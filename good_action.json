@@ -1,0 +1,16 @@
+{
+  "step": 14389,
+  "name": "replace_file_content",
+  "args": {
+    "AllowMultiple": "false",
+    "Description": "\"Restore broken code in Warehouses.ts\"",
+    "EndLine": "276",
+    "Instruction": "\"Restore missing JS logic and styling\"",
+    "ReplacementContent": "\"      const lastUpdate = item.lastUpdated.toDate ? item.lastUpdated.toDate().getTime() : new Date(item.lastUpdated).getTime();\\n      return lastUpdate < sixMonthsAgo && item.quantity > 0;\\n    });\\n\\n    const auditedCount = inventoryData.filter(i => i.lastAuditDate).length;\\n    const integrityScore = inventoryData.length > 0 ? Math.round((auditedCount / inventoryData.length) * 100) : 0;\\n    \\n    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n    \\n    (window as any).draftReservations = draftReservations; // Store for global access in reserve detail modal\\n    console.log('[WarehousePage] Sorting completed.');\\n\\n    const getSortIcon = (key: string) => {\\n      if (sortKey !== key) return '<i class=\\\"fa-solid fa-sort\\\" style=\\\"opacity: 0.2; margin-left: 8px;\\\"></i>';\\n      return sortDir === 'asc' \\n        ? '<i class=\\\"fa-solid fa-sort-up\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>' \\n        : '<i class=\\\"fa-solid fa-sort-down\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>';\\n    };\\n    (window as any).getSortIcon = getSortIcon; // Register to window to avoid unused error and allow future use\\n\\n    return `\\n      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255\n<truncated 3346 bytes>",
+    "StartLine": "269",
+    "TargetContent": "\"      if (!item.lastUpdated) return false;\\n\\n        .shelf-dot {\"",
+    "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+    "toolAction": "\"Restore logic\"",
+    "toolSummary": "\"Restore logic and style that was removed\""
+  }
+}

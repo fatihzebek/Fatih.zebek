@@ -1,0 +1,1 @@
+const fs=require('fs'); let code=fs.readFileSync('src/components/ReportTemplate.ts','utf8'); const start = 3394; const end = 11083; const newBlock = fs.readFileSync('new_block.txt', 'utf8'); fs.writeFileSync('src/components/ReportTemplate.ts', code.slice(0,start) + newBlock + code.slice(end), 'utf8'); console.log('Done!');

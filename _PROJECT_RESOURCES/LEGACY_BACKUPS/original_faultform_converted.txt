@@ -1,0 +1,9 @@
+﻿
+> {"step_index":748,"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-05-08T21:23:13Z","too
+l_calls":[{"name":"run_command","args":{"CommandLine":"\"Get-Content C:\\\\Users\\\\FatihZebek\\\\.gemini\\\\antigravit
+y\\\\brain\\\\8f4b90d3-f567-47c5-9b71-be294a8ec108\\\\.system_generated\\\\logs\\\\overview.txt | Select-String -Patter
+n \\\"1: import\\\" -Context 0, 600 > C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\original_faultf\n<truncated 
+8 bytes>","Cwd":"\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\"","SafeToAutoRun":"true","WaitMsBeforeAsync":"500
+"}}]}
+
+

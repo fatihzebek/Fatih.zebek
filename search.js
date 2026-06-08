@@ -1,0 +1,1 @@
+const fs = require('fs'); const lines = fs.readFileSync('src/pages/Warehouses.ts', 'utf8').split('\n'); lines.forEach((l, i) => { if (l.includes('e ?') || l.includes('e ?') || l.includes('selectedWarehouseId ?')) console.log(i + 1, l.trim()); });

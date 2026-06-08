@@ -1,0 +1,18 @@
+[
+    { "code": "8000", "name": "Türbinde Çalışma", "category": "WORK" },
+    { "code": "7420", "name": "Stok/saha çalışması", "category": "WORK" },
+    { "code": "7440", "name": "araç/el aleti bakımı", "category": "OFFICE" },
+    { "code": "7454", "name": "bekleme (malzeme eksik)", "category": "WAITING" },
+    { "code": "7455", "name": "bekleme zamanı (el aleti eksik)", "category": "WAITING" },
+    { "code": "7453", "name": "bekleme zamanı (hava muhalefeti)", "category": "WAITING" },
+    { "code": "7450", "name": "diğer bekleme zamanları", "category": "WAITING" },
+    { "code": "8400", "name": "Eğitim (katılımcı/eğitmen)", "category": "OFFICE" },
+    { "code": "7120", "name": "Evden <=> WEC", "category": "TRAVEL" },
+    { "code": "7410", "name": "Toplantı", "category": "OFFICE" },
+    { "code": "6400", "name": "Mola (kahvaltı, öğlen yemeği)", "category": "BREAK" },
+    { "code": "7530", "name": "Ofis <=> WEC", "category": "TRAVEL" },
+    { "code": "7430", "name": "ofis işleri", "category": "OFFICE" },
+    { "code": "7532", "name": "WEC <=> Ofis", "category": "TRAVEL" },
+    { "code": "7400", "name": "servis planlamak/planı işlemek", "category": "OFFICE" },
+    { "code": "7520", "name": "WEC <=> Ev", "category": "TRAVEL" }
+]

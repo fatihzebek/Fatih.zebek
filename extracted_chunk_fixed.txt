@@ -1,0 +1,1754 @@
+
+          transition: all 0.3s;
+        }
+        
+        .cyber-input-premium:focus {
+          border-color: var(--accent-cyan);
+          box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+          outline: none;
+        }
+
+        .premium-tab {
+          padding: 8px 24px;
+          border-radius: 10px;
+          border: 1px solid transparent;
+          background: transparent;
+          color: var(--text-dim);
+          font-size: 0.8rem;
+          font-weight: 800;
+          cursor: pointer;
+          transition: all 0.3s;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+          font-family: 'Rajdhani', sans-serif;
+          letter-spacing: 1px;
+        }
+
+        .premium-tab.active {
+          background: rgba(0, 243, 255, 0.1);
+          border-color: var(--accent-cyan);
+          color: var(--accent-cyan);
+          box-shadow: 0 0 15px rgba(0, 243, 255, 0.2);
+        }
+
+        .ai-banner {
+          background: linear-gradient(90deg, rgba(255, 77, 77, 0.05), rgba(0, 243, 255, 0.05));
+          border: 1px solid rgba(255, 77, 77, 0.2);
+          border-left: 4px solid var(--accent-red);
+          border-radius: 16px;
+          padding: 1.5rem;
+          margin-bottom: 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .action-icon-btn {
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.02);
+          color: var(--text-dim);
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .action-icon-btn:hover {
+          transform: translateY(-2px);
+          filter: brightness(1.2);
+          border-color: var(--accent-cyan);
+          color: var(--accent-cyan);
+        }
+
+        .material-row:hover {
+          background: rgba(255,255,255,0.01);
+        }
+
+        .shelf-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--accent-blue);
+        }
+
+        .zoom-tablet {
+          /* Page zoom reverted to normal */
+          zoom: 1;
+        }
+
+        .modal-content {
+          zoom: 0.8;
+          transform-origin: center center;
+        }
+
+        .audit-badge {
+          font-size: 0.55rem;
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-weight: 800;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+        .audit-fresh { background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); border: 1px solid rgba(100, 255, 218, 0.2); }
+        .audit-stale { background: rgba(255, 152, 0, 0.1); color: #ff9800; border: 1px solid rgba(255, 152, 0, 0.2); }
+        .audit-expired { background: rgba(255, 77, 77, 0.1); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.2); }
+
+        .batch-bar {
+          position: fixed;
+          bottom: 30px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #111a24;
+          border: 1px solid var(--accent-blue);
+          padding: 1rem 2rem;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          gap: 2rem;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+          z-index: 1000;
+          animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes slideUp { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+          .premium-card {
+            padding: 1rem !important;
+          }
+          .ai-banner {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 1.2rem !important;
+            padding: 1.2rem !important;
+          }
+          .ai-banner button {
+            width: 100% !important;
+          }
+          .premium-tab {
+            padding: 8px 16px !important;
+            font-size: 0.75rem !important;
+          }
+        }
+      </style>
+
+      <!-- Image Preview Modal -->
+      <div id="image-preview-modal" class="modal-overlay" style="display: none; align-items: center; justify-content: center; z-index: 10000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px);">
+        <div class="premium-card modal-content" style="width: 90%; max-width: 900px; padding: 0; overflow: hidden; position: relative; background: #0a192f; border: 1px solid rgba(100,255,218,0.2); box-shadow: 0 30px 60px rgba(0,0,0,0.8); transform: scale(0.9); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+          <div style="padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <h3 id="preview-title" style="margin: 0; color: var(--accent-blue); font-size: 1.1rem;">Malzeme Resmi</h3>
+            <button onclick="document.getElementById('image-preview-modal').style.display='none'" class="action-icon-btn" style="background: rgba(255,255,255,0.05);">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div style="width: 100%; height: 600px; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <img id="preview-img" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+          </div>
+          <div style="padding: 1.5rem; display: flex; justify-content: center; gap: 1rem; background: rgba(255,255,255,0.02);">
+            <button onclick="document.getElementById('image-preview-modal').style.display='none'" class="btn-cyber" style="background: rgba(255,255,255,0.05); color: var(--text-main); padding: 12px 30px; border-radius: 12px;">KAPAT</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add/Edit Material Modal -->
+      <div id="add-material-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px); z-index: 10001; align-items: center; justify-content: center;">
+        <div class="premium-card modal-content" style="max-width: 720px; width: 95%; max-height: 90vh; overflow-y: auto; overflow-x: hidden; padding: 0; border: 1px solid rgba(100, 255, 218, 0.1); background: #0d1117; box-shadow: 0 30px 60px rgba(0,0,0,0.5); border-radius: 28px; transform: scale(0.9); transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); position: relative; box-sizing: border-box;">
+          
+          <div class="modal-inner-content" style="zoom: 0.92; padding: 3.5rem; display: flex; flex-direction: column; box-sizing: border-box;">
+            
+            <!-- Close Button -->
+            <button onclick="window.closeAddMaterialModal()" 
+                    style="position: absolute; top: 30px; right: 30px; background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.4rem; opacity: 0.6; transition: opacity 0.2s; z-index: 10;"
+                    onmouseover="this.style.opacity='1'"
+                    onmouseout="this.style.opacity='0.6'">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <!-- Header -->
+            <div style="margin-bottom: 3rem;">
+              <h3 id="modal-title" style="margin: 0; color: #64ffda; font-size: 2rem; font-weight: 700; letter-spacing: -0.5px;">Yeni Malzeme Kaydı</h3>
+              <p style="color: var(--text-dim); margin: 10px 0 0 0; font-size: 1rem; opacity: 0.6;">Sistem kayıtlarını yüksek hassasiyetle güncelleyin.</p>
+            </div>
+
+            <form id="add-material-form" onsubmit="window.handleWarehouseFormSubmit(event)">
+              <input type="hidden" id="modal-warehouse-id">
+              <input type="hidden" id="modal-item-id">
+              
+              <div style="display: grid; grid-template-columns: 1fr 220px; gap: 4rem; align-items: start;">
+                <!-- Left Side -->
+                <div style="display: flex; flex-direction: column; gap: 1.8rem;">
+                  
+                  <!-- SAP No -->
+                  <div>
+                    <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;">SAP NUMARASI</label>
+                    <input type="text" id="modal-sap-no" required placeholder="Örn: 1002345" 
+                           style="width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; transition: all 0.2s; box-sizing: border-box;"
+                           onfocus="this.style.borderColor='#64ffda'; this.style.background='#1c2128'" onblur="this.style.borderColor='#30363d'; this.style.background='#161b22'"
+                           oninput="window.handleSapInput(this.value)">
+                  </div>
+
+                  <!-- Description -->
+                  <div>
+                    <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;">AAÇIKLAMA / ÜRÜN ADI</label>
+                    <input type="text" id="modal-description" required placeholder="Malzeme adını girin..." 
+                           style="width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; transition: all 0.2s; box-sizing: border-box;"
+                           onfocus="this.style.borderColor='#64ffda'; this.style.background='#1c2128'" onblur="this.style.borderColor='#30363d'; this.style.background='#161b22'">
+                  </div>
+
+
+
+                  <!-- Quantity & Limit -->
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div>
+                      <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;">MİKTAR</label>
+                      <input type="number" id="modal-quantity" required placeholder="0" 
+                             style="width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; box-sizing: border-box;"
+                             onfocus="this.style.borderColor='#64ffda'" onblur="this.style.borderColor='#30363d'">
+                    </div>
+                    <div>
+                      <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;">KRİTİK LİMİT</label>
+                      <input type="number" id="modal-critical-limit" placeholder="Limit yok" 
+                             style="width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; box-sizing: border-box;"
+                             onfocus="this.style.borderColor='#64ffda'" onblur="this.style.borderColor='#30363d'">
+                    </div>
+                  </div>
+
+                  <!-- Shelf -->
+                  <div>
+                    <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;">RAF KONUMU</label>
+                    <input type="text" id="modal-shelf" placeholder="Örn: A-12-3" 
+                           style="width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; box-sizing: border-box;"
+                           onfocus="this.style.borderColor='#64ffda'" onblur="this.style.borderColor='#30363d'">
+                  </div>
+                </div>
+
+                <!-- Right Side -->
+                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                  <label style="display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;">MALZEME GÖRSELİ</label>
+                  <div id="modal-image-area" style="height: 220px; width: 100%; position: relative;">
+                    <div id="modal-image-preview-container" style="display: none; width: 100%; height: 100%; position: relative; border-radius: 20px; overflow: hidden; background: #000; border: 1px solid #30363d;">
+                      <img id="modal-image-preview" src="" style="width: 100%; height: 100%; object-fit: contain;">
+                      <button type="button" onclick="window.removeMaterialImage()" style="position: absolute; top: 12px; right: 12px; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,77,77,0.9); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                        <i class="fa-solid fa-trash" style="font-size: 0.9rem;"></i>
+                      </button>
+                    </div>
+                    <div id="modal-no-image" onclick="window.triggerMaterialImageSelect()" 
+                         style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; border: 2px dashed #30363d; border-radius: 20px; cursor: pointer; background: rgba(255,255,255,0.02); transition: all 0.2s;"
+                         onmouseover="this.style.borderColor='#64ffda'; this.style.background='rgba(100,255,218,0.05)';"
+                         onmouseout="this.style.borderColor='#30363d'; this.style.background='rgba(255,255,255,0.02)';">
+                      <i class="fa-solid fa-camera" style="font-size: 2.4rem; color: var(--text-dim); opacity: 0.3;"></i>
+                      <span style="color: var(--text-dim); font-size: 0.9rem; font-weight: 500; opacity: 0.8;">Görsel Yükle</span>
+                    </div>
+                    <input type="file" id="material-image-input" accept="image/*" style="display: none;" onchange="window.handleMaterialImageSelect(event)">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer Buttons -->
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2.5rem; margin-top: 5rem;">
+                <button type="button" onclick="window.closeAddMaterialModal()" 
+                        style="height: 60px; border-radius: 16px; font-weight: 700; font-size: 1.1rem; background: #21262d; color: white; border: 1px solid #30363d; cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">İPTAL</button>
+                <button type="submit" id="modal-submit-btn" 
+                        style="height: 60px; border-radius: 16px; font-weight: 800; font-size: 1.1rem; background: #64ffda; color: #0d1117; border: none; cursor: pointer; transition: all 0.2s; text-transform: uppercase;"
+                        onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">DEĞİŞİKLİKLERİ KAYDET</button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- QR Scanner Modal -->
+      <div id="qr-scanner-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10002; align-items: center; justify-content: center;">
+        <div class="premium-card" style="max-width: 600px; width: 90%; padding: 2rem; text-align: center;">
+          <h3 style="color: var(--accent-blue); margin-bottom: 1.5rem;">QR KOD TARA</h3>
+          <div id="reader"></div>
+          <button onclick="window.stopQRScanner()" class="btn-cyber" style="margin-top: 1.5rem; background: #ff4d4d; color: white;">KAPAT</button>
+        </div>
+      </div>
+
+      <!-- Loading Overlays -->
+      <div id="upload-loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.8); backdrop-filter: blur(10px); z-index: 20000; align-items: center; justify-content: center; flex-direction: column; gap: 1.5rem;">
+          <div style="width: 60px; height: 60px; border: 4px solid var(--accent-glow); border-top-color: var(--accent-blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+          <div style="color: var(--text-main); font-weight: 800; letter-spacing: 1px;">İŞLENİYOR...</div>
+      </div>
+
+      <!-- Batch Action Bar -->
+      <div id="batch-action-bar" style="display: none;" class="batch-bar">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 32px; height: 32px; background: var(--accent-blue); color: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900;" id="batch-count">0</div>
+          <div style="color: var(--text-main); font-weight: 700; font-size: 0.9rem;">Öğe Seçildi</div>
+        </div>
+        <div style="width: 1px; height: 30px; background: rgba(255,255,255,0.1);"></div>
+        <div style="display: flex; gap: 10px;">
+          <button onclick="window.printBatchLabels()" class="btn-cyber" style="background: rgba(255, 193, 7, 0.1); color: var(--accent-yellow, #ffc107); padding: 8px 16px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(255, 193, 7, 0.2);">
+            <i class="fa-solid fa-print" style="margin-right: 6px;"></i> TOPLU ETİKET YAZDIR
+          </button>
+          <button onclick="window.openBatchShelfModal()" class="btn-cyber" style="background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); padding: 8px 16px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.2);">
+            <i class="fa-solid fa-location-dot" style="margin-right: 6px;"></i> TOPLU KONUM GÜNCELLE
+          </button>
+          <button onclick="window.clearBatchSelection()" class="btn-cyber" style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 8px 16px; font-size: 0.75rem; font-weight: 800;">
+            İPTAL
+          </button>
+        </div>
+      </div>
+
+      <!-- Reserve Detail Modal -->
+      <div id="reserve-detail-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px); z-index: 10005; align-items: center; justify-content: center;">
+        <div class="premium-card modal-content" style="max-width: 600px; width: 90%; padding: 2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h3 id="reserve-modal-title" style="margin: 0; color: #ff9800; font-weight: 900;">Rezervasyon Detayları</h3>
+            <button onclick="document.getElementById('reserve-detail-modal').style.display='none'" class="action-icon-btn"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div id="reserve-modal-content" style="display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Content will be injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Container with Zoom -->
+      <div class="zoom-tablet" style="max-width: 1600px; margin: 0 auto; padding: 1.5rem; animation: fadeIn 0.4s ease-out;">
+        
+        <!-- Dashboard Header -->
+        <header style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+          <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <button onclick="window.navigate('warehouses')" class="action-icon-btn" style="width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+              <h1 style="margin: 0; font-size: clamp(1.5rem, 2.5vw, 2.2rem); font-weight: 900; letter-spacing: -1px; color: var(--text-main);">${t?.name||`Depo`}</h1>
+              <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.85rem; font-weight: 500;">${t?.location||`Stok ve Envanter Yönetim Sistemi`}</p>
+            </div>
+          </div>
+          
+          <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; flex: 1; justify-content: flex-end;">
+            <div style="position: relative; flex: 1 1 250px; max-width: 350px; min-width: 200px; display: flex; align-items: center;">
+              <input type="text" id="inventory-search" placeholder="Parça veya SAP no ara..." 
+                     value="${s||``}"
+                     class="cyber-input-premium search-box-mini"
+                     style="width: 100%; padding-right: 50px;"
+                     onkeypress="if(event.key==='Enter') window.updateWarehouseUI(undefined, undefined, undefined, this.value)"
+                     autofocus
+                     onfocus="this.setSelectionRange(this.value.length, this.value.length)">
+              <button onclick="window.updateWarehouseUI(undefined, undefined, undefined, document.getElementById('inventory-search').value)" 
+                      style="position: absolute; right: 6px; width: 36px; height: 36px; background: var(--accent-blue); border: none; color: #0a1118; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.2s;"
+                      onmouseover="this.style.filter='brightness(1.1)';" 
+                      onmouseout="this.style.filter='none';">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </button>
+            </div>
+            
+            <button onclick="window.startQuickAudit('${e}')" class="btn-cyber" style="background: linear-gradient(135deg, #64ffda 0%, #48bb78 100%); color: #000; padding: 10px 18px; border-radius: 10px; font-size: 0.75rem; font-weight: 900; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(100, 255, 218, 0.2); flex-shrink: 0;">
+              <i class="fa-solid fa-bolt" style="margin-right: 8px;"></i> HIZLI SAYIM
+            </button>
+
+            <button onclick="window.startQRScanner('${e}')" class="btn-cyber" style="background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); padding: 10px 18px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.2); cursor: pointer; flex-shrink: 0;">
+              <i class="fa-solid fa-qrcode" style="margin-right: 8px;"></i> QR TARA
+            </button>
+
+            <button onclick="window.downloadExcel('${e}')" class="btn-cyber" style="background: rgba(255,255,255,0.05); color: var(--text-main); padding: 10px 18px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: none; cursor: pointer; flex-shrink: 0;">
+              <i class="fa-solid fa-file-export" style="color: #2ecc71; margin-right: 8px;"></i> İNDİR
+            </button>
+
+            ${d?`
+            <button onclick="window.triggerExcelUpload('${e}')" class="btn-cyber" style="background: rgba(255,255,255,0.05); color: var(--text-main); padding: 10px 18px; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: none; cursor: pointer; flex-shrink: 0;">
+              <i class="fa-solid fa-file-import" style="color: var(--accent-blue); margin-right: 8px;"></i> YÜKLE
+            </button>
+            `:``}
+
+            ${f?`
+            <div style="position: relative; display: inline-block; flex-shrink: 0;" id="admin-menu-container">
+              <button onclick="const m = document.getElementById('admin-actions-menu'); if(m) m.style.display = m.style.display === 'none' ? 'block' : 'none';" 
+                      class="btn-cyber" 
+                      style="background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 10px; border-radius: 10px; font-size: 0.9rem; border: none; cursor: pointer;">
+                <i class="fa-solid fa-ellipsis-vertical"></i>
+              </button>
+              <div id="admin-actions-menu" style="display: none; position: absolute; top: calc(100% + 8px); right: 0; background: #1a1a1a; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; min-width: 220px; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden;">
+                <div style="padding: 10px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.65rem; color: var(--text-dim); font-weight: 800; letter-spacing: 1px;">Y�NETİCİ ARAÇLARI</div>
+                
+                <button onclick="window.clearLegacyLimits('${e}')" 
+                        style="width: 100%; text-align: left; background: none; border: none; padding: 12px 15px; color: var(--text-main); cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; gap: 10px; transition: background 0.2s;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+                        onmouseout="this.style.background='none'">
+                  <i class="fa-solid fa-broom" style="color: var(--accent-blue); width: 16px;"></i>
+                  <span>Eski Limitleri Temizle (5 Adet)</span>
+                </button>
+
+                <button onclick="window.resetWarehouse('${e}')" 
+                        style="width: 100%; text-align: left; background: none; border: none; padding: 12px 15px; color: #ff4d4d; cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; gap: 10px; transition: background 0.2s;"
+                        onmouseover="this.style.background='rgba(255, 77, 77, 0.05)'"
+                        onmouseout="this.style.background='none'">
+                  <i class="fa-solid fa-trash-can" style="width: 16px;"></i>
+                  <span>Depo Envanterini Sıfırla</span>
+                </button>
+              </div>
+            </div>
+            `:``}
+
+            ${x?`
+            <button onclick="window.openAddMaterialModal('${e}')" class="btn-cyber" style="background: #fff; color: #000; padding: 10px 24px; border-radius: 10px; font-weight: 900; font-size: 0.75rem; border: none; cursor: pointer; flex-shrink: 0;">
+              <i class="fa-solid fa-plus"></i> YENİ EKLE
+            </button>
+            `:``}
+          </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1.2rem; margin-bottom: 2rem;">
+          <div class="stats-card">
+            <div class="stats-label">Toplam Kalem</div>
+            <div class="stats-value">${i.length}</div>
+          </div>
+          <div class="stats-card" style="border-left: 3px solid var(--danger);">
+            <div class="stats-label" style="color: var(--danger);">Kritik Stok</div>
+            <div class="stats-value" style="color: var(--danger);">${m.length}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">Son İşlemler</div>
+            <div class="stats-value">${g.length}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">Son Hareket</div>
+            <div class="stats-value" style="font-size: 1.2rem;">${g.length>0?C(g[0].timestamp).split(` `)[1]:`-`}</div>
+          </div>
+          <div class="stats-card" style="background: rgba(100, 255, 218, 0.05); border-color: rgba(100, 255, 218, 0.1);">
+            <div class="stats-label" style="color: var(--accent-blue);">Depo Durumu</div>
+            <div class="stats-value" style="color: var(--accent-blue); font-size: 1.2rem;">AKTİF</div>
+          </div>
+        </div>
+
+        <!-- Tab Switcher (Always Visible) -->
+        <div style="display: flex; overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05); gap: 4px;">
+          <button onclick="window.changeTab('${e}', 'inventory')" class="premium-tab ${c===`inventory`?`active`:``}">
+            <i class="fa-solid fa-layer-group"></i> ENVANTER
+          </button>
+          <button onclick="window.changeTab('${e}', 'history')" class="premium-tab ${c===`history`?`active`:``}">
+            <i class="fa-solid fa-history"></i> GEÇMİŞ
+          </button>
+          <button onclick="window.changeTab('${e}', 'analytics')" class="premium-tab ${c===`analytics`?`active`:``}">
+            <i class="fa-solid fa-chart-line"></i> ANALİZ
+          </button>
+          <button onclick="window.changeTab('${e}', 'audit')" class="premium-tab ${c===`audit`?`active`:``}">
+            <i class="fa-solid fa-clipboard-check"></i> SAYIM
+          </button>
+          <button onclick="window.changeTab('${e}', 'audit_history')" class="premium-tab ${c===`audit_history`?`active`:``}">
+            <i class="fa-solid fa-file-invoice"></i> SAYIM GEÇMİŞİ
+          </button>
+        </div>
+
+        <div id="tab-content-root">
+          ${c===`inventory`?`
+            <!-- AI Banner -->
+            <div class="ai-banner" style="margin-top: 1rem;">
+              <div style="display: flex; align-items: center; gap: 1.5rem;">
+                <div style="width: 48px; height: 48px; background: rgba(255, 77, 77, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--danger);">
+                  <i class="fa-solid fa-robot"></i>
+                </div>
+                <div>
+                  <h4 style="margin: 0; color: var(--danger); letter-spacing: 1px; font-weight: 900; font-size: 0.9rem;">ENVANTER ANALİTİĞİ (AI)</h4>
+                  <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.85rem;">Şu an ${m.length} kalem malzeme kritik seviyenin altında. Sarf malzemeleri için sipariş planlanması önerilir.</p>
+                </div>
+              </div>
+              <button onclick="window.initiateOrderFlow('${e}')" class="btn-cyber" style="background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--danger); padding: 10px 20px; border-radius: 10px; font-size: 0.75rem; font-weight: 900; border: none; cursor: pointer;">
+                SİPARİŞ OLUŞTUR
+              </button>
+            </div>
+
+            ${w.details.length>0?`
+            <!-- Aktif Rezervasyonlar Kartı -->
+            <div class="premium-card" style="padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 20px; border-left: 4px solid #ff9800;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="width: 40px; height: 40px; background: rgba(255, 152, 0, 0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #ff9800;">
+                    <i class="fa-solid fa-bookmark"></i>
+                  </div>
+                  <div>
+                    <h4 style="margin: 0; color: #ff9800; font-weight: 900; font-size: 0.85rem; letter-spacing: 1px;">AKTİF REZERVASYONLAR</h4>
+                    <p style="margin: 2px 0 0 0; color: var(--text-dim); font-size: 0.75rem;">${w.details.length} görevde toplam ${Object.values(w.bySap).reduce((e,t)=>e+t,0)} adet malzeme rezerve edildi</p>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                ${w.details.map(e=>`
+                  <div style="background: rgba(255, 152, 0, 0.04); border: 1px solid rgba(255, 152, 0, 0.1); border-radius: 14px; padding: 1rem 1.2rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="background: rgba(255, 152, 0, 0.15); color: #ff9800; padding: 3px 10px; border-radius: 8px; font-size: 0.65rem; font-weight: 900;">${e.team}</span>
+                        <span style="color: var(--text-main); font-weight: 800; font-size: 0.8rem;"><i class="fa-solid fa-wind" style="color: var(--accent-blue); margin-right: 5px; font-size: 0.7rem;"></i>${e.turbinNo}</span>
+                        <span style="color: var(--text-dim); font-size: 0.7rem; font-weight: 600;">${e.sablon}</span>
+                      </div>
+                      <span style="background: ${e.durum===`Görev Teslim Edildi`?`rgba(100, 255, 218, 0.1)`:`rgba(255, 152, 0, 0.1)`}; color: ${e.durum===`Görev Teslim Edildi`?`var(--accent-blue)`:`#ff9800`}; padding: 3px 10px; border-radius: 8px; font-size: 0.6rem; font-weight: 800;">${e.durum}</span>
+                    </div>
+                    ${e.personnel.length>0?`
+                      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                        <i class="fa-solid fa-user" style="font-size: 0.6rem; color: var(--text-dim);"></i>
+                        <span style="font-size: 0.7rem; color: var(--text-dim); font-weight: 600;">${e.personnel.join(`, `)}</span>
+                      </div>
+                    `:``}
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                      ${e.materials.map(e=>`
+                        <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 10px;">
+                          <span style="color: var(--accent-blue); font-weight: 800; font-size: 0.7rem;">${e.sapNo}</span>
+                          <span style="color: var(--text-dim); font-size: 0.65rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${e.description}</span>
+                          <span style="background: rgba(255, 152, 0, 0.2); color: #ff9800; padding: 2px 8px; border-radius: 6px; font-size: 0.65rem; font-weight: 900;">${e.used} Ad.</span>
+                        </div>
+                      `).join(``)}
+                    </div>
+                  </div>
+                `).join(``)}
+              </div>
+            </div>
+            `:``}
+
+            <div class="premium-card" style="padding: 0; overflow: hidden; border-radius: 20px;">
+              <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                <table style="min-width: 980px; width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                      <th style="padding: 1.2rem 1rem; width: 50px; text-align: center;">
+                        <input type="checkbox" id="master-checkbox" onchange="window.toggleAllBatch(this.checked)" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue);">
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: ${n===`description`?`var(--accent-blue)`:`var(--text-dim)`}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;" onclick="window.updateWarehouseUI('${e}', 'description')">
+                          MALZEME TANIMI <i class="fa-solid fa-sort${n===`description`?window.lastSortDir===`asc`?`-up`:`-down`:``}" style="margin-left: 5px; opacity: ${n===`description`?`1`:`0.5`};"></i>
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: ${n===`sapNo`?`var(--accent-blue)`:`var(--text-dim)`}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;" onclick="window.updateWarehouseUI('${e}', 'sapNo')">
+                          SAP NO <i class="fa-solid fa-sort${n===`sapNo`?window.lastSortDir===`asc`?`-up`:`-down`:``}" style="margin-left: 5px; opacity: ${n===`sapNo`?`1`:`0.5`};"></i>
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: ${n===`quantity`?`var(--accent-blue)`:`var(--text-dim)`}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;" onclick="window.updateWarehouseUI('${e}', 'quantity')">
+                          STOK <i class="fa-solid fa-sort${n===`quantity`?window.lastSortDir===`asc`?`-up`:`-down`:``}" style="margin-left: 5px; opacity: ${n===`quantity`?`1`:`0.5`};"></i>
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">
+                          REZERVE
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: ${n===`shelfNo`?`var(--accent-blue)`:`var(--text-dim)`}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;" onclick="window.updateWarehouseUI('${e}', 'shelfNo')">
+                          KONUM <i class="fa-solid fa-sort${n===`shelfNo`?window.lastSortDir===`asc`?`-up`:`-down`:``}" style="margin-left: 5px; opacity: ${n===`shelfNo`?`1`:`0.5`};"></i>
+                      </th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">Aksiyon</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${i.length===0?`
+                      <tr>
+                        <td colspan="7" style="padding: 4rem 1.5rem; text-align: center;">
+                          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem; animation: fadeIn 0.3s ease-out;">
+                            <div style="width: 56px; height: 56px; background: rgba(255, 77, 77, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--danger); font-size: 1.5rem; border: 1px solid rgba(255, 77, 77, 0.2);">
+                              <i class="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <div>
+                              <h4 style="margin: 0; color: #ff4d4d; font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">BU ÜRÜN STOKTA YOK</h4>
+                              <p style="margin: 6px 0 0 0; color: var(--text-dim); font-size: 0.85rem; font-weight: 500;">Aradışınız kriterlere uyan hiçbir malzeme bu depoda bulunamadı.</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    `:i.map(t=>{let n=t;return`
+                      <tr class="material-row" style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                        <td style="padding: 1rem; text-align: center;">
+                          <input type="checkbox" class="item-checkbox" data-id="${t.id}" data-sap="${t.sapNo}" data-desc="${(n.description||``).replace(/"/g,`&quot;`)}" onchange="window.updateBatchCount()" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue);">
+                        </td>
+                        <td style="padding: 1rem 1.5rem;">
+                          <div style="display: flex; align-items: center; gap: 1.2rem;">
+                            <div onclick="${t.imageUrl?`window.viewMaterialImage('${t.imageUrl}', '${t.description.replace(/'/g,`\\'`)}')`:`window.openImageUploadModal('${e}', '${t.id}')`}" 
+                                 style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; position: relative;">
+                              ${t.imageUrl?`<i class="fa-solid fa-image" style="color: #64ffda; font-size: 1.5rem; filter: drop-shadow(0 0 5px rgba(100,255,218,0.4));"></i>`:`<i class="fa-solid fa-camera" style="color: var(--text-dim); opacity: 0.4; font-size: 1.2rem;"></i>`}
+                            </div>
+                            <div>
+                              <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="font-weight: 700; color: var(--text-main); font-size: 0.9rem;">${t.description}</div>
+                                ${(()=>{if(!n.lastAuditDate)return``;let e=n.lastAuditDate.toDate?n.lastAuditDate.toDate():new Date(n.lastAuditDate),t=Math.floor((Date.now()-e.getTime())/(1e3*60*60*24)),i=t<30?`audit-fresh`:t<90?`audit-stale`:`audit-expired`,a=t<30?`GÜNCEL`:t<90?`SAYIM YAKLAŞTI`:`SAYIM GEREKLİ`;return`<span class="audit-badge ${i}" title="Son Sayım: ${T(n.lastAuditDate)}"><i class="fa-solid fa-shield-check"></i> ${a}</span>`})()}
+                              </div>
+                              <div style="font-size: 0.65rem; color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+                                <i class="fa-solid fa-clock" style="font-size: 0.6rem; opacity: 0.6;"></i>
+                                ${T(n.lastUpdated)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; text-align: center;">
+                          <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <span id="sap-${n.id}" style="background: rgba(100, 255, 218, 0.05); color: var(--accent-blue); padding: 4px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.1); cursor: pointer;" onclick="window.copyToClipboard('${n.sapNo}')">
+                              ${n.sapNo}
+                            </span>
+                            <button class="action-icon-btn" onclick="window.printQR('${n.id}', '${n.sapNo}', '${n.description.replace(/'/g,`\\'`)}')" style="font-size: 0.7rem; width: 28px; height: 28px; background: none; border: 1px solid rgba(255,255,255,0.1);" title="QR Yazdır">
+                              <i class="fa-solid fa-qrcode"></i>
+                            </button>
+                          </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; text-align: center;">
+                          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                            <div style="font-size: 1.1rem; font-weight: 900; color: ${n.criticalLimit&&n.quantity<=n.criticalLimit?`var(--danger)`:`var(--accent-blue)`};">
+                              ${n.quantity}
+                              <div style="font-size: 0.55rem; color: var(--text-dim); font-weight: 600; margin-top: 2px;">ADET</div>
+                            </div>
+                            ${(()=>{let e=window.currentTrends?.[String(n.sapNo).trim()];if(e&&e.forecastDays<30&&n.quantity>0){let t=e.forecastDays<7?`#ff4d4d`:`#ff9800`;return`
+                                  <div style="margin-top: 8px; padding: 4px 8px; border-radius: 6px; background: ${t}15; color: ${t}; font-size: 0.6rem; font-weight: 900; border: 1px solid ${t}30;" title="Günlük ortalama tüketim: ${e.avgDaily.toFixed(2)}">
+                                    <i class="fa-solid fa-hourglass-half" style="margin-right: 4px;"></i> ~${e.forecastDays} GÜN KALDI
+                                  </div>
+                                `}return``})()}
+                            ${(()=>{let e=(n.reservedQuantity||0)+(w.bySap[String(n.sapNo).trim()]||0);return e>0?`
+                                  <div style="margin-top: 8px; padding: 4px 10px; background: rgba(100, 255, 218, 0.1); border: 1px solid rgba(100, 255, 218, 0.2); border-radius: 8px; color: var(--accent-blue); font-size: 0.7rem; font-weight: 900; display: flex; flex-direction: column; align-items: center;">
+                                    <span style="font-size: 0.5rem; opacity: 0.7; letter-spacing: 0.5px; margin-bottom: 2px;">KULLANILABİLİR</span>
+                                    <span style="font-size: 0.9rem;">${n.quantity-e}</span>
+                                  </div>
+                                `:``})()}
+                          </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; text-align: center;">
+                          <div onclick="window.showReserveDetails('${String(n.sapNo).trim()}')" style="font-size: 1rem; font-weight: 800; color: #ff9800; cursor: pointer; padding: 10px; border-radius: 12px; transition: all 0.2s;" onmouseover="this.style.background='rgba(255, 152, 0, 0.05)'" onmouseout="this.style.background='none'">
+                            ${(()=>{let e=n.reservedQuantity||0,t=w.bySap[String(n.sapNo).trim()]||0;return`
+                                <div style="display: flex; flex-direction: column; align-items: center;">
+                                  <div style="font-size: 1.1rem;">${e+t}</div>
+                                  ${t>0?`<div style="font-size: 0.5rem; opacity: 0.7; color: #ff9800;">(+${t} TASLAK)</div>`:``}
+                                  <div style="font-size: 0.55rem; color: var(--text-dim); font-weight: 600; margin-top: 2px;">ADET <i class="fa-solid fa-circle-info" style="margin-left: 2px; font-size: 0.5rem; opacity: 0.5;"></i></div>
+                                </div>
+                              `})()}
+                          </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem;">
+                          <div style="display: flex; align-items: center; gap: 8px; color: var(--text-dim); font-size: 0.8rem; font-weight: 700;">
+                            <div class="shelf-dot" style="background: ${n.shelfNo?`var(--accent-blue)`:`rgba(255,255,255,0.2)`};"></div>
+                            ${n.shelfNo||`-`}
+                          </div>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; text-align: right;">
+                          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                            <button class="action-icon-btn" onclick="window.requestTransferPrompt('${j}', '${n.id}', '${n.description.replace(/'/g,`\\'`)}', '${String(n.sapNo||``).replace(/'/g,`\\'`)}')" style="color: #64ffda; background: rgba(100, 255, 218, 0.05); border-color: rgba(100, 255, 218, 0.1);" title="Transfer Talep Et">
+                              <i class="fa-solid fa-truck-ramp-box"></i>
+                            </button>
+                            <button class="action-icon-btn" onclick="window.reserveMaterialPrompt('${j}', '${n.id}', '${n.description.replace(/'/g,`\\'`)}', ${n.quantity})" style="color: #ff9800; background: rgba(255, 152, 0, 0.05); border-color: rgba(255, 152, 0, 0.1);" title="Rezerve Et">
+                              <i class="fa-solid fa-bookmark"></i>
+                            </button>
+                            <button class="action-icon-btn" onclick="window.showItemHistory('${n.id}', '${n.description.replace(/'/g,`\\'`)}')" style="color: var(--text-dim); background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);" title="Malzeme Geçmişi">
+                              <i class="fa-solid fa-clock-rotate-left"></i>
+                            </button>
+                            ${x?`
+  <button class="action-icon-btn" onclick="window.editMaterial('${j}', '${n.id}')" style="color: var(--accent-blue); background: rgba(100, 255, 218, 0.05); border-color: rgba(100, 255, 218, 0.1);" title="Düzenle">
+                              <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                             `:``}
+                             ${A?`
+  <button class="action-icon-btn" onclick="window.deleteMaterial('${j}', '${n.id}', '${n.description}', '${n.sapNo}')" style="color: var(--danger); background: rgba(255, 77, 77, 0.05); border-color: rgba(255, 77, 77, 0.1);" title="Sil">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                             `:``}
+                          </div>
+                        </td>
+                      </tr>
+                    `}).join(``)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `:b===`history`?`
+            <div class="premium-card" style="padding: 0; overflow: hidden; border-radius: 20px;">
+              <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                <table style="min-width: 800px; width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Tarih</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Malzeme</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">İşlem</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Miktar</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Referans</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Kullanıcı</th>
+                      ${A?`<th style="padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Aksiyon</th>`:``}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${E.filter(e=>!window.deletedLogIds?.includes(e.id)).map(e=>`
+                      <tr class="material-row" style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                        <td style="padding: 1rem 1.5rem; font-size: 0.75rem; color: var(--text-dim);">${T(e.timestamp)}</td>
+                        <td style="padding: 1rem 1.5rem; font-weight: 700; font-size: 0.9rem; color: var(--text-main);">${e.materialName||`-`}</td>
+                        <td style="padding: 1rem 1.5rem; text-align: center;">
+                          <span style="font-size: 0.65rem; font-weight: 900; padding: 4px 10px; border-radius: 6px; background: ${e.type===`ADD`?`rgba(0, 255, 127, 0.05)`:`rgba(255, 77, 77, 0.05)`}; color: ${e.type===`ADD`?`#00ff7f`:`#ff4d4d`}; border: 1px solid ${e.type===`ADD`?`rgba(0, 255, 127, 0.1)`:`rgba(255, 77, 77, 0.1)`};">
+                            ${e.type===`ADD`?`GİRİŞ`:`ÇIKIŞ`}
+                          </span>
+                        </td>
+                        <td style="padding: 1rem 1.5rem; text-align: center; font-weight: 900; color: var(--text-main);">${e.quantity||0}</td>
+                        <td style="padding: 1rem 1.5rem; font-size: 0.75rem; color: var(--text-dim);">
+                          ${e.turbineNo?`<span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">T-${e.turbineNo}</span>`:``} 
+                          ${e.formNo?`<div style="font-size: 0.6rem; opacity: 0.5; margin-top: 2px;">#${e.formNo}</div>`:``}
+                        </td>
+                        <td style="padding: 1rem 1.5rem; font-size: 0.75rem; color: var(--text-dim);">${String(e.user||``).split(`@`)[0]||`Sistem`}</td>
+                        ${A?`
+                        <td style="padding: 1rem 1.5rem; text-align: right;">
+                          <button class="action-icon-btn" onclick="window.deleteLogRecord('${j}', '${e.id}', '${(e.materialName||``).replace(/'/g,`\\'`)}')" style="color: var(--danger); background: rgba(255, 77, 77, 0.05); border-color: rgba(255, 77, 77, 0.1);" title="Kaydı Sil">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        </td>
+                        `:``}
+                      </tr>
+                    `).join(``)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `:b===`analytics`?`
+            <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem;">
+              <div class="premium-card" style="padding: 2rem;">
+                <h4 style="margin-bottom: 1.5rem; color: var(--accent-blue); letter-spacing: 1px;">HAREKET TRENDİ</h4>
+                <div style="height: 300px;"><canvas id="trendChart"></canvas></div>
+              </div>
+              <div class="premium-card" style="padding: 2rem;">
+                <h4 style="margin-bottom: 1.5rem; color: var(--accent-blue); letter-spacing: 1px;">EN ÇOK KULLANILANLAR</h4>
+                <div style="height: 300px;"><canvas id="usageChart"></canvas></div>
+              </div>
+              
+              <div class="premium-card" style="padding: 2rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                  <h4 style="margin: 0; color: #ff9800; letter-spacing: 1px;">�LÜ STOK (6 AY+ HARERETSİZ)</h4>
+                  <span style="background: rgba(255, 152, 0, 0.1); color: #ff9800; padding: 4px 10px; border-radius: 8px; font-size: 0.7rem; font-weight: 900;">${D.length} KALEM</span>
+                </div>
+                <div style="max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+                  ${D.length===0?`<p style="color: var(--text-dim); text-align: center; padding: 2rem;">Hareketsiz stok bulunamadı.</p>`:D.map(e=>`
+                    <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.03);">
+                      <div>
+                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.8rem;">${e.description}</div>
+                        <div style="font-size: 0.65rem; color: var(--text-dim); margin-top: 2px;">SAP: ${e.sapNo}</div>
+                      </div>
+                      <div style="text-align: right;">
+                        <div style="color: #ff9800; font-weight: 900; font-size: 1rem;">${e.quantity} AD.</div>
+                        <div style="font-size: 0.6rem; color: var(--text-dim); opacity: 0.6;">Son Hareket: ${T(e.lastUpdated).split(` `)[0]}</div>
+                      </div>
+                    </div>
+                  `).join(``)}
+                </div>
+              </div>
+
+              <div class="premium-card" style="padding: 2rem;">
+                <h4 style="margin-bottom: 1.5rem; color: var(--accent-blue); letter-spacing: 1px;">GELECEK HAFTA TAHMİNİ İHTİYAÇ</h4>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                   ${(()=>{let e=Object.entries(window.currentTrends||{}).filter(([e,t])=>t.forecastDays<14).slice(0,5);return e.length===0?`
+                         <div style="padding: 1.5rem; border-radius: 16px; background: rgba(100,255,218,0.03); border: 1px dashed rgba(100,255,218,0.2); text-align: center;">
+                            <i class="fa-solid fa-shield-heart" style="font-size: 2rem; color: var(--accent-blue); margin-bottom: 1rem; opacity: 0.5;"></i>
+                            <p style="color: var(--text-dim); font-size: 0.8rem; margin: 0;">Mevcut trendlere göre 2 hafta içinde tükenecek malzeme bulunmuyor. Stok sağlışı mükemmel.</p>
+                         </div>
+                       `:e.map(([e,t])=>{let n=O.find(t=>String(t.sapNo).trim()===e);return`
+                         <div style="background: rgba(255, 77, 77, 0.05); padding: 12px; border-radius: 12px; border-left: 3px solid #ff4d4d; display: flex; justify-content: space-between; align-items: center;">
+                           <div>
+                             <div style="font-size: 0.8rem; font-weight: 800; color: var(--text-main);">${n?.description||e}</div>
+                             <div style="font-size: 0.65rem; color: var(--text-dim);">Tahmini Tükenme: ${t.forecastDays} gün</div>
+                           </div>
+                           <div style="text-align: right;">
+                             <div style="font-size: 0.9rem; font-weight: 900; color: #ff4d4d;">${n?.quantity||0} AD.</div>
+                             <div style="font-size: 0.6rem; color: var(--text-dim);">Günlük: ${t.avgDaily.toFixed(1)}</div>
+                           </div>
+                         </div>
+                       `}).join(``)})()}
+                </div>
+              </div>
+
+              <div class="premium-card" style="grid-column: span 2; padding: 2rem;">
+                <h4 style="margin-bottom: 1.5rem; color: var(--accent-blue); letter-spacing: 1px;">RAF DOLULUK HARİTASI (SPATIAL INTELLIGENCE)</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px;">
+                  ${Object.entries(window.currentOccupancy||{}).sort().map(([e,t])=>`
+                      <div style="background: rgba(100, 255, 218, ${Math.min(t*.15,.8)}); border: 1px solid rgba(100, 255, 218, 0.2); padding: 20px 15px; border-radius: 16px; text-align: center; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent-blue);"></div>
+                        <div style="font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">KONUM</div>
+                        <div style="font-size: 1.4rem; font-weight: 900; color: var(--text-main);">${e}</div>
+                        <div style="font-size: 0.75rem; color: var(--accent-blue); font-weight: 800; margin-top: 8px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 8px;">${t} KALEM</div>
+                      </div>
+                    `).join(``)||`<p style="color: var(--text-dim); grid-column: span 5; text-align: center; padding: 3rem;">Raf bilgisi bulunamadı.</p>`}
+                </div>
+              </div>
+
+              <div class="premium-card" style="grid-column: span 2; padding: 2rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem;">
+                  <h4 style="margin: 0; color: var(--accent-blue); letter-spacing: 1px;">STOK SAĞLIĞI & GÜVENİLİRLİK</h4>
+                  <div style="display: flex; gap: 2rem;">
+                    <div style="text-align: right;">
+                      <div style="font-size: 0.65rem; color: var(--text-dim);">SAYIM DOĞRULUĞU</div>
+                      <div style="font-size: 1.4rem; font-weight: 900; color: ${v>80?`var(--accent-blue)`:`#ff9800`};">${v}%</div>
+                    </div>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4rem;">
+                    <div style="width: 250px; height: 250px;"><canvas id="healthChart"></canvas></div>
+                    <div style="flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div style="padding: 1.5rem; border-radius: 20px; background: rgba(100,255,218,0.05); border: 1px solid rgba(100,255,218,0.1);">
+                            <div style="font-size: 0.7rem; color: var(--accent-blue); margin-bottom: 8px;">SAĞLIKLI (SAYILMIŞ)</div>
+                            <div style="font-size: 2rem; font-weight: 900;">${u}</div>
+                        </div>
+                        <div style="padding: 1.5rem; border-radius: 20px; background: rgba(255,152,0,0.05); border: 1px solid rgba(255,152,0,0.1);">
+                            <div style="font-size: 0.7rem; color: #ff9800; margin-bottom: 8px;">SAYIM BEKLEYEN</div>
+                            <div style="font-size: 2rem; font-weight: 900;">${i.length-u}</div>
+                        </div>
+                        <div style="padding: 1.5rem; border-radius: 20px; background: rgba(255,77,77,0.05); border: 1px solid rgba(255,77,77,0.1);">
+                            <div style="font-size: 0.7rem; color: #ff4d4d; margin-bottom: 8px;">KRİTİK STOK</div>
+                            <div style="font-size: 2rem; font-weight: 900;">${y.length}</div>
+                        </div>
+                    </div>
+                </div>
+              </div>
+            </div>
+          `:b===`audit_history`?`
+            <div class="premium-card" style="padding: 0; overflow: hidden; border-radius: 20px;">
+              <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;">
+                <table style="min-width: 800px; width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Tarih</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Kullanıcı</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Toplam Kalem</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Hatalı Kalem</th>
+                      <th style="padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Aksiyon</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${k.length===0?`
+                      <tr><td colspan="6" style="padding: 4rem; text-align: center; color: var(--text-dim);">Henüz bir sayım kaydı bulunmuyor.</td></tr>
+                    `:k.map(e=>{let t=e.date||(e.timestamp?new Date(e.timestamp.seconds*1e3).toLocaleDateString(`tr-TR`):`Bilinmiyor`),n=e.timestamp?T(e.timestamp).split(` `)[1]:`--:--`,i=e.discrepantItems??0;return`
+                      <tr class="material-row" style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                        <td style="padding: 1.2rem 1.5rem; font-weight: 700; color: var(--text-main);">${t} <span style="font-weight: 400; font-size: 0.7rem; opacity: 0.5; margin-left: 10px;">${n}</span></td>
+                        <td style="padding: 1.2rem 1.5rem; color: var(--text-main); font-weight: 600; font-size: 0.85rem;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 24px; height: 24px; border-radius: 50%; background: rgba(100, 255, 218, 0.1); display: flex; align-items: center; justify-content: center; border: 1px solid rgba(100, 255, 218, 0.2);">
+                              <i class="fa-solid fa-user" style="font-size: 0.7rem; color: var(--accent-blue);"></i>
+                            </div>
+                            ${e.user?.split(`@`)[0]?.toUpperCase()||`SİSTEM`}
+                          </div>
+                        </td>
+                        <td style="padding: 1.2rem 1.5rem; text-align: center; font-weight: 800; color: var(--text-main);">${e.totalItems||e.results?.length||0}</td>
+                        <td style="padding: 1.2rem 1.5rem; text-align: center; font-weight: 800; color: ${i>0?`#ff4d4d`:`var(--text-main)`};">${i}</td>
+                        <td style="padding: 1.2rem 1.5rem; text-align: right;">
+                          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button class="action-icon-btn" onclick="window.viewAuditDetails('${e.id}')" title="Detayları Gör" style="color: var(--accent-blue);">
+                              <i class="fa-solid fa-eye"></i>
+                            </button>
+                            <button class="action-icon-btn" onclick="window.downloadAuditExcel('${e.id}')" title="Excel İndir" style="color: #2ecc71;">
+                              <i class="fa-solid fa-file-excel"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    `}).join(``)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `:`
+            <div class="premium-card" style="padding: 2.5rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <div>
+                  <h2 style="margin: 0; color: var(--text-main); font-size: 1.5rem;">Depo Sayımı</h2>
+                  <p style="color: var(--text-dim); margin: 5px 0 0 0;">Fiziksel stok miktarlarını girerek sayımı tamamlayın.</p>
+                </div>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                  <div id="audit-live-summary" style="display: flex; gap: 20px; padding: 10px 20px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); margin-right: 10px;">
+                    <div style="text-align: center;">
+                      <div style="font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase;">Toplam Kalem</div>
+                      <div id="audit-total-count" style="font-weight: 800; color: var(--accent-blue);">${r.length}</div>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 20px;">
+                      <div style="font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase;">Hatalı Kalem</div>
+                      <div id="audit-error-count" style="font-weight: 800; color: var(--text-main);">0</div>
+                      <div style="font-size: 0.55rem; color: var(--text-dim); margin-top: 2px;">
+                        <span id="audit-surplus-count" style="color: #00ff7f;">�  0</span> | 
+                        <span id="audit-deficit-count" style="color: #ff4d4d;">�  0</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button onclick="window.finishAudit('${j}')" class="btn-cyber" style="padding: 12px 25px;">
+                    <i class="fa-solid fa-check-double"></i> SAYIMI TAMAMLA
+                  </button>
+                </div>
+              </div>
+              <div style="overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; margin-top: 1rem;">
+                <table style="min-width: 800px; width: 100%; border-collapse: collapse;">
+                  <thead>
+                    <tr style="background: rgba(255,255,255,0.02);">
+                      <th onclick="window.updateWarehouseUI('${j}', 'name')" style="padding: 1rem; text-align: left; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;">
+                        MALZEME ${window.lastSortBy===`name`?window.lastSortDir===`asc`?`� `:`� `:``}
+                      </th>
+                      <th onclick="window.updateWarehouseUI('${j}', 'shelfNo')" style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;">
+                        RAF ${window.lastSortBy===`shelfNo`?window.lastSortDir===`asc`?`� `:`� `:``}
+                      </th>
+                      <th onclick="window.updateWarehouseUI('${j}', 'quantity')" style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;">
+                        SİSTEM ${window.lastSortBy===`quantity`?window.lastSortDir===`asc`?`� `:`� `:``}
+                      </th>
+                      <th style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim);">FİZİKSEL</th>
+                      <th style="padding: 1rem; text-align: right; font-size: 0.7rem; color: var(--text-dim);">FARK</th>
+                    </tr>
+                  </thead>
+                  <tbody id="audit-table-body">
+                    ${r.map(e=>`
+                      <tr class="audit-row" data-shelf="${e.shelfNo||``}" style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                        <td style="padding: 1rem;">
+                          <div style="font-weight: 700; color: var(--text-main);">${e.description}</div>
+                          <div style="font-size: 0.7rem; color: var(--text-dim);">${e.sapNo}</div>
+                        </td>
+                        <td style="padding: 1rem; text-align: center;">
+                          <span style="background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 6px; color: var(--accent-blue); font-weight: 800; font-size: 0.75rem;">
+                            ${e.shelfNo||`-`}
+                          </span>
+                        </td>
+                        <td style="padding: 1rem; text-align: center; font-weight: 800; color: var(--text-main);">${e.quantity}</td>
+                        <td style="padding: 1rem; text-align: center;">
+                          <input type="number" class="audit-input" data-item-id="${e.id}" data-system-qty="${e.quantity}" value="${e.quantity}" oninput="window.updateAuditSummary()" style="width: 80px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 8px; border-radius: 8px; text-align: center; font-weight: 700; font-family: 'JetBrains Mono', monospace;">
+                        </td>
+                        <td style="padding: 1rem; text-align: right; font-weight: 900; color: var(--text-main);" id="diff-${e.id}">0</td>
+                      </tr>
+                      <tr id="note-row-${e.id}" style="display: none; background: rgba(255, 77, 77, 0.03);">
+                        <td colspan="5" style="padding: 0.5rem 1rem 1rem 1rem;">
+                          <div style="display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-message" style="color: #ff4d4d; font-size: 0.8rem; opacity: 0.7;"></i>
+                            <input type="text" class="audit-note" data-item-id="${e.id}" placeholder="Farkın nedeni hakkında kısa bir açıklama yazın..." 
+                                   style="flex: 1; background: rgba(0,0,0,0.2); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--text-main); padding: 8px 12px; border-radius: 6px; font-size: 0.75rem; outline: none;">
+                          </div>
+                        </td>
+                      </tr>
+                    `).join(``)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          `}
+        </div>
+
+        <input type="file" id="material-image-input" style="display: none;" accept="image/*">
+        <input type="file" id="excel-upload-input" style="display: none;" accept=".xlsx, .xls" onchange="window.handleExcelUpload(event, '${j}')">
+        <input type="hidden" id="upload-warehouse-id">
+        <input type="hidden" id="upload-item-id">
+        <!-- Antigravity Agent Status Bar -->
+        <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; opacity: 0.8;">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="display: flex; align-items: center; gap: 8px; background: rgba(100, 255, 218, 0.05); padding: 6px 14px; border-radius: 100px; border: 1px solid rgba(100, 255, 218, 0.1);">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: #64ffda; box-shadow: 0 0 10px #64ffda; animation: pulse 2s infinite;"></div>
+              <span style="font-size: 0.6rem; font-weight: 900; color: var(--accent-blue); letter-spacing: 1px; text-transform: uppercase;">System Secure</span>
+            </div>
+            <div style="font-size: 0.65rem; color: var(--text-dim); font-weight: 500;">Antigravity OS v4.2.0 ⬢ All Systems Nominal</div>
+          </div>
+          
+          <div style="display: flex; gap: 1.5rem; align-items: center;">
+            <div style="display: flex; gap: 12px; padding: 4px 12px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid rgba(255,255,255,0.03);">
+              <div title="Frontend Architect" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">FE</span>
+              </div>
+              <div title="UI/UX Specialist" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">UX</span>
+              </div>
+              <div title="Backend Integrity" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">BE</span>
+              </div>
+              <div title="Performance Optimizer" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">PERF</span>
+              </div>
+              <div title="Quality Assurance" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">QA</span>
+              </div>
+              <div title="Visual Synthesis" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">AI</span>
+              </div>
+              <div title="DevOps Specialist" style="display: flex; align-items: center; gap: 5px;">
+                <div style="width: 4px; height: 4px; border-radius: 50%; background: #64ffda;"></div>
+                <span style="font-size: 0.55rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.5px;">OPS</span>
+              </div>
+            </div>
+            <div style="font-size: 0.6rem; color: var(--text-dim); font-weight: 800; background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px;">7 AGENTS ONLINE</div>
+          </div>
+        </footer>
+
+      </div> <!-- End of zoom-tablet -->
+    `}return`
+    <style>
+      /* ========== WAREHOUSE HUB � PROFESSIONAL RESPONSIVE DESIGN ========== */
+      .wh-hub {
+        --wh-accent: #64ffda;
+        --wh-accent-glow: rgba(100, 255, 218, 0.12);
+        --wh-accent-dim: rgba(100, 255, 218, 0.06);
+        --wh-bg-card: rgba(10, 25, 47, 0.45);
+        --wh-bg-card-hover: rgba(10, 25, 47, 0.7);
+        --wh-border: rgba(255, 255, 255, 0.07);
+        --wh-border-hover: rgba(100, 255, 218, 0.4);
+        --wh-text-primary: #e6f1ff;
+        --wh-text-secondary: #8892b0;
+        --wh-text-tertiary: rgba(136, 146, 176, 0.6);
+        --wh-radius: 24px;
+        --wh-transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 4rem;
+        contain: layout style;
+      }
+
+      /* ���� Header ���� */
+      .wh-hub-header {
+        text-align: center;
+        margin-bottom: 3rem;
+        padding: 0 1rem;
+      }
+
+      .wh-hub-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 18px;
+        border-radius: 100px;
+        background: var(--wh-accent-dim);
+        color: var(--wh-accent);
+        font-size: 0.65rem;
+        font-weight: 900;
+        letter-spacing: 2.5px;
+        text-transform: uppercase;
+        border: 1px solid rgba(100, 255, 218, 0.15);
+        margin-bottom: 1.5rem;
+      }
+
+      .wh-hub-badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--wh-accent);
+        box-shadow: 0 0 8px var(--wh-accent);
+        animation: wh-pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes wh-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.8); }
+      }
+
+      .wh-hub-title {
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        font-weight: 900;
+        letter-spacing: -1.5px;
+        color: var(--wh-text-primary);
+        margin: 0 0 0.8rem 0;
+        line-height: 1.1;
+      }
+
+      .wh-hub-subtitle {
+        font-size: clamp(0.85rem, 2vw, 1.05rem);
+        color: var(--wh-text-secondary);
+        max-width: 500px;
+        margin: 0 auto;
+        line-height: 1.6;
+        font-weight: 400;
+      }
+
+      /* ���� Grid � Rock-Solid Responsive ���� */
+      .wh-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+        gap: 1.5rem;
+        align-items: stretch;
+      }
+
+      /* ���� Cards ���� */
+      .wh-card {
+        position: relative;
+        background: var(--wh-bg-card);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid var(--wh-border);
+        border-radius: var(--wh-radius);
+        padding: 2rem 1.8rem 1.8rem;
+        cursor: pointer;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        transition: var(--wh-transition);
+        -webkit-tap-highlight-color: transparent;
+        contain: content;
+        isolation: isolate;
+        min-height: 0;
+      }
+
+      /* Top shimmer line */
+      .wh-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+        z-index: 1;
+      }
+
+      /* Glow orb */
+      .wh-card::after {
+        content: '';
+        position: absolute;
+        top: -40%;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 180%;
+        height: 180%;
+        background: radial-gradient(ellipse at center, var(--wh-accent-dim) 0%, transparent 60%);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s;
+        z-index: 0;
+      }
+
+      .wh-card:hover::after,
+      .wh-card:active::after {
+        opacity: 1;
+      }
+
+      /* Desktop hover effects */
+      @media (hover: hover) {
+        .wh-card:hover {
+          background: var(--wh-bg-card-hover);
+          border-color: var(--wh-border-hover);
+          transform: translateY(-6px);
+          box-shadow: 
+            0 20px 40px rgba(0, 0, 0, 0.35),
+            0 0 30px var(--wh-accent-glow);
+        }
+        .wh-card:hover .wh-card-icon {
+          background: var(--wh-accent);
+          color: #0a192f;
+          transform: scale(1.08);
+          box-shadow: 0 8px 30px var(--wh-accent-glow);
+        }
+        .wh-card:hover .wh-card-cta i {
+          transform: translateX(4px);
+        }
+      }
+
+      /* Touch active state */
+      @media (hover: none) {
+        .wh-card:active {
+          background: var(--wh-bg-card-hover);
+          border-color: var(--wh-border-hover);
+          transform: scale(0.98);
+        }
+        .wh-card:active .wh-card-icon {
+          background: var(--wh-accent);
+          color: #0a192f;
+        }
+      }
+
+      .wh-card-icon {
+        position: relative;
+        z-index: 1;
+        width: 72px;
+        height: 72px;
+        background: var(--wh-accent-dim);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--wh-accent);
+        font-size: 1.8rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid rgba(100, 255, 218, 0.08);
+        transition: var(--wh-transition);
+        flex-shrink: 0;
+      }
+
+      .wh-card-name {
+        position: relative;
+        z-index: 1;
+        margin: 0 0 0.6rem 0;
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: var(--wh-text-primary);
+        letter-spacing: -0.3px;
+        line-height: 1.3;
+        word-break: break-word;
+        overflow-wrap: break-word;
+      }
+
+      .wh-card-desc {
+        position: relative;
+        z-index: 1;
+        color: var(--wh-text-secondary);
+        font-size: 0.82rem;
+        line-height: 1.55;
+        margin-bottom: 1.5rem;
+        flex-grow: 1;
+        max-width: 280px;
+      }
+
+      .wh-card-footer {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding-top: 1.2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        flex-shrink: 0;
+      }
+
+      .wh-card-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--wh-accent);
+        font-weight: 800;
+        font-size: 0.72rem;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+      }
+
+      .wh-card-cta i {
+        font-size: 0.7rem;
+        transition: transform 0.3s;
+      }
+
+      /* ���� Responsive: Tablet ���� */
+      @media (max-width: 1024px) {
+        .wh-hub {
+          padding: 1.5rem 1rem 3rem;
+        }
+        .wh-hub-header {
+          margin-bottom: 2rem;
+        }
+        .wh-grid {
+          grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+          gap: 1.2rem;
+        }
+        .wh-card {
+          padding: 1.6rem 1.4rem 1.4rem;
+          border-radius: 20px;
+        }
+        .wh-card-icon {
+          width: 60px;
+          height: 60px;
+          font-size: 1.5rem;
+          border-radius: 16px;
+          margin-bottom: 1.2rem;
+        }
+        .wh-card-name {
+          font-size: 1.15rem;
+        }
+        .wh-card-desc {
+          font-size: 0.78rem;
+          margin-bottom: 1.2rem;
+        }
+      }
+
+      /* ���� Responsive: Phone ���� */
+      @media (max-width: 600px) {
+        .wh-hub {
+          padding: 1rem 0.75rem 2.5rem;
+        }
+        .wh-hub-header {
+          margin-bottom: 1.5rem;
+          padding: 0 0.5rem;
+        }
+        .wh-hub-badge {
+          font-size: 0.58rem;
+          padding: 5px 14px;
+        }
+        .wh-grid {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+        }
+        .wh-card {
+          padding: 1.4rem 1.2rem 1.2rem;
+          border-radius: 18px;
+          flex-direction: row;
+          text-align: left;
+          align-items: center;
+          gap: 1rem;
+        }
+        .wh-card-icon {
+          width: 52px;
+          height: 52px;
+          min-width: 52px;
+          font-size: 1.3rem;
+          border-radius: 14px;
+          margin-bottom: 0;
+        }
+        .wh-card-body {
+          flex: 1;
+          min-width: 0;
+        }
+        .wh-card-name {
+          font-size: 1rem;
+          margin-bottom: 0.3rem;
+        }
+        .wh-card-desc {
+          font-size: 0.75rem;
+          margin-bottom: 0;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          max-width: none;
+        }
+        .wh-card-footer {
+          display: none;
+        }
+        .wh-card-cta-mobile {
+          display: flex;
+          color: var(--wh-accent);
+          font-size: 1rem;
+          align-self: center;
+          flex-shrink: 0;
+          opacity: 0.6;
+        }
+      }
+      @media (min-width: 601px) {
+        .wh-card-cta-mobile {
+          display: none;
+        }
+        .wh-card-body {
+          display: contents;
+        }
+      }
+
+      /* ���� Empty State ���� */
+      .wh-empty {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--wh-text-tertiary);
+      }
+      .wh-empty i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        display: block;
+        opacity: 0.3;
+      }
+
+      /* ���� Stagger animation ���� */
+      @keyframes wh-card-in {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .wh-card {
+        animation: wh-card-in 0.5s ease-out both;
+      }
+      .wh-card:nth-child(1) { animation-delay: 0s; }
+      .wh-card:nth-child(2) { animation-delay: 0.08s; }
+      .wh-card:nth-child(3) { animation-delay: 0.16s; }
+      .wh-card:nth-child(4) { animation-delay: 0.24s; }
+      .wh-card:nth-child(5) { animation-delay: 0.32s; }
+      .wh-card:nth-child(6) { animation-delay: 0.4s; }
+    </style>
+
+    <div class="wh-hub fade-in-up content-area">
+      <!-- Header -->
+      <div class="wh-hub-header">
+        <div class="wh-hub-badge">Sistem Çevrimiçi</div>
+        <h1 class="wh-hub-title">DEPO MERKEZİ</h1>
+        <p class="wh-hub-subtitle">Bölgesel envanter kontrolü ve stok optimizasyon paneli. İşlem yapmak istediğiniz depoyu seçiniz.</p>
+      </div>
+
+      <!-- Grid -->
+      <div class="wh-grid">
+        ${m.length===0?`
+          <div class="wh-empty">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <div style="font-size: 1.2rem; font-weight: 700; color: var(--wh-text-primary);">Erişilebilir depo bulunamadı</div>
+            <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--wh-text-secondary);">Yöneticinizden depo erişim yetkisi talep edin.</p>
+          </div>
+        `:m.map(e=>`
+          <div class="wh-card" onclick="window.navigate('warehouses', '${e.id}')">
+            <div class="wh-card-icon">
+              <i class="fa-solid fa-warehouse"></i>
+            </div>
+            <div class="wh-card-body">
+              <h3 class="wh-card-name">${e.name}</h3>
+              <p class="wh-card-desc">${e.id===`central`?`Ana lojistik ve dağıtım merkezi`:`Bölgesel saha yedek parça deposu`}</p>
+            </div>
+            <div class="wh-card-footer">
+              <div class="wh-card-cta">
+                ENVANTERİ G�RÜNTÜLE <i class="fa-solid fa-arrow-right"></i>
+              </div>
+            </div>
+            <div class="wh-card-cta-mobile">
+              <i class="fa-solid fa-chevron-right"></i>
+            </div>
+          </div>
+        `).join(``)}
+      </div>
+    </div>
+    `};window.handleWarehouseFormSubmit=async e=>{e.preventDefault();let t=document.getElementById(`modal-warehouse-id`).value,n=document.getElementById(`modal-item-id`).value,i=document.getElementById(`modal-sap-no`).value,a=document.getElementById(`modal-description`).value,o=parseInt(document.getElementById(`modal-quantity`).value||`0`,10),s=document.getElementById(`modal-critical-limit`).value,c=s?parseInt(s,10):null,l=document.getElementById(`modal-shelf`).value,u=null,d=document.getElementById(`modal-submit-btn`),f=d.innerHTML;try{if(d.disabled=!0,d.innerHTML=`<i class="fa-solid fa-spinner fa-spin"></i> KAYDEDİLİYOR...`,window.pendingMaterialImage){let{inventoryService:e}=await V(async()=>{let{inventoryService:e}=await Promise.resolve().then(()=>Ns);return{inventoryService:e}},void 0),{warehouseService:i}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0),a=i.resolveWarehouseId(t);u=await e.uploadMaterialImage(a,n||`temp_`+Date.now(),window.pendingMaterialImage),window.pendingMaterialImage=null}let e={sapNo:i,description:a,quantity:o,shelfNo:l};if(c!==null&&(e.criticalLimit=c),u&&(e.imageUrl=u),n)await W.updateMaterial(t,n,e),await W.addLog(t,{itemId:n,materialName:a,sapNo:i,type:`UPDATE`,quantity:o,user:Bs.getCurrentUser()?.email||`Sistem`,source:`MANUAL`});else{let n=await W.addMaterial(t,e);await W.addLog(t,{itemId:n.id,materialName:a,sapNo:i,type:`ADD`,quantity:o,user:Bs.getCurrentUser()?.email||`Sistem`,source:`MANUAL`})}window.closeAddMaterialModal(),setTimeout(()=>{window.updateWarehouseUI(t,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(e),alert(`Bir hata oluştu. Lütfen tekrar deneyin.`)}finally{d.disabled=!1,d.innerHTML=f}},window.closeAddMaterialModal=()=>{let e=document.getElementById(`add-material-modal`);if(e){let t=e.querySelector(`.modal-content`);t&&(t.style.transform=`scale(0.9)`),setTimeout(()=>{e.style.display=`none`},200)}},window.openImageUploadModal=(e,t)=>{let n=window.currentUser,i=n?.role?.toUpperCase()===`ADMIN`,a=n?.allowedTabs?.warehouses||{};if(!(i||typeof a==`object`&&a.addMaterial)){alert(`⚠️ Resim yükleme/değiştirme yetkiniz bulunmamaktadır.`);return}let o=document.getElementById(`material-image-input`),s=document.getElementById(`upload-warehouse-id`),c=document.getElementById(`upload-item-id`);o&&s&&c?(s.value=e,c.value=t,o.value=``,o.onchange=e=>{e.target.files&&e.target.files.length>0&&window.handleMaterialImageUpload(e)},requestAnimationFrame(()=>{o.click()}),console.log(`[ImageUpload] Triggering file picker for:`,{warehouseId:e,itemId:t})):console.error(`[ImageUpload] Required elements not found in DOM`)},window.triggerMaterialImageSelect=()=>{let e=document.getElementById(`material-image-input`);e&&(e.onchange=e=>{let t=e.target.files[0];if(!t)return;window.pendingMaterialImage=t;let n=new FileReader;n.onload=e=>{let t=document.getElementById(`modal-image-preview`),n=document.getElementById(`modal-image-preview-container`),i=document.getElementById(`modal-no-image`);t&&n&&i&&(t.src=e.target.result,n.style.display=`block`,i.style.display=`none`)},n.readAsDataURL(t)},e.click())},window.handleMaterialImageUpload=async e=>{let t=e.target.files[0],n=document.getElementById(`upload-warehouse-id`).value,i=document.getElementById(`upload-item-id`).value,a=document.getElementById(`upload-loading-overlay`);if(console.log(`[ImageUpload] Starting...`,{warehouseId:n,itemId:i,fileName:t?.name}),!t||!n||!i){console.error(`[ImageUpload] Missing data:`,{file:t,warehouseId:n,itemId:i});return}try{a&&(a.style.display=`flex`);let e=W.resolveWarehouseId(n),o=await Ps.uploadMaterialImage(e,i,t);if(console.log(`[ImageUpload] Storage Success:`,o),!i||i===`undefined`)throw Error(`Geçersiz Malzeme ID (itemId missing)`);await W.updateMaterial(n,i,{imageUrl:o});let s=(await W.getInventory(n)).find(e=>e.id===i);s&&s.sapNo&&(console.log(`[ImageUpload] Triggering global sync for SAP: ${s.sapNo}`),await W.syncMaterialImageGlobally(s.sapNo,o)),console.log(`[ImageUpload] Firestore Update Success!`),a&&(a.style.display=`none`),setTimeout(()=>{window.updateWarehouseUI(n,void 0,void 0,void 0,void 0,!0)},500),setTimeout(()=>alert(`�S& Resim başarıyla yüklendi ve kaydedildi.`),100)}catch(e){a&&(a.style.display=`none`),console.error(`[ImageUpload] Error:`,e),alert(`Resim yüklenirken bir hata oluştu: `+(e.message||`Bilinmeyen hata`))}},window.removeMaterialImage=async()=>{let e=window.currentUser,t=e?.role?.toUpperCase()===`ADMIN`,n=e?.allowedTabs?.warehouses||{};if(!(t||typeof n==`object`&&n.deleteImage)){alert(`⚠️ Resim silme yetkiniz bulunmamaktadır.`);return}let i=document.getElementById(`modal-warehouse-id`).value,a=document.getElementById(`modal-item-id`).value;if(!(!i||!a)&&confirm(`Malzeme resmini silmek istediğinize emin misiniz?`))try{let e=document.getElementById(`modal-submit-btn`);if(e.disabled=!0,a){await W.updateMaterial(i,a,{imageUrl:``});let e=(await W.getInventory(i)).find(e=>e.id===a);e&&e.sapNo&&(console.log(`[ImageRemove] Triggering global sync for SAP: ${e.sapNo}`),await W.syncMaterialImageGlobally(e.sapNo,``))}window.pendingMaterialImage=null;let t=document.getElementById(`modal-image-preview-container`),n=document.getElementById(`modal-no-image`);t&&(t.style.display=`none`),n&&(n.style.display=`flex`),alert(`�S& Resim başarıyla kaldırıldı.`),a&&setTimeout(()=>{window.updateWarehouseUI(i,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(`[RemoveImage] Error:`,e),alert(`Resim silinirken bir hata oluştu.`)}finally{let e=document.getElementById(`modal-submit-btn`);e.disabled=!1}},window.viewMaterialImage=(e,t)=>{if(!e)return;let n=document.createElement(`div`);n.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.95); backdrop-filter: blur(30px); z-index: 11000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s;`,n.innerHTML=`
+    <div style="position: relative; max-width: 90%; max-height: 90%; text-align: center; transform: scale(0.9); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+      <button onclick="this.parentElement.parentElement.style.opacity='0'; setTimeout(()=>this.parentElement.parentElement.remove(), 300)" class="action-btn" style="position: absolute; top: -60px; right: 0; border: none; background: rgba(255,255,255,0.1); width: 44px; height: 44px; border-radius: 50%; color: #fff; font-size: 1.2rem;">&times;</button>
+      <img src="${e}" style="max-width: 100%; max-height: 80vh; border-radius: 32px; box-shadow: 0 50px 100px rgba(0,0,0,0.8); border: 1px solid rgba(255,255,255,0.1);">
+      <div style="color: #fff; margin-top: 2rem; font-size: 1.6rem; font-weight: 900; letter-spacing: -0.5px;">${t}</div>
+    </div>
+  `,n.onclick=e=>{e.target===n&&(n.style.opacity=`0`,setTimeout(()=>n.remove(),300))},document.body.appendChild(n),setTimeout(()=>{n.style.opacity=`1`,n.querySelector(`div`).style.transform=`scale(1)`},10)},window.deleteLogRecord=async(e,t,n)=>{let i=window.currentUser,a=i?.role?.toUpperCase()===`ADMIN`,o=i?.allowedTabs?.warehouses||{};if(!(a||typeof o==`object`&&o.deleteMaterial)){alert(`Yetkiniz bulunmamaktadır.`);return}if(confirm(`"${n}" hareket kaydını kalıcı olarak silmek istediğinize emin misiniz?`))try{let{warehouseService:n}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0);await n.deleteLog(e,t),window.deletedLogIds=window.deletedLogIds||[],window.deletedLogIds.push(t),document.querySelectorAll(`tr`).forEach(e=>{e.innerHTML.includes(t)&&(e.style.display=`none`)}),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(e),alert(`Silme işlemi sırasında bir hata oluştu.`)}},window.deleteMaterial=async(e,t,n,i)=>{let a=window.currentUser,o=a?.role?.toUpperCase()===`ADMIN`,s=a?.allowedTabs?.warehouses||{};if(!(o||typeof s==`object`&&s.deleteMaterial)){alert(`⚠️ Malzeme silme yetkiniz bulunmamaktadır.`);return}if(confirm(`"${i} - ${n}" malzemesini kalıcı olarak silmek istediğinize emin misiniz?`))try{await W.deleteMaterial(e,t),window.deletedItemIds=window.deletedItemIds||[],window.deletedItemIds.push(t),document.querySelectorAll(`tr`).forEach(e=>{e.innerHTML.includes(t)&&(e.style.display=`none`)}),await W.addLog(e,{itemId:t,materialName:n,sapNo:i,type:`REMOVE`,quantity:0,user:Bs.getCurrentUser()?.email||`Sistem`,source:`MANUAL`}),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(e),alert(`Silme işlemi sırasında bir hata oluştu.`)}},window.viewActivityHistory=e=>{window.updateWarehouseUI(e,void 0,void 0,``,`history`)},window.viewLogDetails=e=>{let t=document.getElementById(`log-detail-modal`),n=document.getElementById(`log-detail-content`);!t||!n||(n.innerHTML=[{label:`Malzeme`,value:e.materialName,icon:`fa-box`},{label:`SAP No`,value:e.sapNo||`-`,icon:`fa-barcode`},{label:`İşlem Türü`,value:e.type,icon:`fa-exchange-alt`},{label:`Miktar`,value:e.quantity,icon:`fa-sort-amount-up`},{label:`Kullanıcı`,value:e.user,icon:`fa-user`},{label:`Zaman`,value:new Date(e.timestamp?.toDate?e.timestamp.toDate():e.timestamp).toLocaleString(`tr-TR`),icon:`fa-clock`},{label:`Türbin`,value:e.turbineNo?`T-${e.turbineNo}`:`-`,icon:`fa-wind-turbine`},{label:`Ekip`,value:e.team||`-`,icon:`fa-users`},{label:`Form No`,value:e.formNo?`#${e.formNo}`:`-`,icon:`fa-file-contract`}].map(e=>`
+        <div style="display: flex; align-items: center; gap: 15px; background: rgba(255,255,255,0.02); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: var(--accent-glow); display: flex; align-items: center; justify-content: center; color: var(--accent-blue); font-size: 1rem;">
+                <i class="fa-solid ${e.icon}"></i>
+            </div>
+            <div>
+                <div style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">${e.label}</div>
+                <div style="font-size: 0.95rem; color: var(--text-main); font-weight: 700;">${e.value}</div>
+            </div>
+        </div>
+    `).join(``),t.style.display=`flex`)},window.handleSapInput=async e=>{let t=document.getElementById(`modal-description`),n=document.getElementById(`sap-status-icon`);if(!t||e.length<2){n&&(n.innerHTML=``);return}n&&(n.innerHTML=`<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-blue);"></i>`);let i=Ps.getMaterialBySap(e);i?(t.value=i.d,n&&(n.innerHTML=`<i class="fa-solid fa-check-circle" style="color: #00ff7f;"></i>`),t.parentElement?.classList.add(`pulse-border`),setTimeout(()=>t.parentElement?.classList.remove(`pulse-border`),1e3)):n&&(n.innerHTML=`<i class="fa-solid fa-circle-question" style="color: var(--text-dim); opacity: 0.5;"></i>`)},window.filterInventory=async(e,t)=>{let n=window.appState;n&&(n.inventorySearchQuery=e);let i=document.querySelector(`#inventory-list-container tbody`)||document.querySelector(`.premium-card table tbody`);if(!i)return;let a=window.currentUser,o=a?.role?.toUpperCase()===`ADMIN`,s=a?.allowedTabs?.warehouses||{},c=o||typeof s==`object`&&!!s.addMaterial,l=o||typeof s==`object`&&!!s.deleteMaterial,u=await W.getInventory(t);if(e){let t=e.toLowerCase();u=u.filter(e=>e.sapNo.toLowerCase().includes(t)||e.description.toLowerCase().includes(t)||e.shelfNo&&e.shelfNo.toLowerCase().includes(t))}let d=n?.inventorySortKey||`sapNo`,f=n?.inventorySortDirection||`asc`;u.sort((e,t)=>{let n=e[d]||``,i=t[d]||``;return n.toString().localeCompare(i.toString())*(f===`asc`?1:-1)});let p=e=>{if(!e)return`-`;try{return(e.toDate?e.toDate():new Date(e)).toLocaleDateString(`tr-TR`,{day:`2-digit`,month:`2-digit`,year:`numeric`,hour:`2-digit`,minute:`2-digit`})}catch{return`-`}};if(u.length===0){i.innerHTML=`
+            <tr>
+              <td colspan="5" style="padding: 5rem 0; text-align: center;">
+                <div style="opacity: 0.2; font-size: 4rem; margin-bottom: 1.5rem;"><i class="fa-solid fa-box-open"></i></div>
+                <div style="color: var(--text-dim); font-size: 1.1rem; font-weight: 600;">Sonuç bulunamadı</div>
+                <p style="opacity: 0.4; font-size: 0.9rem;">Arama kriterlerini değiştirmeyi deneyin.</p>
+              </td>
+            </tr>
+        `;return}i.innerHTML=u.map(e=>`
+        <tr class="premium-item" id="row-${e.id}">
+          <td style="padding: 1.2rem 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 1.2rem;">
+              <div style="position: relative;">
+                <div onclick="window.viewMaterialImage('${e.imageUrl||``}', '${e.description.replace(/'/g,`\\'`)}')" style="cursor: pointer;">
+                    ${e.imageUrl?`<img src="${e.imageUrl}" class="material-thumb">`:`<div class="material-thumb" style="background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; color: var(--accent-blue); opacity: 0.4;"><i class="fa-solid fa-image"></i></div>`}
+                </div>
+                ${c?`
+                <div style="position: absolute; bottom: -6px; right: -6px; width: 36px; height: 36px; background: var(--accent-blue); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1rem; color: #0a192f; border: 3px solid #0a192f; cursor: pointer; z-index: 20; box-shadow: 0 8px 20px rgba(0,0,0,0.6); transition: all 0.2s;" 
+                     onclick="event.preventDefault(); event.stopPropagation(); window.openImageUploadModal('${t}', '${e.id}')">
+                  <i class="fa-solid fa-camera"></i>
+                </div>
+                `:``}
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 1rem; color: var(--text-main);">${e.description}</div>
+                <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px; display: flex; align-items: center; gap: 10px;">
+                    <span><i class="fa-solid fa-clock-rotate-left" style="margin-right: 4px;"></i> ${p(e.lastUpdated)}</span>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td style="padding: 1.2rem 1.5rem;">
+            <code style="background: rgba(100, 255, 218, 0.05); color: var(--accent-blue); padding: 4px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.1);">${e.sapNo}</code>
+          </td>
+          <td style="padding: 1.2rem 1.5rem; text-align: center;">
+            <div style="font-size: 1.2rem; font-weight: 800; color: ${e.criticalLimit&&e.criticalLimit>0&&e.quantity<=e.criticalLimit?`var(--danger)`:`var(--text-main)`};">
+              ${e.quantity}
+              <span style="font-size: 0.6rem; opacity: 0.4; display: block;">ADET</span>
+            </div>
+          </td>
+          <td style="padding: 1.2rem 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem; color: var(--text-dim); font-size: 0.9rem; font-weight: 600;">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent-blue);"></div>
+              ${e.shelfNo||`R-00`}
+            </div>
+          </td>
+          <td style="padding: 1.2rem 1.5rem;">
+            <div style="display: flex; gap: 1.2rem; justify-content: flex-end; align-items: center;">
+              ${c?`
+              <button class="action-btn" onclick="window.editMaterial('${t}', '${e.id}')" title="Düzenle" style="background: rgba(100, 255, 218, 0.05); border-color: rgba(100, 255, 218, 0.2); color: var(--accent-blue);">
+                <i class="fa-solid fa-pen-to-square"></i>
+              </button>
+              `:``}
+              ${l?`
+        
+        setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);
+              </button>
+              `:``}
+            </div>
+          </td>
+        </tr>
+    `).join(``)},window.changeTab=(e,t)=>{window.updateWarehouseUI(e,void 0,void 0,``,t)},window.toggleNotifications=()=>{let e=document.getElementById(`notif-dropdown`);e&&(e.style.display=e.style.display===`none`?`block`:`none`)},window.markRead=async(e,t)=>{await W.markNotificationAsRead(e,t),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)},window.printQR=(e,t,n)=>{Uc.printLabel({id:e,sapNo:t,description:n})};var yy=null;window.viewMaterialImage=(e,t)=>{let n=document.getElementById(`image-preview-modal`),i=document.getElementById(`preview-img`),a=document.getElementById(`preview-title`),o=document.getElementById(`change-image-btn`);n&&i&&a&&(i.src=e,a.textContent=t,n.style.display=`flex`,o&&(o.onclick=()=>{n.style.display=`none`,W.getInventory(window.currentWarehouseId).then(t=>{let n=t.find(t=>t.imageUrl===e);n&&window.openImageUploadModal(window.currentWarehouseId,n.id)})}))},window.showItemHistory=async(e,t)=>{let n=window.currentWarehouseId;if(!n)return;let i=(await W.getLogs(n)).filter(t=>t.itemId===e).sort((e,t)=>(t.timestamp?.toDate?t.timestamp.toDate().getTime():t.timestamp)-(e.timestamp?.toDate?e.timestamp.toDate().getTime():e.timestamp)),a=document.createElement(`div`);a.className=`modal-overlay`,a.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px); z-index: 10001; display: flex; align-items: center; justify-content: center;`,a.innerHTML=`
+        <div class="premium-card" style="max-width: 600px; width: 95%; padding: 2rem; max-height: 80vh; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h3 style="margin: 0; color: var(--accent-blue);">${t} � Hareket Geçmişi</h3>
+                <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.5rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="overflow-y: auto; flex-grow: 1;">
+                ${i.length===0?`<p style="text-align: center; color: var(--text-dim);">Hareket kaydı bulunamadı.</p>`:i.map(e=>`
+                    <div style="padding: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 700; color: ${e.type===`ADD`?`#00ff7f`:e.type===`REMOVE`?`#ff4d4d`:`#3498db`};">
+                                ${e.type===`ADD`?`<i class="fa-solid fa-arrow-down-long"></i> STOK GİRİŞ`:e.type===`REMOVE`?`<i class="fa-solid fa-arrow-up-long"></i> STOK ÇIKIŞ`:`<i class="fa-solid fa-rotate"></i> GÜNCELLEME`}
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">${new Date(e.timestamp?.toDate?e.timestamp.toDate():e.timestamp).toLocaleString(`tr-TR`)}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 900; font-size: 1.2rem; color: var(--text-main);">${e.quantity} ADET</div>
+                            <div style="font-size: 0.7rem; color: var(--accent-blue); opacity: 0.7; font-weight: 700;">${e.user?.split(`@`)[0]?.toUpperCase()||`SİSTEM`}</div>
+                        </div>
+                    </div>
+                `).join(``)}
+            </div>
+        </div>
+    `,document.body.appendChild(a)},window.copyToClipboard=e=>{navigator.clipboard.writeText(e);let t=document.createElement(`div`);t.style.cssText=`position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: var(--accent-blue); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 800; font-size: 0.8rem; z-index: 10002; box-shadow: 0 10px 30px rgba(100, 255, 218, 0.3); animation: fadeUp 0.3s ease-out;`,t.innerHTML=`<i class="fa-solid fa-check-circle"></i> SAP NO KOPYALANDI: ${e}`,document.body.appendChild(t),setTimeout(()=>{t.style.animation=`fadeDown 0.3s ease-in forwards`,setTimeout(()=>t.remove(),300)},2e3)},window.printQR=(e,t,n)=>{let i=window.open(``,`_blank`);i&&(i.document.write(`
+        <html>
+            <head>
+                <title>QR Label - ${t}</title>
+                <style>
+                    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .label { border: 2px solid #000; padding: 20px; text-align: center; width: 300px; }
+                    .sap { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+                    .name { font-size: 14px; margin-bottom: 20px; }
+                    img { width: 200px; height: 200px; }
+                </style>
+            </head>
+            <body>
+                <div class="label">
+                    <div class="sap">SAP: ${t}</div>
+                    <div class="name">${n}</div>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${t}">
+                    <div style="margin-top: 10px; font-size: 10px;">DH SERVIS CMMS</div>
+                </div>
+                <script>
+                    window.onload = () => { window.print(); window.close(); };
+                <\/script>
+            </body>
+        </html>
+    `),i.document.close())},window.initWarehouseLogic=()=>{let e=document.querySelector(`.premium-tab.active`)?.textContent?.trim().toLowerCase();console.log(`[Warehouse] Initializing Logic for tab:`,e),e?.includes(`analiz`)&&setTimeout(()=>{window.initCharts(window.currentWarehouseId)},100)},window.startQRScanner=e=>{document.getElementById(`qr-scanner-modal`).style.display=`flex`,yy=Uc.initScanner(`reader`,async t=>{window.stopQRScanner();let n=(window.currentInventoryData||[]).find(e=>String(e.sapNo).trim()===String(t).trim()||String(e.id).trim()===String(t).trim());n||=await W.getStockBySap(e,t),n?window.editMaterial(e,n.id):alert(`Malzeme bulunamadı: `+t)})},window.stopQRScanner=()=>{yy&&=(yy.clear().catch(console.error),null),document.getElementById(`qr-scanner-modal`).style.display=`none`},window.updateAuditSummary=()=>{let e=document.querySelectorAll(`.audit-input`),t=0,n=0,i=0,a=0;e.forEach(e=>{let o=(parseInt(e.value)||0)-parseInt(e.dataset.systemQty||`0`);t+=o,o!==0&&(n++,o>0?i++:a++);let s=e.dataset.itemId,c=document.getElementById(`diff-${s}`),l=document.getElementById(`note-row-${s}`);c&&(c.textContent=(o>0?`+`:``)+o,c.style.color=o===0?`var(--text-main)`:o>0?`#00ff7f`:`#ff4d4d`,c.style.fontWeight=o===0?`400`:`900`),l&&(l.style.display=o===0?`none`:`table-row`)});let o=document.getElementById(`audit-net-diff`);o&&(o.textContent=(t>0?`+`:``)+t,o.style.color=t===0?`var(--text-main)`:t>0?`#00ff7f`:`#ff4d4d`);let s=document.getElementById(`audit-error-count`);s&&(s.textContent=n.toString(),s.style.color=n>0?`#ff4d4d`:`var(--accent-blue)`);let c=document.getElementById(`audit-surplus-count`);c&&(c.textContent=`�  ${i}`);let l=document.getElementById(`audit-deficit-count`);l&&(l.textContent=`�  ${a}`)},window.finishAudit=async e=>{let t=document.querySelectorAll(`.audit-input`);if(!confirm(`Sayımları onaylıyor musunuz? Stok miktarları güncellenecektir.`))return;let n=document.querySelector(`.btn-cyber[onclick*="finishAudit"]`);n&&(n.disabled=!0,n.innerHTML=`<i class="fa-solid fa-circle-notch fa-spin"></i> KAYDEDİLİYOR...`);try{let n=window.currentInventoryData;if((!n||n.length===0)&&(console.log(`[finishAudit] Global inventory missing, fetching from service...`),n=await W.getInventory(e)),!n||n.length===0){alert(`Hata: Sayılacak envanter bulunamadı.`);return}let i=[],a=0,o=0,s=0,c=0,l=window.currentUser?.email||`unknown@dhservis.com`,{db:u}=await V(async()=>{let{db:e}=await Promise.resolve().then(()=>xs);return{db:e}},void 0),{writeBatch:d,doc:f}=await V(async()=>{let{writeBatch:e,doc:t}=await import(`./index.esm-FOcpZ245.js`).then(e=>e.t);return{writeBatch:e,doc:t}},__vite__mapDeps([0,1])),p=d(u);for(let l of t){let t=l.dataset.itemId,d=parseInt(l.value)||0,m=n.find(e=>e.id===t);if(!m)continue;let h=Number(m.quantity)||0,g=d-h;a+=g,g!==0&&(o++,g>0?s++:c++);let _=f(u,`warehouses/${e}/inventory`,t);p.update(_,{quantity:d,lastUpdated:new Date().toISOString()}),i.push({itemId:t,sapNo:m.sapNo,description:m.description,systemQty:h,physicalQty:d,diff:g,note:document.querySelector(`.audit-note[data-item-id="${t}"]`)?.value||``})}await W.saveAudit(e,{user:l,totalItems:i.length,totalDiff:a,discrepantItems:o,surplusItems:s,deficitItems:c,results:i}),await p.commit(),alert(`Sayım başarıyla tamamlandı ve stoklar güncellendi.`),window.invalidateWarehouseCache(),window.updateWarehouseUI(e,void 0,void 0,``,`audit_history`)}catch(e){console.error(`Audit failed:`,e),alert(`Sayım kaydedilirken bir hata oluştu.`);let t=document.querySelector(`.btn-cyber[onclick*="finishAudit"]`);t&&(t.disabled=!1,t.innerHTML=`<i class="fa-solid fa-check-double"></i> SAYIMI TAMAMLA`)}},window.initCharts=async e=>{let t=await W.getInventory(e),n=await W.getLogs(e),i=document.getElementById(`trendChart`);if(i){let e=[...Array(30)].map((e,t)=>{let n=new Date;return n.setDate(n.getDate()-(29-t)),n.toLocaleDateString(`tr-TR`,{day:`2-digit`,month:`2-digit`})}),t=e.map(e=>n.filter(t=>{if(!t.timestamp)return!1;try{return(t.timestamp.toDate?t.timestamp.toDate():new Date(t.timestamp)).toLocaleDateString(`tr-TR`,{day:`2-digit`,month:`2-digit`})===e}catch{return!1}}).length).length;new _y(i,{type:`line`,data:{labels:e,datasets:[{label:`İşlem Sayısı`,data:t,borderColor:`#64ffda`,backgroundColor:`rgba(100, 255, 218, 0.1)`,fill:!0,tension:.4}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:!1}},scales:{y:{beginAtZero:!0,grid:{color:`rgba(255,255,255,0.05)`}},x:{grid:{display:!1}}}}})}let a=document.getElementById(`usageChart`);if(a){let e={};n.filter(e=>e.type===`REMOVE`).forEach(t=>{e[t.materialName]=(e[t.materialName]||0)+t.quantity});let t=Object.entries(e).sort((e,t)=>t[1]-e[1]).slice(0,5);new _y(a,{type:`bar`,data:{labels:t.map(e=>e[0].length>15?e[0].substring(0,15)+`...`:e[0]),datasets:[{label:`Toplam Çıkış`,data:t.map(e=>e[1]),backgroundColor:`rgba(100, 255, 218, 0.6)`,borderRadius:8}]},options:{responsive:!0,maintainAspectRatio:!1,indexAxis:`y`,plugins:{legend:{display:!1}}}})}let o=document.getElementById(`healthChart`);if(o){let e=t.filter(e=>e.criticalLimit&&e.criticalLimit>0),n=e.filter(e=>e.quantity>e.criticalLimit).length,i=e.filter(e=>e.quantity<=e.criticalLimit&&e.quantity>0).length,a=t.filter(e=>e.quantity<=0).length;new _y(o,{type:`doughnut`,data:{labels:[`Sağlıklı`,`Kritik`,`Stok Yok`],datasets:[{data:[n,i,a],backgroundColor:[`#64ffda`,`#ff4d4d`,`rgba(255,255,255,0.2)`],borderWidth:0}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:!1}},cutout:`70%`}})}},window.downloadExcel=async e=>{try{let t=await W.getInventory(e),n=await W.getLogs(e),a=t.map(e=>({"SAP NO":e.sapNo,"AAÇIKLAMA":e.description,MİKTAR:e.quantity,KONUM:e.shelfNo||``,"KRİTİK LİMİT":e.criticalLimit??``})),o=n.map(e=>{let t=e.timestamp&&e.timestamp.toDate?e.timestamp.toDate().toLocaleString(`tr-TR`):new Date().toLocaleString(`tr-TR`),n=``;return n=e.type===`ADD`?e.source===`MANUAL`?`MANUEL GİRİŞ`:`GİRİŞ`:e.type===`REMOVE`?e.source===`MANUAL`?`MANUEL ÇIKIŞ`:`ÇIKIŞ`:`GÜNCELLEME`,{TARİH:t,"SAP NO":e.sapNo,MALZEME:e.materialName,İŞLEM:n,MİKTAR:e.quantity,PERSONEL:e.user||`-`,"FORM/MÇF NO":e.formNo||`-`,"TÜRBİN":e.turbineNo||`-`}}),s=await V(()=>Promise.resolve().then(()=>eb),void 0),c=s.utils.book_new();s.utils.book_append_sheet(c,s.utils.json_to_sheet(a),`Envanter`),s.utils.book_append_sheet(c,s.utils.json_to_sheet(o),`Son Hareketler`);let l=i.getWarehouses().find(t=>t.id===e);s.writeFile(c,`${l?.name||`Depo`}_Envanter_Detayli_${new Date().toISOString().split(`T`)[0]}.xlsx`)}catch(e){console.error(`Excel export error:`,e),alert(`Excel indirilirken bir hata oluştu.`)}},window.filterAuditByShelf=e=>{let t=document.querySelectorAll(`.audit-row`),n=e.toLowerCase();t.forEach(e=>{(e.dataset.shelf?.toLowerCase()||``).includes(n)?e.style.display=``:e.style.display=`none`})},window.triggerExcelUpload=e=>{let t=window.currentUser,n=t?.role?.toUpperCase()===`ADMIN`,i=t?.allowedTabs?.warehouses||{};if(!(n||typeof i==`object`&&i.uploadExcel)){alert(`⚠️ Excel yükleme yetkiniz bulunmamaktadır.`);return}document.getElementById(`excel-upload-input`)?.click()},window.handleExcelUpload=async(e,t)=>{let n=window.currentUser,i=n?.role?.toUpperCase()===`ADMIN`,a=n?.allowedTabs?.warehouses||{};if(!(i||typeof a==`object`&&a.uploadExcel)){alert(`⚠️ Excel yükleme yetkiniz bulunmamaktadır.`);return}let o=e.target.files[0];if(!o)return;let s=new FileReader;s.onload=async n=>{try{let i=new Uint8Array(n.target?.result),a=await V(()=>Promise.resolve().then(()=>eb),void 0),o=a.read(i,{type:`array`}),s=o.Sheets[o.SheetNames[0]],c=a.utils.sheet_to_json(s);if(c.length===0){alert(`Excel dosyası boş.`);return}if(!confirm(`${c.length} adet kayıt işlenecek. Devam edilsin mi?`))return;let l=new Map;try{let{warehouseService:e}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0);l=await e.getGlobalImagePool()}catch(e){console.warn(`Could not load global images`,e)}let u=await W.getInventory(t),d=0,f=0;for(let e of c){let n=String(e[`SAP NO`]||``).trim(),i=e[`AAÇIKLAMA`]||``,a=parseInt(e.MİKTAR)||0,o=e.KONUM||``,s=e[`KRİTİK LİMİT`],c=s!=null&&s!==``?parseInt(s):void 0;if(!n)continue;let p=u.find(e=>e.sapNo===n),m=l.get(n);if(p&&p.id){let e={description:i,quantity:a,shelfNo:o,criticalLimit:c};m&&!p.imageUrl&&(e.imageUrl=m),await W.updateMaterial(t,p.id,e),d++}else{let e={sapNo:n,description:i,quantity:a,shelfNo:o,criticalLimit:c};m&&(e.imageUrl=m),await W.addMaterial(t,e),f++}}alert(`İşlem tamamlandı!\nGüncellenen: ${d}\nYeni Eklenen: ${f}`),setTimeout(()=>{window.updateWarehouseUI(t,void 0,void 0,void 0,void 0,!0)},500),e.target.value=``}catch(e){console.error(`Excel import error:`,e),alert(`Excel yüklenirken bir hata oluştu.`)}},s.readAsArrayBuffer(o)},window.initiateOrderFlow=async e=>{try{let t=(await W.getInventory(e)).filter(e=>e.criticalLimit&&e.criticalLimit>0&&e.quantity<=e.criticalLimit);if(t.length===0){alert(`Şu an kritik seviyede malzeme bulunmuyor.`);return}let n=document.createElement(`div`);n.id=`order-confirm-modal`,n.className=`modal-overlay`,n.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px); z-index: 10001; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s;`,n.innerHTML=`
+            <div class="premium-card" style="max-width: 700px; width: 95%; padding: 2.5rem; transform: scale(0.9); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                    <div>
+                        <h3 style="margin: 0; color: var(--danger); font-size: 1.5rem; font-weight: 900; letter-spacing: -0.5px;">SİPARİŞ TALEBİ OLUŞTUR</h3>
+                        <p style="color: var(--text-dim); margin-top: 8px; font-size: 0.85rem;">Aşağııdaki ${t.length} kalem malzeme için satın alma talebi oluşturulacak.</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.5rem;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <div style="max-height: 400px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 16px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05);">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #111a24; z-index: 1;">
+                            <tr>
+                                <th style="padding: 1rem; text-align: left; font-size: 0.7rem; color: var(--text-dim);">MALZEME</th>
+                                <th style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim);">STOK</th>
+                                <th style="padding: 1rem; text-align: right; font-size: 0.7rem; color: var(--accent-blue);">TALEP ADETİ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${t.map(e=>`
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                    <td style="padding: 1rem;">
+                                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${e.description}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-dim);">${e.sapNo}</div>
+                                    </td>
+                                    <td style="padding: 1rem; text-align: center; font-weight: 900; color: var(--danger);">${e.quantity}</td>
+                                    <td style="padding: 1rem; text-align: right;">
+                                        <input type="number" class="cyber-input-premium order-qty-input" data-item-id="${e.id}" data-sap="${e.sapNo}" data-desc="${e.description.replace(/"/g,`&quot;`)}" data-stock="${e.quantity}" data-limit="${e.criticalLimit}" value="${(e.criticalLimit||0)*2}" style="width: 80px; text-align: center; background: rgba(100,255,218,0.05); border-color: rgba(100,255,218,0.2); font-weight: 900;">
+                                    </td>
+                                </tr>
+                            `).join(``)}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-bottom: 2rem;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Sipariş Notu / Gerekçe</label>
+                    <textarea id="order-requester-note" placeholder="Neden bu malzemelere ihtiyaç duyulduğunu veya özel taleplerinizi belirtebilirsiniz..." style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; color: var(--text-main); padding: 1rem; font-size: 0.85rem; height: 80px; resize: none; outline: none; transition: border-color 0.3s;"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="btn-cyber" style="padding: 14px 28px; border-radius: 12px; background: rgba(255,255,255,0.05); color: var(--text-main); border: none;">İPTAL</button>
+                    <button onclick="window.submitOrderRequest('${e}')" id="confirm-order-btn" class="btn-cyber" style="padding: 14px 40px; border-radius: 12px; background: var(--danger); color: white; font-weight: 900; border: none; box-shadow: 0 10px 30px rgba(255, 77, 77, 0.2);">TALEBİ G�NDER</button>
+                </div>
+            </div>
+        `,document.body.appendChild(n),setTimeout(()=>{n.style.opacity=`1`,n.querySelector(`div`).style.transform=`scale(1)`},10)}catch(e){console.error(`Order Flow Error:`,e)}},window.submitOrderRequest=async e=>{let t=document.getElementById(`confirm-order-btn`),n=document.querySelectorAll(`.order-qty-input`),a=[];n.forEach(e=>{a.push({itemId:e.dataset.itemId,sapNo:e.dataset.sap,description:e.dataset.desc,currentStock:parseInt(e.dataset.stock),limit:parseInt(e.dataset.limit),quantity:parseInt(e.value)||0})});try{t.disabled=!0,t.innerHTML=`<i class="fa-solid fa-circle-notch fa-spin"></i> G�NDERİLİYOR...`;let{orderService:n}=await V(async()=>{let{orderService:e}=await Promise.resolve().then(()=>Oy);return{orderService:e}},void 0),o=i.getWarehouses().find(t=>t.id===e)?.name||e,s=Bs.getCurrentUser()?.displayName||Bs.getCurrentUser()?.email||`Bilinmeyen`,c=document.getElementById(`order-requester-note`).value;await n.createPurchaseRequest(e,o,a,s,c),t.style.background=`#28a745`,t.innerHTML=`<i class="fa-solid fa-check"></i> BAŞARIYLA G�NDERİLDİ`,setTimeout(()=>{document.getElementById(`order-confirm-modal`)?.remove(),alert(`�S& Satın alma talebi Hurşit Akter için oluşturuldu.`)},1500)}catch(e){console.error(`Submit Error:`,e),t.disabled=!1,t.innerHTML=`HATA OLUŞTU`}},window.viewAuditDetails=async e=>{let t=window.currentWarehouseId;if(t)try{let n=(await W.getAuditHistory(t)).find(t=>t.id===e);if(!n)return;let i=document.createElement(`div`);i.className=`modal-overlay`,i.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.9); backdrop-filter: blur(20px); z-index: 10001; display: flex; align-items: center; justify-content: center;`,i.innerHTML=`
+            <div class="premium-card" style="max-width: 900px; width: 95%; padding: 2rem; max-height: 85vh; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                    <div>
+                        <h3 style="margin: 0; color: var(--accent-blue); font-size: 1.3rem;">SAYIM DETAYLARI</h3>
+                        <p style="color: var(--text-dim); margin: 5px 0 0 0; font-size: 0.8rem;">${n.date||(n.timestamp?new Date(n.timestamp.seconds*1e3).toLocaleDateString(`tr-TR`):`Bilinmiyor`)} tarihinde ${n.user?.split(`@`)[0]||`Sistem`} tarafından yapıldı.</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()" class="action-icon-btn" style="background: rgba(255,255,255,0.05);"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
+                <div style="overflow-y: auto; flex-grow: 1; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #111a24; z-index: 1;">
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <th style="padding: 1rem; text-align: left; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">Malzeme</th>
+                                <th style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">Sistem</th>
+                                <th style="padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">Fiziksel</th>
+                                <th style="padding: 1rem; text-align: right; font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase;">Fark</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(n.results||[]).map(e=>`
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 1rem;">
+                                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${e.description||`Bilinmeyen Malzeme`}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-dim);">${e.sapNo||`-`}</div>
+                                    </td>
+                                    <td style="padding: 1rem; text-align: center; color: var(--text-dim);">${e.systemQty??`-`}</td>
+                                    <td style="padding: 1rem; text-align: center; font-weight: 700; color: var(--text-main);">${e.physicalQty??e.quantity??`-`}</td>
+                                    <td style="padding: 1rem; text-align: right; font-weight: 900; color: ${e.diff?e.diff>0?`#00ff7f`:`#ff4d4d`:`var(--text-dim)`};">
+                                        ${e.diff>0?`+`:``}${e.diff??`-`}
+                                        ${e.note?`<div style="font-weight: 400; font-size: 0.65rem; color: var(--text-dim); font-style: italic; margin-top: 4px; max-width: 200px; margin-left: auto;">"${e.note}"</div>`:``}
+                                    </td>
+                                </tr>
+                            `).join(``)}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding: 1rem; background: rgba(100,255,218,0.03); border-radius: 12px; border: 1px solid rgba(100,255,218,0.1);">
+                    <div style="display: flex; gap: 2rem;">
+                        <div>
+                            <div style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Toplam Kalem</div>
+                            <div style="font-size: 1.2rem; font-weight: 900; color: var(--accent-blue);">${n.totalItems||n.results?.length||0}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;">Hatalı Kalem</div>
+                            <div style="font-size: 1.2rem; font-weight: 900; color: ${n.discrepantItems>0?`#ff4d4d`:`var(--text-main)`};">
+                                ${n.discrepantItems||0}
+                                <div style="font-size: 0.55rem; color: var(--text-dim); font-weight: 600; margin-top: 2px;">
+                                    <span style="color: #00ff7f;">�  ${n.surplusItems||0}</span> | 
+                                    <span style="color: #ff4d4d;">�  ${n.deficitItems||0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="window.downloadAuditExcel('${n.id}')" class="btn-cyber" style="background: #2ecc71; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700;">
+                        <i class="fa-solid fa-file-excel" style="margin-right: 8px;"></i> EXCEL'E AKTAR
+                    </button>
+                </div>
+            </div>
+        `,document.body.appendChild(i)}catch(e){console.error(`View audit details error:`,e)}},window.downloadAuditExcel=async e=>{let t=window.currentWarehouseId;if(t)try{let n=(await W.getAuditHistory(t)).find(t=>t.id===e);if(!n)return;let a=n.date||(n.timestamp?new Date(n.timestamp.seconds*1e3).toLocaleDateString(`tr-TR`):`Bilinmiyor`),o=n.user?.split(`@`)[0]?.toUpperCase()||`SİSTEM`,s=(n.results||[]).map(e=>({"SAP NO":e.sapNo||`-`,"MALZEME TANIMI":e.description||`Bilinmeyen`,"SİSTEM MİKTARI":e.systemQty??`-`,"FİZİKSEL MİKTAR":e.physicalQty??e.quantity??`-`,FARK:e.diff??`-`,"AAÇIKLAMA":e.note||``})),c=await V(()=>Promise.resolve().then(()=>eb),void 0),l=c.utils.book_new(),u=[[`SAYIM RAPORU`],[`Tarih:`,a],[`Sayımı Yapan:`,o],[],[`SAP NO`,`MALZEME TANIMI`,`SİSTEM MİKTARI`,`FİZİKSEL MİKTAR`,`FARK`,`AAÇIKLAMA`]];s.forEach(e=>{u.push([e[`SAP NO`],e[`MALZEME TANIMI`],e[`SİSTEM MİKTARI`],e[`FİZİKSEL MİKTAR`],e.FARK,e[`AAÇIKLAMA`]])});let d=c.utils.aoa_to_sheet(u);d[`!cols`]=[{wch:15},{wch:40},{wch:15},{wch:15},{wch:10},{wch:50}],c.utils.book_append_sheet(l,d,`Sayım Sonuçları`);let f=i.getWarehouses().find(e=>e.id===t),p=a.replace(/\./g,`-`);c.writeFile(l,`${f?.name||`Depo`}_Sayim_${p}.xlsx`)}catch(e){console.error(`Excel download error:`,e),alert(`Excel dosyası oluşturulurken bir hata oluştu: `+(e instanceof Error?e.message:`Bilinmeyen hata`))}},window.reserveMaterialPrompt=async(e,t,n,i)=>{let a=prompt(`${n} için rezerve edilecek miktarı girin (Mevcut Stok: ${i}):`,`1`);if(a===null)return;let o=parseInt(a);if(isNaN(o)||o<=0){alert(`Lütfen geçerli bir sayı girin.`);return}if(o>i){alert(`Stok miktarından fazla rezervasyon yapılamaz.`);return}try{let{warehouseService:n}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0);await n.reserveMaterial(e,t,o,`Manuel Rezervasyon`),alert(`Rezervasyon başarıyla oluşturuldu.`),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(`Rezervasyon hatası:`,e),alert(`Rezervasyon yapılamadı: `+(e instanceof Error?e.message:`Bilinmeyen hata`))}},window.clearLegacyLimits=async e=>{if(confirm(`Bu işlem, bu depodaki tüm '5 ADET' olarak kalmış otomatik kritik limitleri silecektir. Malzemeler silinmez, sadece stok uyarı limitleri kaldırılır. Emin misiniz?`))try{document.body.style.cursor=`wait`;let{warehouseService:t}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0);await t.clearLegacyLimits(e),alert(`İşlem başarıyla tamamlandı. Artık kritik limitleri manuel olarak belirleyebilirsiniz.`),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(`Temizleme hatası:`,e),alert(`Hata oluştu: `+(e instanceof Error?e.message:`Bilinmeyen hata`))}finally{document.body.style.cursor=`default`}},window.resetWarehouse=async e=>{if(confirm(`DİKKAT: Bu işlem bu depodaki TÜM malzemeleri ve stok kayıtlarını kalıcı olarak SİLECEKTİR. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`)&&confirm(`SON UYARI: Depo envanteri tamamen boşaltılacak. Onaylıyor musunuz?`))try{document.body.style.cursor=`wait`;let{warehouseService:t}=await V(async()=>{let{warehouseService:e}=await Promise.resolve().then(()=>fc);return{warehouseService:e}},void 0);await t.clearInventory(e),alert(`Depo envanteri tamamen temizlendi.`),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)}catch(e){console.error(`Sıfırlama hatası:`,e),alert(`Hata oluştu: `+(e instanceof Error?e.message:`Bilinmeyen hata`))}finally{document.body.style.cursor=`default`}},window.toggleAllBatch=e=>{document.querySelectorAll(`.item-checkbox`).forEach(t=>t.checked=e),window.updateBatchCount()},window.updateBatchCount=()=>{let e=document.querySelectorAll(`.item-checkbox:checked`).length,t=document.getElementById(`batch-action-bar`),n=document.getElementById(`batch-count`);t&&(e>0?(t.style.display=`flex`,n&&(n.textContent=e.toString())):t.style.display=`none`)},window.clearBatchSelection=()=>{document.querySelectorAll(`.item-checkbox`).forEach(e=>e.checked=!1);let e=document.getElementById(`select-all-batch`);e&&(e.checked=!1),window.updateBatchCount()},window.printBatchLabels=()=>{let e=document.querySelectorAll(`.item-checkbox:checked`);if(e.length===0)return;let t=Math.ceil(e.length/14);if(confirm(`Toplam ${e.length} adet etiket yazdırılacak.\nBu işlem tahmini ${t} sayfa A4 (Tanex TW-2014) etiket kağıdı gerektirecektir.\n\nYazıcıya boş etiket kağıtlarını yerleştirdiğinizden emin olun.\nDevam edilsin mi?`)){let t=[];e.forEach(e=>{t.push({id:e.dataset.id||``,sapNo:e.dataset.sap||``,description:e.dataset.desc||``})}),Uc.printBulkLabels(t),window.clearBatchSelection()}},window.openBatchShelfModal=()=>{let e=Array.from(document.querySelectorAll(`.item-checkbox:checked`)).map(e=>e.dataset.id);if(e.length===0)return;let t=prompt(`${e.length} kalem için yeni raf numarası girin:`,`R-`);if(t===null)return;let n=window.currentWarehouseId;n&&confirm(`${e.length} kalemin raf bilgisini "${t}" olarak güncellemek istiyor musunuz?`)&&W.updateShelfLocations(n,e,t).then(()=>{alert(`Raf bilgileri başarıyla güncellendi.`),window.clearBatchSelection(),setTimeout(()=>{window.updateWarehouseUI(n,void 0,void 0,void 0,void 0,!0)},500)}).catch(e=>{console.error(`Batch update error:`,e),alert(`Güncelleme sırasında bir hata oluştu.`)})},window.showReserveDetails=e=>{let t=window.draftReservations;if(!t)return;let n=t.details.filter(t=>t.materials.some(t=>String(t.sapNo).trim()===e)),i=document.createElement(`div`);i.className=`modal-overlay`,i.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.95); backdrop-filter: blur(30px); z-index: 12000; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s;`,i.innerHTML=`
+        <div class="premium-card" style="max-width: 800px; width: 95%; padding: 2.5rem; max-height: 80vh; overflow-y: auto; transform: scale(0.9); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                <div>
+                    <h3 style="margin: 0; color: #ff9800; font-size: 1.4rem; font-weight: 900; letter-spacing: -0.5px;">REZEVASYON DETAYLARI</h3>
+                    <p style="color: var(--text-dim); margin-top: 8px; font-size: 0.85rem;">SAP: ${e} için aktif görev rezervasyonları.</p>
+                </div>
+                <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.5rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                ${n.length===0?`<p style="text-align: center; color: var(--text-dim); padding: 2rem;">Bu malzeme için aktif bir görev rezervasyonu bulunmuyor.</p>`:n.map(t=>`
+                    <div style="background: rgba(255,152,0,0.05); border: 1px solid rgba(255,152,0,0.1); padding: 1.5rem; border-radius: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.65rem; color: #ff9800; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">TÜRBİN / G�REV</div>
+                            <div style="font-weight: 900; color: var(--text-main); font-size: 1rem;">${t.turbinNo} - ${t.sablon}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">Durum: ${t.durum}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.65rem; color: #ff9800; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">EKİP / MİKTAR</div>
+                            <div style="font-weight: 900; color: var(--text-main); font-size: 1.4rem;">${t.materials.find(t=>String(t.sapNo).trim()===e)?.used||0} ADET</div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">${t.team}</div>
+                        </div>
+                        <div style="grid-column: span 2; padding-top: 10px; border-top: 1px dashed rgba(255,152,0,0.2); font-size: 0.75rem; color: var(--text-dim); display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-user-gear" style="color: #ff9800;"></i> 
+                            <span>${t.personnel.join(`, `)}</span>
+                        </div>
+                    </div>
+                `).join(``)}
+            </div>
+        </div>
+    `,document.body.appendChild(i),setTimeout(()=>{i.style.opacity=`1`,i.querySelector(`.premium-card`).style.transform=`scale(1)`},10)},window.requestTransferPrompt=async(e,t,n,a)=>{let o=i.getWarehouses().filter(t=>t.id!==e),s=document.createElement(`div`);s.className=`modal-overlay`,s.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,8,20,0.95); backdrop-filter: blur(30px); z-index: 12000; display: flex; align-items: center; justify-content: center;`,s.innerHTML=`
+        <div class="premium-card" style="max-width: 500px; width: 95%; padding: 2.5rem; transform: scale(0.9); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <h3 style="color: var(--accent-blue); margin: 0; font-weight: 900;">TRANSFER TALEBİ</h3>
+                <button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-dim); cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem;"><b>${n}</b> malzemesi için diğer bir depodan sevkiyat talebi oluşturun.</p>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase;">KAYNAK DEPO (MALZEMENİN GELECEĞİ YER)</label>
+                <select id="transfer-source-warehouse" class="cyber-input-premium" style="width: 100%; height: 45px; background: rgba(0,0,0,0.2);">
+                    ${o.map(e=>`<option value="${e.id}">${e.name}</option>`).join(``)}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 2rem;">
+                <label style="display: block; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase;">TALEP EDİLEN MİKTAR</label>
+                <input type="number" id="transfer-quantity" class="cyber-input-premium" value="1" min="1" style="width: 100%; height: 45px; background: rgba(0,0,0,0.2); font-weight: 900; font-size: 1.2rem; text-align: center;">
+            </div>
+
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button onclick="this.parentElement.parentElement.parentElement.remove()" class="btn-cyber" style="background: rgba(255,255,255,0.05); padding: 12px 24px;">İPTAL</button>
+                <button id="submit-transfer-btn" class="btn-cyber" style="background: var(--accent-blue); color: #000; font-weight: 900; padding: 12px 30px;">TALEBİ G�NDER</button>
+            </div>
+        </div>
+    `,document.body.appendChild(s),setTimeout(()=>{let e=s.querySelector(`.premium-card`);e&&(e.style.transform=`scale(1)`)},10),document.getElementById(`submit-transfer-btn`)?.addEventListener(`click`,async()=>{let t=document.getElementById(`transfer-source-warehouse`).value,i=parseInt(document.getElementById(`transfer-quantity`).value);if(isNaN(i)||i<=0){alert(`Lütfen geçerli bir miktar girin.`);return}try{let{transferService:o}=await V(async()=>{let{transferService:e}=await Promise.resolve().then(()=>by);return{transferService:e}},void 0),c=window.currentUser?.email||`Bilinmeyen`;await o.createTransfer({fromSiteId:t,toSiteId:e,materialCode:a,materialName:n,quantity:i,status:`PENDING`,requestedBy:c}),alert(`�S& Transfer talebi başarıyla oluşturuldu. 'Malzeme Karar Merkezi' onayından sonra stoklar otomatik güncellenecektir.`),s.remove()}catch(e){console.error(`Transfer talebi hatası:`,e),alert(`Hata oluştu: `+(e instanceof Error?e.message:`Bilinmeyen hata`))}})},window.startQuickAudit=e=>{let t=document.createElement(`div`);t.id=`quick-audit-modal`,t.style.cssText=`position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #050a10; z-index: 20000; display: flex; flex-direction: column; color: white; font-family: "Inter", sans-serif;`,window.quickAuditSession={warehouseId:e,results:[]},t.innerHTML=`
+        <div style="padding: 1.2rem 1.5rem; background: #0a1118; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #64ffda 0%, #48bb78 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #000; font-size: 1.2rem;">
+                    <i class="fa-solid fa-bolt"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1rem; font-weight: 900; letter-spacing: 1px;">HIZLI SAYIM MODU</h3>
+                    <p style="margin: 0; font-size: 0.65rem; color: #64ffda; font-weight: 800;">SAHA OPERASYON OPTİMİZE</p>
+                </div>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" style="background: rgba(255,255,255,0.05); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; cursor: pointer;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+            <div style="background: rgba(100, 255, 218, 0.03); border: 1px dashed rgba(100, 255, 218, 0.3); padding: 2rem; border-radius: 24px; text-align: center;">
+                <i class="fa-solid fa-qrcode" style="font-size: 3rem; color: #64ffda; margin-bottom: 1rem; opacity: 0.5;"></i>
+                <h4 style="margin: 0 0 8px 0; font-weight: 800;">MALZEME OKUTUN</h4>
+                <p style="margin: 0 0 1.5rem 0; font-size: 0.8rem; color: #888;">Kamera ile QR kodu tarayarak sayıma başlayın.</p>
+                <button onclick="window.scanForQuickAudit('${e}')" class="btn-cyber" style="background: #64ffda; color: #000; padding: 15px 40px; border-radius: 12px; font-weight: 900; width: 100%;">
+                    <i class="fa-solid fa-camera" style="margin-right: 10px;"></i> KAMERAYI AÇ
+                </button>
+            </div>
+
+            <div id="quick-audit-scanned-container"></div>
+
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <span style="font-size: 0.75rem; color: #888; font-weight: 800; letter-spacing: 1px;">BU OTURUMDA SAYILANLAR</span>
+                    <span id="quick-audit-session-count" style="background: rgba(100,255,218,0.1); color: #64ffda; padding: 2px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 900;">0 KALEM</span>
+                </div>
+                <div id="quick-audit-session-list" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="padding: 3rem; text-align: center; color: #333; font-weight: 600;">Henüz tarama yapılmadı.</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding: 1.5rem; background: #0a1118; border-top: 1px solid rgba(255,255,255,0.05);">
+            <button id="quick-audit-finish-btn" onclick="window.submitQuickAudit('${e}')" class="btn-cyber" style="width: 100%; padding: 18px; background: linear-gradient(135deg, #64ffda 0%, #48bb78 100%); color: #000; font-weight: 900; font-size: 1.1rem; border-radius: 16px; box-shadow: 0 10px 30px rgba(100, 255, 218, 0.2);">
+                SAYIMI TAMAMLA VE KAYDET
+            </button>
+        </div>
+    `,document.body.appendChild(t)},window.scanForQuickAudit=async e=>{try{let e=await Uc.scanQRCode();if(!e)return;let t=(window.currentInventoryData||[]).find(t=>String(t.sapNo).trim()===String(e).trim()||String(t.id).trim()===String(e).trim());if(!t){alert(`Hata: ${e} numaralı malzeme bu depoda bulunamadı.`);return}let n=document.getElementById(`quick-audit-scanned-container`);n&&(n.innerHTML=`
+                <div style="background: #111; border: 2px solid #64ffda; padding: 1.5rem; border-radius: 20px; animation: slideInUp 0.3s ease-out;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                        <div>
+                            <div style="font-size: 0.7rem; color: #64ffda; font-weight: 800; margin-bottom: 4px;">OKUTULAN MALZEME</div>
+                            <div style="font-weight: 900; font-size: 1.1rem;">${t.description}</div>
+                            <div style="font-size: 0.8rem; color: #888; margin-top: 2px;">SAP: ${t.sapNo} | Raf: ${t.shelfNo||`-`}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.7rem; color: #888;">SİSTEM STOK</div>
+                            <div style="font-size: 1.4rem; font-weight: 900; color: #64ffda;">${t.quantity}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; align-items: flex-end;">
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.7rem; color: #888; margin-bottom: 8px;">FİZİKSEL MİKTAR</label>
+                            <input type="number" id="quick-audit-qty-input" class="cyber-input-premium" value="${t.quantity}" style="width: 100%; height: 50px; font-size: 1.5rem; font-weight: 900; text-align: center; background: #000;">
+                        </div>
+                        <button onclick="window.addQuickAuditResult('${t.id}', '${t.sapNo}', '${t.description.replace(/'/g,`\\'`)}', ${t.quantity})" class="btn-cyber" style="height: 50px; padding: 0 30px; background: #64ffda; color: #000; font-weight: 900; border-radius: 12px;">EKLE</button>
+                    </div>
+                </div>
+            `,setTimeout(()=>document.getElementById(`quick-audit-qty-input`)?.focus(),100))}catch(e){console.error(`Scanning error:`,e)}},window.addQuickAuditResult=(e,t,n,i)=>{let a=document.getElementById(`quick-audit-qty-input`);if(!a)return;let o=parseInt(a.value);if(isNaN(o))return;let s=``;if(o!==i){let e=prompt(`Fark Tespit Edildi (Sistem: ${i}, Sayım: ${o})\nLütfen bu farkın nedenini (açıklama) yazın:`);if(e===null)return;s=e.trim()||`Açıklama girilmedi`}let c=window.quickAuditSession,l=c.results.findIndex(t=>t.id===e),u={id:e,sapNo:t,description:n,systemQty:i,physicalQty:o,diff:o-i,note:s,timestamp:new Date};l>=0?c.results[l]=u:c.results.unshift(u);let d=document.getElementById(`quick-audit-session-list`),f=document.getElementById(`quick-audit-session-count`);d&&f&&(f.textContent=`${c.results.length} KALEM`,d.innerHTML=c.results.map(e=>`
+            <div style="background: rgba(255,255,255,0.03); padding: 12px 15px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.05);">
+                <div>
+                    <div style="font-size: 0.8rem; font-weight: 700;">${e.description}</div>
+                    <div style="font-size: 0.65rem; color: #888;">SAP: ${e.sapNo}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.9rem; font-weight: 900; color: ${e.diff===0?`#64ffda`:`#ff4d4d`}">${e.physicalQty} AD.</div>
+                    <div style="font-size: 0.6rem; color: #888;">Fark: ${e.diff>0?`+`:``}${e.diff}</div>
+                </div>
+            </div>
+            ${e.note?`<div style="font-size: 0.65rem; color: #ffeb3b; padding-top: 4px; font-style: italic;">Açıklama: ${e.note}</div>`:``}
+        `).join(``));let p=document.getElementById(`quick-audit-scanned-container`);p&&(p.innerHTML=``)},window.submitQuickAudit=async e=>{let t=window.quickAuditSession;if(!t||t.results.length===0){alert(`Henüz bir sayım yapmadınız.`);return}if(!confirm(`${t.results.length} kalem sayım verisi kaydedilecek ve stoklar güncellenecektir. Onaylıyor musunuz?`))return;let n=document.getElementById(`quick-audit-finish-btn`);try{n.disabled=!0,n.innerHTML=`<i class="fa-solid fa-circle-notch fa-spin"></i> KAYDEDİLİYOR...`;let i=window.currentUser?.email||`Bilinmeyen`,a=t.results.map(e=>({itemId:e.id,sapNo:e.sapNo,description:e.description,systemQty:e.systemQty,physicalQty:e.physicalQty,diff:e.diff,note:e.note||`Hızlı Mobil Sayım`}));await W.saveAudit(e,{user:i,totalItems:a.length,totalDiff:a.reduce((e,t)=>e+t.diff,0),results:a}),n.style.background=`#28a745`,n.innerHTML=`BAŞARIYLA KAYDEDİLDİ`,setTimeout(()=>{document.getElementById(`quick-audit-modal`)?.remove(),setTimeout(()=>{window.updateWarehouseUI(e,void 0,void 0,void 0,void 0,!0)},500)},1500)}catch(e){console.error(`Submit error:`,e),n.disabled=!1,n.innerHTML=`HATA OLUŞTU!`}},

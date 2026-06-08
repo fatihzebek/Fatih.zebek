@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dh_Servis Cmms</string>
+    <string name="title_activity_main">Dh_Servis Cmms</string>
+    <string name="package_name">com.dh.servis</string>
+    <string name="custom_url_scheme">com.dh.servis</string>
+</resources>

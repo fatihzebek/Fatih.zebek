@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Fatih ZEBEK",
+    "expertise": ["Elektriksel", "Yazılım"],
+    "hourlyRate": 150,
+    "baseSiteId": "2688"
+  },
+  {
+    "name": "Furkan YILDIRIM",
+    "expertise": ["Mekanik"],
+    "hourlyRate": 120,
+    "baseSiteId": "2688"
+  },
+  {
+    "name": "Ahmet ALAN",
+    "expertise": ["Mekanik", "Genel"],
+    "hourlyRate": 110,
+    "baseSiteId": "1001"
+  },
+  {
+    "name": "Ali ÇETİNKAYA",
+    "expertise": ["Elektriksel"],
+    "hourlyRate": 140,
+    "baseSiteId": "2002"
+  }
+]

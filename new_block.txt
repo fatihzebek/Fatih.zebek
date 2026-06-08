@@ -1,0 +1,152 @@
+let checklistHtml = '';
+  if (hasChecklist) {
+    const renderRow = (item: any, idx: number) => {
+      const isOk = item.status === 'OK';
+      const isNa = item.status === 'NA';
+      const statusLabel = isOk ? 'TAMAMLANDI' : (isNa ? 'OPSİYON DIŞI' : 'TAMAMLANMADI');
+      const statusColor = isOk ? '#16a34a' : (isNa ? '#666666' : '#dc2626');
+      const statusBg = isOk ? '#e6f9e8' : (isNa ? '#f5f5f5' : '#fef2f2');
+      const rowBg = idx % 2 === 0 ? '#ffffff' : '#fcfcfc';
+      
+      let advHtml = '';
+      if (item.advancedData && item.advancedData.length > 0) {
+        const type = item.measurementConfig?.type;
+        const vals = item.advancedData;
+        let details = '';
+        
+        if (type === 'torque_control') details = `<strong>Değer:</strong> ${vals[0] || '-'} | <strong>İmza:</strong> ${vals[1] || '-'}`;
+        else if (type === 'oil_sample') details = `<strong>Numune Alındı:</strong> ${vals[0] === 'true' ? 'Evet' : 'Hayır'} | <strong>Miktar:</strong> ${vals[1] || '-'} | <strong>İmza:</strong> ${vals[2] || '-'}`;
+        else if (type === 'oil_level_control') details = `<strong>Seviye:</strong> ${vals[0] || '-'} | <strong>Eklenen:</strong> ${vals[1] || '-'} | <strong>İmza:</strong> ${vals[2] || '-'}`;
+        else if (type === 'filter_change') details = `<strong>Değişti:</strong> ${vals[0] === 'true' ? 'Evet' : 'Hayır'} | <strong>Temizlendi:</strong> ${vals[1] === 'true' ? 'Evet' : 'Hayır'} | <strong>İmza:</strong> ${vals[2] || '-'}`;
+        else if (type === 'signature_approval') details = `<strong>İmza/Onay:</strong> ${vals[0] || '-'}`;
+        else if (type === 'crane_control') details = `<strong>Vinç Tipi:</strong> ${vals[0] || '-'} | <strong>Halat Çapı:</strong> ${vals[1] || '-'} mm | <strong>Kopuk:</strong> (30:${vals[2]||'0'}, 60:${vals[3]||'0'}, 300:${vals[4]||'0'}) | <strong>İmza:</strong> ${vals[5] || '-'}`;
+        else if (type === 'safety_equipment_control') details = `<strong>Son Kontrol (Ay/Yıl):</strong> ${vals[0] || '-'} | <strong>Eksiksiz/Hasarsız:</strong> ${vals[1] === 'true' ? 'Evet' : 'Hayır'} | <strong>İmza:</strong> ${vals[2] || '-'}`;
+        else if (type === 'bearing_control') details = `<strong>Numune Alındı:</strong> ${vals[0] === 'true' ? 'Evet' : 'Hayır'} | <strong>ÖN Gres:</strong> ${vals[1] || '-'} | <strong>ARKA Gres:</strong> ${vals[2] || '-'} | <strong>İmza:</strong> ${vals[3] || '-'}`;
+        else if (type === 'final_checkout_control') {
+            details = `
+                <div style="font-weight: 700; margin-bottom: 2px;">Bakım Sonu Final Kontrolü:</div>
+                <div style="margin-left: 8px;">
+                    <div>${vals[0] === 'true' ? '☑' : '☐'} Türbin içinde, kulede veya çevresinde hiçbir el aleti, malzeme, atık bez veya çöp bırakılmamıştır.</div>
+                    <div>${vals[1] === 'true' ? '☑' : '☐'} Tespit edilen tüm hasarlar, arızalar ve eksiklikler servis raporuna eksiksiz olarak işlenmiştir.</div>
+                    <div>${vals[2] === 'true' ? '☑' : '☐'} Makine dairesinde ve kule tabanındaki tüm elektrik panoları/kapakları güvenli bir şekilde kapatılmıştır.</div>
+                    <div>${vals[3] === 'true' ? '☑' : '☐'} Türbin çalıştırılıp dinleme testi yapılmış olup olağandışı bir ses veya titreşim olmadan tamamlanmıştır.</div>
+                    <div>${vals[4] === 'true' ? '☑' : '☐'} Türbin devreye alınmıştır ve türbin defterine ilgili bakım talimatı ve açıklamalar yazılmıştır.</div>
+                </div>
+                <div style="margin-top: 4px;"><strong>Sorumlu İmza:</strong> ${vals[5] || '-'}</div>
+            `;
+        }
+        else if (type === 'numeric_multiple') {
+            const labels = item.measurementConfig.measurementLabels || [];
+            details = vals.map((v: any, i: number) => {
+                if (item.measurementConfig.requireSignature && i === vals.length - 1 && vals.length > item.measurementConfig.inputCount) return `<strong>İmza:</strong> ${v || '-'}`;
+                return `<strong>${labels[i] || 'Ölçüm '+(i+1)}:</strong> ${v || '-'}`;
+            }).join(' | ');
+        }
+        else if (type === 'version_control') {
+            const items = item.measurementConfig.versionItems || [];
+            details = vals.map((v: any, i: number) => `<strong>${items[i]?.label || 'Kart '+(i+1)}:</strong> ${v || '-'}`).join('<br>');
+        }
+        else if (type === 'dropdown') {
+            details = `<strong>Seçim:</strong> ${vals[0] || '-'}`;
+        }
+        if (details) advHtml = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(0,85,170,0.06); border: 1px solid rgba(0,85,170,0.1); border-radius: 4px; font-size: 0.65rem; color: #004488;">${details}</div>`;
+      }
+
+      return `
+        <tr style="background: ${rowBg}; page-break-inside: avoid;">
+          <td style="border: 1px solid #bbb; padding: 3px; text-align: center; font-weight: 700; color: #555;">${(idx + 1).toString().padStart(2, '0')}</td>
+          <td style="border: 1px solid #bbb; padding: 3px 6px; font-weight: ${item.status === 'NOT_OK' ? '700' : '400'};${item.status === 'NOT_OK' ? ' color: #b91c1c;' : ''}">
+            ${item.text}
+            ${advHtml}
+          </td>
+          <td style="border: 1px solid #bbb; padding: 3px; text-align: center;">
+            <span style="background: ${statusBg}; color: ${statusColor}; padding: 1px 6px; border-radius: 3px; font-weight: 800; font-size: 0.65rem; border: 1px solid ${statusColor}33;">${statusLabel}</span>
+          </td>
+          <td style="border: 1px solid #bbb; padding: 3px 6px; font-size: 0.7rem; color: ${item.status === 'NOT_OK' ? '#b91c1c' : '#666'}; font-style: ${item.comment ? 'normal' : 'italic'};">
+            ${item.comment || '-'}
+          </td>
+        </tr>`;
+    };
+
+    checklistHtml += `<div class="html2pdf__page-break"></div>`;
+    checklistHtml += `<div style="padding-top: 5px;">`;
+    
+    checklistHtml += `
+      <div style="text-align: center; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 8px;">
+        <h1 style="font-size: 1.1rem; margin: 0 0 2px; font-weight: 900; letter-spacing: 1px;">BAKIM KONTROL LİSTESİ</h1>
+        <div style="font-size: 0.7rem; color: #555;">${report.templateName || ''} | Rapor No: <strong>${report.reportNo}</strong> | Türbin: <strong>${report.turbineNo}</strong> (${report.turbineSerial}) | Saha: <strong>${report.siteName}</strong> | Tarih: <strong>${new Date(report.date).toLocaleDateString('tr-TR')}</strong></div>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 0.78rem;">
+        <tr>
+          <td style="width: 33.3%; padding: 0 3px 0 0;">
+            <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 4px; padding: 4px 8px; text-align: center;">
+              <span style="font-size: 0.6rem; font-weight: 700; color: #16a34a; text-transform: uppercase;">Tamamlandı: </span>
+              <span style="font-size: 1rem; font-weight: 900; color: #15803d;">${okCount} / ${totalChecklist}</span>
+            </div>
+          </td>
+          <td style="width: 33.3%; padding: 0 2px;">
+            <div style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 4px; padding: 4px 8px; text-align: center;">
+              <span style="font-size: 0.6rem; font-weight: 700; color: #dc2626; text-transform: uppercase;">Tamamlanmadı: </span>
+              <span style="font-size: 1rem; font-weight: 900; color: #b91c1c;">${notOkCount}</span>
+            </div>
+          </td>
+          <td style="width: 33.3%; padding: 0 0 0 3px;">
+            <div style="background: #f5f5f5; border: 1px solid #aaa; border-radius: 4px; padding: 4px 8px; text-align: center;">
+              <span style="font-size: 0.6rem; font-weight: 700; color: #666; text-transform: uppercase;">Opsiyon Dışı: </span>
+              <span style="font-size: 1rem; font-weight: 900; color: #555;">${naCount}</span>
+            </div>
+          </td>
+        </tr>
+      </table>
+      <div style="margin-bottom: 8px;">
+        <div style="background: #e8ecf1; padding: 4px 12px; font-weight: 800; font-size: 0.8rem; border: 1px solid #bbb; border-bottom: none;">
+          BAKIM DENETİM LİSTESİ
+        </div>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.75rem;">
+          <tr style="background: #f5f7fa;">
+            <th style="border: 1px solid #bbb; padding: 4px; width: 30px; font-weight: 700; text-align: center;">NO</th>
+            <th style="border: 1px solid #bbb; padding: 4px; text-align: left; font-weight: 700;">KONTROL MADDESİ</th>
+            <th style="border: 1px solid #bbb; padding: 4px; width: 110px; font-weight: 700; text-align: center;">DURUM</th>
+            <th style="border: 1px solid #bbb; padding: 4px; width: 180px; font-weight: 700; text-align: left;">AÇIKLAMA</th>
+          </tr>`;
+          
+    checklist.forEach((item, i) => {
+      checklistHtml += renderRow(item, i);
+    });
+    
+    checklistHtml += `</table></div>`;
+    
+    if (notOkCount > 0) {
+      checklistHtml += `
+        <div style="margin-bottom: 12px; page-break-inside: avoid;">
+          <div style="background: #fef2f2; padding: 4px 12px; font-weight: 800; font-size: 0.8rem; border: 1px solid #ef4444; border-bottom: none; color: #b91c1c;">
+            🚨 ANALİZ VE BULGULAR (${notOkCount})
+          </div>
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #ef4444; font-size: 0.75rem;">
+            <tr style="background: #fef2f2;">
+              <th style="border: 1px solid #ef4444; padding: 4px; width: 30px; font-weight: 700; text-align: center;">NO</th>
+              <th style="border: 1px solid #ef4444; padding: 4px; text-align: left; font-weight: 700;">Kontrol Maddesi</th>
+              <th style="border: 1px solid #ef4444; padding: 4px; text-align: left; font-weight: 700;">Tamamlanamama Nedeni / Arıza Bulgusu</th>
+            </tr>
+            ${checklist.filter(item => item.status === 'NOT_OK').map((item) => {
+              const originalIndex = checklist.indexOf(item);
+              return `
+                <tr style="background: #fff; page-break-inside: avoid;">
+                  <td style="border: 1px solid #ef4444; padding: 4px; text-align: center; font-weight: 800; color: #b91c1c;">${(originalIndex + 1).toString().padStart(2, '0')}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px; font-weight: 600;">${item.text}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px; color: #b91c1c; font-weight: 500;">${item.comment || 'Açıklama girilmemiş'}</td>
+                </tr>`;
+            }).join('')}
+          </table>
+        </div>`;
+    } else {
+      checklistHtml += `
+        <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 12px; page-break-inside: avoid;">
+          <div style="font-size: 1.3rem; margin-bottom: 4px;">✅</div>
+          <div style="font-weight: 700; color: #15803d; font-size: 0.85rem;">Tüm maddeler başarıyla tamamlandı.</div>
+          <div style="font-size: 0.7rem; color: #16a34a;">Olumsuz bir bulguya rastlanmadı.</div>
+        </div>`;
+    }
+    checklistHtml += `</div>`;
+  }
+  

@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Kullanıcının Firestore'daki `users` tablosunda kaydı var mı kontrol etme imkanı 
+    // Storage kurallarında doğrudan Firestore'a erişim (get) maliyetlidir ve Karmaşıktır,
+    // Ancak basit bir "sadece giriş yapmış kullanıcılar" kuralı yetmez.
+    // Şimdilik Firebase App Check devrede olduğu ve uygulamanın içinden geldiğini doğruladığı için:
+    
+    match /{allPaths=**} {
+      // Okuma herkese açık (rapor resimlerinin pdf'lerde vs. görünmesi için)
+      allow read: if true;
+      
+      // Yazma ve Silme için kullanıcının otantik (giriş yapmış) olması şart.
+      // Dışarıdan yetkisiz yüklemeler App Check (reCAPTCHA) sayesinde büyük oranda engellenmiştir.
+      allow write, delete: if request.auth != null;
+    }
+  }
+}

@@ -1,0 +1,679 @@
+[
+  {
+    "type": "edit",
+    "step": 515,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Wrap the main warehouse inventory table in a premium responsive horizontal scroll container.\"",
+      "EndLine": "940",
+      "Instruction": "\"Wrap main inventory table in scroll container and add min-width to table\"",
+      "ReplacementContent": "\"            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <div style=\\\"overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;\\\">\\n                <table style=\\\"min-width: 980px; width: 100%; border-collapse: collapse;\\\">\\n                  <thead>\\n                    <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                      <th style=\\\"padding: 1.2rem 1rem; width: 50px; text-align: center;\\\">\\n                        <input type=\\\"checkbox\\\" id=\\\"master-checkbox\\\" onchange=\\\"window.toggleAllBatch(this.checked)\\\" style=\\\"width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue);\\\">\\n                      </th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: ${(window as any).lastSortBy === 'description' ? 'var(--accent-blue)' : 'var(--text-dim)'}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;\\\" onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'description')\\\">\\n                          MALZEME TANIMI <i class=\\\"fa-solid fa-sort${(window as any).lastSortBy === 'description' ? ((window as any).lastSortDir === 'asc' ? '-up' : '-down') : ''}\\\" style=\\\"margin-left: 5px; opacity: ${(window as any).lastSortBy === 'description' ? '1' : '0.5'};\\\"></i>\\n                      </th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: ${(window as any).lastSortBy === 'sapNo' ? 'var(--accent-blue)' : 'var(--text-dim)'}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;\\\" onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'sapNo')\\\">\\n                          SAP NO <i class=\\\"fa-solid fa-sort${(window as any).lastSortBy === 'sapNo' ? ((window as any).lastSortDir === 'asc' ? '-up' : '-down') : ''}\\\" style=\\\"margin-left: 5px; opacity: ${(window as any).lastSortBy === 'sapNo' ? '1' : '0.5'};\\\"></i>\\n            \n<truncated 14846 bytes>",
+      "StartLine": "773",
+      "TargetContent": "\"            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <table style=\\\"width: 100%; border-collapse: collapse;\\\">\\n                <thead>\\n                  <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                    <th style=\\\"padding: 1.2rem 1rem; width: 50px; text-align: center;\\\">\\n                      <input type=\\\"checkbox\\\" id=\\\"master-checkbox\\\" onchange=\\\"window.toggleAllBatch(this.checked)\\\" style=\\\"width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue);\\\">\\n                    </th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: ${(window as any).lastSortBy === 'description' ? 'var(--accent-blue)' : 'var(--text-dim)'}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;\\\" onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'description')\\\">\\n                        MALZEME TANIMI <i class=\\\"fa-solid fa-sort${(window as any).lastSortBy === 'description' ? ((window as any).lastSortDir === 'asc' ? '-up' : '-down') : ''}\\\" style=\\\"margin-left: 5px; opacity: ${(window as any).lastSortBy === 'description' ? '1' : '0.5'};\\\"></i>\\n                    </th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: ${(window as any).lastSortBy === 'sapNo' ? 'var(--accent-blue)' : 'var(--text-dim)'}; text-transform: uppercase; letter-spacing: 1px; cursor: pointer;\\\" onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'sapNo')\\\">\\n                        SAP NO <i class=\\\"fa-solid fa-sort${(window as any).lastSortBy === 'sapNo' ? ((window as any).lastSortDir === 'asc' ? '-up' : '-down') : ''}\\\" style=\\\"margin-left: 5px; opacity: ${(window as any).lastSortBy === 'sapNo' ? '1' : '0.5'};\\\"></i>\\n                    </th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: ${(window as any).l\n<truncated 14377 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Wrapping Warehouses.ts main table in scroll container\"",
+      "toolSummary": "\"Wrap Warehouses.ts table\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 1412,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Fixed a JavaScript SyntaxError in the warehouse search button by removing the TypeScript casting 'as HTMLInputElement' from the inline HTML onclick attribute.\"",
+      "EndLine": "609",
+      "Instruction": "\"Remove the TypeScript 'as HTMLInputElement' cast from the inline HTML onclick attribute on the search button to avoid runtime JavaScript SyntaxError.\"",
+      "ReplacementContent": "\"              <button onclick=\\\"window.updateWarehouseUI(undefined, undefined, undefined, document.getElementById('inventory-search').value)\\\" \\n                      style=\\\"position: absolute; right: 6px; width: 36px; height: 36px; background: var(--accent-blue); border: none; color: #0a1118; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.2s;\\\"\\n                      onmouseover=\\\"this.style.filter='brightness(1.1)';\\\" \\n                      onmouseout=\\\"this.style.filter='none';\\\">\\n                <i class=\\\"fa-solid fa-magnifying-glass\\\"></i>\\n              </button>\"",
+      "StartLine": "603",
+      "TargetContent": "\"              <button onclick=\\\"window.updateWarehouseUI(undefined, undefined, undefined, (document.getElementById('inventory-search') as HTMLInputElement).value)\\\" \\n                      style=\\\"position: absolute; right: 6px; width: 36px; height: 36px; background: var(--accent-blue); border: none; color: #0a1118; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: all 0.2s;\\\"\\n                      onmouseover=\\\"this.style.filter='brightness(1.1)';\\\" \\n                      onmouseout=\\\"this.style.filter='none';\\\">\\n                <i class=\\\"fa-solid fa-magnifying-glass\\\"></i>\\n              </button>\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Fixing search button click handler in Warehouses.ts\"",
+      "toolSummary": "\"Warehouses.ts code replacement\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 2412,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Update granular permissions inside Warehouses.ts\"",
+      "Instruction": "\"Update permission checks for editMaterial, countStock, uploadImage.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":104,\"ReplacementContent\":\"  const hasAddMaterialPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).addMaterial);\\n  const hasEditMaterialPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).editMaterial);\\n  const hasDeleteMaterialPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).deleteMaterial);\\n  const hasUploadImagePerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).uploadImage);\\n  const hasCountStockPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).countStock);\\n  const hasUploadExcelPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).uploadExcel);\",\"StartLine\":101,\"TargetContent\":\"  const hasAddMaterialPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).addMaterial);\\n  const hasDeleteMaterialPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).deleteMaterial);\\n  const hasDeleteImagePerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).deleteImage);\\n  const hasUploadExcelPerm = isAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).uploadExcel);\"},{\"AllowMultiple\":false,\"EndLine\":1762,\"ReplacementContent\":\"  const currentUser = (window as any).currentUser;\\n  const isUserAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';\\n  const warehousePerms = currentUser?.allowedTabs?.warehouses || {};\\n  const hasEditPerm = isUserAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).editMaterial);\\n  if (!hasEditPerm) {\\n    alert('⚠️ Malzeme düzenleme yetkiniz bulunmamaktadır.');\\n    return;\\n  }\",\"StartLine\":1755,\"TargetContent\":\"  const currentUser = (window as any).currentUser;\\n  const isUserAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';\\n  const warehousePerms = currentUser?.allowedTabs?.warehouses || {};\\n  const hasAddPerm = isUserAdmin || (ty\n<truncated 1145 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Updating warehouse permissions\"",
+      "toolSummary": "\"Update warehouse permissions\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 5470,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Add flex-shrink: 0 to premium-tab styles and append custom responsive media query for mobile screens in Warehouses.ts style block. This reflows AI banner, limits card paddings, and optimizes tab sizes on mobile.\"",
+      "Instruction": "\"Update premium-tab flex properties and add mobile max-width: 768px media query inside Warehouses.ts style tag\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":316,\"ReplacementContent\":\"        .premium-tab {\\n          padding: 8px 24px;\\n          border-radius: 10px;\\n          border: none;\\n          background: transparent;\\n          color: var(--text-dim);\\n          font-size: 0.8rem;\\n          font-weight: 700;\\n          cursor: pointer;\\n          transition: all 0.3s;\\n          display: flex;\\n          align-items: center;\\n          gap: 8px;\\n          flex-shrink: 0;\\n        }\",\"StartLine\":303,\"TargetContent\":\"        .premium-tab {\\n          padding: 8px 24px;\\n          border-radius: 10px;\\n          border: none;\\n          background: transparent;\\n          color: var(--text-dim);\\n          font-size: 0.8rem;\\n          font-weight: 700;\\n          cursor: pointer;\\n          transition: all 0.3s;\\n          display: flex;\\n          align-items: center;\\n          gap: 8px;\\n        }\"},{\"AllowMultiple\":false,\"EndLine\":409,\"ReplacementContent\":\"        @keyframes slideUp { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }\\n        @keyframes spin { 100% { transform: rotate(360deg); } }\\n\\n        @media (max-width: 768px) {\\n          .premium-card {\\n            padding: 1rem !important;\\n          }\\n          .ai-banner {\\n            flex-direction: column !important;\\n            align-items: stretch !important;\\n            gap: 1.2rem !important;\\n            padding: 1.2rem !important;\\n          }\\n          .ai-banner button {\\n            width: 100% !important;\\n          }\\n          .premium-tab {\\n            padding: 8px 16px !important;\\n            font-size: 0.75rem !important;\\n          }\\n        }\\n      </style>\",\"StartLine\":407,\"TargetContent\":\"        @keyframes slideUp { from { transform: translate(-50%, 100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }\\n        @keyframes spin { 100% { transform: rotate(360deg); } }\\n      </style>\"}]",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Applying multiple non-contiguous edits in Warehouses.ts styles\"",
+      "toolSummary": "\"Modify Warehouses.ts style block\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 5474,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Convert tab switcher bar container to be horizontally scrollable on mobile viewports while keeping standard look on desktop\"",
+      "EndLine": "713",
+      "Instruction": "\"Update Tab Switcher container style at line 713 in Warehouses.ts to allow overflow-x and touch scrolling\"",
+      "ReplacementContent": "\"        <!-- Tab Switcher (Always Visible) -->\\n        <div style=\\\"display: flex; overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05); gap: 4px;\\\">\"",
+      "StartLine": "712",
+      "TargetContent": "\"        <!-- Tab Switcher (Always Visible) -->\\n        <div style=\\\"display: flex; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; width: fit-content; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05);\\\">\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Updating Tab Switcher markup in Warehouses.ts\"",
+      "toolSummary": "\"Update Tab Switcher container style\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 5480,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Wrap history table in a horizontally scrollable container with min-width 800px to prevent layout squeeze on mobile.\"",
+      "EndLine": "999",
+      "Instruction": "\"Wrap history table with overflow-x: auto div and add min-width to table in Warehouses.ts\"",
+      "ReplacementContent": "\"          ` : activeTab === 'history' ? `\\n            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <div style=\\\"overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;\\\">\\n                <table style=\\\"min-width: 800px; width: 100%; border-collapse: collapse;\\\">\\n                  <thead>\\n                    <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Tarih</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Malzeme</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">İşlem</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Miktar</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Referans</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Kullanıcı</th>\\n                    </tr>\\n                  </thead>\\n                  <tbody>\\n                    ${logs.map(log => `\\n                      <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\\n                        <td style=\\\"padding: 1rem 1.5rem; font-size: 0.75rem; color: var(--text-dim);\\\">${formatTimestamp(log.timestamp)}</td>\\n                        <td style=\\\"padding: 1rem 1.5rem; font-weight: 700; font-size: 0.9rem; color: var(--text-main);\\\">${log.materialName || '-'}</td>\\n                        <td style=\\\"padding: 1r\n<truncated 1496 bytes>",
+      "StartLine": "965",
+      "TargetContent": "\"          ` : activeTab === 'history' ? `\\n            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <table style=\\\"width: 100%; border-collapse: collapse;\\\">\\n                <thead>\\n                  <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Tarih</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Malzeme</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">İşlem</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Miktar</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Referans</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Kullanıcı</th>\\n                  </tr>\\n                </thead>\\n                <tbody>\\n                  ${logs.map(log => `\\n                    <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\\n                      <td style=\\\"padding: 1rem 1.5rem; font-size: 0.75rem; color: var(--text-dim);\\\">${formatTimestamp(log.timestamp)}</td>\\n                      <td style=\\\"padding: 1rem 1.5rem; font-weight: 700; font-size: 0.9rem; color: var(--text-main);\\\">${log.materialName || '-'}</td>\\n                      <td style=\\\"padding: 1rem 1.5rem; text-align: center;\\\">\\n                        <span style=\\\"font-size: 0.65rem; font-weight: 900; padding: 4px 10px; border-radius: 6px;\n<truncated 1297 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Wrapping history table with overflow layout in Warehouses.ts\"",
+      "toolSummary": "\"Wrap history table\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 5486,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Wrap audit history table in a horizontally scrollable container with min-width 800px to prevent narrow mobile screens from squishing or shifting columns.\"",
+      "EndLine": "1162",
+      "Instruction": "\"Wrap audit history table inside overflow-x scroll container and set table min-width to 800px in Warehouses.ts\"",
+      "ReplacementContent": "\"          ` : activeTab === 'audit_history' ? `\\n            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <div style=\\\"overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%;\\\">\\n                <table style=\\\"min-width: 800px; width: 100%; border-collapse: collapse;\\\">\\n                  <thead>\\n                    <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Tarih</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Kullanıcı</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Toplam Kalem</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Hatalı Kalem</th>\\n                      <th style=\\\"padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Aksiyon</th>\\n                    </tr>\\n                  </thead>\\n                  <tbody>\\n                    ${audits.length === 0 ? `\\n                      <tr><td colspan=\\\"6\\\" style=\\\"padding: 4rem; text-align: center; color: var(--text-dim);\\\">Henüz bir sayım kaydı bulunmuyor.</td></tr>\\n                    ` : audits.map(audit => {\\n                      const auditDate = audit.date || (audit.timestamp ? new Date(audit.timestamp.seconds * 1000).toLocaleDateString('tr-TR') : 'Bilinmiyor');\\n                      const auditTime = audit.timestamp ? formatTimestamp(audit.timestamp).split(' ')[1] : '--:--';\\n                      const discrepantItems = (audit as any).discrepantItems ?? 0;\\n                      retu\n<truncated 2455 bytes>",
+      "StartLine": "1115",
+      "TargetContent": "\"          ` : activeTab === 'audit_history' ? `\\n            <div class=\\\"premium-card\\\" style=\\\"padding: 0; overflow: hidden; border-radius: 20px;\\\">\\n              <table style=\\\"width: 100%; border-collapse: collapse;\\\">\\n                <thead>\\n                  <tr style=\\\"background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);\\\">\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Tarih</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Kullanıcı</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Toplam Kalem</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: center; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Hatalı Kalem</th>\\n                    <th style=\\\"padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Aksiyon</th>\\n                  </tr>\\n                </thead>\\n                <tbody>\\n                  ${audits.length === 0 ? `\\n                    <tr><td colspan=\\\"6\\\" style=\\\"padding: 4rem; text-align: center; color: var(--text-dim);\\\">Henüz bir sayım kaydı bulunmuyor.</td></tr>\\n                  ` : audits.map(audit => {\\n                    const auditDate = audit.date || (audit.timestamp ? new Date(audit.timestamp.seconds * 1000).toLocaleDateString('tr-TR') : 'Bilinmiyor');\\n                    const auditTime = audit.timestamp ? formatTimestamp(audit.timestamp).split(' ')[1] : '--:--';\\n                    const discrepantItems = (audit as any).discrepantItems ?? 0;\\n                    return `\\n                    <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\\n                      <td style=\\\"pad\n<truncated 2230 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Wrapping audit history table with overflow layout in Warehouses.ts\"",
+      "toolSummary": "\"Wrap audit history table\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 5492,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Wrap active audit table in a horizontally scrollable container with min-width 800px to ensure the table handles small mobile portrait viewports without layout distortion.\"",
+      "EndLine": "1237",
+      "Instruction": "\"Wrap active audit table inside an overflow-x scroll container and set table min-width to 800px in Warehouses.ts\"",
+      "ReplacementContent": "\"              <div style=\\\"overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; margin-top: 1rem;\\\">\\n                <table style=\\\"min-width: 800px; width: 100%; border-collapse: collapse;\\\">\\n                  <thead>\\n                    <tr style=\\\"background: rgba(255,255,255,0.02);\\\">\\n                      <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'name')\\\" style=\\\"padding: 1rem; text-align: left; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                        MALZEME ${(window as any).lastSortBy === 'name' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                      </th>\\n                      <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'shelfNo')\\\" style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                        RAF ${(window as any).lastSortBy === 'shelfNo' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                      </th>\\n                      <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'quantity')\\\" style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                        SİSTEM ${(window as any).lastSortBy === 'quantity' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                      </th>\\n                      <th style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim);\\\">FİZİKSEL</th>\\n                      <th style=\\\"padding: 1rem; text-align: right; font-size: 0.7rem; color: var(--text-dim);\\\">FARK</th>\\n                    </tr>\\n                  </thead>\\n                  <tbody id=\\\"audit-table-body\\\">\\n                    ${inventoryData.map(item => `\\n                      <tr class=\\\"audit-row\\\" data-shelf=\\\"${item.shelfNo || ''}\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.03);\\\">\\n                        <td style=\\\"padding: 1rem;\\\">\\n           \n<truncated 2506 bytes>",
+      "StartLine": "1191",
+      "TargetContent": "\"              <table style=\\\"width: 100%; border-collapse: collapse;\\\">\\n                <thead>\\n                  <tr style=\\\"background: rgba(255,255,255,0.02);\\\">\\n                    <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'name')\\\" style=\\\"padding: 1rem; text-align: left; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                      MALZEME ${(window as any).lastSortBy === 'name' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                    </th>\\n                    <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'shelfNo')\\\" style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                      RAF ${(window as any).lastSortBy === 'shelfNo' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                    </th>\\n                    <th onclick=\\\"window.updateWarehouseUI('${selectedWarehouseId}', 'quantity')\\\" style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim); cursor: pointer;\\\">\\n                      SİSTEM ${(window as any).lastSortBy === 'quantity' ? ((window as any).lastSortDir === 'asc' ? '↑' : '↓') : ''}\\n                    </th>\\n                    <th style=\\\"padding: 1rem; text-align: center; font-size: 0.7rem; color: var(--text-dim);\\\">FİZİKSEL</th>\\n                    <th style=\\\"padding: 1rem; text-align: right; font-size: 0.7rem; color: var(--text-dim);\\\">FARK</th>\\n                  </tr>\\n                </thead>\\n                <tbody id=\\\"audit-table-body\\\">\\n                  ${inventoryData.map(item => `\\n                    <tr class=\\\"audit-row\\\" data-shelf=\\\"${item.shelfNo || ''}\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.03);\\\">\\n                      <td style=\\\"padding: 1rem;\\\">\\n                        <div style=\\\"font-weight: 700; color: var(--text-main);\\\">${item.description}</div>\\n                        <div style=\\\"font-size: 0.7rem; color: var(--text-d\n<truncated 2259 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Wrapping active audit table in scroll container in Warehouses.ts\"",
+      "toolSummary": "\"Wrap active audit table\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 6036,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Added 'Toplu Etiket Yazdır' functionality to Warehouses.ts using the batch selection mechanism.\"",
+      "Instruction": "\"Add bulk print button and logic to Warehouses.ts\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":602,\"ReplacementContent\":\"          <div style=\\\"display: flex; gap: 10px;\\\">\\n            <button onclick=\\\"window.printBatchLabels()\\\" class=\\\"btn-cyber\\\" style=\\\"background: rgba(255, 193, 7, 0.1); color: var(--accent-yellow, #ffc107); padding: 8px 16px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(255, 193, 7, 0.2);\\\">\\n              <i class=\\\"fa-solid fa-print\\\" style=\\\"margin-right: 6px;\\\"></i> TOPLU ETİKET YAZDIR\\n            </button>\\n            <button onclick=\\\"window.openBatchShelfModal()\\\" class=\\\"btn-cyber\\\" style=\\\"background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); padding: 8px 16px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.2);\\\">\",\"StartLine\":601,\"TargetContent\":\"          <div style=\\\"display: flex; gap: 10px;\\\">\\n            <button onclick=\\\"window.openBatchShelfModal()\\\" class=\\\"btn-cyber\\\" style=\\\"background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); padding: 8px 16px; font-size: 0.75rem; font-weight: 800; border: 1px solid rgba(100, 255, 218, 0.2);\\\">\"},{\"AllowMultiple\":false,\"EndLine\":851,\"ReplacementContent\":\"                        <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\\n                          <td style=\\\"padding: 1rem; text-align: center;\\\">\\n                            <input type=\\\"checkbox\\\" class=\\\"item-checkbox\\\" data-id=\\\"${item.id}\\\" data-sap=\\\"${item.sapNo}\\\" data-desc=\\\"${(item.description || '').replace(/\\\"/g, '&quot;')}\\\" onchange=\\\"window.updateBatchCount()\\\" style=\\\"width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-blue);\\\">\\n                          </td>\",\"StartLine\":848,\"TargetContent\":\"                        <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\\n                          <td style=\\\"padding: 1rem; text-align: center;\\\">\\n                            <input type=\\\"checkbox\\\" class=\\\"item-checkbox\\\" data-id=\\\"${item.id}\\\" onchange=\\\"window\n<truncated 2144 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Adding print label logic to Warehouses\"",
+      "toolSummary": "\"Add Warehouses print\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 6050,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Added window.printBatchLabels function logic to collect selected items and call QRService.\"",
+      "EndLine": "3235",
+      "Instruction": "\"Add printBatchLabels method to Warehouses.ts\"",
+      "ReplacementContent": "\"};\\n\\n(window as any).printBatchLabels = () => {\\n    const checkboxes = document.querySelectorAll('.item-checkbox:checked') as NodeListOf<HTMLInputElement>;\\n    if (checkboxes.length === 0) return;\\n    \\n    const pagesCount = Math.ceil(checkboxes.length / 14);\\n    if (confirm(`Toplam ${checkboxes.length} adet etiket yazdırılacak.\\\\nBu işlem tahmini ${pagesCount} sayfa A4 (Tanex TW-2014) etiket kağıdı gerektirecektir.\\\\n\\\\nYazıcıya boş etiket kağıtlarını yerleştirdiğinizden emin olun.\\\\nDevam edilsin mi?`)) {\\n        const items: Array<{id: string, sapNo: string, description: string}> = [];\\n        checkboxes.forEach(cb => {\\n            items.push({\\n                id: cb.dataset.id || '',\\n                sapNo: cb.dataset.sap || '',\\n                description: cb.dataset.desc || ''\\n            });\\n        });\\n        \\n        qrService.printBulkLabels(items);\\n        (window as any).clearBatchSelection();\\n    }\\n};\\n\"",
+      "StartLine": "3234",
+      "TargetContent": "\"};\\n\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Adding printBatchLabels logic\"",
+      "toolSummary": "\"Add printBatchLabels\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 6117,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Fixed QR scanner to check both document ID and SAP No to support both old and new printed labels.\"",
+      "Instruction": "\"Fix scanner logic to check ID and sapNo\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":2457,\"ReplacementContent\":\"        // Check if decodedText is a material ID or SAP No\\n        const inventory = (window as any).currentInventoryData || [];\\n        let material = inventory.find((i: any) => String(i.sapNo).trim() === String(decodedText).trim() || String(i.id).trim() === String(decodedText).trim());\\n        \\n        if (!material) {\\n            material = await warehouseService.getStockBySap(warehouseId, decodedText);\\n        }\",\"StartLine\":2456,\"TargetContent\":\"        // Check if decodedText is a material ID or SAP No\\n        const material = await warehouseService.getStockBySap(warehouseId, decodedText);\"},{\"AllowMultiple\":false,\"EndLine\":3468,\"ReplacementContent\":\"        const inventory = (window as any).currentInventoryData || [];\\n        const item = inventory.find((i: any) => String(i.sapNo).trim() === String(sapNo).trim() || String(i.id).trim() === String(sapNo).trim());\",\"StartLine\":3467,\"TargetContent\":\"        const inventory = (window as any).currentInventoryData || [];\\n        const item = inventory.find((i: any) => String(i.sapNo).trim() === String(sapNo).trim());\"}]",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Fixing scanner logic in Warehouses.ts\"",
+      "toolSummary": "\"Fix QR scanner\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 6240,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Added prompt for Quick Audit reason if count differs from system.\"",
+      "Instruction": "\"Add audit difference reason prompt\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":3526,\"ReplacementContent\":\"    const physicalQty = parseInt(input.value);\\n    \\n    if (isNaN(physicalQty)) return;\\n\\n    let explanation = '';\\n    if (physicalQty !== systemQty) {\\n        const reason = prompt(`Fark Tespit Edildi (Sistem: ${systemQty}, Sayım: ${physicalQty})\\\\nLütfen bu farkın nedenini (açıklama) yazın:`);\\n        if (reason === null) return; // cancelled\\n        explanation = reason.trim() || 'Açıklama girilmedi';\\n    }\\n\\n    const session = (window as any).quickAuditSession;\\n    const existingIdx = session.results.findIndex((r: any) => r.id === id);\\n    \\n    const result = {\\n        id, sapNo, description, systemQty, physicalQty,\\n        diff: physicalQty - systemQty,\\n        note: explanation,\\n        timestamp: new Date()\\n    };\",\"StartLine\":3515,\"TargetContent\":\"    const physicalQty = parseInt(input.value);\\n    \\n    if (isNaN(physicalQty)) return;\\n\\n    const session = (window as any).quickAuditSession;\\n    const existingIdx = session.results.findIndex((r: any) => r.id === id);\\n    \\n    const result = {\\n        id, sapNo, description, systemQty, physicalQty,\\n        diff: physicalQty - systemQty,\\n        timestamp: new Date()\\n    };\"},{\"AllowMultiple\":false,\"EndLine\":3547,\"ReplacementContent\":\"                <div style=\\\"text-align: right;\\\">\\n                    <div style=\\\"font-size: 0.9rem; font-weight: 900; color: ${r.diff === 0 ? '#64ffda' : '#ff4d4d'}\\\">${r.physicalQty} AD.</div>\\n                    <div style=\\\"font-size: 0.6rem; color: #888;\\\">Fark: ${r.diff > 0 ? '+' : ''}${r.diff}</div>\\n                </div>\\n            </div>\\n            ${r.note ? `<div style=\\\"font-size: 0.65rem; color: #ffeb3b; padding-top: 4px; font-style: italic;\\\">Açıklama: ${r.note}</div>` : ''}\\n        `).join('');\",\"StartLine\":3542,\"TargetContent\":\"                <div style=\\\"text-align: right;\\\">\\n                    <div style=\\\"font-size: 0.9rem; font-weight: 900; color: ${r.diff === 0 ? '#64ffda' : '#ff4d4d'}\\\">${r.physic\n<truncated 552 bytes>",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Adding quick audit diff prompt\"",
+      "toolSummary": "\"Update Quick Audit\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 7790,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Optimizing warehouse data fetching inside WarehousePage to run database queries in parallel and utilize pre-fetched inventory/logs arrays. This drastically reduces page load latency (by up to 5x), eliminating lag when viewing warehouses.\"",
+      "EndLine": "175",
+      "Instruction": "\"Implement parallel Firestore fetching and pre-fetched arrays inside WarehousePage in Warehouses.ts\"",
+      "ReplacementContent": "\"  } else {\\n    console.log('[WarehousePage] Cache missing or stale. Fetching fresh data from Firestore...');\\n    try {\\n      if (selectedWarehouseId) {\\n        // Fetch core datasets concurrently in parallel!\\n        const [inv, res, lg] = await Promise.all([\\n          warehouseService.getInventory(selectedWarehouseId),\\n          warehouseService.getReservationsFromDrafts(selectedWarehouseId),\\n          warehouseService.getLogs(selectedWarehouseId)\\n        ]);\\n        inventory = inv;\\n        draftReservations = res;\\n        logs = lg;\\n\\n        // Instant calculations utilizing pre-fetched arrays to avoid redundant DB hits!\\n        trends = await warehouseService.calculateConsumptionTrends(selectedWarehouseId, inventory, logs);\\n        occupancy = await warehouseService.getShelfOccupancy(selectedWarehouseId, inventory);\\n\\n        if (activeTab === 'audit_history') {\\n          audits = await warehouseService.getAuditHistory(selectedWarehouseId);\\n        }\\n      } else {\\n        inventory = [];\\n        draftReservations = { bySap: {}, details: [] };\\n        trends = {};\\n        occupancy = {};\\n        logs = [];\\n      }\\n      \\n      // Cache the newly loaded values\\n      (window as any).cachedWarehouseId = selectedWarehouseId;\\n      (window as any).cachedInventory = inventory;\\n      (window as any).cachedReservations = draftReservations;\\n      (window as any).cachedTrends = trends;\\n      (window as any).cachedOccupancy = occupancy;\\n      (window as any).cachedLogs = logs;\\n      (window as any).cachedAudits = audits;\\n    } catch (e) {\\n      console.error('[WarehousePage] Firestore fetch error:', e);\\n    }\\n  }\"",
+      "StartLine": "152",
+      "TargetContent": "\"  } else {\\n    console.log('[WarehousePage] Cache missing or stale. Fetching fresh data from Firestore...');\\n    try {\\n      inventory = selectedWarehouseId ? await warehouseService.getInventory(selectedWarehouseId) : [];\\n      draftReservations = selectedWarehouseId ? await warehouseService.getReservationsFromDrafts(selectedWarehouseId) : { bySap: {}, details: [] };\\n      trends = selectedWarehouseId ? await warehouseService.calculateConsumptionTrends(selectedWarehouseId) : {};\\n      occupancy = selectedWarehouseId ? await warehouseService.getShelfOccupancy(selectedWarehouseId) : {};\\n      logs = selectedWarehouseId ? await warehouseService.getLogs(selectedWarehouseId) : [];\\n      if (selectedWarehouseId && activeTab === 'audit_history') {\\n        audits = await warehouseService.getAuditHistory(selectedWarehouseId);\\n      }\\n      \\n      // Cache the newly loaded values\\n      (window as any).cachedWarehouseId = selectedWarehouseId;\\n      (window as any).cachedInventory = inventory;\\n      (window as any).cachedReservations = draftReservations;\\n      (window as any).cachedTrends = trends;\\n      (window as any).cachedOccupancy = occupancy;\\n      (window as any).cachedLogs = logs;\\n      (window as any).cachedAudits = audits;\\n    } catch (e) {\\n      console.error('[WarehousePage] Firestore fetch error:', e);\\n    }\\n  }\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Implementing parallel queries and local calculations for WarehousePage\"",
+      "toolSummary": "\"Optimize Warehouses.ts fetching\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 8951,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Optimize WarehousePage data loading by fetching logs and reservations asynchronously\"",
+      "EndLine": "176",
+      "Instruction": "\"Replace the `Promise.all` blocking logic with an optimized version that only `await`s inventory, and loads reservations and logs in the background, updating the UI when done.\"",
+      "ReplacementContent": "\"        console.log('[WarehousePage] Fetching inventory (fast)...');\\n        inventory = await warehouseService.getInventory(selectedWarehouseId);\\n        \\n        (window as any).cachedWarehouseId = selectedWarehouseId;\\n        (window as any).cachedInventory = inventory;\\n        \\n        occupancy = await warehouseService.getShelfOccupancy(selectedWarehouseId, inventory);\\n        (window as any).cachedOccupancy = occupancy;\\n        \\n        // Temporary defaults while background loading\\n        draftReservations = (window as any).cachedReservations || { bySap: {}, details: [] };\\n        logs = (window as any).cachedLogs || [];\\n        trends = (window as any).cachedTrends || {};\\n        \\n        // Background load heavy datasets (Reservations and Logs)\\n        if (!(window as any).bgLoadStartedFor || (window as any).bgLoadStartedFor !== selectedWarehouseId) {\\n            (window as any).bgLoadStartedFor = selectedWarehouseId;\\n            console.log('[WarehousePage] Started background loading for logs & reservations...');\\n            \\n            Promise.all([\\n              warehouseService.getReservationsFromDrafts(selectedWarehouseId),\\n              warehouseService.getLogs(selectedWarehouseId)\\n            ]).then(async ([res, lg]) => {\\n              (window as any).cachedReservations = res;\\n              (window as any).cachedLogs = lg;\\n              const tr = await warehouseService.calculateConsumptionTrends(selectedWarehouseId, inventory, lg);\\n              (window as any).cachedTrends = tr;\\n              \\n              if ((window as any).currentWarehouseId === selectedWarehouseId) {\\n                 console.log('[WarehousePage] Background load complete. Updating UI...');\\n                 (window as any).updateWarehouseUI(selectedWarehouseId);\\n              }\\n            }).catch(e => console.error('[WarehousePage] Background load error:', e));\\n        }\\n\\n        if (activeTab === 'audit_history') {\\n          audits = await warehouseService.getAuditHistory(selectedWar\n<truncated 72 bytes>",
+      "StartLine": "147",
+      "TargetContent": "\"    try {\\n      if (selectedWarehouseId) {\\n        // Fetch core datasets concurrently in parallel!\\n        const [inv, res, lg] = await Promise.all([\\n          warehouseService.getInventory(selectedWarehouseId),\\n          warehouseService.getReservationsFromDrafts(selectedWarehouseId),\\n          warehouseService.getLogs(selectedWarehouseId)\\n        ]);\\n        inventory = inv;\\n        draftReservations = res;\\n        logs = lg;\\n\\n        // Instant calculations utilizing pre-fetched arrays to avoid redundant DB hits!\\n        trends = await warehouseService.calculateConsumptionTrends(selectedWarehouseId, inventory, logs);\\n        occupancy = await warehouseService.getShelfOccupancy(selectedWarehouseId, inventory);\\n\\n        if (activeTab === 'audit_history') {\\n          audits = await warehouseService.getAuditHistory(selectedWarehouseId);\\n        }\\n      } else {\\n        inventory = [];\\n        draftReservations = { bySap: {}, details: [] };\\n        logs = [];\\n        trends = {};\\n        occupancy = {};\\n      }\\n      \\n      // Update cache\\n      (window as any).cachedWarehouseId = selectedWarehouseId;\\n      (window as any).cachedInventory = inventory;\\n      (window as any).cachedReservations = draftReservations;\\n      (window as any).cachedTrends = trends;\\n      (window as any).cachedOccupancy = occupancy;\\n      (window as any).cachedLogs = logs;\\n    } catch (e) {\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Optimize background loading\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 8999,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Call global sync when image is uploaded\"",
+      "EndLine": "2067",
+      "Instruction": "\"After updating the material, check if we have the SAP number and if so, trigger a global image sync.\"",
+      "ReplacementContent": "\"    await warehouseService.updateMaterial(warehouseId, itemId, { imageUrl });\\n    \\n    // Auto-sync image to all other warehouses that have the same material\\n    const currentInventory = await warehouseService.getInventory(warehouseId);\\n    const uploadedItem = currentInventory.find(i => i.id === itemId);\\n    if (uploadedItem && uploadedItem.sapNo) {\\n        console.log(`[ImageUpload] Triggering global sync for SAP: ${uploadedItem.sapNo}`);\\n        await warehouseService.syncMaterialImageGlobally(uploadedItem.sapNo, imageUrl);\\n    }\"",
+      "StartLine": "2067",
+      "TargetContent": "\"    await warehouseService.updateMaterial(warehouseId, itemId, { imageUrl });\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Call global sync on upload\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 9005,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Call global sync when image is removed\"",
+      "EndLine": "2108",
+      "Instruction": "\"After removing the image (updating it to ''), check for sapNo and trigger global sync with empty string.\"",
+      "ReplacementContent": "\"            if (itemId) {\\n                await warehouseService.updateMaterial(warehouseId, itemId, { imageUrl: '' });\\n                \\n                // Auto-sync image removal to all other warehouses\\n                const currentInventory = await warehouseService.getInventory(warehouseId);\\n                const removedItem = currentInventory.find(i => i.id === itemId);\\n                if (removedItem && removedItem.sapNo) {\\n                    console.log(`[ImageRemove] Triggering global sync for SAP: ${removedItem.sapNo}`);\\n                    await warehouseService.syncMaterialImageGlobally(removedItem.sapNo, '');\\n                }\\n            }\"",
+      "StartLine": "2108",
+      "TargetContent": "\"            if (itemId) {\\n                await warehouseService.updateMaterial(warehouseId, itemId, { imageUrl: '' });\\n            }\"",
+      "TargetFile": "\"c:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Sync image removal\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11280,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Integrate the Global Image Pool into Warehouses.ts Excel upload logic. It fetches the pool once before processing rows, and automatically assigns imageUrl to existing or new materials if a global image exists for that SAP No.\"",
+      "Instruction": "\"1. Update handleExcelUpload to fetch getGlobalImagePool(). 2. Update the row iteration loop to map the global image URL to added and updated materials if available.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":641,\"ReplacementContent\":\"            const confirmImport = confirm(`${rows.length} adet kayıt işlenecek. Devam edilsin mi?`);\\n            if (!confirmImport) return;\\n\\n            let globalImagePool = new Map<string, string>();\\n            try {\\n                const { warehouseService } = await import('../services/WarehouseService');\\n                globalImagePool = await warehouseService.getGlobalImagePool();\\n            } catch(e) {\\n                console.warn(\\\"Could not load global images\\\", e);\\n            }\\n\\n            const currentInventory = await warehouseService.getInventory(warehouseId);\\n            let updated = 0, added = 0;\\n\\n            for (const row of rows) {\\n                const sapNo = String(row['SAP NO'] || '').trim();\\n                const description = row['AÇIKLAMA'] || '';\\n                const quantity = parseInt(row['MİKTAR']) || 0;\\n                const shelfNo = row['KONUM'] || '';\\n                const criticalLimitVal = row['KRİTİK LİMİT'];\\n                const criticalLimit = (criticalLimitVal !== undefined && criticalLimitVal !== null && criticalLimitVal !== '') ? parseInt(criticalLimitVal) : undefined;\\n\\n                if (!sapNo) continue;\\n                const existing = currentInventory.find(i => i.sapNo === sapNo);\\n                const globalImageUrl = globalImagePool.get(sapNo);\\n\\n                if (existing && existing.id) {\\n                    const updateData: any = { description, quantity, shelfNo, criticalLimit };\\n                    if (globalImageUrl && !existing.imageUrl) updateData.imageUrl = globalImageUrl;\\n                    await warehouseService.updateMaterial(warehouseId, existing.id, updateData);\\n                    updated++;\\n                } else {\\n                    const addData: any = { sapNo, description, quantity, shelfNo, criticalLimit };\\n                    if (globalImageUrl) addData.imageUrl = globalImageUrl;\\n                    await warehouseService.addMaterial(\n<truncated 1479 bytes>",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Update Warehouses.ts\"",
+      "toolSummary": "\"Update Warehouses.ts to integrate Global Image Pool in Excel import\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11349,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Fix crash when critical limit is empty. Firestore throws an error when a property is explicitly set to 'undefined'. Changed undefined to null.\"",
+      "EndLine": "2764",
+      "Instruction": "\"Change criticalLimit from undefined to null when criticalLimitVal is falsy.\"",
+      "ReplacementContent": "\"    const quantity = parseInt((form.querySelector('#modal-quantity') as HTMLInputElement).value);\\n    const shelfNo = (form.querySelector('#modal-shelf') as HTMLInputElement).value;\\n    const criticalLimitVal = (form.querySelector('#modal-critical-limit') as HTMLInputElement).value;\\n    const criticalLimit = criticalLimitVal ? parseInt(criticalLimitVal) : null;\\n\\n    if (!sapNo || !description) {\"",
+      "StartLine": "2759",
+      "TargetContent": "\"    const quantity = parseInt((form.querySelector('#modal-quantity') as HTMLInputElement).value);\\n    const shelfNo = (form.querySelector('#modal-shelf') as HTMLInputElement).value;\\n    const criticalLimitVal = (form.querySelector('#modal-critical-limit') as HTMLInputElement).value;\\n    const criticalLimit = criticalLimitVal ? parseInt(criticalLimitVal) : undefined;\\n\\n    if (!sapNo || !description) {\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Fix undefined error\"",
+      "toolSummary": "\"Fix Firestore undefined error by setting criticalLimit to null instead of undefined\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11374,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Fix the payload for adding/updating materials. Instead of passing null or undefined for criticalLimit and imageUrl, omit the fields entirely to prevent Firestore from rejecting unsupported values like undefined.\"",
+      "Instruction": "\"Change handleWarehouseFormSubmit payload logic to build an object and conditionally add criticalLimit and imageUrl.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":2796,\"ReplacementContent\":\"    try {\\n      submitBtn.disabled = true;\\n      submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> İŞLENİYOR...';\\n  \\n      let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.src || '';\\n      \\n      // If we have a pending image, upload it first\\n      if ((window as any).pendingMaterialImage) {\\n          try {\\n              submitBtn.innerHTML = '<i class=\\\"fa-solid fa-camera fa-spin\\\"></i> GÖRSEL YÜKLENİYOR...';\\n              const { inventoryService } = await import('../services/InventoryService');\\n              const resolvedId = warehouseService.resolveWarehouseId(warehouseId);\\n              imageUrl = await inventoryService.uploadMaterialImage(resolvedId, itemId || 'new', (window as any).pendingMaterialImage);\\n              (window as any).pendingMaterialImage = null;\\n          } catch (uploadErr) {\\n              console.error('[Submit] Image upload failed:', uploadErr);\\n          }\\n      }\\n      \\n      const payload: any = { sapNo, description, quantity, shelfNo };\\n      if (criticalLimit !== null) payload.criticalLimit = criticalLimit;\\n      if (imageUrl) payload.imageUrl = imageUrl;\\n\\n      if (itemId) {\\n        await warehouseService.updateMaterial(warehouseId, itemId, payload);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: description, sapNo, type: 'UPDATE', quantity,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n      } else {\\n        const result = await warehouseService.addMaterial(warehouseId, payload);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId: result.id, materialName: description, sapNo, type: 'ADD', quantity,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n      }\\n      \\n      (window as any).closeAddMaterialModal();\",\"StartLine\":2764,\"TargetContent\":\"    try \n<truncated 1762 bytes>",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Update payload logic\"",
+      "toolSummary": "\"Update payload creation logic to safely omit undefined values\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11391,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Fix image resolving to localhost/baseurl by using getAttribute('src'). Prevent duplicate SAP numbers from being added by checking the inventory before insertion.\"",
+      "Instruction": "\"Change imageUrl retrieval to use getAttribute('src'). Also, add a check before adding a new item to ensure the SAP number doesn't already exist in the inventory.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":1924,\"ReplacementContent\":\"    try {\\n      submitBtn.disabled = true;\\n      submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> İŞLENİYOR...';\\n  \\n      let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.getAttribute('src') || '';\\n      // Exclude base URL matches just in case\\n      if (imageUrl && (imageUrl === window.location.href || imageUrl === window.location.origin + '/')) {\\n          imageUrl = '';\\n      }\\n      \\n      // Prevent duplicate SAP\\n      if (!itemId) {\\n          const currentInventory = await warehouseService.getInventory(warehouseId);\\n          const exists = currentInventory.some(i => String(i.sapNo).trim() === String(sapNo).trim());\\n          if (exists) {\\n              alert(`Hata: ${sapNo} SAP numarasına sahip malzeme bu depoda zaten mevcut! Lütfen listedeki mevcut malzemeyi düzenleyin.`);\\n              submitBtn.disabled = false;\\n              submitBtn.innerHTML = originalBtnText;\\n              return;\\n          }\\n      }\\n\\n      // If we have a pending image, upload it first\",\"StartLine\":1918,\"TargetContent\":\"    try {\\n      submitBtn.disabled = true;\\n      submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> ?LENYOR...';\\n  \\n      let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.src || '';\\n      \\n      // If we have a pending image, upload it first\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Fix image URL and duplicate SAP\"",
+      "toolSummary": "\"Fix broken imageUrl and add duplicate SAP check\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11397,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Fix image URL logic to prevent empty strings from evaluating to the window base URL. Add a validation to prevent adding duplicate SAP numbers in manual insertions.\"",
+      "EndLine": "1922",
+      "Instruction": "\"Replace lines from the start of the try block down to the let imageUrl assignment. Use getAttribute to prevent resolving absolute URLs and add the SAP duplication check.\"",
+      "ReplacementContent": "\"    try {\\n      submitBtn.disabled = true;\\n      submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> İŞLENİYOR...';\\n  \\n      let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.getAttribute('src') || '';\\n      if (imageUrl && (imageUrl === window.location.href || imageUrl === window.location.origin + '/')) {\\n          imageUrl = '';\\n      }\\n      \\n      // Prevent duplicate SAP\\n      if (!itemId) {\\n          const currentInventory = await warehouseService.getInventory(warehouseId);\\n          const exists = currentInventory.some(i => String(i.sapNo).trim() === String(sapNo).trim());\\n          if (exists) {\\n              alert(`Hata: ${sapNo} SAP numarasına sahip malzeme bu depoda zaten mevcut! Lütfen listedeki mevcut malzemeyi düzenleyin.`);\\n              submitBtn.disabled = false;\\n              submitBtn.innerHTML = originalBtnText;\\n              return;\\n          }\\n      }\"",
+      "StartLine": "1918",
+      "TargetContent": "\"    try {\\n      submitBtn.disabled = true;\\n      submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> İŞLENİYOR...';\\n  \\n      let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.src || '';\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Replace imageUrl and add SAP logic\"",
+      "toolSummary": "\"Update imageUrl assignment and add SAP check\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11403,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Fix image URL logic to prevent empty strings from evaluating to the window base URL. Add a validation to prevent adding duplicate SAP numbers in manual insertions.\"",
+      "EndLine": "1922",
+      "Instruction": "\"Replace lines from the start of the try block down to the let imageUrl assignment. Use getAttribute to prevent resolving absolute URLs and add the SAP duplication check.\"",
+      "ReplacementContent": "\"  try {\\n    submitBtn.disabled = true;\\n    submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> İŞLENİYOR...';\\n\\n    let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.getAttribute('src') || '';\\n    if (imageUrl && (imageUrl === window.location.href || imageUrl === window.location.origin + '/')) {\\n        imageUrl = '';\\n    }\\n    \\n    // Prevent duplicate SAP\\n    if (!itemId) {\\n        const currentInventory = await warehouseService.getInventory(warehouseId);\\n        const exists = currentInventory.some(i => String(i.sapNo).trim() === String(sapNo).trim());\\n        if (exists) {\\n            alert(`Hata: ${sapNo} SAP numarasına sahip malzeme bu depoda zaten mevcut! Lütfen listedeki mevcut malzemeyi düzenleyin.`);\\n            submitBtn.disabled = false;\\n            submitBtn.innerHTML = originalBtnText;\\n            return;\\n        }\\n    }\"",
+      "StartLine": "1918",
+      "TargetContent": "\"  try {\\n    submitBtn.disabled = true;\\n    submitBtn.innerHTML = '<i class=\\\"fa-solid fa-circle-notch fa-spin\\\"></i> ?LENYOR...';\\n\\n    let imageUrl = (document.getElementById('modal-image-preview') as HTMLImageElement)?.src || '';\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "TargetLintErrorIds": "[]",
+      "toolAction": "\"Fix imageUrl and SAP check\"",
+      "toolSummary": "\"Update imageUrl assignment and add duplicate SAP check\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11625,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add a small delay before updating UI after adding material to allow Firebase local cache to settle\"",
+      "EndLine": "1976",
+      "Instruction": "\"Change (window as any).updateWarehouseUI(warehouseId); to a setTimeout in handleWarehouseFormSubmit\"",
+      "ReplacementContent": "\"      (window as any).closeAddMaterialModal();\\n      setTimeout(() => {\\n        (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true);\\n      }, 400);\"",
+      "StartLine": "1973",
+      "TargetContent": "\"      (window as any).closeAddMaterialModal();\\n      (window as any).updateWarehouseUI(warehouseId);\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Fix race condition\"",
+      "toolSummary": "\"Add delay to updateWarehouseUI after form submit\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11648,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Wrap updateWarehouseUI rendering logic in a try-catch to surface silent errors\"",
+      "EndLine": "641",
+      "Instruction": "\"Add a try-catch block inside updateWarehouseUI around WarehousePage call to catch any silent crashes\"",
+      "ReplacementContent": "\"    const app = document.getElementById('app');\\n    if (app) {\\n      try {\\n        const html = await WarehousePage(\\n          selectedId, \\n          (window as any).userProfile, \\n          (window as any).lastSortBy || 'sapNo', \\n          (window as any).lastSortDir || 'asc', \\n          searchQuery, \\n          activeTab as any\\n        );\\n        app.innerHTML = html;\\n    \\n        // RESTORE FOCUS: If search was active, put cursor back and at the end\\n        if (query !== undefined) {\\n            const searchInput = document.getElementById('inventory-search') as HTMLInputElement;\\n            if (searchInput) {\\n                searchInput.focus();\\n                const len = searchInput.value.length;\\n                searchInput.setSelectionRange(len, len);\\n            }\\n        }\\n      } catch (uiErr: any) {\\n        console.error('[updateWarehouseUI] Error:', uiErr);\\n        alert('Arayüz güncellenirken bir hata oluştu: ' + (uiErr?.message || String(uiErr)));\\n      }\\n    }\\n  };\"",
+      "StartLine": "621",
+      "TargetContent": "\"    const app = document.getElementById('app');\\n    if (app) {\\n      const html = await WarehousePage(\\n        selectedId, \\n        (window as any).userProfile, \\n        (window as any).lastSortBy || 'sapNo', \\n        (window as any).lastSortDir || 'asc', \\n        searchQuery, \\n        activeTab as any\\n      );\\n      app.innerHTML = html;\\n  \\n      // RESTORE FOCUS: If search was active, put cursor back and at the end\\n      if (query !== undefined) {\\n          const searchInput = document.getElementById('inventory-search') as HTMLInputElement;\\n          if (searchInput) {\\n              searchInput.focus();\\n              const len = searchInput.value.length;\\n              searchInput.setSelectionRange(len, len);\\n          }\\n      }\\n    }\\n  };\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add error handling\"",
+      "toolSummary": "\"Wrap updateWarehouseUI in try/catch to debug the UI failure\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11671,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Remove the 400ms delay since we now mutate cache synchronously\"",
+      "EndLine": "1973",
+      "Instruction": "\"Remove setTimeout around updateWarehouseUI in handleWarehouseFormSubmit\"",
+      "ReplacementContent": "\"    }\\n    \\n    (window as any).closeAddMaterialModal();\\n    (window as any).updateWarehouseUI(warehouseId);\\n  } catch (err) {\"",
+      "StartLine": "1967",
+      "TargetContent": "\"    }\\n    \\n    (window as any).closeAddMaterialModal();\\n    setTimeout(() => {\\n      (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true);\\n    }, 400);\\n  } catch (err) {\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Remove UI delay\"",
+      "toolSummary": "\"Remove unnecessary setTimeout in handleWarehouseFormSubmit\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11750,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add ID to row for manual DOM removal\"",
+      "EndLine": "1440",
+      "Instruction": "\"Add id=row-{item.id} to the premium-item row\"",
+      "ReplacementContent": "\"      tbody.innerHTML = inventory.map(item => `\\n        <tr class=\\\"premium-item\\\" id=\\\"row-${item.id}\\\">\\n          <td style=\\\"padding: 1.2rem 1.5rem;\\\">\"",
+      "StartLine": "1438",
+      "TargetContent": "\"      tbody.innerHTML = inventory.map(item => `\\n        <tr class=\\\"premium-item\\\">\\n          <td style=\\\"padding: 1.2rem 1.5rem;\\\">\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add row ID\"",
+      "toolSummary": "\"Add ID to inventory table row\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11762,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Manually remove the DOM row upon successful delete\"",
+      "EndLine": "2088",
+      "Instruction": "\"Add document.getElementById(`row-${itemId}`)?.remove() to deleteMaterial\"",
+      "ReplacementContent": "\"    if (confirm(`\\\"${sapNo} - ${name}\\\" malzemesini kalıcı olarak silmek istediğinize emin misiniz?`)) {\\n      try {\\n        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        \\n        // IMMEDIATE DOM REMOVAL (Guarantees instant visual feedback)\\n        const row = document.getElementById(`row-${itemId}`);\\n        if (row) row.remove();\\n        \\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \\n          console.error(err); \\n          alert('Silme işlemi sırasında bir hata oluştu.');\\n      }\\n    }\"",
+      "StartLine": "2075",
+      "TargetContent": "\"    if (confirm(`\\\"${sapNo} - ${name}\\\" malzemesini kalıcı olarak silmek istediğinize emin misiniz?`)) {\\n      try {\\n        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \\n          console.error(err); \\n          alert('Silme işlemi sırasında bir hata oluştu.');\\n      }\\n    }\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add manual DOM removal\"",
+      "toolSummary": "\"Manually remove DOM row for deleteMaterial\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11793,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add DOM fallback to deleteMaterial\"",
+      "EndLine": "2088",
+      "Instruction": "\"Insert DOM removal logic in deleteMaterial in Warehouses.ts\"",
+      "ReplacementContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        const row = document.getElementById(`row-${itemId}`);\\n        if (row) row.remove();\\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "StartLine": "2080",
+      "TargetContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add manual DOM removal\"",
+      "toolSummary": "\"Use replace_file_content to add DOM fallback in deleteMaterial\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11851,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add DOM removal fallback in deleteMaterial\"",
+      "EndLine": "2088",
+      "Instruction": "\"Add DOM removal logic before updateWarehouseUI\"",
+      "ReplacementContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        \\n        // IMMEDIATE DOM REMOVAL\\n        const row = document.getElementById(`row-${itemId}`);\\n        if (row) row.remove();\\n        \\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "StartLine": "2080",
+      "TargetContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add DOM removal\"",
+      "toolSummary": "\"Use replace_file_content to add DOM fallback in deleteMaterial\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 11860,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add DOM removal fallback in deleteMaterial\"",
+      "EndLine": "2196",
+      "Instruction": "\"Insert DOM removal logic in deleteMaterial in Warehouses.ts\"",
+      "ReplacementContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        \\n        // IMMEDIATE DOM REMOVAL\\n        const row = document.getElementById(`row-${itemId}`);\\n        if (row) row.remove();\\n        \\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "StartLine": "2188",
+      "TargetContent": "\"        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        (window as any).updateWarehouseUI(warehouseId);\\n      } catch (err) { \"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add manual DOM removal\"",
+      "toolSummary": "\"Add manual DOM removal fallback using replace_file_content\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 12000,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Add DOM removal logic directly to deleteMaterial\"",
+      "EndLine": "2378",
+      "Instruction": "\"Inject DOM removal for the deleted item before the UI refresh.\"",
+      "ReplacementContent": "\"    if (confirm(`\\\"${sapNo} - ${name}\\\" malzemesini kalıcı olarak silmek istediğinize emin misiniz?`)) {\\n      try {\\n        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n        \\n        document.querySelectorAll('tr').forEach(tr => {\\n            if (tr.innerHTML.includes(itemId)) {\\n                tr.remove();\\n            }\\n        });\\n          \\n        setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);\\n      } catch (err) { \"",
+      "StartLine": "2364",
+      "TargetContent": "\"    if (confirm(`\\\"${sapNo} - ${name}\\\" malzemesini kalc olarak silmek istediYinize emin misiniz?`)) {\\n      try {\\n        await warehouseService.deleteMaterial(warehouseId, itemId);\\n        await warehouseService.addLog(warehouseId, {\\n          itemId, materialName: name, sapNo, type: 'REMOVE', quantity: 0,\\n          user: authService.getCurrentUser()?.email || 'Sistem',\\n          source: 'MANUAL'\\n        });\\n          \\n        setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);\\n      } catch (err) { \"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add DOM wipe\"",
+      "toolSummary": "\"Add bulletproof DOM wipe to deleteMaterial in Warehouses.ts\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 12360,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Add delete button to the logs tab for users with deleteMaterial permission.\"",
+      "Instruction": "\"Add deleteLogRecord function and inject delete button into the GEÇMİŞ tab.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":2198,\"ReplacementContent\":\"(window as any).deleteLogRecord = async (warehouseId: string, logId: string, logDesc: string) => {\\n  const currentUser = (window as any).currentUser;\\n  const isUserAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';\\n  const warehousePerms = currentUser?.allowedTabs?.warehouses || {};\\n  const hasDeletePerm = isUserAdmin || (typeof warehousePerms === 'object' && !!(warehousePerms as any).deleteMaterial);\\n  \\n  if (!hasDeletePerm) {\\n    alert('Yetkiniz bulunmamaktadır.');\\n    return;\\n  }\\n  \\n  if (confirm(`\\\"${logDesc}\\\" hareket kaydını kalıcı olarak silmek istediğinize emin misiniz?`)) {\\n    try {\\n      const { warehouseService } = await import('../services/WarehouseService');\\n      await warehouseService.deleteLog(warehouseId, logId);\\n      document.querySelectorAll(\\\"tr\\\").forEach(tr => { if (tr.innerHTML.includes(logId)) { tr.style.display = \\\"none\\\"; } });\\n      setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);\\n    } catch (err) {\\n      console.error(err);\\n      alert('Silme işlemi sırasında bir hata oluştu.');\\n    }\\n  }\\n};\\n\\n(window as any).deleteMaterial = async (warehouseId: string, itemId: string, name: string, sapNo: string) => {\",\"StartLine\":2198,\"TargetContent\":\"(window as any).deleteMaterial = async (warehouseId: string, itemId: string, name: string, sapNo: string) => {\"},{\"AllowMultiple\":false,\"EndLine\":833,\"ReplacementContent\":\"                        <th style=\\\"padding: 1.2rem 1.5rem; text-align: left; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Kullanıcı</th>\\n                        ${hasDeleteMaterialPerm ? `<th style=\\\"padding: 1.2rem 1.5rem; text-align: right; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase;\\\">Aksiyon</th>` : ''}\\n                      </tr>\\n                    </thead>\\n                    <tbody>\\n                      ${logs.map(log => `\",\"StartLine\":828,\n<truncated 1586 bytes>",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Inject delete log function and update history tab rendering\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 12426,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Implement deletedLogIds array to instantly and permanently hide deleted history log items before background re-rendering\"",
+      "Instruction": "\"Add deletedLogIds cache update and filtering logic to Warehouses.ts\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":2199,\"ReplacementContent\":\"    try {\\n      const { warehouseService } = await import('../services/WarehouseService');\\n      await warehouseService.deleteLog(warehouseId, logId);\\n      (window as any).deletedLogIds = (window as any).deletedLogIds || [];\\n      (window as any).deletedLogIds.push(logId);\\n      document.querySelectorAll(\\\"tr\\\").forEach(tr => { if (tr.innerHTML.includes(logId)) { tr.style.display = \\\"none\\\"; } });\\n      setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);\\n    } catch (err) {\",\"StartLine\":2196,\"TargetContent\":\"    try {\\n      const { warehouseService } = await import('../services/WarehouseService');\\n      await warehouseService.deleteLog(warehouseId, logId);\\n      document.querySelectorAll(\\\"tr\\\").forEach(tr => { if (tr.innerHTML.includes(logId)) { tr.style.display = \\\"none\\\"; } });\\n      setTimeout(() => { (window as any).updateWarehouseUI(warehouseId, undefined, undefined, undefined, undefined, true); }, 500);\\n    } catch (err) {\"},{\"AllowMultiple\":false,\"EndLine\":1030,\"ReplacementContent\":\"                    </thead>\\n                    <tbody>\\n                      ${logs.filter(log => !(window as any).deletedLogIds?.includes(log.id)).map(log => `\\n                        <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\",\"StartLine\":1027,\"TargetContent\":\"                    </thead>\\n                    <tbody>\\n                      ${logs.map(log => `\\n                        <tr class=\\\"material-row\\\" style=\\\"border-bottom: 1px solid rgba(255,255,255,0.02);\\\">\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Implement bulletproof log rendering filter\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 12435,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Add filter to logs mapping\"",
+      "Instruction": "\"Add deletedLogIds filter to the logs map\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":1028,\"ReplacementContent\":\"                    <tbody>\\n                      ${logs.filter(log => !(window as any).deletedLogIds?.includes(log.id)).map(log => `\",\"StartLine\":1027,\"TargetContent\":\"                    <tbody>\\n                      ${logs.map(log => `\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Edit Warehouses.ts\"",
+      "toolSummary": "\"Apply deletedLogIds filter to the logs mapping in history tab\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 13015,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Add lazy loading to warehouse material images to prevent UI freezing on mobile.\"",
+      "Instruction": "\"Add loading=\\\"lazy\\\" to the <img> tags in the material rendering loop.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":true,\"EndLine\":891,\"ReplacementContent\":\"                              ${item.imageUrl ? \\n                                  `<img src=\\\"${item.imageUrl}\\\" loading=\\\"lazy\\\" style=\\\"width: 100%; height: 100%; object-fit: cover;\\\">` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--accent-blue); opacity: 0.5; font-size: 0.9rem;\\\"></i>`\",\"StartLine\":889,\"TargetContent\":\"                              ${item.imageUrl ? \\n                                  `<img src=\\\"${item.imageUrl}\\\" style=\\\"width: 100%; height: 100%; object-fit: cover;\\\">` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--accent-blue); opacity: 0.5; font-size: 0.9rem;\\\"></i>`\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Add lazy load\"",
+      "toolSummary": "\"Add loading='lazy' to material images in Warehouses.ts to improve rendering performance\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 13055,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Replace inline base64 image tags with a gallery icon to vastly improve rendering performance on mobile devices.\"",
+      "Instruction": "\"Replace the <img> tag inside the material row with a FontAwesome image icon to prevent layout thrashing and out-of-memory errors on mobile when opening warehouses with hundreds of materials.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":892,\"ReplacementContent\":\"                              ${item.imageUrl ? \\n                                  `<i class=\\\"fa-solid fa-image\\\" style=\\\"color: var(--accent-blue); font-size: 1.4rem;\\\"></i>` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--accent-blue); opacity: 0.3; font-size: 0.9rem;\\\"></i>`\\n                              }\",\"StartLine\":889,\"TargetContent\":\"                              ${item.imageUrl ? \\n                                  `<img src=\\\"${item.imageUrl}\\\" loading=\\\"lazy\\\" style=\\\"width: 100%; height: 100%; object-fit: cover;\\\">` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--accent-blue); opacity: 0.5; font-size: 0.9rem;\\\"></i>`\\n                              }\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Use gallery icon\"",
+      "toolSummary": "\"Replace the material thumbnail image tag with a gallery icon to prevent the UI from freezing when rendering the list\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 13075,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Change image icon colors to make loaded vs unloaded state more obvious.\"",
+      "Instruction": "\"Change the loaded image icon to have a glowing effect and the unloaded camera icon to be a dim gray color.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":890,\"ReplacementContent\":\"                              ${item.imageUrl ? \\n                                  `<i class=\\\"fa-solid fa-image\\\" style=\\\"color: #64ffda; font-size: 1.5rem; filter: drop-shadow(0 0 5px rgba(100,255,218,0.4));\\\"></i>` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--text-dim); opacity: 0.4; font-size: 1.2rem;\\\"></i>`\\n                              }\",\"StartLine\":889,\"TargetContent\":\"                              ${item.imageUrl ? \\n                                  `<i class=\\\"fa-solid fa-image\\\" style=\\\"color: var(--accent-blue); font-size: 1.4rem;\\\"></i>` : \\n                                  `<i class=\\\"fa-solid fa-camera\\\" style=\\\"color: var(--accent-blue); opacity: 0.3; font-size: 0.9rem;\\\"></i>`\\n                              }\"}]",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Change icon colors\"",
+      "toolSummary": "\"Change the color of the loaded and unloaded image icons to make them visually distinct\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14359,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Updated Warehouses.ts CSS styles to match the cyber aesthetic.\"",
+      "EndLine": "376",
+      "Instruction": "\"Update the inline CSS variables and styles for premium-card, stats-card, etc., to cyber neon styles.\"",
+      "ReplacementContent": "\"      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);\\n          border: 1px solid rgba(0, 243, 255, 0.1);\\n          border-radius: 16px;\\n          min-width: 150px;\\n          position: relative;\\n          overflow: hidden;\\n          transition: all 0.3s;\\n        }\\n        \\n        .stats-card:hover {\\n          transform: translateY(-2px);\\n          border-color: rgba(0, 243, 255, 0.3);\\n          box-shadow: 0 10px 20px rgba(0, 243, 255, 0.1);\\n        }\\n\\n        .stats-label {\\n          font-size: 0.7rem;\\n          font-weight: 800;\\n          color: var(--text-dim);\\n          text-transform: uppercase;\\n          letter-spacing: 1.5px;\\n          margin-bottom: 8px;\\n          font-family: 'Rajdhani', sans-serif;\\n        }\\n\\n        .stats-value {\\n          font-size: 2rem;\\n          font-weight: 900;\\n          color: var(--text-main);\\n          font-family: 'Rajdhani', sans-serif;\\n          text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);\\n        }\\n\\n        .cyber-input-premium {\\n          background: rgba(0, 0, 0, 0.4);\\n          border: 1px solid rgba(0, 243, 255, 0.2);\\n          border-radius: 12px;\\n          color: var(--text-main);\\n          padding: 10px 15px;\\n          transition: all 0.3s;\\n        }\\n        \\n        .cyber-input-premi\n<truncated 1328 bytes>",
+      "StartLine": "292",
+      "TargetContent": "\"      <style>\\n        :root {\\n          --bg-dark: #0a1118;\\n          --card-bg: #111a24;\\n          --accent-blue: #64ffda;\\n          --accent-glow: rgba(100, 255, 218, 0.1);\\n          --text-main: #e6f1ff;\\n          --text-dim: #8892b0;\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: var(--card-bg);\\n          border: 1px solid rgba(255, 255, 255, 0.05);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.2rem;\\n          background: rgba(255,255,255,0.02);\\n          border: 1px solid rgba(255,255,255,0.05);\\n          border-radius: 16px;\\n          min-width: 150px;\\n        }\\n\\n        .stats-label {\\n          font-size: 0.65rem;\\n          font-weight: 800;\\n          color: var(--text-dim);\\n          text-transform: uppercase;\\n          letter-spacing: 1px;\\n          margin-bottom: 8px;\\n        }\\n\\n        .stats-value {\\n          font-size: 1.8rem;\\n          font-weight: 900;\\n          color: var(--text-main);\\n          font-family: 'Outfit', sans-serif;\\n        }\\n\\n        .cyber-input-premium {\\n          background: rgba(0, 0, 0, 0.2);\\n          border: 1px solid rgba(255, 255, 255, 0.1);\\n          border-radius: 12px;\\n          color: var(--text-main);\\n          padding: 10px 15px;\\n          transition: all 0.3s;\\n        }\\n\\n        .premium-tab {\\n          padding: 8px 24px;\\n          border-radius: 10px;\\n          border: none;\\n          background: transparent;\\n          color: var(--text-dim);\\n          font-size: 0.8rem;\\n          font-weight: 700;\\n          cursor: pointer;\\n          transition: all 0.3s;\\n          display: flex;\\n          align-items: center;\\n          gap: 8px;\\n          flex-shrink: 0;\\n        }\\n\\n        .premium-tab.active {\\n          background: var(--accent-blue);\\n          color: #0a1118;\\n          box-shadow: 0 4px 15px var(--accent-glow);\\n        }\\n\\n        .ai-banner\n<truncated 354 bytes>",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Update CSS in Warehouses\"",
+      "toolSummary": "\"Replace Warehouses.ts inline CSS styles to match the cyber theme\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14365,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Fixed the broken style block in Warehouses.ts\"",
+      "EndLine": "295",
+      "Instruction": "\"Restore the getSortIcon and the <style> block in Warehouses.ts.\"",
+      "ReplacementContent": "\"      return sortDir === 'asc' \\n        ? '<i class=\\\"fa-solid fa-sort-up\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>' \\n        : '<i class=\\\"fa-solid fa-sort-down\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>';\\n    };\\n    (window as any).getSortIcon = getSortIcon; // Register to window to avoid unused error and allow future use\\n\\n    return `\\n      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);\\n          border: 1px solid rgba(0, 243, 255, 0.1);\\n          border-radius: 16px;\\n          min-width: 150px;\\n          position: relative;\\n          overflow: hidden;\\n          transition: all 0.3s;\\n        }\\n        \\n        .stats-card:hover {\\n          transform: translateY(-2px);\\n          border-color: rgba(0, 243, 255, 0.3);\\n          box-shadow: 0 10px 20px rgba(0, 243, 255, 0.1);\\n        }\\n\\n        .stats-label {\\n          font-size: 0.7rem;\\n          font-weight: 800;\\n          color: var(--text-dim);\\n          text-transform: uppercase;\\n          letter-spacing: 1.5px;\\n          margin-bottom: 8px;\\n          font-family: 'Rajdhani', sans-serif;\\n        }\\n\\n        .stats-value {\\n          font-size: 2rem;\\n          font-weight: 900;\\n          color: var(--text-main);\\n          font-family: 'Rajdhani', sans-s\n<truncated 2124 bytes>",
+      "StartLine": "285",
+      "TargetContent": "\"      return sortDir === 'asc' \\n          border-radius: 8px;\\n          display: flex;\\n          align-items: center;\\n          justify-content: center;\\n          border: 1px solid rgba(255,255,255,0.1);\\n          background: rgba(255,255,255,0.02);\\n          color: var(--text-dim);\\n          cursor: pointer;\\n          transition: all 0.2s;\\n        }\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Fix syntax in Warehouses\"",
+      "toolSummary": "\"Fix the broken style block in Warehouses.ts\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14371,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Restore broken code in Warehouses.ts\"",
+      "EndLine": "280",
+      "Instruction": "\"Restore the missing JS code and styling block in Warehouses.ts\"",
+      "ReplacementContent": "\"    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n    \\n    (window as any).draftReservations = draftReservations; // Store for global access in reserve detail modal\\n    console.log('[WarehousePage] Sorting completed.');\\n\\n    const getSortIcon = (key: string) => {\\n      if (sortKey !== key) return '<i class=\\\"fa-solid fa-sort\\\" style=\\\"opacity: 0.2; margin-left: 8px;\\\"></i>';\\n      return sortDir === 'asc' \\n        ? '<i class=\\\"fa-solid fa-sort-up\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>' \\n        : '<i class=\\\"fa-solid fa-sort-down\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>';\\n    };\\n    (window as any).getSortIcon = getSortIcon; // Register to window to avoid unused error and allow future use\\n\\n    return `\\n      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);\\n          border: 1px solid rgba(0, 243, 255, 0.1);\\n          border-radius: 16px;\\n          min-width: 150px;\\n          position: relative;\\n          overflow: hidden;\\n          transition: all 0.3s;\\n        }\\n        \\n        .stats-card:hover {\\n          transform: translateY(-2px);\\n          border-color: rgba(0, 243, 255, 0.3);\\n          b\n<truncated 2831 bytes>",
+      "StartLine": "277",
+      "TargetContent": "\"    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n        }\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Restore Warehouses code\"",
+      "toolSummary": "\"Restore the accidentally removed code and styling block in Warehouses.ts\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14380,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Restore the missing lines in Warehouses.ts\"",
+      "EndLine": "276",
+      "Instruction": "\"Restore the missing logic and style tags.\"",
+      "ReplacementContent": "\"      const lastUpdate = item.lastUpdated.toDate ? item.lastUpdated.toDate().getTime() : new Date(item.lastUpdated).getTime();\\n      return lastUpdate < sixMonthsAgo && item.quantity > 0;\\n    });\\n\\n    const auditedCount = inventoryData.filter(i => i.lastAuditDate).length;\\n    const integrityScore = inventoryData.length > 0 ? Math.round((auditedCount / inventoryData.length) * 100) : 0;\\n    \\n    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n    \\n    (window as any).draftReservations = draftReservations; // Store for global access in reserve detail modal\\n    console.log('[WarehousePage] Sorting completed.');\\n\\n    const getSortIcon = (key: string) => {\\n      if (sortKey !== key) return '<i class=\\\"fa-solid fa-sort\\\" style=\\\"opacity: 0.2; margin-left: 8px;\\\"></i>';\\n      return sortDir === 'asc' \\n        ? '<i class=\\\"fa-solid fa-sort-up\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>' \\n        : '<i class=\\\"fa-solid fa-sort-down\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>';\\n    };\\n    (window as any).getSortIcon = getSortIcon; // Register to window to avoid unused error and allow future use\\n\\n    return `\\n      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255\n<truncated 3346 bytes>",
+      "StartLine": "270",
+      "TargetContent": "\"      const lastUpdate = item.lastUpdated.toDate ? item.lastUpdated.toDate().getTime() : new Date(item.lastUpdated).getTime();\\n      return lastUpdate < sixMonthsAgo && item.quantity > 0;\\n    });\\n\\n    const auditedCount = inventoryData.filter(i => i.lastAuditDate).length;\\n    const integrityScore = inventoryData.length > 0 ? Math.round((auditedCount / inventoryData.length) * 100) : 0;\\n    \\n    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n        }\\n\\n        .material-row:hover {\\n          background: rgba(255,255,255,0.01);\\n        }\\n\\n        .shelf-dot {\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Restore Warehouses.ts code\"",
+      "toolSummary": "\"Fully restore the Warehouses.ts code that was broken in previous replacement\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14389,
+    "name": "replace_file_content",
+    "args": {
+      "AllowMultiple": "false",
+      "Description": "\"Restore broken code in Warehouses.ts\"",
+      "EndLine": "276",
+      "Instruction": "\"Restore missing JS logic and styling\"",
+      "ReplacementContent": "\"      const lastUpdate = item.lastUpdated.toDate ? item.lastUpdated.toDate().getTime() : new Date(item.lastUpdated).getTime();\\n      return lastUpdate < sixMonthsAgo && item.quantity > 0;\\n    });\\n\\n    const auditedCount = inventoryData.filter(i => i.lastAuditDate).length;\\n    const integrityScore = inventoryData.length > 0 ? Math.round((auditedCount / inventoryData.length) * 100) : 0;\\n    \\n    // Total value or critical summary\\n    const criticalItems = inventoryData.filter(i => i.criticalLimit && i.criticalLimit > 0 && i.quantity <= i.criticalLimit);\\n    \\n    (window as any).draftReservations = draftReservations; // Store for global access in reserve detail modal\\n    console.log('[WarehousePage] Sorting completed.');\\n\\n    const getSortIcon = (key: string) => {\\n      if (sortKey !== key) return '<i class=\\\"fa-solid fa-sort\\\" style=\\\"opacity: 0.2; margin-left: 8px;\\\"></i>';\\n      return sortDir === 'asc' \\n        ? '<i class=\\\"fa-solid fa-sort-up\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>' \\n        : '<i class=\\\"fa-solid fa-sort-down\\\" style=\\\"color: var(--accent-blue); margin-left: 8px;\\\"></i>';\\n    };\\n    (window as any).getSortIcon = getSortIcon; // Register to window to avoid unused error and allow future use\\n\\n    return `\\n      <style>\\n        :root {\\n          --bg-dark: #0a0a0a;\\n          --card-bg: rgba(15, 20, 25, 0.8);\\n          --accent-blue: var(--accent-cyan);\\n          --accent-glow: rgba(0, 243, 255, 0.15);\\n          --text-main: #ffffff;\\n          --text-dim: rgba(255, 255, 255, 0.6);\\n          --danger: #ff4d4d;\\n        }\\n\\n        .premium-card {\\n          background: rgba(10, 15, 25, 0.6);\\n          backdrop-filter: blur(12px);\\n          border: 1px solid rgba(0, 243, 255, 0.15);\\n          border-radius: 16px;\\n          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(0, 243, 255, 0.05);\\n        }\\n\\n        .stats-card {\\n          flex: 1;\\n          padding: 1.5rem;\\n          background: linear-gradient(145deg, rgba(255\n<truncated 3346 bytes>",
+      "StartLine": "269",
+      "TargetContent": "\"      if (!item.lastUpdated) return false;\\n\\n        .shelf-dot {\"",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Restore logic\"",
+      "toolSummary": "\"Restore logic and style that was removed\""
+    }
+  },
+  {
+    "type": "edit",
+    "step": 14620,
+    "name": "multi_replace_file_content",
+    "args": {
+      "Description": "\"Add Price, Currency and Condition to Warehouse Form\"",
+      "Instruction": "\"Update the add-material-modal HTML, editMaterial, and handleWarehouseFormSubmit to include price, currency, and condition.\"",
+      "ReplacementChunks": "[{\"AllowMultiple\":false,\"EndLine\":574,\"ReplacementContent\":\"                  <div style=\\\"display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;\\\">\\n                    <div>\\n                      <label style=\\\"display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;\\\">MİKTAR</label>\\n                      <input type=\\\"number\\\" id=\\\"modal-quantity\\\" required placeholder=\\\"0\\\" \\n                             style=\\\"width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; box-sizing: border-box;\\\"\\n                             onfocus=\\\"this.style.borderColor='#64ffda'\\\" onblur=\\\"this.style.borderColor='#30363d'\\\">\\n                    </div>\\n                    <div>\\n                      <label style=\\\"display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;\\\">KRİTİK LİMİT</label>\\n                      <input type=\\\"number\\\" id=\\\"modal-critical-limit\\\" placeholder=\\\"Limit yok\\\" \\n                             style=\\\"width: 100%; height: 50px; background: #161b22; border: 1px solid #30363d; border-radius: 12px; color: white; padding: 0 18px; font-size: 1rem; outline: none; box-sizing: border-box;\\\"\\n                             onfocus=\\\"this.style.borderColor='#64ffda'\\\" onblur=\\\"this.style.borderColor='#30363d'\\\">\\n                    </div>\\n                  </div>\\n\\n                  <div style=\\\"display: grid; grid-template-columns: 1fr 120px; gap: 1rem;\\\">\\n                    <div>\\n                      <label style=\\\"display: block; color: #64ffda; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.8px;\\\">BİRİM FİYAT</label>\\n                      <input type=\\\"number\\\" step=\\\"0.01\\\" id=\\\"modal-price\\\" placeholder=\\\"Fiyat (Opsiyonel)\\\" \\n                             style\n<truncated 5794 bytes>",
+      "TargetFile": "\"C:\\\\Users\\\\FatihZebek\\\\Desktop\\\\Dh_Servis\\\\src\\\\pages\\\\Warehouses.ts\"",
+      "toolAction": "\"Update Add Material Modal\"",
+      "toolSummary": "\"Add pricing and condition to Warehouse modal\""
+    }
+  }
+]

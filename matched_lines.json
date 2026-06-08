@@ -1,0 +1,54 @@
+[
+  {
+    "step": 161,
+    "type": "RUN_COMMAND"
+  },
+  {
+    "step": 458,
+    "type": "VIEW_FILE"
+  },
+  {
+    "step": 5400,
+    "type": "VIEW_FILE"
+  },
+  {
+    "step": 5449,
+    "type": "RUN_COMMAND"
+  },
+  {
+    "step": 11545,
+    "type": "RUN_COMMAND"
+  },
+  {
+    "step": 14675,
+    "type": "VIEW_FILE"
+  },
+  {
+    "step": 14725,
+    "type": "VIEW_FILE"
+  },
+  {
+    "step": 14727,
+    "type": "PLANNER_RESPONSE",
+    "name": "run_command"
+  },
+  {
+    "step": 14730,
+    "type": "PLANNER_RESPONSE",
+    "name": "run_command"
+  },
+  {
+    "step": 14731,
+    "type": "RUN_COMMAND"
+  },
+  {
+    "step": 14733,
+    "type": "PLANNER_RESPONSE",
+    "name": "grep_search"
+  },
+  {
+    "step": 14736,
+    "type": "PLANNER_RESPONSE",
+    "name": "write_to_file"
+  }
+]

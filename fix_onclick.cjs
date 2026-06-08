@@ -1,0 +1,1 @@
+const fs = require('fs'); let content = fs.readFileSync('src/pages/Warehouses.ts', 'utf8'); content = content.replace(/onclick="\(window as any\)\./g, 'onclick="window.'); content = content.replace(/onchange="\(window as any\)\./g, 'onchange="window.'); fs.writeFileSync('src/pages/Warehouses.ts', content);
