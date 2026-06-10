@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc, collectionGroup, limit } from 'firebase/firestore';
 import { dataService } from './DataService';
 
 export interface InventoryItem {
@@ -95,10 +95,33 @@ class WarehouseService {
       return cached.data;
     }
 
-    const colRef = collection(db, 'warehouses', warehouseId, 'inventory');
+    const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     const q = query(colRef, orderBy('sapNo', 'asc'));
     const snapshot = await getDocs(q);
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
+    let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
+    
+    // Auto-sync missing images from GlobalMaterialImages
+    try {
+        const globalSnapshot = await getDocs(collection(db, 'GlobalMaterialImages'));
+        const globalImages = new Map<string, string>();
+        globalSnapshot.forEach(doc => {
+            if (doc.data().imageUrl) {
+                globalImages.set(doc.id, doc.data().imageUrl);
+            }
+        });
+        
+        data = data.map(item => {
+            if (!item.imageUrl && item.sapNo) {
+                const safeSapNo = item.sapNo.replace(/\//g, '_');
+                if (globalImages.has(safeSapNo)) {
+                    return { ...item, imageUrl: globalImages.get(safeSapNo) };
+                }
+            }
+            return item;
+        });
+    } catch (e) {
+        console.warn("Could not sync global images", e);
+    }
     
     this.inventoryCache.set(warehouseId, { data, timestamp: now });
     return data;
@@ -106,7 +129,7 @@ class WarehouseService {
 
   async addMaterial(id: string, item: Omit<InventoryItem, 'id' | 'lastUpdated'>) {
     const warehouseId = this.resolveWarehouseId(id);
-    const colRef = collection(db, 'warehouses', warehouseId, 'inventory');
+    const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     
     // Auto-fetch from global pool if not provided
     if (!item.imageUrl) {
@@ -137,9 +160,43 @@ class WarehouseService {
     return result;
   }
 
+  async updateMaterialImage(id: string, itemId: string, imageUrl: string, sapNo?: string) {
+    const warehouseId = this.resolveWarehouseId(id);
+    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
+    await updateDoc(docRef, { imageUrl });
+
+    const cached = this.inventoryCache.get(warehouseId);
+    if (cached) {
+      const idx = cached.data.findIndex(i => i.id === itemId);
+      if (idx !== -1) {
+        cached.data[idx] = { ...cached.data[idx], imageUrl } as any;
+        cached.timestamp = Date.now();
+      }
+    }
+
+    if (sapNo && sapNo.trim() !== '') {
+        try {
+            const safeSapNo = sapNo.replace(/\//g, '_');
+            await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { imageUrl }, { merge: true });
+            
+            // Sync image to other cached items across all warehouses in session
+            this.inventoryCache.forEach((cache, _) => {
+               cache.data = cache.data.map(i => {
+                  if (!i.imageUrl && i.sapNo === sapNo) {
+                     return { ...i, imageUrl } as any;
+                  }
+                  return i;
+               });
+            });
+        } catch (e) {
+            console.warn("Could not update global image", e);
+        }
+    }
+  }
+
   async deleteMaterial(id: string, itemId: string) {
     const warehouseId = this.resolveWarehouseId(id);
-    const docRef = doc(db, 'warehouses', warehouseId, 'inventory', itemId);
+    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
     await deleteDoc(docRef);
     
     // Update local cache directly to avoid query lag
@@ -152,7 +209,7 @@ class WarehouseService {
 
   async updateMaterial(id: string, itemId: string, updates: Partial<InventoryItem>) {
     const warehouseId = this.resolveWarehouseId(id);
-    const docRef = doc(db, 'warehouses', warehouseId, 'inventory', itemId);
+    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
     await updateDoc(docRef, {
       ...updates,
       lastUpdated: serverTimestamp()
@@ -171,6 +228,61 @@ class WarehouseService {
     const current = await this.getInventory(warehouseId, true);
     const item = current.find(i => i.id === itemId);
     if (item) this.checkCriticalStock(warehouseId, item);
+  }
+
+  async transferMaterial(sourceId: string, targetId: string, sourceItemId: string, quantity: number, user: string) {
+    const sourceWarehouseId = this.resolveWarehouseId(sourceId);
+    const targetWarehouseId = this.resolveWarehouseId(targetId);
+
+    const sourceInventory = await this.getInventory(sourceWarehouseId);
+    const sourceItem = sourceInventory.find(i => i.id === sourceItemId);
+    if (!sourceItem) throw new Error("Kaynak malzeme bulunamadı");
+    if (sourceItem.quantity < quantity) throw new Error("Yetersiz stok");
+
+    await this.updateMaterial(sourceWarehouseId, sourceItemId, { quantity: sourceItem.quantity - quantity });
+    await this.addLog(sourceWarehouseId, {
+      itemId: sourceItemId,
+      sapNo: sourceItem.sapNo || '',
+      materialName: (sourceItem as any).name || 'Bilinmeyen',
+      type: 'TRANSFER',
+      quantity: -quantity,
+      oldQty: sourceItem.quantity,
+      newQty: sourceItem.quantity - quantity,
+      user,
+      note: `${targetWarehouseId} deposuna transfer edildi.`
+    });
+
+    const targetInventory = await this.getInventory(targetWarehouseId);
+    const targetItem = targetInventory.find(i => i.sapNo === sourceItem.sapNo);
+
+    if (targetItem && targetItem.id) {
+      await this.updateMaterial(targetWarehouseId, targetItem.id, { quantity: targetItem.quantity + quantity });
+      await this.addLog(targetWarehouseId, {
+        itemId: targetItem.id,
+        sapNo: targetItem.sapNo || '',
+        materialName: (targetItem as any).name || 'Bilinmeyen',
+        type: 'TRANSFER',
+        quantity,
+        oldQty: targetItem.quantity,
+        newQty: targetItem.quantity + quantity,
+        user,
+        note: `${sourceWarehouseId} deposundan transfer edildi.`
+      });
+    } else {
+      const { id, lastUpdated, ...itemWithoutId } = sourceItem as any;
+      const newItem = await this.addMaterial(targetWarehouseId, { ...itemWithoutId, quantity });
+      await this.addLog(targetWarehouseId, {
+        itemId: newItem.id,
+        sapNo: sourceItem.sapNo || '',
+        materialName: (sourceItem as any).name || 'Bilinmeyen',
+        type: 'TRANSFER',
+        quantity,
+        oldQty: 0,
+        newQty: quantity,
+        user,
+        note: `${sourceWarehouseId} deposundan transfer edildi.`
+      });
+    }
   }
 
   async syncMaterialImageGlobally(sapNo: string, imageUrl: string) {
@@ -194,12 +306,12 @@ class WarehouseService {
     
     const updatePromises = warehouses.map(async (w) => {
       try {
-        const colRef = collection(db, 'warehouses', w.id, 'inventory');
+        const colRef = collection(db, 'warehouses', w.id, 'inventory_v2');
         const q = query(colRef, where('sapNo', '==', sapNo));
         const snap = await getDocs(q);
         
         const docUpdates = snap.docs.map(document => 
-           updateDoc(doc(db, 'warehouses', w.id, 'inventory', document.id), { imageUrl, lastUpdated: serverTimestamp() })
+           updateDoc(doc(db, 'warehouses', w.id, 'inventory_v2', document.id), { imageUrl, lastUpdated: serverTimestamp() })
         );
         
         await Promise.all(docUpdates);
@@ -234,10 +346,10 @@ class WarehouseService {
 
   async clearInventory(id: string) {
     const warehouseId = this.resolveWarehouseId(id);
-    const colRef = collection(db, 'warehouses', warehouseId, 'inventory');
+    const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     const snapshot = await getDocs(colRef);
     
-    const promises = snapshot.docs.map(docSnap => deleteDoc(doc(db, 'warehouses', warehouseId, 'inventory', docSnap.id)));
+    const promises = snapshot.docs.map(docSnap => deleteDoc(doc(db, 'warehouses', warehouseId, 'inventory_v2', docSnap.id)));
     await Promise.all(promises);
     this.inventoryCache.delete(warehouseId);
   }
@@ -251,7 +363,7 @@ class WarehouseService {
     
     const promises = legacyItems.map(item => {
       if (!item.id) return Promise.resolve();
-      const docRef = doc(db, 'warehouses', warehouseId, 'inventory', item.id);
+      const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', item.id);
       return updateDoc(docRef, { criticalLimit: null });
     });
     
@@ -309,13 +421,26 @@ class WarehouseService {
 
     // Update each item's lastAuditDate and quantity in the inventory
     const auditTimestamp = serverTimestamp();
-    const promises = auditData.results.map(res => {
-      const itemDocRef = doc(db, 'warehouses', warehouseId, 'inventory', res.itemId);
-      return updateDoc(itemDocRef, {
+    const promises = auditData.results.map(async res => {
+      const itemDocRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', res.itemId);
+      await updateDoc(itemDocRef, {
         lastAuditDate: auditTimestamp,
         quantity: res.physicalQty, // Update system quantity to match physical reality
         lastUpdated: auditTimestamp
       });
+      if (res.diff !== 0) {
+        await this.addLog(warehouseId, {
+           itemId: res.itemId,
+           sapNo: res.sapNo || '',
+           materialName: res.description || 'Bilinmeyen',
+           type: 'UPDATE',
+           quantity: res.diff,
+           oldQty: res.systemQty,
+           newQty: res.physicalQty,
+           user: auditData.user,
+           note: res.note ? `Sayım Güncellemesi: ${res.note}` : 'Sayım Güncellemesi'
+        });
+      }
     });
 
     await Promise.all(promises);
@@ -330,11 +455,17 @@ class WarehouseService {
     return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as AuditRecord));
   }
 
+  async deleteAudit(id: string, auditId: string): Promise<void> {
+    const warehouseId = this.resolveWarehouseId(id);
+    const docRef = doc(db, 'warehouses', warehouseId, 'audits', auditId);
+    await deleteDoc(docRef);
+  }
+
 
   async getStockBySap(id: string, sapNo: string): Promise<InventoryItem | null> {
     try {
       const warehouseId = this.resolveWarehouseId(id);
-      const colRef = collection(db, 'warehouses', warehouseId, 'inventory');
+      const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
       const cleanSap = sapNo.toString().trim();
       const numSap = Number(cleanSap);
       const strippedSap = cleanSap.replace(/^0+/, ''); // Baştaki sıfırları atılmış hali
@@ -509,7 +640,7 @@ class WarehouseService {
 
     if (!item || !item.id) {
       console.warn(`Item not found for SAP: ${sapNo} in warehouse: ${id}. Creating new entry.`);
-      const colRef = collection(db, 'warehouses', warehouseId, 'inventory');
+      const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
       const { addDoc } = await import('firebase/firestore');
       const result = await addDoc(colRef, {
         sapNo: sapNo,
@@ -525,7 +656,7 @@ class WarehouseService {
       currentQty = item.quantity || 0;
       description = item.description || description;
       
-      const docRef = doc(db, 'warehouses', warehouseId, 'inventory', itemId);
+      const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
       const newQty = currentQty + delta;
       await updateDoc(docRef, {
         quantity: newQty,
@@ -554,7 +685,7 @@ class WarehouseService {
     const cachedItem = this.inventoryCache.get(warehouseId)?.data.find(i => i.id === itemId);
     const currentReserved = cachedItem?.reservedQuantity || 0;
 
-    const docRef = doc(db, 'warehouses', warehouseId, 'inventory', itemId);
+    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
     await updateDoc(docRef, {
       reservedQuantity: currentReserved + quantity,
       
@@ -586,7 +717,7 @@ class WarehouseService {
   async updateShelfLocations(id: string, itemIds: string[], shelfNo: string) {
     const warehouseId = this.resolveWarehouseId(id);
     const promises = itemIds.map(itemId => {
-      const docRef = doc(db, 'warehouses', warehouseId, 'inventory', itemId);
+      const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
       return updateDoc(docRef, { shelfNo, lastUpdated: serverTimestamp() });
     });
     await Promise.all(promises);
@@ -655,6 +786,20 @@ class WarehouseService {
       occupancy[shelf] = (occupancy[shelf] || 0) + 1;
     });
     return occupancy;
+  }
+
+  async getMaterialInfoBySapGlobally(sapNo: string) {
+    try {
+      const q = query(collectionGroup(db, 'inventory_v2'), where('sapNo', '==', sapNo), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        return snap.docs[0].data() as InventoryItem;
+      }
+      return null;
+    } catch (err) {
+      console.error('[WarehouseService] Error fetching global SAP info:', err);
+      return null;
+    }
   }
 }
 

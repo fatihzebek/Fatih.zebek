@@ -126,6 +126,63 @@ class ExcelService {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Satın Alma Talepleri');
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
   }
+
+  async exportTurbineAnalytics(turbineData: Record<string, { totalUsed: number; totalDefect: number; items: any[] }>, warehouseName: string, period: string) {
+    const workbook = XLSX.utils.book_new();
+
+    // Create a sheet for each turbine
+    Object.keys(turbineData).sort().forEach(turbineId => {
+      const data = turbineData[turbineId];
+      if (data.items.length === 0) return;
+
+      const sheetData = data.items.map(item => ({
+        'TARİH': new Date(item.date).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        'RAPOR NO': item.reportId,
+        'MÇF / FORM NO': item.matFormNo,
+        'SAP NO': item.sapNo,
+        'MALZEME': item.description,
+        'KULLANILAN (TAKILAN)': item.used,
+        'DEFECT (SÖKÜLEN)': item.defect
+      }));
+
+      const worksheet = XLSX.utils.aoa_to_sheet([
+        [`DEMİRER HOLDİNG - TÜRBİN BAZLI MALZEME TÜKETİMİ (${turbineId})`],
+        ['Depo:', warehouseName],
+        ['Dönem:', period === 'this-week' ? 'Bu Hafta' : period === 'this-month' ? 'Bu Ay' : period === 'last-month' ? 'Önceki Ay' : period === 'this-year' ? 'Bu Yıl' : 'Tümü'],
+        ['Oluşturulma Tarihi:', new Date().toLocaleString('tr-TR')],
+        ['Toplam Takılan:', data.totalUsed, 'Toplam Sökülen:', data.totalDefect],
+        [] // Boş satır
+      ]);
+
+      XLSX.utils.sheet_add_json(worksheet, sheetData, { origin: 'A7' });
+
+      // Column widths
+      worksheet['!cols'] = [
+        { wch: 15 }, // Tarih
+        { wch: 15 }, // Rapor No
+        { wch: 20 }, // MCF
+        { wch: 15 }, // SAP
+        { wch: 40 }, // Malzeme
+        { wch: 25 }, // Kullanılan
+        { wch: 25 }  // Defect
+      ];
+
+      // Excel sheet names cannot exceed 31 characters and shouldn't contain certain characters like [], *, ?, :, \ 
+      let safeSheetName = turbineId.replace(/[\[\]\*\?\:\/\\]/g, '').trim().substring(0, 31);
+      if (!safeSheetName) safeSheetName = 'Turbine';
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+    });
+
+    if (workbook.SheetNames.length === 0) {
+        // If no data, just add an empty sheet
+        const emptySheet = XLSX.utils.aoa_to_sheet([['Kayıt Bulunamadı']]);
+        XLSX.utils.book_append_sheet(workbook, emptySheet, 'Veri Yok');
+    }
+
+    const safeDate = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Turbin_Analizi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
+  }
 }
 
 export const excelService = new ExcelService();

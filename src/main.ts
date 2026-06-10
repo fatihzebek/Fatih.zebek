@@ -57,7 +57,7 @@ import { LoginPage } from './pages/Login'
 import { TasksPage } from './pages/Tasks'
 import { ReportArchivePage } from './pages/ReportArchive'
 import { UserManagementPage } from './pages/UserManagement'
-import { WarehousePage } from './pages/Warehouses'
+import { NewWarehousePage } from './pages/NewWarehouses'
 import { TransferPage } from './pages/Transfers'
 import { TemplatesPage } from './pages/Templates'
 import { DashboardPage } from './pages/Dashboard'
@@ -643,10 +643,12 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     }
     destroyTsiLibrary(); // Cleanup TSI listeners
 
+    (window as any).currentWarehouseTab = state.warehouseTab;
     const content = await getContent();
     clearTimeout(loaderTimeout);
     targetContent.innerHTML = content;
 
+    // Removing the setTimeout for switchTab since we now handle it at render time
     // --- PAGE SPECIFIC INITIALIZATION ---
     if (state.currentPage === 'tsi-library') initTsiLibrary();
     if (state.currentPage === 'form-ariza' || state.currentPage === 'form-template-edit') (window as any).initFaultFormLogic?.();
@@ -723,7 +725,7 @@ const getContent = async () => {
     case 'teams': return TeamsPage();
     case 'tasks': return await TasksPage();
     case 'users': return await UserManagementPage();
-    case 'warehouses': return await WarehousePage(state.selectedWarehouseId, state.userProfile, state.inventorySortKey, state.inventorySortDirection, state.inventorySearchQuery, state.warehouseTab);
+    case 'warehouses': return await NewWarehousePage(state.selectedWarehouseId);
     case 'transfers': return await TransferPage(state.userProfile);
     case 'templates': return await TemplatesPage();
     case 'analytics': {
@@ -815,6 +817,7 @@ const getContent = async () => {
       if (page === 'form-template-edit') {
         localStorage.setItem('currentEditingTemplateId', param);
       }
+
     } else {
       state.activeTask = param;
       localStorage.removeItem('currentEditingTemplateId'); // Ensure clean state if it's a real task

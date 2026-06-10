@@ -1,9 +1,5 @@
-﻿const fs = require('fs');
-let t = fs.readFileSync('src/pages/Warehouses.ts', 'utf8');
-const openIdx = t.lastIndexOf('(window as any).openAddMaterialModal');
-if (openIdx !== -1) {
-    t = t.substring(0, openIdx);
-}
-let appendText = fs.readFileSync('append.txt', 'utf8');
-t += appendText;
-fs.writeFileSync('src/pages/Warehouses.ts', t);
+const fs = require('fs');
+let code = fs.readFileSync('src/pages/Warehouses.ts', 'utf8');
+code = code.replace(/\\'/g, "'").replace(/\\`/g, "`");
+fs.writeFileSync('src/pages/Warehouses.ts', code);
+console.log('Fixed escape characters in TS file.');
