@@ -50,12 +50,19 @@ class TicketService {
       snapshot.forEach(doc => {
         tickets.push({ id: doc.id, ...doc.data() } as Ticket);
       });
-      // Sort locally
-      tickets.sort((a,b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0));
+      // Sort locally safely
+      tickets.sort((a,b) => {
+        const timeA = typeof a.updatedAt?.toMillis === 'function' ? a.updatedAt.toMillis() : 0;
+        const timeB = typeof b.updatedAt?.toMillis === 'function' ? b.updatedAt.toMillis() : 0;
+        return timeB - timeA;
+      });
       callback(tickets);
     }, (error) => {
       console.error("Error subscribing to tickets:", error);
-      callback([]); // Handle missing index error gracefully
+      if (typeof window !== 'undefined') {
+        (window as any).showToast?.('BAĞLANTI HATASI', `Biletler canlı dinlenemiyor: ${error.message || error}`, 'error');
+      }
+      // callback([]); // DONT wipe the UI!
     });
   }
 
