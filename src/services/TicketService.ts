@@ -119,7 +119,7 @@ class TicketService {
     
     const countSnap = await getDocs(query(this.ticketsCol));
     const nextNum = countSnap.size + 1;
-    const ticketNo = `TCK-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2,'0')}-${String(nextNum).padStart(4, '0')}`;
+    const ticketNo = `DESTEK-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2,'0')}-${String(nextNum).padStart(4, '0')}`;
 
     const newTicket = {
       ...data,
