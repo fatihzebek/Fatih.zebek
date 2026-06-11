@@ -218,7 +218,8 @@ export const TicketsPage = async () => {
     return;
   }
 
-  const statusLabels = { open: 'AÇIK', in_progress: 'İŞLEMDE', resolved: 'ÇÖZÜLDÜ', closed: 'KAPALI' };
+  const statusLabels: Record<string, string> = { open: 'AÇIK', in_progress: 'İŞLEMDE', resolved: 'ÇÖZÜLDÜ', closed: 'KAPALI' };
+  const prioIcons: Record<string, string> = { low: '🟢', normal: '🟡', high: '🔴' };
 
   container.innerHTML = filtered.map(t => {
     const isUnread = isAdmin ? t.unreadAdmin : t.unreadUser;
@@ -230,7 +231,7 @@ export const TicketsPage = async () => {
           <span class="ti-no">${t.ticketNo}</span>
           <span class="ti-date">${dateStr}</span>
         </div>
-        <div class="ti-title">${t.title}</div>
+        <div class="ti-title">${prioIcons[t.priority] || '🟡'} ${t.title}</div>
         <div class="ti-bottom">
           <span class="ti-turbine"><i class="fa-solid fa-wind"></i> ${t.turbineName}</span>
           <span class="status-badge status-${t.status}">${statusLabels[t.status]}</span>
