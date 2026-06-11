@@ -27,7 +27,7 @@ export const TicketsPage = async () => {
         </div>
         
         <div class="tickets-filters" style="display:flex; flex-direction:column; gap:0.5rem;">
-          <input type="text" id="ticket-search-input" placeholder="Konu, bilet no veya türbin ara..." class="cyber-input" style="padding: 6px; font-size: 0.75rem;" onkeyup="window.renderTicketList()">
+          <input type="text" id="ticket-search-input" placeholder="Konu ara..." class="cyber-input" style="padding: 6px; font-size: 0.75rem;" onkeyup="window.renderTicketList()">
           <select id="ticket-status-filter" onchange="window.renderTicketList()" class="cyber-input" style="padding: 6px; font-size: 0.75rem;">
             <option value="all">Tüm Durumlar</option>
             <option value="open">Açık</option>
