@@ -26,11 +26,13 @@ export const TicketsPage = async () => {
           </button>
         </div>
         
-        <div class="tickets-filters">
+        <div class="tickets-filters" style="display:flex; flex-direction:column; gap:0.5rem;">
+          <input type="text" id="ticket-search-input" placeholder="Konu, bilet no veya türbin ara..." class="cyber-input" style="padding: 6px; font-size: 0.75rem;" onkeyup="window.renderTicketList()">
           <select id="ticket-status-filter" onchange="window.renderTicketList()" class="cyber-input" style="padding: 6px; font-size: 0.75rem;">
             <option value="all">Tüm Durumlar</option>
             <option value="open">Açık</option>
             <option value="in_progress">İşlemde</option>
+            <option value="waiting_for_user">Yanıt Bekleniyor</option>
             <option value="resolved">Çözüldü</option>
           </select>
         </div>
@@ -212,6 +214,7 @@ export const TicketsPage = async () => {
 (window as any).renderTicketList = () => {
   const container = document.getElementById('tickets-list');
   const filter = (document.getElementById('ticket-status-filter') as HTMLSelectElement)?.value || 'all';
+  const searchQ = ((document.getElementById('ticket-search-input') as HTMLInputElement)?.value || '').toLowerCase();
   const currentUser = (window as any).currentUser;
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
 
@@ -219,7 +222,14 @@ export const TicketsPage = async () => {
 
   let filtered = allTickets;
   if (filter !== 'all') {
-    filtered = allTickets.filter(t => t.status === filter);
+    filtered = filtered.filter(t => t.status === filter);
+  }
+  if (searchQ) {
+    filtered = filtered.filter(t => 
+      (t.title && t.title.toLowerCase().includes(searchQ)) || 
+      (t.ticketNo && t.ticketNo.toLowerCase().includes(searchQ)) ||
+      (t.turbineName && t.turbineName.toLowerCase().includes(searchQ))
+    );
   }
 
   if (filtered.length === 0) {
@@ -344,7 +354,10 @@ export const TicketsPage = async () => {
   container.innerHTML = `
     <div class="chat-header">
       <div>
-        <div style="font-family:'Rajdhani'; font-size:1.1rem; font-weight:700; color:var(--text-main);">${ticket.title}</div>
+        <div style="font-family:'Rajdhani'; font-size:1.1rem; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
+          ${ticket.title}
+          ${isAdmin ? `<i class="fa-solid fa-pen-to-square" style="font-size:0.8rem; color:var(--text-muted); cursor:pointer; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='var(--text-muted)'" onclick="window.editTicketTitle('${ticket.id}')" title="Başlığı Düzenle"></i>` : ''}
+        </div>
         <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
           <span style="color:var(--accent-cyan);">${ticket.ticketNo}</span> • 
           <i class="fa-solid fa-wind"></i> ${ticket.turbineName} • 
@@ -387,6 +400,20 @@ export const TicketsPage = async () => {
      (window as any).showToast?.('HATA', 'Silme işlemi başarısız.', 'error');
   }
 }
+
+(window as any).editTicketTitle = async (id: string) => {
+  const t = allTickets.find(x => x.id === id);
+  if(!t) return;
+  const newTitle = prompt("Yeni konu başlığını girin:", t.title);
+  if(newTitle && newTitle.trim() !== '' && newTitle !== t.title) {
+    try {
+      await ticketService.updateTicketTitle(id, newTitle.trim());
+      (window as any).showToast?.('BAŞARILI', 'Başlık güncellendi.', 'success');
+    } catch(e) {
+      (window as any).showToast?.('HATA', 'Başlık güncellenemedi.', 'error');
+    }
+  }
+};
 
 // --- MESSAGE SENDING LOGIC ---
 let pendingChatPhotoBase64 = '';

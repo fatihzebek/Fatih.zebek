@@ -168,9 +168,17 @@ class TicketService {
   /**
    * Update ticket status (Admin only)
    */
-  async updateTicketStatus(ticketId: string, status: Ticket['status']) {
-    const ref = doc(db, 'tickets', ticketId);
-    await updateDoc(ref, { status, updatedAt: serverTimestamp() });
+  async updateTicketStatus(ticketId: string, status: Ticket['status']): Promise<void> {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    await updateDoc(ticketRef, { status, updatedAt: serverTimestamp() });
+  }
+
+  /**
+   * Update ticket title
+   */
+  async updateTicketTitle(ticketId: string, newTitle: string): Promise<void> {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    await updateDoc(ticketRef, { title: newTitle, updatedAt: serverTimestamp() });
   }
 
   /**
