@@ -218,7 +218,7 @@ export const TicketsPage = async () => {
     return;
   }
 
-  const statusLabels: Record<string, string> = { open: 'AÇIK', in_progress: 'İŞLEMDE', resolved: 'ÇÖZÜLDÜ', closed: 'KAPALI' };
+  const statusLabels: Record<string, string> = { open: 'AÇIK', in_progress: 'İŞLEMDE', waiting_for_user: 'YANIT BEKLENİYOR', resolved: 'ÇÖZÜLDÜ', closed: 'KAPALI' };
   const prioIcons: Record<string, string> = { low: '🟢', normal: '🟡', high: '🔴' };
 
   container.innerHTML = filtered.map(t => {
@@ -258,12 +258,14 @@ export const TicketsPage = async () => {
   const mainArea = document.getElementById('ticket-main-area');
   if (!mainArea) return;
 
+  const canWrite = isAdmin ? (ticket.status !== 'resolved' && ticket.status !== 'closed') : (ticket.status === 'waiting_for_user');
+
   mainArea.innerHTML = `
     <div id="chat-header-container"></div>
     <div class="chat-messages" id="chat-messages">
       <div style="text-align:center; color:var(--text-muted);"><i class="fa-solid fa-circle-notch fa-spin"></i> Mesajlar yükleniyor...</div>
     </div>
-    ${ticket.status !== 'resolved' ? `
+    ${canWrite ? `
     <div class="chat-input-area">
       <label for="chat-photo-upload" class="btn-cyber-outline" style="padding: 10px; cursor: pointer;" title="Fotoğraf Ekle">
         <i class="fa-solid fa-camera"></i>
@@ -283,8 +285,8 @@ export const TicketsPage = async () => {
       </button>
     </div>
     ` : `
-    <div style="padding: 1rem; text-align: center; background: rgba(16,185,129,0.1); color: #10b981; font-weight: 600; border-top: 1px solid rgba(16,185,129,0.2);">
-      <i class="fa-solid fa-circle-check"></i> Bu bilet çözüldü olarak işaretlenmiş ve kapatılmıştır.
+    <div style="padding: 1rem; text-align: center; background: rgba(255,255,255,0.05); color: var(--text-muted); font-weight: 600; border-top: 1px solid rgba(255,255,255,0.1);">
+      ${ticket.status === 'resolved' || ticket.status === 'closed' ? '<i class="fa-solid fa-circle-check" style="color:#10b981;"></i> Bu bilet kapatılmıştır.' : '<i class="fa-solid fa-lock" style="color:#f59e0b;"></i> Sadece merkez yanıt beklediğinde mesaj yazabilirsiniz.'}
     </div>
     `}
   `;
@@ -347,6 +349,7 @@ export const TicketsPage = async () => {
           <select class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; height: auto;" onchange="window.changeTicketStatus('${ticket.id}', this.value)">
             <option value="open" ${ticket.status === 'open' ? 'selected' : ''}>Açık</option>
             <option value="in_progress" ${ticket.status === 'in_progress' ? 'selected' : ''}>İşlemde</option>
+            <option value="waiting_for_user" ${ticket.status === 'waiting_for_user' ? 'selected' : ''}>Yanıt Bekleniyor</option>
             <option value="resolved" ${ticket.status === 'resolved' ? 'selected' : ''}>Çözüldü</option>
           </select>
           <button class="btn-cyber-outline" style="padding: 4px 8px; color: #ef4444; border-color: rgba(239,68,68,0.3);" onclick="window.deleteTicket('${ticket.id}')" title="Bileti Sil"><i class="fa-solid fa-trash"></i></button>
