@@ -17,13 +17,8 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize App Check with reCAPTCHA v3
-if (typeof window !== 'undefined') {
-  // Use debug token in development mode if needed
-  if (import.meta.env.DEV) {
-    (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  }
-  
+// Initialize App Check with reCAPTCHA v3 ONLY in production
+if (typeof window !== 'undefined' && !import.meta.env.DEV) {
   initializeAppCheck(app, {
     provider: new ReCaptchaV3Provider('6LcR6ggtAAAAAGECggL-b3sI9AJqvC921v2knrEf'),
     isTokenAutoRefreshEnabled: true

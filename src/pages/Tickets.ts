@@ -470,16 +470,20 @@ let pendingChatPhotoBase64 = '';
        initialPhotoUrl = await inventoryService.uploadMaterialImage('temp', 'temp', photoFile);
     }
 
-    const ticketId = await ticketService.createTicket({
+    const ticketPayload: any = {
       turbineId,
       title,
       description: desc,
       priority: priority as any,
       status: 'open',
       createdByUid: currentUser.uid,
-      createdByName: currentUser.displayName || 'Kullanıcı',
-      photoUrl: initialPhotoUrl
-    });
+      createdByName: currentUser.displayName || 'Kullanıcı'
+    };
+    if (initialPhotoUrl) {
+      ticketPayload.photoUrl = initialPhotoUrl;
+    }
+
+    const ticketId = await ticketService.createTicket(ticketPayload);
 
     // Add initial description as first message for context
     await ticketService.sendMessage(ticketId, currentUser.uid, currentUser.displayName || 'Kullanıcı', desc, false, initialPhotoUrl);
@@ -487,8 +491,9 @@ let pendingChatPhotoBase64 = '';
     (window as any).showToast?.('BAŞARILI', 'Bilet başarıyla oluşturuldu.', 'success');
     (window as any).closeNewTicketModal();
     (window as any).openTicket(ticketId); // Auto open
-  } catch (e) {
-    (window as any).showToast?.('HATA', 'Bilet oluşturulamadı.', 'error');
+  } catch (e: any) {
+    console.error("Ticket Creation Error:", e);
+    (window as any).showToast?.('HATA', `Bilet oluşturulamadı: ${e?.message || e}`, 'error');
   } finally {
     btn.innerHTML = 'Servis merkezine bildirim gönder';
     btn.disabled = false;
