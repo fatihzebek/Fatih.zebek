@@ -123,6 +123,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   if (currentWarehouse) {
     const rawItems = await warehouseService.getInventory(currentWarehouse.id);
     inventoryItems = rawItems.map(item => ({ ...item, name: (item as any).name || item.description || 'Bilinmeyen Malzeme' }));
+    (window as any).currentInventoryData = inventoryItems;
     inventoryWithQRs = await Promise.all(inventoryItems.map(async (item) => {
       try {
         const qrData = JSON.stringify({ id: item.id, sapNo: item.sapNo });
@@ -780,6 +781,13 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           }
         }
       });
+      
+      const actionBar = document.getElementById('inventory-action-bar');
+      if (actionBar) {
+        actionBar.style.display = (tabName === 'ENVANTER') ? 'flex' : 'none';
+      }
+
+      (window as any).currentWarehouseTab = tabName === 'ENVANTER' ? 'INVENTORY' : tabName;
 
       // Fetch audit history if needed
       if (tabName === 'SAYIM_GECMISI') {
@@ -1119,7 +1127,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           <h1 style="font-size: 1.5rem; font-weight: 600; color: #FFFFFF; margin: 0;">${warehouseName}</h1>
           <div style="font-size: 0.85rem; color: #64748B; margin-top: 0.25rem;">Stok ve Envanter Sistemi</div>
         </div>
-        <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <div id="inventory-action-bar" style="display: ${currentTab === 'INVENTORY' ? 'flex' : 'none'}; gap: 0.75rem; align-items: center;">
           <input 
             id="inventory-search-input"
             oninput="window.filterInventory()"
@@ -1133,7 +1141,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
             <i class="fa-solid fa-qrcode"></i> QR Tara
           </button>
-          <button style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+          <button onclick="window.downloadInventoryExcel()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
             <i class="fa-solid fa-download"></i> İndir
           </button>
           <input type="file" id="excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleExcelUpload(event)" />
@@ -1277,8 +1285,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             ${inventoryWithQRs.length === 0 ? `
               <tr><td colspan="7" style="padding: 2rem; text-align: center; color: #94A3B8;">Henüz malzeme eklenmemiş.</td></tr>
             ` : [...inventoryWithQRs].sort((a, b) => {
-              const locA = (a.location || '').toUpperCase();
-              const locB = (b.location || '').toUpperCase();
+              const locA = (a.shelfNo || '').toUpperCase();
+              const locB = (b.shelfNo || '').toUpperCase();
               if (!locA && locB) return 1;
               if (locA && !locB) return -1;
               return locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
@@ -1300,17 +1308,17 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 </td>
                 <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
                   <span style="background-color: ${isKritik ? 'rgba(239, 68, 68, 0.1)' : 'rgba(20, 241, 149, 0.1)'}; color: ${isKritik ? '#EF4444' : '#14F195'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                    ${item.quantity} ${item.unit}
+                    ${item.quantity} Adet
                   </span>
                 </td>
                 <td style="padding: 1rem; color: ${rezerve > 0 ? '#F59E0B' : '#94A3B8'}; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
                   ${rezerve}
                 </td>
-                <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.location || '-'}</td>
+                <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.shelfNo || '-'}</td>
                 <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); text-align: right; white-space: nowrap;">
                   <i onclick="window.openHistoryModal('${item.id}', '${item.name.replace(/'/g, '\\\'')}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
                   <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${item.name.replace(/'/g, '\\\'')}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
-                  <i onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${item.name.replace(/'/g, '\\\'')}', ${item.quantity}, '${item.location || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                  <i onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${item.name.replace(/'/g, '\\\'')}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
                   <i onclick="window.deleteItem('${item.id}', '${item.name.replace(/'/g, '\\\'')}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
                 </td>
               </tr>
@@ -1324,9 +1332,15 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <div id="view-ANALİZ" style="display: ${currentTab === 'ANALİZ' ? 'block' : 'none'};">
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; padding: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
-            <div>
-              <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Türbin Bazlı Malzeme Tüketim Analizi</h2>
+            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+              <h2 style="color: #FFFFFF; margin: 0; font-size: 1.25rem;">Türbin Bazlı Malzeme Tüketim Analizi</h2>
               <div style="color: #94A3B8; font-size: 0.9rem;">Bu sahaya ait servis raporlarında takılan ve sökülen malzemeler türbin bazında listelenmektedir.</div>
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                <input type="text" id="warehouse-analytics-sap" class="cyber-input" style="padding: 8px 12px; font-size: 0.85rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(20, 241, 149, 0.3); border-radius: 6px; color: #14F195; width: 250px; font-weight: 600; outline: none;" placeholder="SAP Kodu veya Malzeme Adı..." value="${localStorage.getItem('warehouse_analytics_sap') || ''}" onkeypress="if(event.key==='Enter') window.setWarehouseAnalyticsSap(this.value)">
+                <button onclick="window.setWarehouseAnalyticsSap(document.getElementById('warehouse-analytics-sap').value)" style="padding: 8px 16px; border-radius: 6px; cursor: pointer; background: rgba(20, 241, 149, 0.1); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.3); font-weight: bold; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background='rgba(20, 241, 149, 0.2)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.1)'">
+                  <i class="fa-solid fa-search"></i> Filtrele
+                </button>
+              </div>
             </div>
             
             <div class="filter-group" style="display: flex; align-items: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); gap: 4px;">
@@ -1336,10 +1350,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               <button class="btn-filter ${currentPeriod === 'this-year' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-year')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'this-year' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'this-year' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">BU YIL</button>
               <button class="btn-filter ${currentPeriod === 'all' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('all')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'all' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'all' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">TÜMÜ</button>
               
-              <input type="text" id="warehouse-analytics-sap" class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #FFF; width: 130px;" placeholder="SAP veya Malzeme..." value="${localStorage.getItem('warehouse_analytics_sap') || ''}" onkeypress="if(event.key==='Enter') window.setWarehouseAnalyticsSap(this.value)">
-              <button onclick="window.setWarehouseAnalyticsSap(document.getElementById('warehouse-analytics-sap').value)" style="padding: 4px 8px; border-radius: 4px; background: transparent; color: #94A3B8; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;" title="Ara">
-                <i class="fa-solid fa-search"></i>
-              </button>
+
               
               <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
               
@@ -1645,9 +1656,22 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       alert('Dışa aktarılacak analiz verisi bulunamadı.');
       return;
    }
-   // Dynamically import excelService to avoid top-level circular issues if any, though it's already imported at the top
    const { excelService } = await import('../services/ExcelService');
    await excelService.exportTurbineAnalytics(data, name, period);
+};
+
+(window as any).downloadInventoryExcel = async () => {
+   const inventory = (window as any).currentInventoryData || [];
+   const audits = (window as any).__cachedAudits || [];
+   const name = (window as any).currentWarehouseName || 'Depo';
+   
+   if (inventory.length === 0) {
+      alert('İndirilecek envanter verisi bulunamadı veya henüz yüklenmedi.');
+      return;
+   }
+   
+   const { excelService } = await import('../services/ExcelService');
+   await excelService.exportToExcel(inventory, audits, name + ' Envanteri');
 };
 
 // Global toggle for UI

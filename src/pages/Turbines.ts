@@ -532,9 +532,6 @@ export const TurbinesPage = () => {
                 });
               }
               
-              const pdfUrl = r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls.find((url: string) => url.toLowerCase().includes('.pdf')) : null;
-              const hasPdf = !!pdfUrl;
-
               const currentUser = authService.getCurrentUser();
               const isAdmin = currentUser?.email?.toLowerCase().includes('admin') || 
                               currentUser?.email === 'fatih.zebek@demirerholding.com';
@@ -556,13 +553,9 @@ export const TurbinesPage = () => {
                     <div style="font-size: 0.75rem; color: var(--text-muted);">Tarih: ${r.date} | Arıza: ${r.faultDesc || r.faultCode}</div>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-                    ${hasPdf ? `
-                      <button onclick="window.viewTurbinePdf('${pdfUrl}', '${r.reportNo}')" class="cyber-button primary" style="padding: 0.4rem 1rem; font-size: 0.8rem;">
-                        <i class="fa-solid fa-file-pdf"></i> PDF GÖSTER
-                      </button>
-                    ` : `
-                      <span style="color: var(--text-muted); font-size: 0.7rem;"><i class="fa-solid fa-ban"></i> PDF Yok</span>
-                    `}
+                    <button onclick="window.viewTurbinePdf('${r.id}', '${r.reportNo}')" class="cyber-button primary" style="padding: 0.4rem 1rem; font-size: 0.8rem;">
+                      <i class="fa-solid fa-file-invoice"></i> RAPORU GÖSTER
+                    </button>
                     ${reportDeleteBtn}
                   </div>
                 </div>
@@ -743,27 +736,43 @@ export const TurbinesPage = () => {
   }
 };
 
-(window as any).viewTurbinePdf = (url: string, reportNo: string) => {
+(window as any).viewTurbinePdf = async (reportId: string, reportNo: string) => {
   const listContainer = document.getElementById('reports-list-container');
   const viewerContainer = document.getElementById('pdf-viewer-container');
-  const iframe = document.getElementById('pdf-iframe') as HTMLIFrameElement;
+  const viewerContent = document.getElementById('pdf-iframe');
   const title = document.getElementById('pdf-viewer-title');
   
-  if (listContainer && viewerContainer && iframe && title) {
-    title.innerText = `Rapor: ${reportNo}`;
-    iframe.src = url;
-    listContainer.classList.add('hidden');
-    viewerContainer.classList.remove('hidden');
+  if (listContainer && viewerContainer && viewerContent && title) {
+    try {
+      title.innerText = `Rapor: ${reportNo}`;
+      viewerContent.innerHTML = `<div style="text-align: center; padding: 3rem; color: var(--accent-cyan);"><i class="fa-solid fa-spinner fa-spin fa-3x"></i><p style="margin-top: 1rem; font-weight: 700;">Rapor Oluşturuluyor...</p></div>`;
+      
+      listContainer.classList.add('hidden');
+      viewerContainer.classList.remove('hidden');
+
+      const { serviceReportService } = await import('../services/ServiceReportService');
+      const report = await serviceReportService.getReportByNo(reportNo);
+      
+      if (report) {
+          const { renderReportPDF } = await import('../components/ReportTemplate');
+          const htmlContent = renderReportPDF(report);
+          viewerContent.innerHTML = htmlContent;
+      } else {
+          viewerContent.innerHTML = `<div style="text-align: center; color: red;">Rapor bulunamadı.</div>`;
+      }
+    } catch(err) {
+      viewerContent.innerHTML = `<div style="text-align: center; color: red;">Hata: ${err}</div>`;
+    }
   }
 };
 
 (window as any).closeTurbinePdf = () => {
   const listContainer = document.getElementById('reports-list-container');
   const viewerContainer = document.getElementById('pdf-viewer-container');
-  const iframe = document.getElementById('pdf-iframe') as HTMLIFrameElement;
+  const viewerContent = document.getElementById('pdf-iframe');
   
-  if (listContainer && viewerContainer && iframe) {
-    iframe.src = '';
+  if (listContainer && viewerContainer && viewerContent) {
+    viewerContent.innerHTML = '';
     viewerContainer.classList.add('hidden');
     listContainer.classList.remove('hidden');
   }

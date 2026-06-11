@@ -586,7 +586,7 @@ export const DashboardPage = async () => {
       .count-tag { font-size: 0.65rem; background: var(--accent-cyan); color: #000; font-weight: 900; padding: 2px 8px; border-radius: 4px; }
 
       .feed-container { display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 4px 4px; }
-      .feed-item { background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; display: flex; gap: 1rem; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+      .feed-item { background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; display: flex; gap: 1rem; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; flex-shrink: 0; }
       .feed-item:hover { background: rgba(255,255,255,0.03); border-color: var(--accent-cyan); transform: translateX(5px); }
       .feed-item.emergency { border-left: 4px solid var(--accent-red); }
       

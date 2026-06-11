@@ -77,12 +77,23 @@ class ExcelService {
           const worksheet = workbook.Sheets[firstSheetName];
           const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-          const items = jsonData.map(row => ({
-            sapNo: String(row['SAP NO'] || row['sapNo'] || ''),
-            description: String(row['AÇIKLAMA'] || row['description'] || ''),
-            quantity: Number(row['ADET'] || row['quantity'] || 0),
-            shelfNo: String(row['RAF NO'] || row['shelfNo'] || '')
-          }));
+          const items = jsonData.map(row => {
+            const getVal = (possibleKeys: string[]) => {
+              for (const key of Object.keys(row)) {
+                if (possibleKeys.includes(key.trim().toUpperCase())) {
+                  return row[key];
+                }
+              }
+              return '';
+            };
+
+            return {
+              sapNo: String(getVal(['SAP NO', 'SAPNO'])),
+              description: String(getVal(['AÇIKLAMA', 'ACIKLAMA', 'DESCRIPTION'])),
+              quantity: Number(getVal(['ADET', 'QUANTITY']) || 0),
+              shelfNo: String(getVal(['RAF NO', 'RAFNO', 'SHELFNO', 'KONUM']))
+            };
+          });
 
           resolve(items);
         } catch (err) {

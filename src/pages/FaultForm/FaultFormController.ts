@@ -61,10 +61,13 @@ export class FaultFormController {
             const row = input.closest('tr');
             if (!row) return;
 
+            const lookupId = Date.now().toString() + Math.random().toString();
+            input.setAttribute('data-lookup-id', lookupId);
+
             const inputs = row.querySelectorAll('input');
             const rowType = row.getAttribute('data-type') || 'S';
             
-            if (sapNo.length < 4) {
+            if (sapNo.length === 0) {
                 if (inputs && inputs[2]) {
                     inputs[2].value = '';
                 }
@@ -76,6 +79,8 @@ export class FaultFormController {
             try {
                 const material = await inventoryService.getMaterialBySap(sapNo);
                 
+                if (input.getAttribute('data-lookup-id') !== lookupId) return;
+
                 // 1. Update Description Input with clean description
                 if (inputs && inputs[2]) {
                     const baseDesc = material ? (material.d || '') : (inputs[2].value || '');
@@ -105,6 +110,9 @@ export class FaultFormController {
                     if (siteId) {
                         try {
                             const stockItem = await warehouseService.getStockBySap(siteId, sapNo);
+                            
+                            if (input.getAttribute('data-lookup-id') !== lookupId) return;
+
                             if (stockItem) {
                                 stockQty = stockItem.quantity || 0;
                                 badge.setAttribute('data-debug', JSON.stringify({id: stockItem.id, q: stockItem.quantity}));
@@ -1101,17 +1109,25 @@ export class FaultFormController {
                 totalTurbineHours = (lastEnd.getTime() - firstStart.getTime()) / (1000 * 60 * 60);
             }
 
+            const formatHHMM = (decimalHours: number) => {
+                if (isNaN(decimalHours) || decimalHours < 0) return '0 SA 00 DK';
+                const totalMinutes = Math.round(decimalHours * 60);
+                const h = Math.floor(totalMinutes / 60);
+                const m = totalMinutes % 60;
+                return `${h} SA ${m.toString().padStart(2, '0')} DK`;
+            };
+
             const thEl = document.getElementById('total-turbine-hours-display');
             const rhEl = document.getElementById('total-road-hours-display');
             const nmEl = document.getElementById('total-normal-man-hours-display');
             const omEl = document.getElementById('total-overtime-man-hours-display');
             const tmEl = document.getElementById('total-man-hours-display');
 
-            if (thEl) thEl.innerText = `${totalTurbineHours.toFixed(2)} SAAT`;
-            if (rhEl) rhEl.innerText = `${totalRoadHours.toFixed(2)} SAAT`;
-            if (nmEl) nmEl.innerText = `${totalNormalManHours.toFixed(2)} SAAT`;
-            if (omEl) omEl.innerText = `${totalOvertimeManHours.toFixed(2)} SAAT`;
-            if (tmEl) tmEl.innerText = `${totalManHours.toFixed(2)} SAAT`;
+            if (thEl) thEl.innerText = formatHHMM(totalTurbineHours);
+            if (rhEl) rhEl.innerText = formatHHMM(totalRoadHours);
+            if (nmEl) nmEl.innerText = formatHHMM(totalNormalManHours);
+            if (omEl) omEl.innerText = formatHHMM(totalOvertimeManHours);
+            if (tmEl) tmEl.innerText = formatHHMM(totalManHours);
         };
 
         w.searchFaultCodes = async (term: string) => {

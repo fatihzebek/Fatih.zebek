@@ -593,11 +593,11 @@ const render = async (options: { skipShell?: boolean } = {}) => {
                     <div id="modal-reports-list" class="report-list-container"></div>
                   </div>
                   <div id="pdf-viewer-container" class="hidden">
-                    <div class="pdf-viewer-header">
-                      <h3 id="pdf-viewer-title">Rapor Görüntüleyici</h3>
-                      <button onclick="window.closeTurbinePdf()" class="cyber-button secondary">Listeye Dön</button>
+                    <div class="pdf-viewer-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                      <h3 id="pdf-viewer-title" style="margin: 0; color: var(--accent-cyan);">Rapor Görüntüleyici</h3>
+                      <button onclick="window.closeTurbinePdf()" class="cyber-button secondary" style="padding: 4px 12px; font-size: 0.8rem;"><i class="fa-solid fa-arrow-left"></i> LİSTEYE DÖN</button>
                     </div>
-                    <iframe id="pdf-iframe" class="pdf-frame"></iframe>
+                    <div id="pdf-iframe" style="background: white; color: black; padding: 2rem; border-radius: 8px; max-height: 65vh; overflow-y: auto; overflow-x: auto; font-size: 14px;"></div>
                   </div>
                 </div>
 
