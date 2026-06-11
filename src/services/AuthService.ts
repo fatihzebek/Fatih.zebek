@@ -28,6 +28,13 @@ class AuthService {
         this.currentUser = data.user;
         this.isFallbackMode = true;
         console.log("[Auth] Restored fallback session for:", this.currentUser?.email);
+        
+        // Start heartbeat for restored fallback session
+        if (this.currentUser) {
+          setTimeout(() => {
+            presenceService.startHeartbeat(this.currentUser!.uid);
+          }, 1000); // Small delay to ensure DB connection
+        }
       } catch (e) {
         localStorage.removeItem('dh_auth_fallback');
       }
@@ -52,6 +59,11 @@ class AuthService {
 
       this.currentUser = user;
       this.isInitializing = false;
+      
+      if (user) {
+        // Start presence heartbeat for real users
+        presenceService.startHeartbeat(user.uid);
+      }
       
       if (window.dispatchEvent) {
         window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: user }));

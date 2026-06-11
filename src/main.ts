@@ -86,7 +86,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users';
 
 interface AppState {
   currentPage: Page
@@ -391,6 +391,13 @@ const Sidebar = () => {
               <i class="fa-solid fa-warehouse"></i> Depo İzleme
             </li>
           ` : ''}
+
+          ${(profile?.role === 'ADMIN') ? `
+            <div class="nav-section-title" style="margin-top: 1rem; margin-bottom: 0.5rem; padding-left: 1rem; font-size: 0.7rem; color: rgba(255,255,255,0.4); font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Yönetim</div>
+            <li class="nav-item ${state.currentPage === 'online-users' ? 'active' : ''}" onclick="window.navigate('online-users')">
+              <i class="fa-solid fa-users-viewfinder" style="color: #14F195;"></i> Aktif Kullanıcılar
+            </li>
+          ` : ''}
         ` : ''}
       </nav>
 
@@ -415,7 +422,10 @@ const Sidebar = () => {
             <i class="fa-solid fa-user-shield"></i>
           </div>
           <div style="text-align: left;">
-            <div style="font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.8rem; color: var(--text-main); line-height: 1.2;">${state.userProfile?.displayName || profile?.email?.split('@')[0]?.toUpperCase() || 'YÜKLENİYOR...'}</div>
+            <div style="font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.8rem; color: var(--text-main); line-height: 1.2;">
+              ${state.userProfile?.displayName || profile?.email?.split('@')[0]?.toUpperCase() || 'YÜKLENİYOR...'}
+              <span id="session-count-badge"></span>
+            </div>
             ${state.userProfile?.managedTeams && state.userProfile.managedTeams.length > 0 ? `<div style="font-size: 0.55rem; color: #f97316; font-weight: 800; letter-spacing: 1px; margin-top: 2px;">EKİP LİDERİ</div>` : ''}
             <div style="font-size: 0.6rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">${state.userProfile?.role || '...'}</div>
           </div>
@@ -519,6 +529,23 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           }
         });
       });
+    }
+
+    // --- GLOBAL SESSION LISTENER (ADMIN ONLY) ---
+    if (!(window as any)._globalSessionUnsubscribe && state.userProfile.role?.toUpperCase() === 'ADMIN') {
+       import('./services/PresenceService').then(({ presenceService }) => {
+          (window as any)._globalSessionUnsubscribe = presenceService.subscribeToUserSessions(state.userProfile!.uid, (sessions) => {
+             const count = sessions.length;
+             const badge = document.getElementById('session-count-badge');
+             if (badge) {
+                if (count > 1) {
+                   badge.innerHTML = `<span style="color: var(--accent-red); font-size: 0.65rem; font-weight: bold; margin-left: 4px;">(${count} Cihaz)</span>`;
+                } else {
+                   badge.innerHTML = ``;
+                }
+             }
+          });
+       });
     }
   }
 
@@ -759,6 +786,15 @@ const getContent = async () => {
     case 'material-analytics': {
       const { MaterialAnalyticsPage } = await import('./pages/MaterialAnalytics');
       return await MaterialAnalyticsPage();
+    }
+    case 'online-users': {
+      const { OnlineUsersPage } = await import('./pages/OnlineUsers');
+      setTimeout(() => {
+         if ((window as any).initOnlineUsersPage) {
+            (window as any).initOnlineUsersPage();
+         }
+      }, 50);
+      return await OnlineUsersPage();
     }
     case 'siparis': return await SiparisPage(state.userProfile);
     case 'bakim-planlama': {

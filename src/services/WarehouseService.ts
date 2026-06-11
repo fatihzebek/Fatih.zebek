@@ -106,15 +106,24 @@ class WarehouseService {
         const globalImages = new Map<string, string>();
         globalSnapshot.forEach(doc => {
             if (doc.data().imageUrl) {
-                globalImages.set(doc.id, doc.data().imageUrl);
+                const rawId = doc.id.trim();
+                globalImages.set(rawId, doc.data().imageUrl);
+                const stripped = rawId.replace(/^0+/, '');
+                if (stripped) {
+                    globalImages.set(stripped, doc.data().imageUrl);
+                }
             }
         });
         
         data = data.map(item => {
             if (!item.imageUrl && item.sapNo) {
-                const safeSapNo = item.sapNo.replace(/\//g, '_');
+                const safeSapNo = String(item.sapNo).trim().replace(/\//g, '_');
                 if (globalImages.has(safeSapNo)) {
                     return { ...item, imageUrl: globalImages.get(safeSapNo) };
+                }
+                const stripped = safeSapNo.replace(/^0+/, '');
+                if (globalImages.has(stripped)) {
+                    return { ...item, imageUrl: globalImages.get(stripped) };
                 }
             }
             return item;
@@ -132,12 +141,20 @@ class WarehouseService {
     const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     
     // Auto-fetch from global pool if not provided
-    if (!item.imageUrl) {
+    if (!item.imageUrl && item.sapNo) {
         try {
-            const safeSapNo = item.sapNo.replace(/\//g, '_');
-            const globalDoc = await getDoc(doc(db, 'GlobalMaterialImages', safeSapNo));
+            const safeSapNo = String(item.sapNo).trim().replace(/\//g, '_');
+            let globalDoc = await getDoc(doc(db, 'GlobalMaterialImages', safeSapNo));
             if (globalDoc.exists() && globalDoc.data().imageUrl) {
                 item.imageUrl = globalDoc.data().imageUrl;
+            } else {
+                const stripped = safeSapNo.replace(/^0+/, '');
+                if (stripped !== safeSapNo && stripped !== '') {
+                    globalDoc = await getDoc(doc(db, 'GlobalMaterialImages', stripped));
+                    if (globalDoc.exists() && globalDoc.data().imageUrl) {
+                        item.imageUrl = globalDoc.data().imageUrl;
+                    }
+                }
             }
         } catch(e) {
             console.warn("Could not auto-fetch global image", e);
@@ -174,15 +191,17 @@ class WarehouseService {
       }
     }
 
-    if (sapNo && sapNo.trim() !== '') {
+    if (sapNo && String(sapNo).trim() !== '') {
         try {
-            const safeSapNo = sapNo.replace(/\//g, '_');
+            const cleanSapNo = String(sapNo).trim();
+            const safeSapNo = cleanSapNo.replace(/\//g, '_');
             await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { imageUrl }, { merge: true });
             
             // Sync image to other cached items across all warehouses in session
             this.inventoryCache.forEach((cache, _) => {
                cache.data = cache.data.map(i => {
-                  if (!i.imageUrl && i.sapNo === sapNo) {
+                  const itemSapStr = String(i.sapNo || '').trim();
+                  if (!i.imageUrl && (itemSapStr === cleanSapNo || itemSapStr.replace(/^0+/, '') === cleanSapNo.replace(/^0+/, ''))) {
                      return { ...i, imageUrl } as any;
                   }
                   return i;
@@ -290,9 +309,10 @@ class WarehouseService {
     
     // Save to Global Pool
     try {
-        const safeSapNo = sapNo.replace(/\//g, '_');
+        const cleanSapNo = String(sapNo).trim();
+        const safeSapNo = cleanSapNo.replace(/\//g, '_');
         await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { 
-            sapNo, 
+            sapNo: cleanSapNo, 
             imageUrl, 
             lastUpdated: serverTimestamp() 
         }, { merge: true });
@@ -334,8 +354,13 @@ class WarehouseService {
         const snap = await getDocs(collection(db, 'GlobalMaterialImages'));
         snap.docs.forEach(d => {
             const data = d.data();
-            if (data.sapNo && data.imageUrl) {
-                pool.set(data.sapNo, data.imageUrl);
+            if (data.imageUrl) {
+                const rawId = d.id.trim();
+                pool.set(rawId, data.imageUrl);
+                const stripped = rawId.replace(/^0+/, '');
+                if (stripped) {
+                    pool.set(stripped, data.imageUrl);
+                }
             }
         });
     } catch(err) {

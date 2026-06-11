@@ -4,6 +4,7 @@ import { warehouseAgent } from '../agents/WarehouseAgent';
 import { fileService } from '../services/FileService';
 import { excelService } from '../services/ExcelService';
 import { serviceReportService } from '../services/ServiceReportService';
+import { ImageCompressor } from '../utils/imageCompressor';
 import type { IMalzeme } from '../types/depo';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
@@ -196,7 +197,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
            <div style="color: #94A3B8; font-size: 0.9rem; margin-bottom: 1rem;">SAP No: ${item.sapNo}</div>
            <div style="background: #0A0E17; border-radius: 6px; padding: 1rem;">
              <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase;">Güncel Stok</div>
-             <div style="font-size: 2rem; font-weight: 700; color: #14F195;">${item.quantity} ${item.unit || 'Adet'}</div>
+             <div style="font-size: 2rem; font-weight: 700; color: #14F195;">${item.quantity} ${item.unit && item.unit !== 'undefined' && item.unit !== 'null' ? item.unit : 'Adet'}</div>
            </div>
            <button onclick="window.closeQRModal()" style="width: 100%; margin-top: 1rem; padding: 0.75rem; border-radius: 8px; background: #3B82F6; border: none; color: white; font-weight: 600; cursor: pointer;">Kapat</button>
            <button onclick="window.startQRScanner()" style="width: 100%; margin-top: 0.5rem; padding: 0.75rem; border-radius: 8px; background: #1E293B; border: 1px solid #334155; color: white; font-weight: 600; cursor: pointer;">Yeni QR Tara</button>
@@ -320,7 +321,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          const path = `inventory/${currentWarehouse.id}/${itemId}_${Date.now()}`;
          
          // Fire and forget compression and upload
-         if ((window as any).compressImage) {
+         if (ImageCompressor) {
             const cell = document.getElementById(`img-cell-${itemId}`);
             if (cell) {
                // Show a loading indicator temporarily
@@ -328,7 +329,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                cell.innerHTML = `<div style="width:36px; height:36px; border-radius:6px; background-color: rgba(20, 241, 149, 0.1); border: 1px solid #14F195; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#14F195;"><i class="fa-solid fa-spinner fa-spin"></i></div>${nameText}`;
             }
             
-            (window as any).compressImage(file, 800, 800, 0.7)
+            ImageCompressor.compressImage(file, 800, 800, 0.7)
               .then((compressedFile: File) => fileService.uploadImage(compressedFile, path))
               .then((url: string) => warehouseService.updateMaterialImage(currentWarehouse.id, itemId, url, sapNo).then(() => url))
               .then((url: string) => {
@@ -346,7 +347,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                   setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 500); }, 3000);
               })
               .catch((err: any) => {
-                  console.error(err);
+                  console.error("Upload error: ", err);
+                  alert("Görsel yüklenirken hata: " + (err.message || err.toString()));
                   // Show error toast
                   const toast = document.createElement('div');
                   toast.innerText = "Görsel yüklenirken hata oluştu!";
@@ -360,10 +362,13 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                       const nameText = cell.innerText.trim();
                       cell.innerHTML = `<div onclick="window.triggerImageUpload('${itemId}', '${sapNo}')" style="width:36px; height:36px; border-radius:6px; background-color: #1E293B; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#64748B; cursor: pointer; transition: all 0.2s;" title="Tekrar Dene" onmouseover="this.style.backgroundColor='#334155'" onmouseout="this.style.backgroundColor='#1E293B'"><i class="fa-solid fa-image"></i></div>${nameText}`;
                   }
+              })
+              .finally(() => {
+                  input.value = ''; // Reset input ONLY after promise completes
               });
+         } else {
+             input.value = ''; // Reset input if compressImage is missing
          }
-         
-         input.value = ''; // Reset input
        };
        input.click();
     };
@@ -457,8 +462,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           const file = imgInput.files[0];
           const path = `materials/${sapInput.value}_${Date.now()}_${file.name}`;
           
-          if ((window as any).compressImage) {
-              (window as any).compressImage(file, 800, 800, 0.7).then((compressedFile: File) => {
+          if (ImageCompressor) {
+              ImageCompressor.compressImage(file, 800, 800, 0.7).then((compressedFile: File) => {
                   fileService.uploadImage(compressedFile, path).then(url => {
                     warehouseService.updateMaterialImage(currentWarehouse.id, result.id, url, sapInput.value).then(() => {
                       const cell = document.getElementById(`img-cell-${result.id}`);
@@ -467,8 +472,13 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         cell.innerHTML = `<div onclick="window.showBigImage('${url}', '${safeName}')" style="width:36px; height:36px; border-radius:6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#3B82F6; cursor: pointer; transition: all 0.2s;" title="Görseli Büyüt" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'"><i class="fa-solid fa-image"></i></div>${inputNameValue}`;
                       }
                     });
-                  }).catch(err => console.error('Arkaplan görsel yükleme hatası:', err));
+                  }).catch(err => console.error('Arkaplan görsel yükleme hatası:', err))
+                    .finally(() => {
+                        imgInput.value = '';
+                    });
               });
+          } else {
+              imgInput.value = '';
           }
         }
         
@@ -614,7 +624,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             const path = `inventory/${currentWarehouse.id}/${id}_${Date.now()}`;
             
             // Arkaplanda yükleme işlemi yap, arayüzü kitleme
-            (window as any).compressImage(file, 800, 800, 0.7)
+            ImageCompressor.compressImage(file, 800, 800, 0.7)
                 .then((compressedFile: File) => fileService.uploadImage(compressedFile, path))
                 .then((url: string) => {
                     return warehouseService.updateMaterialImage(currentWarehouse.id, id, url, sap).then(() => url);
@@ -629,7 +639,10 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         cell.innerHTML = `<div onclick="window.showBigImage('${url}', '${safeName}')" style="width:36px; height:36px; border-radius:6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#3B82F6; cursor: pointer; transition: all 0.2s;" title="Görseli Büyüt" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'"><i class="fa-solid fa-image"></i></div>${name}`;
                     }
                 })
-                .catch((err: any) => console.error('Arkaplan görsel yükleme hatası:', err));
+                .catch((err: any) => console.error('Arkaplan görsel yükleme hatası:', err))
+                .finally(() => {
+                    imgInput.value = '';
+                });
          }
 
          (window as any).closeEditModal();
@@ -898,6 +911,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
     (window as any).saveManualAudit = async (btn: HTMLButtonElement) => {
       const inputs = document.querySelectorAll('.manual-audit-input');
       const manualResults: any[] = [];
+      const shelfUpdates: any[] = [];
       let hasError = false;
 
       inputs.forEach((input: any) => {
@@ -905,6 +919,14 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         const sapNo = input.dataset.sap;
         const name = input.dataset.name;
         const systemQty = parseFloat(input.dataset.sysqty);
+        
+        const shelfInput = document.getElementById('manual-shelf-' + itemId) as HTMLInputElement;
+        const shelfVal = shelfInput ? shelfInput.value.trim() : '';
+        const originalShelf = shelfInput ? (shelfInput.dataset.original || '').trim() : '';
+
+        if (shelfVal !== originalShelf) {
+           shelfUpdates.push({ itemId, shelfNo: shelfVal });
+        }
         
         if (input.value !== '') {
           const physicalQty = parseFloat(input.value);
@@ -934,32 +956,47 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         return;
       }
 
-      if (manualResults.length === 0) {
-        alert('Herhangi bir sayım girişi yapılmadı.');
+      if (manualResults.length === 0 && shelfUpdates.length === 0) {
+        alert('Herhangi bir sayım girişi veya konum değişikliği yapılmadı.');
         return;
       }
 
-      if (!confirm(manualResults.length + ' adet malzemenin sayım sonucunu kaydetmek istediğinize emin misiniz?')) return;
+      let confirmMessage = '';
+      if (manualResults.length > 0 && shelfUpdates.length > 0) {
+          confirmMessage = `${manualResults.length} adet malzemenin sayım sonucunu ve ${shelfUpdates.length} adet konum değişikliğini kaydetmek istediğinize emin misiniz?`;
+      } else if (manualResults.length > 0) {
+          confirmMessage = `${manualResults.length} adet malzemenin sayım sonucunu kaydetmek istediğinize emin misiniz?`;
+      } else {
+          confirmMessage = `${shelfUpdates.length} adet konum değişikliğini kaydetmek istediğinize emin misiniz?`;
+      }
+
+      if (!confirm(confirmMessage)) return;
 
       const originalText = btn.innerText;
       btn.innerText = 'Kaydediliyor...';
       btn.disabled = true;
 
       try {
-        const totalDiff = manualResults.reduce((sum, r) => sum + r.diff, 0);
-        const userStr = localStorage.getItem('user');
-        const user = userStr ? JSON.parse(userStr).name || JSON.parse(userStr).email : 'Bilinmeyen Kullanıcı';
-        
-        await warehouseService.saveAudit(currentWarehouse.id, {
-          user: user,
-          totalItems: manualResults.length,
-          totalDiff: totalDiff,
-          results: manualResults
-        });
+        if (manualResults.length > 0) {
+            const totalDiff = manualResults.reduce((sum, r) => sum + r.diff, 0);
+            const userStr = localStorage.getItem('user');
+            const user = userStr ? JSON.parse(userStr).name || JSON.parse(userStr).email : 'Bilinmeyen Kullanıcı';
+            
+            await warehouseService.saveAudit(currentWarehouse.id, {
+              user: user,
+              totalItems: manualResults.length,
+              totalDiff: totalDiff,
+              results: manualResults
+            });
+        }
+
+        for (const update of shelfUpdates) {
+            await warehouseService.updateMaterial(currentWarehouse.id, update.itemId, { shelfNo: update.shelfNo });
+        }
 
         localStorage.removeItem(`draft_audit_${currentWarehouse.id}`);
 
-        alert('Manuel sayım başarıyla kaydedildi!');
+        alert('Değişiklikler başarıyla kaydedildi!');
         if ((window as any).selectWarehouseAndNavigate) {
           (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
         }
@@ -1025,15 +1062,22 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         }
 
         let addedCount = 0;
-        for (const item of items) {
+        const totalItems = items.length;
+        for (let i = 0; i < totalItems; i++) {
+           const item = items[i];
            if (!item.description && !item.sapNo) continue; // Skip empty rows
            await warehouseService.addMaterial(currentWarehouse.id, {
-             sapNo: item.sapNo || '',
-             description: item.description || 'Bilinmeyen Malzeme',
-             quantity: item.quantity || 0,
-             shelfNo: item.shelfNo || 'Tanımsız'
+             sapNo: String(item.sapNo || '').trim(),
+             description: String(item.description || '').trim() || 'Bilinmeyen Malzeme',
+             quantity: Number(item.quantity) || 0,
+             shelfNo: String(item.shelfNo || '').trim() || 'Tanımsız'
            });
            addedCount++;
+           
+           if (btn) {
+               const percentage = Math.round(((i + 1) / totalItems) * 100);
+               btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> %${percentage} Yükleniyor...`;
+           }
         }
 
         alert(`Başarıyla ${addedCount} ürün yüklendi!`);
@@ -1068,12 +1112,34 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        const draft: any = {};
        inputs.forEach((input: any) => {
          const itemId = input.dataset.id;
-         if (input.value !== '') {
+         const shelfInput = document.getElementById('manual-shelf-' + itemId) as HTMLInputElement;
+         const shelfVal = shelfInput ? shelfInput.value : '';
+         const originalShelf = shelfInput ? shelfInput.dataset.original : '';
+         
+         if (input.value !== '' || (shelfVal !== originalShelf)) {
            const noteInput = document.getElementById('manual-note-' + itemId) as HTMLInputElement;
-           draft[itemId] = { qty: input.value, note: noteInput ? noteInput.value : '' };
+           draft[itemId] = { 
+               qty: input.value, 
+               note: noteInput ? noteInput.value : '', 
+               shelf: shelfVal 
+           };
          }
        });
        localStorage.setItem(`draft_audit_${currentWarehouse.id}`, JSON.stringify(draft));
+    };
+
+    (window as any).filterManualAudit = (query: string) => {
+       const q = query.toLowerCase();
+       const rows = document.querySelectorAll('.manual-audit-row');
+       rows.forEach((row: any) => {
+         const sap = row.dataset.sap || '';
+         const name = row.dataset.name || '';
+         if (sap.includes(q) || name.includes(q)) {
+           row.style.display = '';
+         } else {
+           row.style.display = 'none';
+         }
+       });
     };
 
     (window as any).clearDraftAudit = () => {
@@ -1260,9 +1326,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div style="color: #FCA5A5; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
           <i class="fa-solid fa-triangle-exclamation"></i>
-          Envanter Analitiği (AI): Önümüzdeki 30 gün içinde 12 kalemde stok tükenme riski tespit edildi.
+          Envanter Analitiği (AI): Önümüzdeki 30 gün içinde 12 kalemde stok tükenme riski tespit edildi. <span style="color: #EF4444; font-weight: bold; margin-left: 10px;">(Bu modül şu an güncelleme aşamasındadır ve aktif değildir.)</span>
         </div>
-        <button style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #EF4444; color: #FFFFFF; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+        <button onclick="alert('Bu modül şu an güncelleme aşamasındadır ve aktif değildir.')" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #EF4444; color: #FFFFFF; font-size: 0.9rem; font-weight: 600; cursor: not-allowed; opacity: 0.7;">
           Sipariş Oluştur
         </button>
       </div>
@@ -1285,11 +1351,22 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             ${inventoryWithQRs.length === 0 ? `
               <tr><td colspan="7" style="padding: 2rem; text-align: center; color: #94A3B8;">Henüz malzeme eklenmemiş.</td></tr>
             ` : [...inventoryWithQRs].sort((a, b) => {
-              const locA = (a.shelfNo || '').toUpperCase();
-              const locB = (b.shelfNo || '').toUpperCase();
+              const locA = String(a.shelfNo || '').trim().toUpperCase();
+              const locB = String(b.shelfNo || '').trim().toUpperCase();
               if (!locA && locB) return 1;
               if (locA && !locB) return -1;
-              return locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+              let locCmp = 0;
+              if (locA && locB) {
+                  locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+              }
+              if (locCmp !== 0) return locCmp;
+              const sapA = String(a.sapNo || '').trim();
+              const sapB = String(b.sapNo || '').trim();
+              if (sapA && sapB) {
+                  const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
+                  if (sapCmp !== 0) return sapCmp;
+              }
+              return String(a.name || '').localeCompare(String(b.name || ''));
             }).map(item => {
               const kritik = (item.minStock || 0);
               const rezerve = (item.reserved || 0);
@@ -1430,6 +1507,10 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               <div style="color: #94A3B8; font-size: 0.9rem;">Listedeki ürünlerin fiziksel sayılarını girerek hızlıca stokları güncelleyebilirsiniz. Değişiklik olmayan sayımlar geçmişe uyumlu olarak kaydedilecektir.</div>
             </div>
             <div style="display: flex; align-items: center; gap: 1.5rem;">
+              <div style="position: relative;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #64748B;"></i>
+                <input type="text" id="manual-audit-search" oninput="window.filterManualAudit(this.value)" placeholder="SAP No veya Tanım ara..." style="width: 250px; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem 0 2.5rem; outline: none; font-size: 0.9rem;" />
+              </div>
               <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; align-items: center;">
                 <!-- Dynamically populated via updateManualSummaryBar -->
               </div>
@@ -1442,23 +1523,44 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             </div>
           </div>
           
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+          <table id="manual-audit-table" style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
             <thead>
               <tr>
                 <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">SAP No</th>
                 <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Malzeme Tanımı</th>
+                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; width: 150px;">Konum</th>
                 <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Sistem Stoğu</th>
                 <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; width: 150px;">Fiziksel Sayım</th>
                 <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; width: 250px;">Fark Açıklaması</th>
               </tr>
             </thead>
             <tbody>
-              ${inventoryItems.length === 0 ? '<tr><td colspan="5" style="padding: 2rem; text-align: center; color: #94A3B8;">Henüz malzeme eklenmemiş.</td></tr>' : ''}
-              ${inventoryItems.sort((a,b) => a.name.localeCompare(b.name)).map((item) => `
-                <tr>
+              ${inventoryItems.length === 0 ? '<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #94A3B8;">Henüz malzeme eklenmemiş.</td></tr>' : ''}
+              ${inventoryItems.sort((a,b) => {
+                  const locA = String(a.shelfNo || '').trim().toUpperCase();
+                  const locB = String(b.shelfNo || '').trim().toUpperCase();
+                  if (!locA && locB) return 1;
+                  if (locA && !locB) return -1;
+                  let locCmp = 0;
+                  if (locA && locB) {
+                      locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+                  }
+                  if (locCmp !== 0) return locCmp;
+                  const sapA = String(a.sapNo || '').trim();
+                  const sapB = String(b.sapNo || '').trim();
+                  if (sapA && sapB) {
+                      const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
+                      if (sapCmp !== 0) return sapCmp;
+                  }
+                  return String(a.name || '').localeCompare(String(b.name || ''));
+              }).map((item) => `
+                <tr class="manual-audit-row" data-sap="${item.sapNo.toLowerCase()}" data-name="${item.name.toLowerCase()}">
                   <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.sapNo}</td>
                   <td style="padding: 1rem; color: #E2E8F0; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.name}</td>
-                  <td style="padding: 1rem; color: #14F195; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.quantity} ${item.unit}</td>
+                  <td style="padding: 0.5rem 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
+                    <input type="text" id="manual-shelf-${item.id}" class="manual-audit-shelf" data-id="${item.id}" data-original="${item.shelfNo || ''}" value="${draftData[item.id]?.shelf || item.shelfNo || ''}" oninput="window.saveDraftAudit()" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #334155; border-radius: 6px; color: #94A3B8; padding: 0 0.75rem; outline: none; font-size: 0.9rem;" placeholder="Raf No" />
+                  </td>
+                  <td style="padding: 1rem; color: #14F195; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.quantity} ${item.unit && item.unit !== 'undefined' && item.unit !== 'null' ? item.unit : 'Adet'}</td>
                   <td style="padding: 0.5rem 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
                     <input type="number" id="manual-qty-${item.id}" class="manual-audit-input" data-id="${item.id}" data-sap="${item.sapNo}" data-name="${item.name.replace(/"/g, '&quot;')}" data-sysqty="${item.quantity}" oninput="window.onManualQtyChange('manual-qty-${item.id}', 'manual-note-${item.id}', ${item.quantity})" value="${draftData[item.id]?.qty || ''}" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #334155; border-radius: 6px; color: #FFFFFF; padding: 0 0.75rem; outline: none; font-size: 0.9rem;" placeholder="Sayı..." />
                   </td>
