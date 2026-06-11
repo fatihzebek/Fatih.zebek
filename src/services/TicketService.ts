@@ -85,13 +85,28 @@ class TicketService {
    * Listen to messages for a specific ticket.
    */
   subscribeToMessages(ticketId: string, callback: (messages: TicketMessage[]) => void): () => void {
-    const q = query(this.messagesCol, where('ticketId', '==', ticketId), orderBy('createdAt', 'asc'));
+    // Remove orderBy to prevent requiring a composite index. We will sort locally.
+    const q = query(this.messagesCol, where('ticketId', '==', ticketId));
     return onSnapshot(q, (snapshot) => {
       const messages: TicketMessage[] = [];
       snapshot.forEach(doc => {
         messages.push({ id: doc.id, ...doc.data() } as TicketMessage);
       });
+      
+      // Sort locally safely (asc)
+      messages.sort((a,b) => {
+        const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+        const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+        return timeA - timeB;
+      });
+      
       callback(messages);
+    }, (error) => {
+      console.error("Error subscribing to messages:", error);
+      if (typeof window !== 'undefined') {
+        (window as any).showToast?.('HATA', 'Mesajlar yüklenemedi, indeks eksik olabilir.', 'error');
+      }
+      callback([]); // Call with empty array so it doesn't get stuck on loading forever
     });
   }
 
