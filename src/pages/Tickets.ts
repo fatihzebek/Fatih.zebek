@@ -358,9 +358,7 @@ export const TicketsPage = async () => {
 (window as any).changeTicketStatus = async (id: string, status: any) => {
   try {
     await ticketService.updateTicketStatus(id, status);
-    if (status === 'resolved') {
-      (window as any).openTicket(id); // Re-render to hide input
-    }
+    (window as any).openTicket(id); // Her zaman re-render yap (Mesaj kutusunu açıp kapatmak için)
   } catch(e) {
     (window as any).showToast?.('HATA', 'Durum güncellenemedi.', 'error');
   }

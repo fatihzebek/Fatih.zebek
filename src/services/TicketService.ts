@@ -41,7 +41,8 @@ class TicketService {
     let q = query(this.ticketsCol, orderBy('updatedAt', 'desc'));
     
     if (!isAdmin) {
-      q = query(this.ticketsCol, where('createdByUid', '==', userUid), orderBy('updatedAt', 'desc'));
+      // Remove orderBy to prevent requiring a composite index. We will sort locally.
+      q = query(this.ticketsCol, where('createdByUid', '==', userUid));
     }
 
     return onSnapshot(q, (snapshot) => {
@@ -49,6 +50,8 @@ class TicketService {
       snapshot.forEach(doc => {
         tickets.push({ id: doc.id, ...doc.data() } as Ticket);
       });
+      // Sort locally
+      tickets.sort((a,b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0));
       callback(tickets);
     }, (error) => {
       console.error("Error subscribing to tickets:", error);

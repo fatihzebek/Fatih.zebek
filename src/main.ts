@@ -502,6 +502,24 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     if (isMaterialManager && state.currentPage === 'dashboard') {
       state.currentPage = 'material-analytics';
     }
+
+    // --- GLOBAL TICKET NOTIFICATION LISTENER ---
+    if (!(window as any)._globalTicketUnsubscribe) {
+      const isAdmin = state.userProfile.role?.toUpperCase() === 'ADMIN';
+      import('./services/TicketService').then(({ ticketService }) => {
+        (window as any)._globalTicketUnsubscribe = ticketService.subscribeToTickets(isAdmin, state.userProfile!.uid, (tickets) => {
+          const unreadCount = tickets.filter(t => isAdmin ? t.unreadAdmin : t.unreadUser).length;
+          const bell = document.getElementById('topbar-ticket-bell');
+          if (bell) {
+            if (unreadCount > 0) {
+              bell.innerHTML = `<i class="fa-solid fa-bell fa-shake" style="color: #f59e0b;"></i><span class="notification-dot" style="position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; font-weight:bold;">${unreadCount}</span>`;
+            } else {
+              bell.innerHTML = `<i class="fa-solid fa-bell"></i>`;
+            }
+          }
+        });
+      });
+    }
   }
 
   
