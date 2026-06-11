@@ -173,7 +173,16 @@ export const TicketsPage = async () => {
       // If we have an active ticket, update its UI (status etc)
       if (currentTicketId) {
         const activeT = allTickets.find(t => t.id === currentTicketId);
-        if (activeT) (window as any).renderChatHeader(activeT, isAdmin);
+        if (activeT) {
+          (window as any).renderChatHeader(activeT, isAdmin);
+        } else {
+          // Ticket was deleted while viewing
+          currentTicketId = null;
+          const mainArea = document.getElementById('ticket-main-area');
+          if (mainArea) {
+            mainArea.innerHTML = `<div style="display:flex; align-items:center; justify-content:center; height:100%; color:var(--text-muted); opacity:0.5; font-size: 1.2rem;"><i class="fa-solid fa-headset fa-2x" style="margin-right:1rem;"></i> Sol taraftan bir bilet seçin</div>`;
+          }
+        }
       }
 
       // Update global unread badge
@@ -373,7 +382,7 @@ export const TicketsPage = async () => {
   try {
     await ticketService.deleteTicket(id);
     currentTicketId = null;
-    (window as any).navigate('tickets');
+    (window as any).navigate('tickets-page');
   } catch(e) {
      (window as any).showToast?.('HATA', 'Silme işlemi başarısız.', 'error');
   }

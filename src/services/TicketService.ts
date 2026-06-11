@@ -20,7 +20,7 @@ export interface Ticket {
   title: string;
   description: string;
   priority: 'low' | 'normal' | 'high';
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  status: 'open' | 'in_progress' | 'waiting_for_user' | 'resolved' | 'closed';
   createdByUid: string;
   createdByName: string;
   createdAt: any;
