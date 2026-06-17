@@ -8,6 +8,7 @@ import { ImageCompressor } from '../utils/imageCompressor';
 import type { IMalzeme } from '../types/depo';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
+import { inventoryService } from '../services/InventoryService';
 const getUserProfile = (): any => {
   let userProfile = (window as any).appState?.userProfile;
   if (!userProfile) {
@@ -659,16 +660,33 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       const userProfile = getUserProfile();
       const userName = userProfile?.displayName || userProfile?.name || 'Bilinmeyen Kullanıcı';
       
-      let materialDesc = 'Bilinmeyen Malzeme';
-      try {
-        const material = await (window as any).inventoryService?.getMaterialBySap(sapNo);
-        if (material) {
-          materialDesc = material.d || materialDesc;
-        }
-      } catch (e) {}
-
       const lastSourceWarehouseId = localStorage.getItem('last_p2p_source_warehouse') || '';
       const defaultSourceId = scannedWarehouseId || lastSourceWarehouseId;
+
+      let materialDesc = 'Bilinmeyen Malzeme';
+
+      // 1. Try resolving description from the default source warehouse inventory
+      if (defaultSourceId) {
+        try {
+          const inv = await warehouseService.getInventory(defaultSourceId);
+          const item = inv.find(i => String(i.sapNo).trim() === sapNo.trim());
+          if (item) {
+            materialDesc = item.description || materialDesc;
+          }
+        } catch (e) {
+          console.warn("Could not retrieve default source inventory for description", e);
+        }
+      }
+
+      // 2. Fallback to dictionary
+      if (materialDesc === 'Bilinmeyen Malzeme') {
+        try {
+          const material = inventoryService.getMaterialBySap(sapNo);
+          if (material) {
+            materialDesc = material.d || materialDesc;
+          }
+        } catch (e) {}
+      }
 
       resultsDiv.innerHTML = `
         <div style="background: #1E293B; border-radius: 12px; padding: 1.5rem; margin-top: 1rem; border: 1px solid #14F195; box-shadow: 0 4px 20px rgba(20, 241, 149, 0.15); text-align: left;">

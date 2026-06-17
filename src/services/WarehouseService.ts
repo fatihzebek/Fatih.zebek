@@ -64,6 +64,7 @@ export interface AuditRecord {
 class WarehouseService {
   private inventoryCache: Map<string, { data: InventoryItem[], timestamp: number }> = new Map();
   private CACHE_DURATION = 30000; // 30 seconds
+  private globalImagesCache: Map<string, string> | null = null;
 
   public resolveWarehouseId(id: string): string {
     const trimmedId = id.trim();
@@ -102,18 +103,23 @@ class WarehouseService {
     
     // Auto-sync missing images from GlobalMaterialImages
     try {
-        const globalSnapshot = await getDocs(collection(db, 'GlobalMaterialImages'));
-        const globalImages = new Map<string, string>();
-        globalSnapshot.forEach(doc => {
-            if (doc.data().imageUrl) {
-                const rawId = doc.id.trim();
-                globalImages.set(rawId, doc.data().imageUrl);
-                const stripped = rawId.replace(/^0+/, '');
-                if (stripped) {
-                    globalImages.set(stripped, doc.data().imageUrl);
+        if (!this.globalImagesCache) {
+            const globalSnapshot = await getDocs(collection(db, 'GlobalMaterialImages'));
+            const globalImages = new Map<string, string>();
+            globalSnapshot.forEach(doc => {
+                if (doc.data().imageUrl) {
+                    const rawId = doc.id.trim();
+                    globalImages.set(rawId, doc.data().imageUrl);
+                    const stripped = rawId.replace(/^0+/, '');
+                    if (stripped) {
+                        globalImages.set(stripped, doc.data().imageUrl);
+                    }
                 }
-            }
-        });
+            });
+            this.globalImagesCache = globalImages;
+        }
+
+        const globalImages = this.globalImagesCache;
         
         data = data.map(item => {
             if (!item.imageUrl && item.sapNo) {
@@ -247,17 +253,19 @@ class WarehouseService {
     
     // Update local cache directly to avoid query lag
     const cached = this.inventoryCache.get(warehouseId);
+    let updatedItem: InventoryItem | undefined = undefined;
     if (cached) {
       const idx = cached.data.findIndex(i => i.id === itemId);
       if (idx !== -1) {
         cached.data[idx] = { ...cached.data[idx], ...updates, lastUpdated: new Date() };
         cached.timestamp = Date.now();
+        updatedItem = cached.data[idx];
       }
     }
 
-    const current = await this.getInventory(warehouseId, true);
-    const item = current.find(i => i.id === itemId);
-    if (item) this.checkCriticalStock(warehouseId, item);
+    if (updatedItem) {
+      this.checkCriticalStock(warehouseId, updatedItem);
+    }
   }
 
   async transferMaterial(sourceId: string, targetId: string, sourceItemId: string, quantity: number, user: string) {
@@ -269,50 +277,55 @@ class WarehouseService {
     if (!sourceItem) throw new Error("Kaynak malzeme bulunamadı");
     if (sourceItem.quantity < quantity) throw new Error("Yetersiz stok");
 
-    await this.updateMaterial(sourceWarehouseId, sourceItemId, { quantity: sourceItem.quantity - quantity });
-    await this.addLog(sourceWarehouseId, {
-      itemId: sourceItemId,
-      sapNo: sourceItem.sapNo || '',
-      materialName: (sourceItem as any).name || 'Bilinmeyen',
-      type: 'TRANSFER',
-      quantity: -quantity,
-      oldQty: sourceItem.quantity,
-      newQty: sourceItem.quantity - quantity,
-      user,
-      note: `${targetWarehouseId} deposuna transfer edildi.`
-    });
+    const sourcePromises: Promise<any>[] = [
+      this.updateMaterial(sourceWarehouseId, sourceItemId, { quantity: sourceItem.quantity - quantity }),
+      this.addLog(sourceWarehouseId, {
+        itemId: sourceItemId,
+        sapNo: sourceItem.sapNo || '',
+        materialName: (sourceItem as any).name || sourceItem.description || 'Bilinmeyen',
+        type: 'TRANSFER',
+        quantity: -quantity,
+        oldQty: sourceItem.quantity,
+        newQty: sourceItem.quantity - quantity,
+        user,
+        note: `${targetWarehouseId} deposuna transfer edildi.`
+      })
+    ];
 
     const targetInventory = await this.getInventory(targetWarehouseId);
     const targetItem = targetInventory.find(i => i.sapNo === sourceItem.sapNo);
 
+    const targetPromises: Promise<any>[] = [];
     if (targetItem && targetItem.id) {
-      await this.updateMaterial(targetWarehouseId, targetItem.id, { quantity: targetItem.quantity + quantity });
-      await this.addLog(targetWarehouseId, {
+      targetPromises.push(this.updateMaterial(targetWarehouseId, targetItem.id, { quantity: targetItem.quantity + quantity }));
+      targetPromises.push(this.addLog(targetWarehouseId, {
         itemId: targetItem.id,
         sapNo: targetItem.sapNo || '',
-        materialName: (targetItem as any).name || 'Bilinmeyen',
+        materialName: (targetItem as any).name || targetItem.description || 'Bilinmeyen',
         type: 'TRANSFER',
         quantity,
         oldQty: targetItem.quantity,
         newQty: targetItem.quantity + quantity,
         user,
         note: `${sourceWarehouseId} deposundan transfer edildi.`
-      });
+      }));
     } else {
       const { id, lastUpdated, ...itemWithoutId } = sourceItem as any;
       const newItem = await this.addMaterial(targetWarehouseId, { ...itemWithoutId, quantity });
-      await this.addLog(targetWarehouseId, {
+      targetPromises.push(this.addLog(targetWarehouseId, {
         itemId: newItem.id,
         sapNo: sourceItem.sapNo || '',
-        materialName: (sourceItem as any).name || 'Bilinmeyen',
+        materialName: (sourceItem as any).name || sourceItem.description || 'Bilinmeyen',
         type: 'TRANSFER',
         quantity,
         oldQty: 0,
         newQty: quantity,
         user,
         note: `${sourceWarehouseId} deposundan transfer edildi.`
-      });
+      }));
     }
+
+    await Promise.all([...sourcePromises, ...targetPromises]);
   }
 
   async syncMaterialImageGlobally(sapNo: string, imageUrl: string) {
