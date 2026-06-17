@@ -2376,6 +2376,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             <i class="fa-solid fa-file-invoice"></i> SAYIM GEÇMİŞİ
           </div>
         `}
+      </div>
 
       <div id="view-ENVANTER" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'block' : 'none'};">
       <!-- Summary Cards -->
