@@ -277,6 +277,21 @@ class WarehouseService {
     if (!sourceItem) throw new Error("Kaynak malzeme bulunamadı");
     if (sourceItem.quantity < quantity) throw new Error("Yetersiz stok");
 
+    const getWarehouseName = (id: string): string => {
+      if (id.startsWith('team_')) {
+        const teamName = id.replace('team_', '').replace(/_/g, ' ');
+        return `${teamName}`;
+      }
+      const wh = dataService.getWarehouses().find(w => w.id === id);
+      if (wh) {
+        return wh.name.replace(/\s*[Dd]epo(su)?\s*$/, '');
+      }
+      return id;
+    };
+
+    const sourceName = getWarehouseName(sourceWarehouseId);
+    const targetName = getWarehouseName(targetWarehouseId);
+
     const sourcePromises: Promise<any>[] = [
       this.updateMaterial(sourceWarehouseId, sourceItemId, { quantity: sourceItem.quantity - quantity }),
       this.addLog(sourceWarehouseId, {
@@ -288,7 +303,7 @@ class WarehouseService {
         oldQty: sourceItem.quantity,
         newQty: sourceItem.quantity - quantity,
         user,
-        note: `${targetWarehouseId} deposuna transfer edildi.`
+        note: `${targetName} deposuna transfer edildi.`
       })
     ];
 
@@ -307,7 +322,7 @@ class WarehouseService {
         oldQty: targetItem.quantity,
         newQty: targetItem.quantity + quantity,
         user,
-        note: `${sourceWarehouseId} deposundan transfer edildi.`
+        note: `${sourceName} deposundan transfer edildi.`
       }));
     } else {
       const { id, lastUpdated, ...itemWithoutId } = sourceItem as any;
@@ -321,7 +336,7 @@ class WarehouseService {
         oldQty: 0,
         newQty: quantity,
         user,
-        note: `${sourceWarehouseId} deposundan transfer edildi.`
+        note: `${sourceName} deposundan transfer edildi.`
       }));
     }
 
