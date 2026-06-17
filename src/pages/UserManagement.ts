@@ -26,7 +26,8 @@ export const UserManagementPage = async () => {
     { id: 'users', label: 'Kullanıcı Yetkileri' },
     { id: 'MALZEME_YONETIMI', label: 'Malzeme Yönetimi' },
     { id: 'asset-custody', label: 'Malzeme Zimmeti' },
-    { id: 'tickets-page', label: 'Saha Destek (Ticket)' }
+    { id: 'tickets-page', label: 'Saha Destek (Ticket)' },
+    { id: 'image-pool', label: 'Resim Havuzu' }
   ];
 
   const baseBakimPlanlama = [{ id: 'editPlan', label: 'Plan Düzenleme / Oluşturma' }];

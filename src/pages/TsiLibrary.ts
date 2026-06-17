@@ -79,8 +79,8 @@ export const TsiLibraryPage = async () => {
           </div>
           
           <div class="form-group" style="margin-bottom: 1rem;">
-            <label class="permission-label">DOKÜMAN BAŞLIĞI</label>
-            <input type="text" id="tsi-upload-title" class="cyber-input" placeholder="Örn: 2026 İş Güvenliği Talimatı">
+            <label class="permission-label">DOKÜMAN BAŞLIĞI (Opsiyonel)</label>
+            <input type="text" id="tsi-upload-title" class="cyber-input" placeholder="Boş bırakılırsa dosya adı kullanılır">
           </div>
           
           <div class="form-group" style="margin-bottom: 1rem;">
@@ -89,10 +89,10 @@ export const TsiLibraryPage = async () => {
               <option value="">Kategori Seçin...</option>
             </select>
           </div>
-          
+
           <div class="form-group" style="margin-bottom: 1.5rem;">
-            <label class="permission-label">PDF DOSYASI</label>
-            <input type="file" id="tsi-upload-file" accept=".pdf" class="cyber-input" style="padding: 8px;">
+            <label class="permission-label">PDF DOSYALARI (Çoklu seçebilirsiniz)</label>
+            <input type="file" id="tsi-upload-file" accept=".pdf" multiple class="cyber-input" style="padding: 8px;">
           </div>
           
           <div id="tsi-upload-progress" class="hidden" style="margin-bottom: 1rem;">
@@ -103,7 +103,7 @@ export const TsiLibraryPage = async () => {
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 1rem;">
-            <button class="btn-cyber-outline" onclick="window.closeTsiUploadModal()">İPTAL</button>
+            <button class="btn-cyber-outline" id="tsi-upload-cancel-btn" onclick="window.closeTsiUploadModal()">İPTAL</button>
             <button class="btn-cyber" id="tsi-upload-btn" onclick="window.submitTsiUpload()">YÜKLE</button>
           </div>
         </div>
@@ -301,6 +301,7 @@ const renderDocuments = () => {
   grid.innerHTML = docs.map(doc => {
     const dateStr = doc.createdAt?.toDate ? doc.createdAt.toDate().toLocaleDateString('tr-TR') : 'Yeni';
     const sizeStr = formatBytes(doc.fileSize || 0);
+    const docJson = JSON.stringify(doc).replace(/'/g, "&#39;");
     
     return `
       <div class="tsi-doc-card">
@@ -320,14 +321,14 @@ const renderDocuments = () => {
         </div>
         
         <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05);">
-          <button class="btn-cyber" style="flex: 1; padding: 6px 12px; font-size: 0.75rem; justify-content: center;" onclick="window.open('${doc.fileUrl}', '_blank')">
+          <button class="btn-cyber" style="flex: 1; padding: 6px 12px; font-size: 0.75rem; justify-content: center;" onclick="window.openTsiDoc('${docJson}')">
             <i class="fa-solid fa-eye"></i> GÖSTER
           </button>
-          <button class="btn-cyber-outline" style="padding: 6px 12px;" onclick="window.downloadFile('${doc.fileUrl}', '${doc.fileName.replace(/'/g, "\\'")}')" title="İndir">
+          <button class="btn-cyber-outline" style="padding: 6px 12px;" onclick="window.downloadTsiDoc('${docJson}')" title="İndir">
             <i class="fa-solid fa-download"></i>
           </button>
           ${isAdmin ? `
-            <button class="action-icon-btn red" style="padding: 6px 12px;" onclick="window.deleteTsiDocument('${doc.id}', '${doc.storagePath}')" title="Sil">
+            <button class="action-icon-btn red" style="padding: 6px 12px;" onclick="window.deleteTsiDocument('${docJson}')" title="Sil">
               <i class="fa-solid fa-trash-can"></i>
             </button>
           ` : ''}
@@ -337,14 +338,62 @@ const renderDocuments = () => {
   }).join('');
 };
 
-(window as any).downloadFile = (url: string, filename: string) => {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.target = '_blank';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+(window as any).openTsiDoc = async (docStr: string) => {
+  const doc = JSON.parse(docStr);
+  if (!doc.isChunked) {
+    window.open(doc.fileUrl, '_blank');
+    return;
+  }
+
+  // Senkron olarak yeni sekme aç (Popup Engelleyiciyi aşmak için)
+  const newTab = window.open('', '_blank');
+  if (newTab) {
+    newTab.document.write('<html><body style="background:#111; color:white; display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif;"><h3>Dosya hazırlanıyor, lütfen bekleyin...</h3></body></html>');
+  }
+
+  (window as any).showToast('Bilgi', 'Büyük dosya hazırlanıyor, lütfen bekleyin...', 'info');
+  try {
+    const url = await tsiService.getChunkedFileUrl(doc);
+    if (newTab) {
+      newTab.location.href = url;
+    } else {
+      window.open(url, '_blank');
+    }
+  } catch (err) {
+    console.error(err);
+    if (newTab) newTab.close();
+    (window as any).showToast('Hata', 'Dosya hazırlanırken bir hata oluştu.', 'error');
+  }
+};
+
+(window as any).downloadTsiDoc = async (docStr: string) => {
+  const doc = JSON.parse(docStr);
+  
+  if (!doc.isChunked) {
+    const a = document.createElement('a');
+    a.href = doc.fileUrl;
+    a.download = doc.fileName;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return;
+  }
+
+  (window as any).showToast('Bilgi', 'İndirme hazırlanıyor, bu işlem dosya boyutuna göre 5-10 saniye sürebilir...', 'info');
+  try {
+    const url = await tsiService.getChunkedFileUrl(doc);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = doc.fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    (window as any).showToast('Başarılı', 'İndirme başladı!', 'success');
+  } catch (err) {
+    console.error(err);
+    (window as any).showToast('Hata', 'İndirme başarısız oldu.', 'error');
+  }
 };
 
 // --- ADMIN MODALS LOGIC ---
@@ -446,16 +495,17 @@ const updateUploadCategorySelect = () => {
   const catInput = document.getElementById('tsi-upload-category') as HTMLSelectElement;
   const fileInput = document.getElementById('tsi-upload-file') as HTMLInputElement;
   const btn = document.getElementById('tsi-upload-btn') as HTMLButtonElement;
+  const cancelBtn = document.getElementById('tsi-upload-cancel-btn') as HTMLButtonElement;
   const progressContainer = document.getElementById('tsi-upload-progress');
   const progressBar = document.getElementById('tsi-progress-bar');
   const progressText = document.getElementById('tsi-progress-text');
 
-  const title = titleInput.value.trim();
+  const manualTitle = titleInput.value.trim();
   const categoryId = catInput.value;
-  const file = fileInput.files?.[0];
+  const files = fileInput.files;
 
-  if (!title || !categoryId || !file) {
-    alert("Lütfen tüm alanları doldurun ve bir PDF seçin.");
+  if (!categoryId || !files || files.length === 0) {
+    alert("Lütfen bir kategori ve en az bir PDF dosyası seçin.");
     return;
   }
 
@@ -463,34 +513,55 @@ const updateUploadCategorySelect = () => {
   const uploadedBy = currentUser?.displayName || currentUser?.email || 'Admin';
 
   btn.disabled = true;
+  cancelBtn.disabled = true;
   if (progressContainer) progressContainer.classList.remove('hidden');
 
-  try {
-    await tsiService.uploadDocument(file, title, categoryId, uploadedBy, (progress) => {
-      if (progressBar) progressBar.style.width = `${progress}%`;
-      if (progressText) progressText.innerText = `${Math.round(progress)}%`;
-    });
+  let successCount = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     
-    (window as any).showToast('Başarılı', 'Doküman başarıyla yüklendi.', 'success');
+    let docTitle = manualTitle;
+    if (!docTitle) {
+      docTitle = file.name.replace('.pdf', '');
+    } else if (files.length > 1) {
+      docTitle = `${manualTitle} - ${i + 1}`;
+    }
+
+    if (progressText) progressText.innerText = `Dosya ${i + 1}/${files.length} yükleniyor... %0`;
+    if (progressBar) progressBar.style.width = '0%';
+
+    try {
+      await tsiService.uploadDocument(file, docTitle, categoryId, uploadedBy, (progress) => {
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (progressText) progressText.innerText = `Dosya ${i + 1}/${files.length} yükleniyor... %${Math.round(progress)}`;
+      });
+      successCount++;
+    } catch (err) {
+      console.error(`Upload error for ${file.name}:`, err);
+      (window as any).showToast('Hata', `${file.name} yüklenemedi.`, 'error');
+    }
+  }
+
+  btn.disabled = false;
+  cancelBtn.disabled = false;
+  if (progressContainer) progressContainer.classList.add('hidden');
+  if (progressBar) progressBar.style.width = '0%';
+
+  if (successCount > 0) {
+    (window as any).showToast('Başarılı', `${successCount} doküman başarıyla yüklendi.`, 'success');
     (window as any).closeTsiUploadModal();
     titleInput.value = '';
     fileInput.value = '';
     catInput.value = '';
-    
-  } catch (err) {
-    console.error(err);
-    (window as any).showToast('Hata', 'Yükleme başarısız oldu.', 'error');
-  } finally {
-    btn.disabled = false;
-    if (progressContainer) progressContainer.classList.add('hidden');
-    if (progressBar) progressBar.style.width = '0%';
   }
 };
 
-(window as any).deleteTsiDocument = async (id: string, storagePath: string) => {
+(window as any).deleteTsiDocument = async (docStr: string) => {
+  const doc = JSON.parse(docStr);
   if (confirm("Bu dokümanı silmek istediğinize emin misiniz?")) {
     try {
-      await tsiService.deleteDocument(id, storagePath);
+      await tsiService.deleteDocument(doc.id, doc);
       (window as any).showToast('Başarılı', 'Doküman silindi.', 'info');
     } catch (err) {
       (window as any).showToast('Hata', 'Silme işlemi başarısız.', 'error');

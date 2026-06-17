@@ -6,9 +6,9 @@ class QRService {
         try {
             return await QRCode.toDataURL(text, {
                 width: 300,
-                margin: 2,
+                margin: 4,
                 color: {
-                    dark: '#0a192f',
+                    dark: '#000000',
                     light: '#ffffff'
                 }
             });
@@ -71,7 +71,11 @@ class QRService {
 
         // Generate QR codes for all items
         const itemsWithQR = await Promise.all(items.map(async item => {
-            const dataUrl = await this.generateDataURL(item.id || item.sapNo);
+            const isTurbine = item.id?.startsWith('turbine:');
+            const qrText = isTurbine 
+                ? (item.id || item.sapNo) 
+                : JSON.stringify({ id: item.id, sapNo: item.sapNo, warehouseId: (item as any).warehouseId });
+            const dataUrl = await this.generateDataURL(qrText);
             return { ...item, dataUrl };
         }));
 
@@ -83,18 +87,29 @@ class QRService {
 
         const pagesHtml = pages.map(pageItems => `
             <div class="page">
-                ${pageItems.map(item => `
+                ${pageItems.map(item => {
+                    const isTurbine = item.id?.startsWith('turbine:');
+                    const sapLabel = isTurbine ? item.sapNo : `SAP: ${item.sapNo}`;
+                    const descLabel = (item.description || '').toLocaleUpperCase('tr-TR');
+                    
+                    const turbineIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-top:-2px;"><path d="M10 22h4"/><path d="M12 22V10"/><path d="M12 10V2"/><path d="M12 10L4 14.6"/><path d="M12 10L20 14.6"/><circle cx="12" cy="10" r="1.5" fill="currentColor"/></svg>`;
+                    
+                    const boxIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#000000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-top:-2px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
+                    
+                    const iconSvg = isTurbine ? turbineIcon : boxIcon;
+
+                    return `
                     <div class="label-box">
-                        <img class="qr-img" src="${item.dataUrl}">
                         <div class="details">
-                            <div class="sap" style="display: flex; align-items: center; gap: 6px;">
-                              ${item.id?.startsWith('turbine:') ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-top:-2px; opacity:0.9;"><path d="M10 22h4"/><path d="M12 22V10"/><path d="M12 10V2"/><path d="M12 10L4 14.6"/><path d="M12 10L20 14.6"/><circle cx="12" cy="10" r="1.5" fill="currentColor"/></svg>` : ''}
-                              ${item.sapNo}
+                            <div class="sap">
+                              ${iconSvg}
+                              <span>${sapLabel}</span>
                             </div>
-                            <div class="desc">${item.description}</div>
+                            <div class="desc">${descLabel}</div>
                         </div>
-                    </div>
-                `).join('')}
+                        <img class="qr-img" src="${item.dataUrl}">
+                    </div>`;
+                }).join('')}
             </div>
         `).join('');
 
@@ -138,24 +153,47 @@ class QRService {
                             padding: 4mm;
                             display: flex;
                             align-items: center;
-                            gap: 4mm;
+                            justify-content: space-between;
                             overflow: hidden;
                         }
-                        .qr-img { width: 30mm; height: 30mm; flex-shrink: 0; object-fit: contain; }
-                        .details { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-                        .sap { font-size: 14pt; font-weight: 900; color: #000; margin-bottom: 2mm; word-break: break-all; line-height: 1.1; }
+                        .details { 
+                            flex: 1; 
+                            min-width: 0; 
+                            display: flex; 
+                            flex-direction: column; 
+                            justify-content: center; 
+                            text-align: left;
+                            padding-right: 3mm;
+                        }
+                        .sap { 
+                            font-size: 14pt; 
+                            font-weight: 900; 
+                            color: #000; 
+                            margin-bottom: 2mm; 
+                            display: flex; 
+                            align-items: center; 
+                            gap: 6px; 
+                            line-height: 1.1; 
+                        }
                         .desc { 
                             font-size: 9pt; 
-                            font-weight: 600; 
+                            font-weight: 700; 
                             color: #333; 
                             line-height: 1.2; 
+                            width: 100%;
+                            word-break: break-word;
                             display: -webkit-box; 
-                            -webkit-line-clamp: 3; 
+                            -webkit-line-clamp: 2; 
                             -webkit-box-orient: vertical; 
                             overflow: hidden; 
                             text-overflow: ellipsis; 
                         }
-                        .footer { margin-top: 2mm; font-size: 6pt; font-weight: 800; color: #666; text-transform: uppercase; }
+                        .qr-img { 
+                            width: 30mm; 
+                            height: 30mm; 
+                            flex-shrink: 0; 
+                            object-fit: contain; 
+                        }
                     </style>
                 </head>
                 <body>

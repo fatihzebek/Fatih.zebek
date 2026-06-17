@@ -1,6 +1,24 @@
 import './style.css'
 import { offlineSyncService } from './services/OfflineSyncService';
 
+// --- SERVICE WORKER AUTO-UPDATE AND CACHE RELOADER ---
+if ('serviceWorker' in navigator) {
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    console.log("New service worker activated. Reloading page to apply updates...");
+    if (typeof (window as any).showToast === 'function') {
+      (window as any).showToast('SİSTEM GÜNCELLEMESİ', 'Uygulamanın yeni bir sürümü yüklendi. Sayfa güncelleniyor...', 'success');
+      setTimeout(() => {
+        window.location.reload();
+      }, 2500);
+    } else {
+      window.location.reload();
+    }
+  });
+}
+
 // --- GLOBAL ERROR TRACKER ---
 (window as any).getSystemErrors = () => JSON.parse(localStorage.getItem('system_errors') || '[]');
 window.onerror = (msg, url, line, col, err) => {
@@ -49,36 +67,12 @@ console.log("%c DH SERVIS STABILITY PATCH V3 - GLOBAL MODAL ACTIVE ", "backgroun
   }
 };
 
-import { NewTaskForm } from './components/FormWizard'
-import { InventoryPage } from './pages/Inventory'
-import { TurbinesPage } from './pages/Turbines'
-import { TeamsPage } from './pages/Teams'
-import { LoginPage } from './pages/Login'
-import { TasksPage } from './pages/Tasks'
-import { ReportArchivePage } from './pages/ReportArchive'
-import { UserManagementPage } from './pages/UserManagement'
-import { NewWarehousePage } from './pages/NewWarehouses'
-import { TransferPage } from './pages/Transfers'
-import { TemplatesPage } from './pages/Templates'
-import { DashboardPage } from './pages/Dashboard'
-import { SiparisPage } from './pages/Siparis'
-import { FaultFormPage } from './pages/FaultForm'
-import { TaskCreationForm } from './pages/TaskCreation'
-import { AnalyticsPage } from './pages/Analytics'
-import { GlobalWarehouseHistoryPage } from './pages/GlobalWarehouseHistory'
-import { MaterialManagementPage } from './pages/MaterialManagement'
-import { AssetCustodyPage } from './pages/AssetCustody'
-import { TicketsPage } from './pages/Tickets'
-import { MaintenancePlanningPage } from './pages/MaintenancePlanning'
-import { BearingAnalysisPage } from './pages/BearingAnalysis'
-import { PredictiveAgentPage } from './pages/PredictiveAgent'
 import { dataService, DataService } from './services/DataService'
 import { authService } from './services/AuthService'
 import { taskService } from './services/TaskService'
 import { userService } from './services/UserService'
 import type { UserProfile } from './services/UserService'
 import { formatTeamName } from './utils/formatters'
-import { TsiLibraryPage, initTsiLibrary, destroyTsiLibrary } from './pages/TsiLibrary'
 
 // Types
 type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-task' | 'login' | 'warehouses' | 'transfers' | 'users' | 'templates' | 'analytics' |
@@ -86,7 +80,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool';
 
 interface AppState {
   currentPage: Page
@@ -299,7 +293,28 @@ const Sidebar = () => {
                 <i class="fa-solid fa-boxes-stacked" style="font-size: 0.6rem; opacity: 0.5;"></i> ${wh.name}
               </li>
             `).join('')}
+            ${profile?.team ? `
+              <li class="sub-item ${state.selectedWarehouseId === 'team_' + profile.team.replace(/\s+/g, '_') ? 'active' : ''}" onclick="window.selectWarehouseAndNavigate('team_${profile.team.replace(/\s+/g, '_')}')" style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.5rem; margin-top: 0.5rem; color: #14F195; font-weight: bold;">
+                <i class="fa-solid fa-truck-ramp-box" style="font-size: 0.75rem; margin-right: 4px;"></i> Zimmetim (${profile.team})
+              </li>
+            ` : ''}
+            ${(profile?.role === 'ADMIN' || isMaterialManager) ? `
+              <li style="padding: 0.5rem 1rem; font-size: 0.75rem; color: #64748B; text-transform: uppercase; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 0.5rem;">Ekiplerin Zimmeti</li>
+              ${Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`).map(teamName => {
+                const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
+                return `
+                  <li class="sub-item ${state.selectedWarehouseId === teamId ? 'active' : ''}" onclick="window.selectWarehouseAndNavigate('${teamId}')" style="color: #60A5FA;">
+                    <i class="fa-solid fa-truck-moving" style="font-size: 0.65rem; opacity: 0.7; margin-right: 4px;"></i> ${teamName} Deposu
+                  </li>
+                `;
+              }).join('')}
+            ` : ''}
           </ul>
+        ` : ''}
+        ${isAllowed('image-pool') ? `
+          <li class="nav-item ${state.currentPage === 'image-pool' ? 'active' : ''}" onclick="window.navigate('image-pool')">
+            <i class="fa-solid fa-images" style="color: #0ea5e9;"></i> Resim Havuzu
+          </li>
         ` : ''}
         ${isAllowed('tsi-library') ? `
           <li class="nav-item ${state.currentPage === 'tsi-library' ? 'active' : ''}" onclick="window.navigate('tsi-library')">
@@ -462,8 +477,18 @@ const render = async (options: { skipShell?: boolean } = {}) => {
   const app = document.querySelector<HTMLDivElement>('#app');
   if (!app) return;
 
+  // Trigger Service Worker update check on render
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (reg) {
+        reg.update().catch(err => console.debug("SW update check skipped:", err));
+      }
+    }).catch(() => {});
+  }
+
   const user = authService.getCurrentUser();
   if (!user) {
+    const { LoginPage } = await import('./pages/Login');
     app.innerHTML = LoginPage();
     // Re-bind login logic
     const form = document.getElementById('login-form');
@@ -686,7 +711,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
       (window as any)._currentUnsubscribe();
       (window as any)._currentUnsubscribe = null;
     }
-    destroyTsiLibrary(); // Cleanup TSI listeners
+    import('./pages/TsiLibrary').then(m => m.destroyTsiLibrary?.()).catch(() => {});
 
     (window as any).currentWarehouseTab = state.warehouseTab;
     const content = await getContent();
@@ -695,14 +720,22 @@ const render = async (options: { skipShell?: boolean } = {}) => {
 
     // Removing the setTimeout for switchTab since we now handle it at render time
     // --- PAGE SPECIFIC INITIALIZATION ---
-    if (state.currentPage === 'tsi-library') initTsiLibrary();
+    if (state.currentPage === 'tsi-library') {
+      import('./pages/TsiLibrary').then(m => m.initTsiLibrary?.()).catch(e => console.error(e));
+    }
     if (state.currentPage === 'form-ariza' || state.currentPage === 'form-template-edit') (window as any).initFaultFormLogic?.();
     if (state.currentPage === 'new-task') {
       const form = document.getElementById('wizard-form');
       if (form) form.addEventListener('submit', (window as any).handleWizardSubmit);
     }
     if (state.currentPage === 'transfers') (window as any).initTransferLogic?.();
-    if (state.currentPage === 'warehouses' && state.selectedWarehouseId) (window as any).initWarehouseLogic?.();
+    if (state.currentPage === 'warehouses' && state.selectedWarehouseId) {
+      if ((window as any).initNewWarehouseLogic) {
+        (window as any).initNewWarehouseLogic();
+      } else {
+        (window as any).initWarehouseLogic?.();
+      }
+    }
     if (state.currentPage === 'bakim-planlama') (window as any).initMaintenancePlanning?.();
     // Initial sync if online
     if (navigator.onLine && (window as any).syncOfflineReports) {
@@ -744,43 +777,82 @@ const render = async (options: { skipShell?: boolean } = {}) => {
   }
 }
 
-import { PurchaseRequestsPage } from './pages/PurchaseRequests';
-
 const getContent = async () => {
   switch (state.currentPage) {
-    case 'dashboard': return await DashboardPage();
-
-    case 'new-task': return await NewTaskForm();
+    case 'dashboard': {
+      const { DashboardPage } = await import('./pages/Dashboard');
+      return await DashboardPage();
+    }
+    case 'new-task': {
+      const { NewTaskForm } = await import('./components/FormWizard');
+      return await NewTaskForm();
+    }
     case 'form-ariza': {
+      const { FaultFormPage } = await import('./pages/FaultForm');
       return FaultFormPage(state.activeTask);
     }
     case 'form-template-edit': {
+      const { FaultFormPage } = await import('./pages/FaultForm');
       return FaultFormPage({ id: 'TEMPLATE_MODE', secilenSablon: state.selectedTemplate || 'ŞABLON DÜZENLE' } as any);
     }
     case 'task-create': {
+      const { TaskCreationForm } = await import('./pages/TaskCreation');
       return await TaskCreationForm(state.selectedTemplate || 'Arıza Formu');
     }
-    case 'inventory': return InventoryPage();
+    case 'inventory': {
+      const { InventoryPage } = await import('./pages/Inventory');
+      return InventoryPage();
+    }
     case 'visual-bom': {
       const { VisualBOMPage } = await import('./pages/VisualBOM');
       return await VisualBOMPage();
     }
-    case 'purchase-requests': return await PurchaseRequestsPage();
-    case 'turbines': return TurbinesPage();
-    case 'teams': return TeamsPage();
-    case 'tasks': return await TasksPage();
-    case 'users': return await UserManagementPage();
-    case 'warehouses': return await NewWarehousePage(state.selectedWarehouseId);
-    case 'transfers': return await TransferPage(state.userProfile);
-    case 'templates': return await TemplatesPage();
+    case 'purchase-requests': {
+      const { PurchaseRequestsPage } = await import('./pages/PurchaseRequests');
+      return await PurchaseRequestsPage();
+    }
+    case 'turbines': {
+      const { TurbinesPage } = await import('./pages/Turbines');
+      return TurbinesPage();
+    }
+    case 'teams': {
+      const { TeamsPage } = await import('./pages/Teams');
+      return TeamsPage();
+    }
+    case 'tasks': {
+      const { TasksPage } = await import('./pages/Tasks');
+      return await TasksPage();
+    }
+    case 'users': {
+      const { UserManagementPage } = await import('./pages/UserManagement');
+      return await UserManagementPage();
+    }
+    case 'warehouses': {
+      const { NewWarehousePage } = await import('./pages/NewWarehouses');
+      return await NewWarehousePage(state.selectedWarehouseId);
+    }
+    case 'transfers': {
+      const { TransferPage } = await import('./pages/Transfers');
+      return await TransferPage(state.userProfile);
+    }
+    case 'templates': {
+      const { TemplatesPage } = await import('./pages/Templates');
+      return await TemplatesPage();
+    }
     case 'analytics': {
+      const { AnalyticsPage } = await import('./pages/Analytics');
       return await AnalyticsPage();
     }
-    case 'reports-archive': return await ReportArchivePage(state.selectedReportSiteId);
+    case 'reports-archive': {
+      const { ReportArchivePage } = await import('./pages/ReportArchive');
+      return await ReportArchivePage(state.selectedReportSiteId);
+    }
     case 'global-history': {
+      const { GlobalWarehouseHistoryPage } = await import('./pages/GlobalWarehouseHistory');
       return await GlobalWarehouseHistoryPage();
     }
     case 'MALZEME_YONETIMI': {
+      const { MaterialManagementPage } = await import('./pages/MaterialManagement');
       return await MaterialManagementPage(state.userProfile);
     }
     case 'material-analytics': {
@@ -796,21 +868,38 @@ const getContent = async () => {
       }, 50);
       return await OnlineUsersPage();
     }
-    case 'siparis': return await SiparisPage(state.userProfile);
+    case 'siparis': {
+      const { SiparisPage } = await import('./pages/Siparis');
+      return await SiparisPage(state.userProfile);
+    }
     case 'bakim-planlama': {
+      const { MaintenancePlanningPage } = await import('./pages/MaintenancePlanning');
       return await MaintenancePlanningPage();
     }
     case 'bearing-analysis': {
+      const { BearingAnalysisPage } = await import('./pages/BearingAnalysis');
       return await BearingAnalysisPage();
     }
     case 'predictive-agent': {
+      const { PredictiveAgentPage } = await import('./pages/PredictiveAgent');
       return PredictiveAgentPage();
     }
     case 'tsi-library': {
+      const { TsiLibraryPage } = await import('./pages/TsiLibrary');
       return await TsiLibraryPage();
     }
-    case 'asset-custody': return await AssetCustodyPage();
-    case 'tickets-page': return await TicketsPage();
+    case 'asset-custody': {
+      const { AssetCustodyPage } = await import('./pages/AssetCustody');
+      return await AssetCustodyPage();
+    }
+    case 'tickets-page': {
+      const { TicketsPage } = await import('./pages/Tickets');
+      return await TicketsPage();
+    }
+    case 'image-pool': {
+      const { ImagePoolPage } = await import('./pages/ImagePool');
+      return await ImagePoolPage();
+    }
     default: return `<h2>Sayfa Bulunamadı</h2>`
   }
 }

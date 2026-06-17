@@ -106,6 +106,26 @@ export class FaultFormController {
                         siteId = w.currentTaskContext.task.siteId;
                     }
 
+                    let userProfile = (window as any).appState?.userProfile;
+                    if (!userProfile) {
+                        try {
+                            const storedFallback = localStorage.getItem('dh_auth_fallback');
+                            if (storedFallback) {
+                                const authData = JSON.parse(storedFallback);
+                                const uid = authData?.user?.uid;
+                                if (uid) {
+                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
+                                    if (cachedProfile) {
+                                        userProfile = JSON.parse(cachedProfile);
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    if (userProfile?.team) {
+                        siteId = `team_${userProfile.team.replace(/\s+/g, '_')}`;
+                    }
+
                     let stockQty = 0;
                     if (siteId) {
                         try {
@@ -1620,13 +1640,35 @@ export class FaultFormController {
                     await serviceReportService.saveReport(reportData, files);
                     
                     // Stock update
-                    if (siteId && reportData.materials && reportData.materials.length > 0) {
+                    let userProfile = (window as any).appState?.userProfile;
+                    if (!userProfile) {
+                        try {
+                            const storedFallback = localStorage.getItem('dh_auth_fallback');
+                            if (storedFallback) {
+                                const authData = JSON.parse(storedFallback);
+                                const uid = authData?.user?.uid;
+                                if (uid) {
+                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
+                                    if (cachedProfile) {
+                                        userProfile = JSON.parse(cachedProfile);
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    
+                    let deductionWarehouseId = siteId;
+                    if (userProfile?.team) {
+                        deductionWarehouseId = `team_${userProfile.team.replace(/\s+/g, '_')}`;
+                    }
+
+                    if (deductionWarehouseId && reportData.materials && reportData.materials.length > 0) {
                         setBtnStatus('STOK DÜŞÜLÜYOR...');
                         for (const mat of reportData.materials) {
                             const typeUpper = mat.type?.toUpperCase();
                             const isTakilan = !mat.type || typeUpper === 'T';
                             if (mat.sapNo && mat.used > 0 && isTakilan) {
-                                await warehouseService.updateStockBySap(siteId, mat.sapNo, -mat.used, {
+                                await warehouseService.updateStockBySap(deductionWarehouseId, mat.sapNo, -mat.used, {
                                     user: currentUser?.email || 'Sistem',
                                     reason: 'Saha Raporu ile Malzeme Kullanımı',
                                     reportNo: reportData.reportNo,

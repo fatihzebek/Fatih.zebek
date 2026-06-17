@@ -229,6 +229,17 @@ class WarehouseService {
   async updateMaterial(id: string, itemId: string, updates: Partial<InventoryItem>) {
     const warehouseId = this.resolveWarehouseId(id);
     const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
+    
+    if (warehouseId.startsWith('team_') && updates.quantity !== undefined && updates.quantity <= 0) {
+      await deleteDoc(docRef);
+      const cached = this.inventoryCache.get(warehouseId);
+      if (cached) {
+        cached.data = cached.data.filter(i => i.id !== itemId);
+        cached.timestamp = Date.now();
+      }
+      return;
+    }
+
     await updateDoc(docRef, {
       ...updates,
       lastUpdated: serverTimestamp()
@@ -367,6 +378,46 @@ class WarehouseService {
         console.warn("Failed to fetch global image pool", err);
     }
     return pool;
+  }
+
+  async deleteGlobalMaterialImage(sapNo: string) {
+    if (!sapNo) return;
+    
+    // 1. Delete from GlobalMaterialImages
+    try {
+        const cleanSapNo = String(sapNo).trim();
+        const safeSapNo = cleanSapNo.replace(/\//g, '_');
+        await deleteDoc(doc(db, 'GlobalMaterialImages', safeSapNo));
+        const stripped = cleanSapNo.replace(/^0+/, '');
+        if (stripped) {
+            await deleteDoc(doc(db, 'GlobalMaterialImages', stripped));
+        }
+    } catch(err) {
+        console.warn("Failed to delete from global image pool", err);
+    }
+    
+    // 2. Clear imageUrl in all warehouses' inventory_v2 for this sapNo
+    const warehouses = dataService.getWarehouses();
+    const updatePromises = warehouses.map(async (w) => {
+      try {
+        const colRef = collection(db, 'warehouses', w.id, 'inventory_v2');
+        const q = query(colRef, where('sapNo', '==', sapNo));
+        const snap = await getDocs(q);
+        
+        const docUpdates = snap.docs.map(document => 
+           updateDoc(doc(db, 'warehouses', w.id, 'inventory_v2', document.id), { imageUrl: '' })
+         );
+        await Promise.all(docUpdates);
+        
+        // Clear local cache for this warehouse
+        this.inventoryCache.delete(w.id);
+      } catch (err) {
+        console.error(`Failed to clear image for sap ${sapNo} in warehouse ${w.id}`, err);
+      }
+    });
+    
+    await Promise.all(updatePromises);
+    console.log(`[GlobalDelete] Successfully deleted image for SAP: ${sapNo} across all warehouses.`);
   }
 
   async clearInventory(id: string) {
@@ -683,10 +734,14 @@ class WarehouseService {
       
       const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
       const newQty = currentQty + delta;
-      await updateDoc(docRef, {
-        quantity: newQty,
-        lastUpdated: serverTimestamp()
-      });
+      if (warehouseId.startsWith('team_') && newQty <= 0) {
+        await deleteDoc(docRef);
+      } else {
+        await updateDoc(docRef, {
+          quantity: newQty,
+          lastUpdated: serverTimestamp()
+        });
+      }
     }
 
     await this.addLog(warehouseId, {

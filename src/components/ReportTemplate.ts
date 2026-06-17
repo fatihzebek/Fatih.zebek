@@ -160,7 +160,6 @@ export const renderReportPDF = (report: ServiceReport) => {
         </tr>`;
     };
 
-    checklistHtml += `<div class="html2pdf__page-break"></div>`;
     checklistHtml += `<div style="padding-top: 5px;">`;
     
     
@@ -342,7 +341,7 @@ let ohsHtml = '';
           }
         }
 
-        #pdf-container table { display: table; width: 100%; border-collapse: collapse; }
+        #pdf-container table { display: table; width: 100%; border-collapse: collapse; min-width: 0 !important; }
         #pdf-container table tr { page-break-inside: avoid; break-inside: avoid; }
         #pdf-container table th, #pdf-container table td { word-wrap: break-word; }
         #pdf-container .pdf-no-break { page-break-inside: avoid; break-inside: avoid; }
@@ -356,12 +355,9 @@ let ohsHtml = '';
       <!-- Header -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #002d6b; padding-bottom: 15px;">
         <div style="display: flex; gap: 15px; align-items: center;">
-          <div style="flex-shrink: 0;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" style="width: 70px; height: 70px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-              <rect width="120" height="120" fill="#002d6b"/>
-              <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="75" fill="#ffffff" letter-spacing="-2">dh</text>
-            </svg>
-          </div>
+            <div style="flex-shrink: 0; width: 70px; height: 70px; background-color: #002d6b; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+              <span style="font-family: Arial, sans-serif; font-weight: 900; font-size: 44px; color: #ffffff; letter-spacing: -3px; line-height: 1; display: inline-block; margin-top: -2px;">dh</span>
+            </div>
           <div>
             <h1 style="font-size: 1.6rem; margin: 0 0 4px; font-weight: 900; letter-spacing: 0.5px; color: #002d6b;">DEMİRER HOLDİNG</h1>
             <div style="font-size: 1.1rem; color: #555; font-weight: 700;">TEKNİK SERVİS ${isMaintenance ? 'BAKIM' : 'ARIZA'} RAPORU</div>
@@ -490,16 +486,16 @@ let ohsHtml = '';
           <span style="font-weight: 600; font-size: 1.14rem;">MÇF No: <strong style="color: #cc0000;">${report.matFormNo || '-'}</strong></span>
         </div>
         <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem; text-align: center;">
-          <tr style="background: #f5f7fa;">
-            <th style="border: 1px solid #bbb; padding: 6px; width: 35px; font-weight: 700;">POZ</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 30px; font-weight: 700;">S/T</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 70px; font-weight: 700;">SAP NO</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 70px; font-weight: 700;">SERİ NO</th>
-            <th style="border: 1px solid #bbb; padding: 6px; text-align: left; font-weight: 700;">MALZEME AÇIKLAMASI</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 70px; font-weight: 700;">DEPODAN ALINAN</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 60px; font-weight: 700;">DEPOYA İADE</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 70px; font-weight: 700;">KULLANILAN</th>
-            <th style="border: 1px solid #bbb; padding: 6px; width: 55px; font-weight: 700;">DEFECT</th>
+          <tr style="background: #f5f7fa; font-size: 0.8rem; line-height: 1.1;">
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 35px; font-weight: 700; vertical-align: middle;">POZ</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 30px; font-weight: 700; vertical-align: middle;">S/T</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">SAP<br>NO</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">SERİ<br>NO</th>
+            <th style="border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-weight: 700; vertical-align: middle;">MALZEME AÇIKLAMASI</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">DEPODAN<br>ALINAN</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 60px; font-weight: 700; vertical-align: middle;">DEPOYA<br>İADE</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">KULLANILAN</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 55px; font-weight: 700; vertical-align: middle;">DEFECT</th>
           </tr>
           ${report.materials.length > 0 ? report.materials.map(mat => `
             <tr>

@@ -42,6 +42,114 @@ export const MaterialManagementPage = async (userProfile: any) => {
     .sort(([, a], [, b]) => b.count - a.count)
     .slice(0, 1)[0];
 
+  (window as any).mcfMaterials = mcfMaterials;
+  let currentMcfPage = 1;
+  const mcfItemsPerPage = 50;
+
+  (window as any).changeMcfPage = (page: number) => {
+     currentMcfPage = page;
+     (window as any).renderMcfTable();
+  };
+
+  (window as any).filterMcf = (val: string) => {
+     currentMcfPage = 1;
+     (window as any).renderMcfTable();
+  };
+
+  (window as any).renderMcfTable = () => {
+     const tbody = document.getElementById('mcf-tbody');
+     if (!tbody) return;
+
+     const searchInput = document.getElementById('mcf-search') as HTMLInputElement;
+     const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+     // Sort materials by date descending
+     const sorted = [...(window as any).mcfMaterials].sort((a, b) => {
+       const dateA = new Date(a.date).getTime() || 0;
+       const dateB = new Date(b.date).getTime() || 0;
+       return dateB - dateA;
+     });
+
+     const filtered = sorted.filter(m => {
+       const sap = String(m.sapNo || '').toLowerCase();
+       const desc = String(m.description || '').toLowerCase();
+       const site = String(m.siteName || '').toLowerCase();
+       const team = String(m.team || '').toLowerCase();
+       return term === '' || sap.includes(term) || desc.includes(term) || site.includes(term) || team.includes(term);
+     });
+
+     const totalItems = filtered.length;
+     const totalPages = Math.ceil(totalItems / mcfItemsPerPage) || 1;
+
+     if (currentMcfPage > totalPages) currentMcfPage = totalPages;
+     if (currentMcfPage < 1) currentMcfPage = 1;
+
+     const startIndex = (currentMcfPage - 1) * mcfItemsPerPage;
+     const endIndex = Math.min(startIndex + mcfItemsPerPage, totalItems);
+     const paginated = filtered.slice(startIndex, endIndex);
+
+     if (paginated.length === 0) {
+       tbody.innerHTML = `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-dim);">Aramaya uygun sarfiyat bulunamadı.</td></tr>`;
+     } else {
+       tbody.innerHTML = paginated.map(m => `
+         <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+           <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-dim);">${m.date ? new Date(m.date).toLocaleDateString('tr-TR') : '-'}</td>
+           <td style="padding: 1rem; font-weight: 700; color: var(--accent-blue);">${m.matFormNo}</td>
+           <td style="padding: 1rem;">
+              <div style="font-weight: 600;">${m.siteName}</div>
+              <div style="font-size: 0.7rem; opacity: 0.5;">WEC ${m.reportNo.split('-')[0]}</div>
+           </td>
+           <td style="padding: 1rem;">
+              <div style="font-weight: 600;">${m.description}</div>
+              <div style="font-size: 0.7rem; color: var(--text-dim);">${m.sapNo}</div>
+           </td>
+           <td style="padding: 1rem; text-align: center; font-weight: 900; color: var(--accent-blue);">${m.used}</td>
+           <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-dim);">${m.team}</td>
+         </tr>
+       `).join('');
+     }
+
+     const paginationDiv = document.getElementById('mcf-pagination');
+     if (paginationDiv) {
+       if (totalItems === 0) {
+         paginationDiv.innerHTML = '';
+         return;
+       }
+       const showingStart = startIndex + 1;
+       const showingEnd = endIndex;
+       paginationDiv.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 1.2rem; background-color: rgba(0,0,0,0.3); border-top: 1px solid rgba(0, 243, 255, 0.1); flex-wrap: wrap; gap: 1rem; border-radius: 0 0 20px 20px;">
+            <div style="color: var(--text-dim); font-size: 0.8rem;">
+              <span>${totalItems} kayıt arasından <strong>${showingStart}-${showingEnd}</strong> arası gösteriliyor</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <button onclick="window.changeMcfPage(1)" ${currentMcfPage === 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #111827; border: 1px solid rgba(0, 243, 255, 0.2); color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
+                <i class="fa-solid fa-angles-left"></i>
+              </button>
+              <button onclick="window.changeMcfPage(${currentMcfPage - 1})" ${currentMcfPage === 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #111827; border: 1px solid rgba(0, 243, 255, 0.2); color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
+                <i class="fa-solid fa-angle-left"></i>
+              </button>
+              
+              <span style="color: #E2E8F0; font-size: 0.8rem; padding: 0 0.5rem; font-weight: 600;">Sayfa ${currentMcfPage} / ${totalPages}</span>
+              
+              <button onclick="window.changeMcfPage(${currentMcfPage + 1})" ${currentMcfPage === totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #111827; border: 1px solid rgba(0, 243, 255, 0.2); color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
+                <i class="fa-solid fa-angle-right"></i>
+              </button>
+              <button onclick="window.changeMcfPage(${totalPages})" ${currentMcfPage === totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #111827; border: 1px solid rgba(0, 243, 255, 0.2); color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
+                <i class="fa-solid fa-angles-right"></i>
+              </button>
+            </div>
+          </div>
+       `;
+     }
+  };
+
+  setTimeout(() => {
+     if ((window as any).renderMcfTable) {
+       (window as any).renderMcfTable();
+     }
+  }, 100);
+
   const totalRequestedItems = requests.reduce((acc, r) => acc + (r.items?.length || 0), 0);
 
   // --- UI RENDER ---
@@ -313,9 +421,14 @@ export const MaterialManagementPage = async (userProfile: any) => {
 
       <!-- MCF View -->
       <div id="mcf-view" style="display: none;">
-         <div class="request-card">
-            <h3 style="margin: 0 0 2rem 0; color: white;">SAHA SARFİYATLARI VE ANALİZ</h3>
-            <div style="background: rgba(0,0,0,0.2); border-radius: 20px; overflow: hidden;">
+             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+               <h3 style="margin: 0; color: white;">SAHA SARFİYATLARI VE ANALİZ</h3>
+               <div style="position: relative;">
+                  <i class="fa-solid fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.85rem;"></i>
+                  <input type="text" id="mcf-search" oninput="window.filterMcf(this.value)" placeholder="Malzeme adı veya SAP numarası ara..." style="width: 320px; height: 42px; background-color: #0A0E17; border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 12px; color: #FFFFFF; padding: 0 1rem 0 2.5rem; outline: none; font-size: 0.85rem;" />
+               </div>
+            </div>
+            <div style="background: rgba(0,0,0,0.2); border-radius: 20px 20px 0 0; overflow: hidden;">
                <table style="width: 100%; border-collapse: collapse;">
                   <thead style="background: rgba(255,255,255,0.02);">
                     <tr>
@@ -327,25 +440,11 @@ export const MaterialManagementPage = async (userProfile: any) => {
                       <th style="padding: 1.2rem; text-align: left; color: var(--text-dim); font-size: 0.75rem;">EKİP</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    ${mcfMaterials.map(m => `
-                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                        <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-dim);">${m.date}</td>
-                        <td style="padding: 1rem; font-weight: 700; color: var(--accent-blue);">${m.matFormNo}</td>
-                        <td style="padding: 1rem;">
-                           <div style="font-weight: 600;">${m.siteName}</div>
-                           <div style="font-size: 0.7rem; opacity: 0.5;">WEC ${m.reportNo.split('-')[0]}</div>
-                        </td>
-                        <td style="padding: 1rem;">
-                           <div style="font-weight: 600;">${m.description}</div>
-                           <div style="font-size: 0.7rem; color: var(--text-dim);">${m.sapNo}</div>
-                        </td>
-                        <td style="padding: 1rem; text-align: center; font-weight: 900; color: var(--accent-blue);">${m.used}</td>
-                        <td style="padding: 1rem; font-size: 0.8rem; color: var(--text-dim);">${m.team}</td>
-                      </tr>
-                    `).join('')}
+                  <tbody id="mcf-tbody">
+                     <tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-dim);">Yükleniyor...</td></tr>
                   </tbody>
                </table>
+               <div id="mcf-pagination"></div>
             </div>
          </div>
       </div>

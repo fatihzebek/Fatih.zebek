@@ -1,6 +1,5 @@
-import { db, storage } from '../firebase';
-import { collection, doc, getDocs, addDoc, deleteDoc, query, orderBy, serverTimestamp, setDoc, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { db } from '../firebase';
+import { collection, doc, getDocs, addDoc, deleteDoc, query, orderBy, serverTimestamp, onSnapshot, writeBatch, where } from 'firebase/firestore';
 
 export interface TsiCategory {
   id: string;
@@ -18,6 +17,9 @@ export interface TsiDocument {
   storagePath: string;
   uploadedBy: string; // email or name
   createdAt: any;
+  isChunked?: boolean;
+  chunkCount?: number;
+  isFirestoreBase64?: boolean;
 }
 
 class TsiService {
@@ -64,59 +66,141 @@ class TsiService {
   }
 
   async uploadDocument(file: File, title: string, categoryId: string, uploadedBy: string, onProgress?: (progress: number) => void): Promise<void> {
-    const safeName = file.name.replace(/[^a-zA-Z0-9.\-]/g, '_');
-    const storagePath = `tsi_files/${categoryId}/${Date.now()}_${safeName}`;
-    const storageRef = ref(storage, storagePath);
-    
-    let simulatedProgress = 10;
-    if (onProgress) onProgress(simulatedProgress);
-    
-    // Simulate progress every 500ms up to 90%
-    const progressInterval = setInterval(() => {
-      if (simulatedProgress < 90) {
-        simulatedProgress += Math.floor(Math.random() * 5) + 1;
-        if (simulatedProgress > 90) simulatedProgress = 90;
-        if (onProgress) onProgress(simulatedProgress);
-      }
-    }, 500);
+    const CHUNK_SIZE = 800 * 1024; // 800KB characters to stay safe under Firestore 1MB limit per document
     
     try {
-      await uploadBytes(storageRef, file);
-      if (onProgress) onProgress(95);
-      
-      const downloadUrl = await getDownloadURL(storageRef);
-      
+      // 1. Read file as Base64
+      const base64String = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip data url prefix (e.g. data:application/pdf;base64,)
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+      });
+
+      // 2. Split into chunks
+      const chunkCount = Math.ceil(base64String.length / CHUNK_SIZE);
+      const documentId = `doc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      // 3. Upload chunks to Firestore in batches
+      const batchSize = 10;
+      for (let i = 0; i < chunkCount; i += batchSize) {
+        const batch = writeBatch(db);
+        const maxJ = Math.min(i + batchSize, chunkCount);
+        
+        for (let j = i; j < maxJ; j++) {
+          const start = j * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, base64String.length);
+          const chunkData = base64String.substring(start, end);
+          
+          const chunkRef = doc(collection(db, 'tsi_chunks'));
+          batch.set(chunkRef, {
+            documentId: documentId,
+            index: j,
+            data: chunkData
+          });
+        }
+        await batch.commit();
+
+        if (onProgress) {
+          const progress = Math.round(((i + batchSize) / chunkCount) * 95);
+          onProgress(Math.min(progress, 95));
+        }
+      }
+
+      // 4. Save metadata
       await addDoc(collection(db, 'tsi_documents'), {
         title,
         categoryId,
-        fileUrl: downloadUrl,
+        fileUrl: 'firestore-base64', // Magic string to indicate custom handling
         fileName: file.name,
         fileSize: file.size,
-        storagePath: storagePath,
+        storagePath: documentId, // Reusing storagePath to hold our custom ID
         uploadedBy,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        isChunked: true,
+        chunkCount: chunkCount,
+        isFirestoreBase64: true
       });
       
-      clearInterval(progressInterval);
       if (onProgress) onProgress(100);
+
     } catch (e) {
-      clearInterval(progressInterval);
-      console.error("Upload Error: ", e);
+      console.error("[Upload] Error: ", e);
       throw e;
     }
   }
 
-  async deleteDocument(id: string, storagePath: string): Promise<void> {
+  async getChunkedFileUrl(docData: TsiDocument, onProgress?: (progress: number) => void): Promise<string> {
+    if (!docData.isFirestoreBase64) {
+      return docData.fileUrl; // Fallback for old links
+    }
+
+    // 1. Fetch chunks from Firestore
+    const documentId = docData.storagePath;
+    const q = query(collection(db, 'tsi_chunks'), where('documentId', '==', documentId));
+    const snapshot = await getDocs(q);
+
+    // 2. Sort chunks by index
+    const chunks = snapshot.docs.map(d => d.data());
+    chunks.sort((a, b) => a.index - b.index);
+
+    if (onProgress) onProgress(50);
+
+    // 3. Rebuild Base64 string
+    const fullBase64 = chunks.map(c => c.data).join('');
+
+    // 4. Convert Base64 to Blob
+    const byteCharacters = atob(fullBase64);
+    const byteArrays = [];
+    const sliceSize = 512;
+
+    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+      const slice = byteCharacters.slice(offset, offset + sliceSize);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+
+      if (onProgress && offset % (sliceSize * 100) === 0) {
+        onProgress(50 + Math.round((offset / byteCharacters.length) * 50));
+      }
+    }
+
+    const blob = new Blob(byteArrays, { type: 'application/pdf' });
+    if (onProgress) onProgress(100);
+
+    return URL.createObjectURL(blob);
+  }
+
+  async deleteDocument(id: string, docData: TsiDocument): Promise<void> {
     try {
-      if (storagePath) {
-        const fileRef = ref(storage, storagePath);
-        await deleteObject(fileRef);
+      if (docData.isFirestoreBase64) {
+        // Delete all chunks
+        const documentId = docData.storagePath;
+        const q = query(collection(db, 'tsi_chunks'), where('documentId', '==', documentId));
+        const snapshot = await getDocs(q);
+        
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(d => {
+          batch.delete(d.ref);
+        });
+        await batch.commit();
       }
     } catch (err) {
-      console.warn("Storage file delete error (maybe already deleted):", err);
+      console.warn("Chunk delete error:", err);
     }
+    
+    // Delete metadata
     await deleteDoc(doc(db, 'tsi_documents', id));
   }
 }
 
 export const tsiService = new TsiService();
+

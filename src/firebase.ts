@@ -18,12 +18,15 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 const app = initializeApp(firebaseConfig);
 
 // Initialize App Check with reCAPTCHA v3 ONLY in production
+// Geçici olarak iptal edildi: Şirket ağlarında reCAPTCHA engellendiği için yüklemeleri tamamen donduruyor.
+/*
 if (typeof window !== 'undefined' && !import.meta.env.DEV) {
   initializeAppCheck(app, {
     provider: new ReCaptchaV3Provider('6LcR6ggtAAAAAGECggL-b3sI9AJqvC921v2knrEf'),
     isTokenAutoRefreshEnabled: true
   });
 }
+*/
 
 // Initialize Services with Offline Persistence
 export const db = initializeFirestore(app, {

@@ -25,10 +25,12 @@ export class ImageCompressor {
       }
 
       const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+      const timeoutId = setTimeout(() => reject(new Error('Resim işleme zaman aşımına uğradı. Desteklenmeyen format (Örn: HEIC) olabilir.')), 10000);
+
+      reader.onerror = () => { clearTimeout(timeoutId); reject(new Error('Dosya okunamadı.')); };
       reader.onload = (e) => {
         const img = new Image();
-        img.onerror = () => reject(new Error('Geçersiz resim dosyası.'));
+        img.onerror = () => { clearTimeout(timeoutId); reject(new Error('Geçersiz veya desteklenmeyen resim dosyası (Örn: iPhone HEIC).')); };
         img.onload = () => {
           let width = img.width;
           let height = img.height;
@@ -64,6 +66,7 @@ export class ImageCompressor {
           canvas.toBlob(
             (blob) => {
               if (!blob) {
+                clearTimeout(timeoutId);
                 return reject(new Error('Görsel sıkıştırılamadı.'));
               }
 
@@ -83,6 +86,7 @@ export class ImageCompressor {
                 lastModified: Date.now()
               });
 
+              clearTimeout(timeoutId);
               resolve(compressedFile);
             },
             'image/jpeg',
