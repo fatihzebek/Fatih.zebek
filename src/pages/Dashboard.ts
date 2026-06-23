@@ -53,7 +53,14 @@ export const DashboardPage = async () => {
         // Find last maintenance report for this turbine
         const turbineReports = reports.filter(r => r.turbineSerial === t.id);
         const lastMaint = turbineReports
-          .filter(r => r.type?.toLowerCase().includes('ana') || r.type?.toLowerCase().includes('yağ') || r.type?.toLowerCase().includes('yag'))
+          .filter(r => {
+            const typeLower = (r.type || '').toLowerCase();
+            const templateLower = (r.templateName || '').toLowerCase();
+            const faultLower = (r.faultCode || '').toLowerCase();
+            return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
+                   templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
+                   faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
+          })
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
         if (lastMaint) {
@@ -61,7 +68,8 @@ export const DashboardPage = async () => {
           const nextDate = new Date(lastDate);
           nextDate.setMonth(nextDate.getMonth() + 6); // Add 6 months
 
-          const isLastAna = lastMaint.type.toLowerCase().includes('ana');
+          const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
+          const isLastAna = searchStr.includes('ana');
           const nextType = isLastAna ? 'YAĞLAMA BAKIMI' : 'ANA BAKIM';
           const lastType = isLastAna ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
 
