@@ -389,12 +389,7 @@ export async function renderKkdPublicQueryPage(serialNumber: string): Promise<st
               <div class="field-label">Üretim Tarihi</div>
               <div class="field-value">${formatDisplayDate(item.manufactureDate)}</div>
             </div>
-            <div class="field-row">
-              <div class="field-label">Kullanım Ömrü</div>
-              <div class="field-value ${lifeInfo.expired ? 'text-red' : ''}" style="color:${lifeInfo.expired ? '#EF4444' : '#10B981'};">
-                ${lifeInfo.text} (${formatDisplayDate(lifeInfo.expiryDate)} son)
-              </div>
-            </div>
+
             <div class="field-row">
               <div class="field-label">Zimmetli Personel</div>
               <div class="field-value">${item.assignedPerson || 'Depo / Atanmamış'}</div>
