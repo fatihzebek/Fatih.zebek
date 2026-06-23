@@ -320,7 +320,7 @@ export async function renderKkdPublicQueryPage(serialNumber: string): Promise<st
               <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px; gap: 12px;">
                 <span style="color: #e2e8f0; text-align: left; line-height: 1.3;">${label}</span>
                 <span style="flex-shrink: 0; font-weight: bold; text-align: right; color: ${value ? '#10B981' : '#EF4444'};">
-                  ${value ? 'TAM' : 'UYSUZ'}
+                  ${value ? 'UYGUN' : 'UYGUN DEĞİL'}
                 </span>
               </div>
             `;
