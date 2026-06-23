@@ -85,7 +85,7 @@ export const renderReportPDF = (report: ServiceReport) => {
   const totalChecklist = checklist.length;
 
   // Rapor tipi belirleme
-  const isMaintenance = (report.type !== 'ARIZA') || hasChecklist;
+  const isMaintenance = report.type === 'BAKIM';
   const reportTitle = isMaintenance 
     ? `${report.templateName || 'BAKIM RAPORU'}` 
     : 'ARIZA RAPORU';
@@ -489,13 +489,10 @@ let ohsHtml = '';
           <tr style="background: #f5f7fa; font-size: 0.8rem; line-height: 1.1;">
             <th style="border: 1px solid #bbb; padding: 6px 2px; width: 35px; font-weight: 700; vertical-align: middle;">POZ</th>
             <th style="border: 1px solid #bbb; padding: 6px 2px; width: 30px; font-weight: 700; vertical-align: middle;">S/T</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">SAP<br>NO</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">SERİ<br>NO</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 85px; font-weight: 700; vertical-align: middle;">SAP NO</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 100px; font-weight: 700; vertical-align: middle;">SERİ NO</th>
             <th style="border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-weight: 700; vertical-align: middle;">MALZEME AÇIKLAMASI</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">DEPODAN<br>ALINAN</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 60px; font-weight: 700; vertical-align: middle;">DEPOYA<br>İADE</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 70px; font-weight: 700; vertical-align: middle;">KULLANILAN</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 55px; font-weight: 700; vertical-align: middle;">DEFECT</th>
+            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 80px; font-weight: 700; vertical-align: middle;">ADET</th>
           </tr>
           ${report.materials.length > 0 ? report.materials.map(mat => `
             <tr>
@@ -504,13 +501,10 @@ let ohsHtml = '';
               <td style="border: 1px solid #bbb; padding: 5px;">${mat.sapNo}</td>
               <td style="border: 1px solid #bbb; padding: 5px;">${mat.serialNo || '-'}</td>
               <td style="border: 1px solid #bbb; padding: 5px; text-align: left;">${mat.description}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.received || 0}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.returned || 0}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.used || 0}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.defectCount || 0}</td>
+              <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700;">${mat.type === 'S' ? (mat.defectCount || 0) : (mat.used || 0)}</td>
             </tr>
           `).join('') : `
-            <tr><td colspan="9" style="border: 1px solid #bbb; padding: 15px; color: #999;">Malzeme kaydı bulunmamaktadır.</td></tr>
+            <tr><td colspan="6" style="border: 1px solid #bbb; padding: 15px; color: #999;">Malzeme kaydı bulunmamaktadır.</td></tr>
           `}
         </table>
       </div>

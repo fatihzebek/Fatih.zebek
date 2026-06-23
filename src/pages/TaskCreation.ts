@@ -24,7 +24,8 @@ export const TaskCreationForm = async (templateId: string) => {
   
   // State reset on entry
   currentStep = 1;
-  wizardData = { siteId: '', sahaBilgisi: '', turbinSeriNo: '', kategori: templateId, assignedTeam: '', yoneticiNotu: '', weatherStatus: 'APPROVED', weatherBypassed: false, forceTeamAssign: false };
+  const initialKategori = (templateId || '').toLowerCase().includes('ariza') || (templateId || '').toLowerCase().includes('arıza') ? 'form-ariza' : 'Bakım Formu';
+  wizardData = { siteId: '', sahaBilgisi: '', turbinSeriNo: '', kategori: initialKategori, assignedTeam: '', yoneticiNotu: '', weatherStatus: 'APPROVED', weatherBypassed: false, forceTeamAssign: false };
   weatherResult = null;
   isWeatherChecking = false;
 
@@ -218,10 +219,41 @@ export const TaskCreationForm = async (templateId: string) => {
               <label>MÜSAİT EKİPLER (TEAM 01-15)</label>
               <select id="wiz-team" class="cyber-input" onchange="window.updateWizData('assignedTeam', this.value)">
                 <option value="">Ekip Seçiniz...</option>
-                ${Array.from({length: 15}, (_, i) => {
-                  const t = `Team ${String(i + 1).padStart(2, '0')}`;
-                  return `<option value="${t}" ${wizardData.assignedTeam === t ? 'selected' : ''}>${formatTeamName(t)}</option>`;
-                }).join('')}
+                ${(() => {
+                  const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+                  const userRole = (currentUser?.role || 'GUEST').toUpperCase();
+                  const userTeam = ((window as any).currentUserTeam || currentUser?.team || '').trim();
+                  
+                  const normalizeTeamName = (name: string): string => {
+                    if (!name) return '';
+                    const match = name.match(/\d+/);
+                    if (match) {
+                      const num = String(parseInt(match[0], 10)).padStart(2, '0');
+                      return `Team ${num}`;
+                    }
+                    return name.trim();
+                  };
+
+                  const normUserTeam = normalizeTeamName(userTeam);
+                  const managedTeams = (currentUser?.managedTeams || []).map((t: string) => normalizeTeamName(t)).filter(Boolean);
+                  
+                  const connectedTeams = new Set<string>();
+                  if (normUserTeam) connectedTeams.add(normUserTeam);
+                  managedTeams.forEach((t: string) => connectedTeams.add(t));
+
+                  const allTeams = Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`);
+                  
+                  let filteredTeams = allTeams;
+                  if (userRole !== 'ADMIN') {
+                    if (connectedTeams.size > 0) {
+                      filteredTeams = allTeams.filter((t: string) => connectedTeams.has(t));
+                    }
+                  }
+
+                  return filteredTeams.map((t: string) => `
+                    <option value="${t}" ${wizardData.assignedTeam === t ? 'selected' : ''}>${formatTeamName(t)}</option>
+                  `).join('');
+                })()}
               </select>
             </div>
             <div class="form-group" style="margin-top: 1.5rem;">
@@ -342,7 +374,7 @@ export const TaskCreationForm = async (templateId: string) => {
     try {
       const response = await workOrderAgent.createWorkOrderWizard({
         serialNumber: wizardData.turbinSeriNo,
-        type: wizardData.kategori,
+        type: wizardData.kategori === 'form-ariza' ? 'Arıza' : 'Bakım',
         teamId: wizardData.assignedTeam,
         description: wizardData.yoneticiNotu,
         weatherStatus: wizardData.weatherStatus || 'APPROVED',

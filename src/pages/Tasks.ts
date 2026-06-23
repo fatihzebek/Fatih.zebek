@@ -68,49 +68,108 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
 
   return `
     <div class="tasks-page-container">
-      <!-- Sidebar / Top Filter Navigation -->
+      <!-- Top Filter Navigation -->
       <div class="tasks-filter-sidebar">
-        <div class="glass-panel" style="padding: 1rem; border-top: 2px solid var(--accent-blue);">
-          <h3 style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.5rem; letter-spacing: 1px; padding-left: 0.5rem;">SANTRALLER</h3>
-          
+        <div class="glass-panel" style="padding: 0.6rem 0.8rem; background: rgba(10, 14, 23, 0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 0.2rem;">
           <div class="sidebar-nav">
-             <div class="nav-item ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" 
+             <div class="task-filter-item ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" 
                   onclick="window.handleSiteFilter('TÜMÜ')"
-                  style="padding: 0.8rem 1rem; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; transition: all 0.2s;">
-               <span><i class="fa-solid fa-layer-group" style="margin-right: 10px; width: 16px;"></i> TÜMÜ</span>
-               <span style="font-size: 0.7rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 10px;">${tasks.length}</span>
+                  style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
+               <i class="fa-solid fa-layer-group" style="font-size: 0.75rem;"></i>
+               <span>TÜMÜ</span>
+               <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${tasks.length}</span>
              </div>
 
              ${siteNames.map(id => {
                 const site = dataService.getSites().find(s => s.id === id);
                 const displayName = site ? site.name : id;
                 return `
-                <div class="nav-item ${activeSiteFilter === id ? 'active' : ''}" 
+                <div class="task-filter-item ${activeSiteFilter === id ? 'active' : ''}" 
                      onclick="window.handleSiteFilter('${id}')"
-                     style="padding: 0.8rem 1rem; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; transition: all 0.2s;">
-                  <span style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 0.85rem; flex: 1;">
-                    <i class="fa-solid fa-wind" style="margin-right: 10px; width: 16px;"></i> ${displayName}
-                  </span>
-                  <span style="font-size: 0.7rem; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 10px;">${grouped[id].length}</span>
+                     style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
+                  <i class="fa-solid fa-wind" style="font-size: 0.75rem;"></i>
+                  <span>${displayName}</span>
+                  <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${grouped[id].length}</span>
                 </div>
              `}).join('')}
           </div>
         </div>
+      </div>
         
         <style>
-          .nav-item:hover { background: rgba(255,255,255,0.04); }
-          .nav-item.active { 
-            background: linear-gradient(90deg, rgba(100, 255, 218, 0.08), transparent); 
-            color: #64ffda; 
-            border-left: 3px solid #64ffda;
-            font-weight: 700;
+          .tasks-page-container {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 1.2rem !important;
+          }
+          .tasks-filter-sidebar {
+            width: 100% !important;
+            position: relative !important;
+            top: 0 !important;
+            flex-shrink: 0 !important;
+          }
+          .sidebar-nav {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+          }
+          .task-filter-item {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            color: rgba(255, 255, 255, 0.6) !important;
+            border-radius: 20px !important;
+            padding: 8px 16px !important;
+            font-size: 0.8rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.3px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            border-left: none !important;
+          }
+          .task-filter-item:hover {
+            background: rgba(255, 255, 255, 0.07) !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+            color: #fff !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+          }
+          .task-filter-item.active { 
+            background: linear-gradient(135deg, rgba(20, 241, 149, 0.15), rgba(0, 243, 255, 0.1)) !important;
+            border-color: rgba(20, 241, 149, 0.4) !important;
+            color: #14f195 !important;
+            text-shadow: 0 0 8px rgba(20, 241, 149, 0.3);
+            font-weight: 700 !important;
+            box-shadow: 0 0 15px rgba(20, 241, 149, 0.15), inset 0 0 8px rgba(20, 241, 149, 0.05);
+            transform: translateY(-1px);
+            border-left: none !important;
+          }
+          .task-filter-item span:last-child {
+            font-size: 0.7rem !important;
+            background: rgba(0, 0, 0, 0.25) !important;
+            padding: 2px 8px !important;
+            border-radius: 20px !important;
+            color: rgba(255, 255, 255, 0.5) !important;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+          }
+          .task-filter-item.active span:last-child {
+            background: rgba(20, 241, 149, 0.2) !important;
+            color: #14f195 !important;
+            border-color: rgba(20, 241, 149, 0.25);
           }
           
           /* Tasks table premium styling */
           .tasks-table-panel {
+            background: rgba(10, 14, 23, 0.45) !important;
+            backdrop-filter: blur(20px) !important;
             border: 1px solid rgba(255,255,255,0.06) !important;
             border-radius: 16px !important;
             overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
           }
           .tasks-table-panel table {
             width: 100%;
@@ -119,27 +178,31 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             font-size: 0.85rem;
           }
           .tasks-table-panel thead tr {
-            background: linear-gradient(135deg, rgba(100, 255, 218, 0.04), rgba(0, 114, 255, 0.04)) !important;
+            background: linear-gradient(90deg, rgba(20, 241, 149, 0.05), rgba(0, 243, 255, 0.05)) !important;
           }
           .tasks-table-panel th {
-            padding: 16px 20px !important;
+            padding: 14px 18px !important;
             font-weight: 800;
-            color: rgba(255,255,255,0.5);
-            border-bottom: 1px solid rgba(100, 255, 218, 0.08) !important;
+            color: rgba(255,255,255,0.4);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
             vertical-align: middle !important;
             text-transform: uppercase;
             font-size: 0.68rem;
             letter-spacing: 1.5px;
+            font-family: 'Rajdhani', sans-serif;
           }
           .tasks-table-panel th i {
-            margin-right: 6px;
-            font-size: 0.6rem;
-            opacity: 0.6;
+            margin-right: 8px;
+            font-size: 0.75rem;
+            color: #00f3ff;
+            opacity: 0.8;
+            text-shadow: 0 0 8px rgba(0,243,255,0.4);
           }
           .tasks-table-panel td {
-            padding: 18px 20px !important;
+            padding: 14px 18px !important;
             vertical-align: middle !important;
-            border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+            border-bottom: 1px solid rgba(255,255,255,0.02) !important;
+            transition: all 0.3s ease;
           }
           .tasks-table-panel tr:last-child td {
             border-bottom: none !important;
@@ -147,16 +210,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           .tasks-table-panel tbody tr {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
+            background: transparent;
           }
           .tasks-table-panel tbody tr:hover {
-            background: rgba(100, 255, 218, 0.03) !important;
-            box-shadow: inset 3px 0 0 #64ffda;
+            background: rgba(0, 243, 255, 0.02) !important;
+            box-shadow: inset 4px 0 0 #00f3ff, 0 4px 20px rgba(0, 243, 255, 0.04) !important;
           }
           
           /* Row entrance animation */
           @keyframes taskRowIn {
-            from { opacity: 0; transform: translateX(-8px); }
-            to { opacity: 1; transform: translateX(0); }
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
           }
           .tasks-table-panel tbody tr {
             animation: taskRowIn 0.4s ease-out backwards;
@@ -166,42 +230,98 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           .tasks-table-panel tbody tr:nth-child(3) { animation-delay: 0.09s; }
           .tasks-table-panel tbody tr:nth-child(4) { animation-delay: 0.12s; }
           .tasks-table-panel tbody tr:nth-child(5) { animation-delay: 0.15s; }
+          .tasks-table-panel tbody tr:nth-child(6) { animation-delay: 0.18s; }
+          .tasks-table-panel tbody tr:nth-child(7) { animation-delay: 0.21s; }
+          .tasks-table-panel tbody tr:nth-child(8) { animation-delay: 0.24s; }
+
+          /* Status Dot */
+          .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 8px;
+            display: inline-block;
+          }
+          .status-dot.green { background: #14f195; box-shadow: 0 0 8px #14f195; animation: dotPulse 1.8s infinite ease-in-out; }
+          .status-dot.orange { background: #ffaa00; box-shadow: 0 0 8px #ffaa00; animation: dotPulse 1.8s infinite ease-in-out; }
+          .status-dot.purple { background: #d4a0ff; box-shadow: 0 0 8px #d4a0ff; animation: dotPulse 1.8s infinite ease-in-out; }
+          .status-dot.blue { background: #00f3ff; box-shadow: 0 0 8px #00f3ff; animation: dotPulse 1.8s infinite ease-in-out; }
+          .status-dot.gray { background: rgba(255,255,255,0.45); }
           
+          @keyframes dotPulse {
+            0% { opacity: 0.45; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.15); }
+            100% { opacity: 0.45; transform: scale(0.9); }
+          }
+
           /* Custom status badge */
           .status-badge {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 6px 14px !important;
-            border-radius: 20px !important;
+            padding: 4px 12px !important;
+            border-radius: 8px !important;
             font-size: 0.68rem !important;
             font-weight: 800 !important;
             text-transform: uppercase;
             white-space: nowrap !important;
-            letter-spacing: 0.8px;
-            height: 28px;
+            letter-spacing: 0.5px;
+            height: 26px;
             box-sizing: border-box;
             transition: all 0.3s ease;
           }
           .status-badge:hover {
-            transform: scale(1.05);
+            transform: scale(1.03);
           }
           .status-badge.delivered {
-            background: rgba(100, 255, 218, 0.1) !important;
-            color: #64ffda !important;
-            border: 1px solid rgba(100, 255, 218, 0.25) !important;
-            box-shadow: 0 0 12px rgba(100, 255, 218, 0.08) !important;
+            background: rgba(20, 241, 149, 0.08) !important;
+            color: #14f195 !important;
+            border: 1px solid rgba(20, 241, 149, 0.25) !important;
+            box-shadow: 0 0 12px rgba(20, 241, 149, 0.08) !important;
           }
           .status-badge.hold-weather-badge {
-            background: rgba(255, 170, 0, 0.12) !important;
+            background: rgba(255, 170, 0, 0.08) !important;
             color: #ffb74d !important;
-            border: 1px solid rgba(255, 170, 0, 0.3) !important;
-            box-shadow: 0 0 12px rgba(255, 170, 0, 0.1) !important;
-            animation: weather-pulse 2s infinite alternate;
+            border: 1px solid rgba(255, 170, 0, 0.2) !important;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.05) !important;
           }
-          @keyframes weather-pulse {
-            0% { box-shadow: 0 0 8px rgba(255, 170, 0, 0.1); }
-            100% { box-shadow: 0 0 18px rgba(255, 170, 0, 0.3); }
+          .status-badge.returned-badge {
+            background: rgba(155, 89, 182, 0.12) !important;
+            color: #d4a0ff !important;
+            border: 1px solid rgba(155, 89, 182, 0.25) !important;
+            box-shadow: 0 0 12px rgba(155, 89, 182, 0.06) !important;
+          }
+          .status-badge.created {
+            background: rgba(255, 170, 0, 0.06) !important;
+            color: #ffb74d !important;
+            border: 1px solid rgba(255, 170, 0, 0.2) !important;
+          }
+          .status-badge.completed {
+            background: rgba(255, 255, 255, 0.02) !important;
+            color: rgba(255, 255, 255, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          }
+
+          /* Turbine ID badge */
+          .turbine-id-badge {
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 800;
+            color: #64ffda;
+            font-size: 0.82rem;
+            letter-spacing: 0.5px;
+            background: rgba(100, 255, 218, 0.05);
+            border: 1px solid rgba(100, 255, 218, 0.15);
+            padding: 2px 8px;
+            border-radius: 6px;
+            display: inline-block;
+            box-shadow: 0 0 8px rgba(100, 255, 218, 0.04);
+            transition: all 0.25s ease;
+          }
+          .turbine-id-badge:hover {
+            background: rgba(100, 255, 218, 0.1) !important;
+            border-color: rgba(100, 255, 218, 0.35) !important;
+            box-shadow: 0 0 10px rgba(100, 255, 218, 0.1) !important;
+            transform: scale(1.02);
           }
 
           /* Custom task type badge */
@@ -209,41 +329,57 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             display: flex !important;
             flex-direction: column;
             justify-content: center;
-            background: linear-gradient(135deg, rgba(0, 114, 255, 0.06), rgba(100, 255, 218, 0.03));
-            color: var(--accent-blue);
-            padding: 10px 16px !important;
-            border-radius: 10px !important;
-            border: 1px solid rgba(0, 114, 255, 0.1) !important;
+            padding: 8px 12px !important;
+            border-radius: 8px !important;
             box-sizing: border-box;
-            min-height: 48px;
             transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.01) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
           }
-          .task-type-badge:hover {
-            border-color: rgba(0, 114, 255, 0.25) !important;
-            box-shadow: 0 2px 12px rgba(0, 114, 255, 0.08);
+          .task-type-badge.maintenance {
+            background: linear-gradient(135deg, rgba(0, 243, 255, 0.04), rgba(0, 243, 255, 0.01)) !important;
+            border: 1px solid rgba(0, 243, 255, 0.12) !important;
+            color: #00f3ff !important;
+          }
+          .task-type-badge.maintenance:hover {
+            border-color: rgba(0, 243, 255, 0.3) !important;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.08);
+          }
+          .task-type-badge.fault {
+            background: linear-gradient(135deg, rgba(255, 77, 77, 0.04), rgba(255, 77, 77, 0.01)) !important;
+            border: 1px solid rgba(255, 77, 77, 0.15) !important;
+            color: #ff4d4d !important;
+          }
+          .task-type-badge.fault:hover {
+            border-color: rgba(255, 77, 77, 0.3) !important;
+            box-shadow: 0 0 10px rgba(255, 77, 77, 0.08);
           }
           .task-type-badge.returned {
-            background: linear-gradient(135deg, rgba(155, 89, 182, 0.08), rgba(155, 89, 182, 0.03)) !important;
+            background: linear-gradient(135deg, rgba(155, 89, 182, 0.05), rgba(155, 89, 182, 0.02)) !important;
             color: #b37feb !important;
-            border: 1px solid rgba(155, 89, 182, 0.18) !important;
+            border: 1px solid rgba(155, 89, 182, 0.12) !important;
+          }
+          .task-type-badge.returned:hover {
+            border-color: rgba(155, 89, 182, 0.3) !important;
+            box-shadow: 0 0 10px rgba(155, 89, 182, 0.08);
           }
 
           /* Unify action buttons */
           .action-btn-container {
             display: inline-flex !important;
-            gap: 8px !important;
+            gap: 6px !important;
             justify-content: flex-end !important;
             align-items: center !important;
             width: 100%;
           }
           
           .action-btn-main {
-            height: 34px !important;
-            min-height: 34px !important;
-            padding: 0 18px !important;
-            font-size: 0.7rem !important;
+            height: 28px !important;
+            min-height: 28px !important;
+            padding: 0 12px !important;
+            font-size: 0.65rem !important;
             font-weight: 800 !important;
-            border-radius: 8px !important;
+            border-radius: 6px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -253,7 +389,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
             text-transform: uppercase;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.5px;
             position: relative;
             overflow: hidden;
           }
@@ -262,7 +398,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             position: absolute;
             top: 0; left: -100%;
             width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
             transition: left 0.5s ease;
           }
           .action-btn-main:hover::after {
@@ -270,57 +406,64 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
           
           .action-btn-main.fill-form {
-            background: linear-gradient(135deg, #00ff88, #00cc6a) !important;
-            color: #060912 !important;
-            box-shadow: 0 2px 12px rgba(0, 255, 136, 0.25) !important;
+            background: rgba(20, 241, 149, 0.08) !important;
+            color: #14f195 !important;
+            border: 1px solid rgba(20, 241, 149, 0.25) !important;
+            box-shadow: none !important;
           }
           .action-btn-main.fill-form:hover {
-            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.4) !important;
-            transform: translateY(-2px);
+            background: rgba(20, 241, 149, 0.16) !important;
+            border-color: rgba(20, 241, 149, 0.45) !important;
+            box-shadow: 0 0 12px rgba(20, 241, 149, 0.15) !important;
+            transform: translateY(-1px);
           }
 
           .action-btn-main.edit-returned {
-            background: linear-gradient(135deg, #b37feb, #9b59b6) !important;
-            color: #ffffff !important;
-            box-shadow: 0 2px 12px rgba(155, 89, 182, 0.25) !important;
+            background: rgba(168, 85, 247, 0.08) !important;
+            color: #c084fc !important;
+            border: 1px solid rgba(168, 85, 247, 0.25) !important;
+            box-shadow: none !important;
           }
           .action-btn-main.edit-returned:hover {
-            box-shadow: 0 4px 20px rgba(155, 89, 182, 0.45) !important;
-            transform: translateY(-2px);
+            background: rgba(168, 85, 247, 0.16) !important;
+            border-color: rgba(168, 85, 247, 0.45) !important;
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.15) !important;
+            transform: translateY(-1px);
           }
 
           .action-btn-main.detail-btn {
-            background: rgba(255, 255, 255, 0.04) !important;
-            color: rgba(255,255,255,0.7) !important;
-            border: 1px solid rgba(255,255,255,0.1) !important;
+            background: rgba(255, 255, 255, 0.03) !important;
+            color: rgba(255,255,255,0.6) !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
           }
           .action-btn-main.detail-btn:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border-color: rgba(255,255,255,0.2) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            border-color: rgba(255,255,255,0.15) !important;
             color: #fff !important;
           }
 
           .action-btn-main.transfer-btn {
-            background: rgba(0, 114, 255, 0.08) !important;
+            background: rgba(0, 114, 255, 0.06) !important;
             color: #5b9aff !important;
-            border: 1px solid rgba(0, 114, 255, 0.2) !important;
+            border: 1px solid rgba(0, 114, 255, 0.18) !important;
           }
           .action-btn-main.transfer-btn:hover {
-            background: rgba(0, 114, 255, 0.15) !important;
-            box-shadow: 0 2px 14px rgba(0, 114, 255, 0.2) !important;
-            transform: translateY(-2px);
+            background: rgba(0, 114, 255, 0.12) !important;
+            border-color: rgba(0, 114, 255, 0.35) !important;
+            box-shadow: 0 0 12px rgba(0, 114, 255, 0.1) !important;
+            transform: translateY(-1px);
           }
 
           .action-btn-delete {
-            width: 34px !important;
-            height: 34px !important;
-            min-width: 34px !important;
-            min-height: 34px !important;
+            width: 28px !important;
+            height: 28px !important;
+            min-width: 28px !important;
+            min-height: 28px !important;
             padding: 0 !important;
-            background: rgba(255, 82, 82, 0.08) !important;
+            background: rgba(255, 82, 82, 0.06) !important;
             color: #ff6b6b !important;
-            border: 1px solid rgba(255, 82, 82, 0.15) !important;
-            border-radius: 8px !important;
+            border: 1px solid rgba(255, 82, 82, 0.12) !important;
+            border-radius: 6px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -329,22 +472,22 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
           }
           .action-btn-delete:hover {
-            background: rgba(255, 82, 82, 0.2) !important;
-            border-color: rgba(255, 82, 82, 0.4) !important;
+            background: rgba(255, 82, 82, 0.14) !important;
+            border-color: rgba(255, 82, 82, 0.35) !important;
             color: #ff4444 !important;
-            transform: translateY(-2px) scale(1.05);
-            box-shadow: 0 4px 14px rgba(255, 82, 82, 0.2) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 0 10px rgba(255, 82, 82, 0.1) !important;
           }
 
           .no-permission-badge {
-            font-size: 0.7rem !important;
+            font-size: 0.65rem !important;
             color: rgba(255,255,255,0.3) !important;
             font-weight: 700 !important;
-            height: 34px;
+            height: 28px;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            letter-spacing: 0.8px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
           }
 
@@ -352,32 +495,37 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           .task-date-cell {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
           }
           .task-date-icon {
-            width: 32px; height: 32px;
-            background: rgba(100, 255, 218, 0.06);
-            border: 1px solid rgba(100, 255, 218, 0.1);
-            border-radius: 8px;
+            width: 26px; height: 26px;
+            background: rgba(100, 255, 218, 0.05);
+            border: 1px solid rgba(100, 255, 218, 0.08);
+            border-radius: 6px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 0.7rem; color: #64ffda;
+            font-size: 0.65rem; color: #64ffda;
           }
           .task-date-text {
-            font-weight: 700; color: rgba(255,255,255,0.6); font-size: 0.82rem;
+            font-weight: 700; color: rgba(255,255,255,0.55); font-size: 0.76rem;
             font-variant-numeric: tabular-nums;
           }
 
           /* Team badge */
           .team-badge {
             display: inline-flex; align-items: center; gap: 6px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            padding: 5px 12px; border-radius: 8px;
-            font-weight: 700; font-size: 0.78rem;
-            color: rgba(255,255,255,0.7);
-            transition: all 0.2s;
+            background: rgba(0, 243, 255, 0.04);
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            padding: 4px 10px; border-radius: 6px;
+            font-weight: 700; font-size: 0.72rem;
+            color: rgba(0, 243, 255, 0.85);
+            transition: all 0.25s ease;
           }
-          .team-badge i { color: #5b9aff; font-size: 0.65rem; }
+          .team-badge:hover {
+            background: rgba(0, 243, 255, 0.08);
+            border-color: rgba(0, 243, 255, 0.25);
+            transform: translateY(-1px);
+          }
+          .team-badge i { color: var(--accent-cyan); font-size: 0.6rem; }
         </style>
       </div>
 
@@ -413,14 +561,16 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                   <th><i class="fa-solid fa-signal"></i> DURUM</th>
                   <th style="text-align: right;"><i class="fa-solid fa-bolt"></i> AKSİYON</th>
                 </tr>
-              </thead>
-              <tbody>
-                ${filteredTasks.map(task => {
+                          ${filteredTasks.map(task => {
                   const isReturned = (task as any).isReturnedReport;
                   const isHoldWeather = task.status === 'HOLD_WEATHER';
-                  const statusClass = task.status === 'Görev Teslim Edildi' ? 'delivered' : isHoldWeather ? 'hold-weather-badge' : '';
+                  const isFault = (task.rawFaultCode && task.rawFaultCode !== '---');
+                  const statusClass = isReturned ? 'returned-badge' : (task.status === 'Görev Teslim Edildi' ? 'delivered' : isHoldWeather ? 'hold-weather-badge' : (task.status === 'Tamamlandı' ? 'completed' : 'created'));
+                  const isTransferable = task.status !== 'Tamamlandı' && !isReturned && hasTransferTaskPerm;
+                  
                   return `
-                  <tr style="${isReturned ? 'background: rgba(155, 89, 182, 0.03);' : ''}">
+                  <tr style="${isReturned ? 'background: rgba(155, 89, 182, 0.03);' : ''} ${isTransferable ? 'cursor: grab;' : ''}"
+                      ${isTransferable ? `draggable="true" ondragstart="window.handleTaskDragStart(event, '${task.id}')" ondragend="window.handleTaskDragEnd(event)"` : ''}>
                     <td>
                       <div class="task-date-cell">
                         <div class="task-date-icon"><i class="fa-regular fa-calendar-check"></i></div>
@@ -428,10 +578,10 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </div>
                     </td>
                     <td>
-                       <div style="font-weight: 700; color: rgba(255,255,255,0.45); font-size: 0.7rem; line-height: 1.2; margin-bottom: 3px; letter-spacing: 0.5px; text-transform: uppercase;">
+                       <div style="font-weight: 700; color: rgba(255,255,255,0.35); font-size: 0.65rem; line-height: 1.2; margin-bottom: 4px; letter-spacing: 0.5px; text-transform: uppercase;">
                          ${dataService.getSites().find(s => s.id === task.siteId)?.name || task.siteId}
                        </div>
-                       <div style="font-weight: 900; color: #64ffda; font-size: 0.95rem; line-height: 1.2; letter-spacing: 0.3px;">${task.turbineId}</div>
+                       <span class="turbine-id-badge">${task.turbineId}</span>
                     </td>
                     <td>
                       <span class="team-badge">
@@ -440,19 +590,44 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </span>
                     </td>
                     <td>
-                        <div class="task-type-badge ${isReturned ? 'returned' : ''}">
-                          ${(task.rawFaultCode && task.rawFaultCode !== '---') ? `
-                            <div style="font-weight: 900; font-size: 0.78rem; line-height: 1.2; color: #ff6b6b; margin-bottom: 3px; letter-spacing: 0.3px;">${task.rawFaultCode}</div>
-                            <div style="font-weight: 700; font-size: 0.73rem; color: rgba(255,255,255,0.7); line-height: 1.3; white-space: normal;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</div>
-                            <div style="font-size: 0.58rem; color: rgba(255,255,255,0.35); font-weight: 700; margin-top: 5px; line-height: 1.2; letter-spacing: 0.3px;">${cleanSablonName(task.secilenSablon) || 'Standart Form'}</div>
+                        <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : 'maintenance')}">
+                          ${isFault ? `
+                            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                              <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.85rem; margin-top: 2px; text-shadow: 0 0 8px rgba(255,77,77,0.4);"></i>
+                              <div>
+                                <div style="font-weight: 900; font-size: 0.78rem; line-height: 1.2; color: #ff6b6b; margin-bottom: 3px; letter-spacing: 0.3px;">${task.rawFaultCode}</div>
+                                <div style="font-weight: 700; font-size: 0.73rem; color: rgba(255,255,255,0.7); line-height: 1.3; white-space: normal;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</div>
+                                <div style="font-size: 0.58rem; color: rgba(255,255,255,0.35); font-weight: 700; margin-top: 5px; line-height: 1.2; letter-spacing: 0.3px;">${cleanSablonName(task.secilenSablon) || 'Standart Form'}</div>
+                              </div>
+                            </div>
+                          ` : isReturned ? `
+                            <div style="display: flex; align-items: flex-start; gap: 8px;">
+                              <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.85rem; margin-top: 2px; text-shadow: 0 0 8px rgba(179,127,235,0.4);"></i>
+                              <div>
+                                <div style="font-weight: 800; font-size: 0.78rem; line-height: 1.2; color: #b37feb;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</div>
+                              </div>
+                            </div>
                           ` : `
-                            <div style="font-weight: 800; font-size: 0.8rem; line-height: 1.2;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                              <i class="fa-solid fa-gears" style="color: #00f3ff; font-size: 0.85rem; text-shadow: 0 0 8px rgba(0,243,255,0.4);"></i>
+                              <div>
+                                <div style="font-weight: 800; font-size: 0.78rem; line-height: 1.2; color: #00f3ff;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</div>
+                              </div>
+                            </div>
                           `}
                         </div>
                     </td>
                     <td>
-                      <span class="status-badge ${statusClass}" style="${!statusClass ? `background: ${isReturned ? 'rgba(155, 89, 182, 0.15)' : 'rgba(255, 170, 0, 0.08)'}; color: ${isReturned ? '#d4a0ff' : '#ffb74d'}; border: 1px solid ${isReturned ? 'rgba(155, 89, 182, 0.3)' : 'rgba(255, 170, 0, 0.15)'};` : ''}">
-                        ${isReturned ? '<i class="fa-solid fa-rotate-left" style="margin-right: 5px; font-size: 0.6rem;"></i> DÜZELTME BEKLİYOR' : isHoldWeather ? '<i class="fa-solid fa-cloud-bolt fa-fade" style="margin-right: 6px;"></i> YILDIRIM ENGELLİ' : (task.status === 'Görev Teslim Edildi' ? '<i class="fa-solid fa-circle-check" style="margin-right: 5px; font-size: 0.6rem;"></i> ' + task.status : task.status)}
+                      <span class="status-badge ${statusClass}">
+                        ${isReturned 
+                          ? '<span class="status-dot purple"></span> DÜZELTME BEKLİYOR' 
+                          : isHoldWeather 
+                            ? '<span class="status-dot orange"></span> YILDIRIM ENGELLİ' 
+                            : (task.status === 'Görev Teslim Edildi' 
+                              ? '<span class="status-dot green"></span> GÖREV TESLİM EDİLDİ' 
+                              : (task.status === 'Tamamlandı' 
+                                ? '<span class="status-dot gray"></span> TAMAMLANDI' 
+                                : `<span class="status-dot orange"></span> ${task.status.toUpperCase()}`))}
                       </span>
                     </td>
                     <td>
@@ -467,12 +642,6 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                          ` : `
                            <span class="no-permission-badge"><i class="fa-solid fa-lock" style="margin-right: 4px; font-size: 0.6rem;"></i> YETKİ YOK</span>
                          `}
-
-                         ${task.status !== 'Tamamlandı' && !isReturned && hasTransferTaskPerm ? `
-                           <button class="action-btn-main transfer-btn" onclick="window.handleTransferTask('${task.id}')" title="Görevi Transfer Et">
-                             <i class="fa-solid fa-people-arrows" style="margin-right: 5px; font-size: 0.65rem;"></i> TRANSFER
-                           </button>
-                         ` : ''}
 
                          ${hasDeleteTaskPerm ? `
                            <button class="action-btn-delete" onclick="${isReturned ? `window.handleReturnedReportDelete('${task.id}')` : `window.handleTaskDelete('${task.id}')`}" title="Sil">
@@ -515,6 +684,168 @@ export const TasksPage = async () => {
     const container = document.getElementById('tasks-realtime-container');
     if (container && lastTasks.length > 0) {
       container.innerHTML = renderTasksTable(lastTasks, userRole);
+    }
+  };
+
+  (window as any).handleTaskDragStart = (event: DragEvent, taskId: string) => {
+    event.dataTransfer?.setData('text/plain', taskId);
+    (window as any).draggedTaskId = taskId;
+
+    const tr = event.currentTarget as HTMLElement;
+    tr.classList.add('task-dragging');
+
+    let drawer = document.getElementById('quick-transfer-drawer');
+    if (!drawer) {
+      drawer = document.createElement('div');
+      drawer.id = 'quick-transfer-drawer';
+      drawer.className = 'quick-transfer-drawer glass-panel';
+      drawer.style.cssText = `
+        position: fixed;
+        top: 0;
+        right: -340px;
+        width: 320px;
+        height: 100vh;
+        background: rgba(10, 14, 23, 0.92);
+        border-left: 1px solid rgba(20, 241, 149, 0.25);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+        z-index: 999999;
+        backdrop-filter: blur(16px);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      `;
+
+      drawer.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem; color: #14f195;">
+          <i class="fa-solid fa-people-arrows" style="font-size: 1.4rem; text-shadow: 0 0 10px rgba(20,241,149,0.3);"></i>
+          <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.25rem; margin: 0; font-weight: 800; letter-spacing: 1px;">HIZLI GÖREV DEVRETME</h3>
+        </div>
+        <p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 1.25rem 0; line-height: 1.4;">
+          İş emrini devretmek istediğiniz ekibin üzerine sürükleyip bırakın.
+        </p>
+        
+        <div class="team-drop-targets-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+          ${(() => {
+            const normalizeTeamName = (name: string): string => {
+              if (!name) return '';
+              const match = name.match(/\d+/);
+              if (match) {
+                const num = String(parseInt(match[0], 10)).padStart(2, '0');
+                return `Team ${num}`;
+              }
+              return name.trim();
+            };
+
+            const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+            const normalizedUserTeam = normalizeTeamName((window as any).currentUserTeam || currentUser?.team || '');
+            const managedTeams = (currentUser?.managedTeams || []).map((t: string) => normalizeTeamName(t)).filter(Boolean);
+
+            const connectedTeams = new Set<string>();
+            if (normalizedUserTeam) connectedTeams.add(normalizedUserTeam);
+            managedTeams.forEach((t: string) => connectedTeams.add(t));
+
+            const allTeams = Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`);
+            
+            let filteredTeams = allTeams;
+            if (userRole !== 'ADMIN') {
+              if (connectedTeams.size > 0) {
+                filteredTeams = allTeams.filter((t: string) => connectedTeams.has(t));
+              }
+            }
+
+            return filteredTeams.map(teamName => `
+              <div class="team-drop-target" 
+                   ondragover="event.preventDefault(); this.classList.add('drag-over')" 
+                   ondragleave="this.classList.remove('drag-over')"
+                   ondrop="window.handleTaskDrop(event, '${teamName}')"
+                   style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.88rem; text-align: center; color: #fff; cursor: pointer; transition: all 0.2s;">
+                <i class="fa-solid fa-users" style="margin-right: 6px; font-size: 0.75rem; color: #5b9aff;"></i> ${teamName} Ekibi
+              </div>
+            `).join('');
+          })()}
+        </div>
+        
+        <style>
+          .team-drop-target.drag-over {
+            background: rgba(20, 241, 149, 0.08) !important;
+            border-color: #14f195 !important;
+            border-style: solid !important;
+            color: #14f195 !important;
+            box-shadow: 0 0 15px rgba(20, 241, 149, 0.2);
+            transform: scale(1.02);
+          }
+          .task-dragging {
+            opacity: 0.45;
+            background: rgba(20, 241, 149, 0.05) !important;
+            border: 1px dashed #14f195 !important;
+          }
+        </style>
+      `;
+      document.body.appendChild(drawer);
+    }
+
+    setTimeout(() => {
+      if (drawer) drawer.style.right = '0';
+    }, 10);
+  };
+
+  (window as any).handleTaskDragEnd = (event: DragEvent) => {
+    const tr = event.currentTarget as HTMLElement;
+    tr.classList.remove('task-dragging');
+
+    const drawer = document.getElementById('quick-transfer-drawer');
+    if (drawer) {
+      drawer.style.right = '-340px';
+      setTimeout(() => {
+        drawer.remove();
+      }, 300);
+    }
+  };
+
+  (window as any).handleTaskDrop = async (event: DragEvent, targetTeam: string) => {
+    event.preventDefault();
+    const taskId = (window as any).draggedTaskId || event.dataTransfer?.getData('text/plain');
+    if (!taskId) return;
+
+    document.querySelectorAll('.team-drop-target').forEach(el => el.classList.remove('drag-over'));
+
+    const task = (window as any).lastTasksForNavigation?.find((t: any) => t.id === taskId);
+    if (!task) return;
+
+    const confirmed = confirm(`${task.turbineId} türbinindeki iş emrini ${targetTeam} ekibine devretmek istediğinizden emin misiniz?`);
+    if (!confirmed) return;
+
+    try {
+      const updates: any = { 
+        'assignment.assignedTeam': targetTeam,
+        personnel: targetTeam 
+      };
+
+      if (task.maintenanceData) {
+        const mData = { ...task.maintenanceData };
+        if (mData.workSessions && Array.isArray(mData.workSessions)) {
+          mData.workSessions = mData.workSessions.map((ws: any) => {
+            const prevTeam = mData.teamPersonnel && mData.teamPersonnel.length > 0 ? mData.teamPersonnel : [];
+            return {
+              ...ws,
+              personnel: ws.personnel && ws.personnel.length > 0 ? ws.personnel : prevTeam,
+              locked: true
+            };
+          });
+        }
+        mData.teamPersonnel = [];
+        updates.maintenanceData = mData;
+      }
+
+      const { taskService } = await import('../services/TaskService');
+      await taskService.updateTask(task.id, updates);
+      
+      (window as any).showToast?.('BAŞARILI', `İş emri ${targetTeam} ekibine devredildi.`, 'success');
+    } catch (error: any) {
+      console.error("Transfer hatası:", error);
+      alert("Görev transfer edilirken bir hata oluştu: " + error.message);
     }
   };
 

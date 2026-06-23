@@ -7,13 +7,34 @@ import { FaultFormController } from './FaultForm/FaultFormController';
  * Modularized version that delegates logic to FaultFormController and UI to FaultFormUI.
  */
 export async function FaultFormPage(initialData?: any) {
+    let finalData = initialData;
+    let isRestored = false;
+
+    if (initialData?.id) {
+        try {
+            const localDraftStr = localStorage.getItem('activeTaskContext');
+            if (localDraftStr) {
+                const localDraft = JSON.parse(localDraftStr);
+                if (localDraft && localDraft.id === initialData.id) {
+                    console.log("Using activeTaskContext draft from localStorage for task:", initialData.id);
+                    finalData = localDraft;
+                    isRestored = true;
+                }
+            }
+        } catch (e) {
+            console.error("Error reading activeTaskContext draft:", e);
+        }
+    }
+
+    (window as any).isRestoredFromDraft = isRestored;
+
     // 1. Initialize Controller (registers all window-bound event handlers)
-    FaultFormController.init(initialData);
+    FaultFormController.init(finalData);
 
     // 2. Set Page-Level State for backward compatibility and lifecycle management
-    (window as any).isEditMode = !!initialData?.isEditMode;
-    (window as any).currentEditReportId = initialData?.id || null;
-    (window as any).currentTaskContext = initialData;
+    (window as any).isEditMode = !!finalData?.isEditMode;
+    (window as any).currentEditReportId = finalData?.id || null;
+    (window as any).currentTaskContext = finalData;
     (window as any).selectedFaultFiles = [];
     (window as any).workSessions = [];
     (window as any).teamPersonnel = [];
@@ -41,5 +62,5 @@ export async function FaultFormPage(initialData?: any) {
     }, 150);
 
     // 4. Return the HTML layout for main.ts to render
-    return FaultFormUI.renderMainLayout(initialData);
+    return FaultFormUI.renderMainLayout(finalData);
 }

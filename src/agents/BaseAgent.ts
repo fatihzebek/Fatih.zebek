@@ -54,6 +54,9 @@ export abstract class BaseAgent {
    * Her 30 saniyede bir lastSeen bilgisini günceller.
    */
   private startHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
     this.heartbeatInterval = setInterval(async () => {
       try {
         const agentRef = doc(db, 'agent_registry', this.id);

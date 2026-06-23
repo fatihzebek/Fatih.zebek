@@ -6,7 +6,7 @@ import { authService } from '../services/AuthService';
 import type { UserProfile } from '../services/UserService';
 
 export const TransferPage = async (userProfile?: UserProfile | null) => {
-  const isAdmin = userProfile?.role === 'ADMIN';
+  const isAdmin = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
   const allWarehouses = dataService.getWarehouses();
   
   const filteredWarehouses = isAdmin 

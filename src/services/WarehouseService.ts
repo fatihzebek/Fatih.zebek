@@ -16,6 +16,9 @@ export interface InventoryItem {
   price?: number;
   currency?: 'TRY' | 'USD' | 'EUR';
   condition?: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP';
+  serialNo?: string;
+  note?: string;
+  reservations?: Record<string, number>;
 }
 
 export interface InventoryLog {
@@ -46,7 +49,9 @@ export interface AuditResult {
   physicalQty: number;
   diff: number;
   note?: string;
+  shelfNo?: string;
 }
+
 
 export interface AuditRecord {
   id?: string;
@@ -59,11 +64,12 @@ export interface AuditRecord {
   results: AuditResult[];
   timestamp: any;
   date?: string;
+  imported?: boolean;
 }
 
 class WarehouseService {
   private inventoryCache: Map<string, { data: InventoryItem[], timestamp: number }> = new Map();
-  private CACHE_DURATION = 30000; // 30 seconds
+  private CACHE_DURATION = 2000; // 2 seconds
   private globalImagesCache: Map<string, string> | null = null;
 
   public resolveWarehouseId(id: string): string {
@@ -292,8 +298,26 @@ class WarehouseService {
     const sourceName = getWarehouseName(sourceWarehouseId);
     const targetName = getWarehouseName(targetWarehouseId);
 
+    const sourceUpdates: any = { quantity: sourceItem.quantity - quantity };
+    if (targetWarehouseId.startsWith('team_') && !sourceWarehouseId.startsWith('team_')) {
+      const currentReserved = sourceItem.reservedQuantity || 0;
+      const reservations = (sourceItem as any).reservations || {};
+      const currentTeamQty = reservations[targetWarehouseId] || 0;
+      
+      const newReservations = {
+        ...reservations,
+        [targetWarehouseId]: currentTeamQty + quantity
+      };
+      if (newReservations[targetWarehouseId] <= 0) {
+        delete newReservations[targetWarehouseId];
+      }
+      
+      sourceUpdates.reservedQuantity = currentReserved + quantity;
+      sourceUpdates.reservations = newReservations;
+    }
+
     const sourcePromises: Promise<any>[] = [
-      this.updateMaterial(sourceWarehouseId, sourceItemId, { quantity: sourceItem.quantity - quantity }),
+      this.updateMaterial(sourceWarehouseId, sourceItemId, sourceUpdates),
       this.addLog(sourceWarehouseId, {
         itemId: sourceItemId,
         sapNo: sourceItem.sapNo || '',
@@ -312,7 +336,24 @@ class WarehouseService {
 
     const targetPromises: Promise<any>[] = [];
     if (targetItem && targetItem.id) {
-      targetPromises.push(this.updateMaterial(targetWarehouseId, targetItem.id, { quantity: targetItem.quantity + quantity }));
+      const targetUpdates: any = { quantity: targetItem.quantity + quantity };
+      if (sourceWarehouseId.startsWith('team_') && !targetWarehouseId.startsWith('team_')) {
+        const currentReserved = targetItem.reservedQuantity || 0;
+        const reservations = (targetItem as any).reservations || {};
+        const currentTeamQty = reservations[sourceWarehouseId] || 0;
+        
+        const newReservations = {
+          ...reservations,
+          [sourceWarehouseId]: Math.max(0, currentTeamQty - quantity)
+        };
+        if (newReservations[sourceWarehouseId] <= 0) {
+          delete newReservations[sourceWarehouseId];
+        }
+        
+        targetUpdates.reservedQuantity = Math.max(0, currentReserved - quantity);
+        targetUpdates.reservations = newReservations;
+      }
+      targetPromises.push(this.updateMaterial(targetWarehouseId, targetItem.id, targetUpdates));
       targetPromises.push(this.addLog(targetWarehouseId, {
         itemId: targetItem.id,
         sapNo: targetItem.sapNo || '',
@@ -565,6 +606,12 @@ class WarehouseService {
     await deleteDoc(docRef);
   }
 
+  async updateAudit(id: string, auditId: string, data: Partial<AuditRecord>): Promise<void> {
+    const warehouseId = this.resolveWarehouseId(id);
+    const docRef = doc(db, 'warehouses', warehouseId, 'audits', auditId);
+    await updateDoc(docRef, data);
+  }
+
 
   async getStockBySap(id: string, sapNo: string): Promise<InventoryItem | null> {
     try {
@@ -636,12 +683,98 @@ class WarehouseService {
     }
   }
 
+  async getStockBySapAndCondition(id: string, sapNo: string, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP', serialNo?: string): Promise<InventoryItem | null> {
+    try {
+      const warehouseId = this.resolveWarehouseId(id);
+      const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
+      const cleanSap = sapNo.toString().trim();
+      const numSap = Number(cleanSap);
+      const strippedSap = cleanSap.replace(/^0+/, '');
+
+      const matchesCondition = (item: any) => {
+        const itemCond = item.condition || 'NEW';
+        const condMatch = itemCond === condition;
+        if (serialNo) {
+          const itemSerial = String(item.serialNo || '').trim();
+          const searchSerial = String(serialNo).trim();
+          return condMatch && (itemSerial === searchSerial || (!itemSerial && searchSerial === '-'));
+        }
+        return condMatch;
+      };
+
+      // 1. Strateji: Tam metin eşleşmesi
+      const q1 = query(colRef, where('sapNo', '==', cleanSap));
+      const snap1 = await getDocs(q1);
+      if (!snap1.empty) {
+        const docs = snap1.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)).filter(matchesCondition);
+        if (docs.length > 0) {
+          docs.sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0));
+          return docs[0];
+        }
+      }
+
+      // 2. Strateji: Sayısal eşleşme
+      if (!isNaN(numSap)) {
+        const q2 = query(colRef, where('sapNo', '==', numSap));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          const docs = snap2.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)).filter(matchesCondition);
+          if (docs.length > 0) {
+            docs.sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0));
+            return docs[0];
+          }
+        }
+      }
+
+      // 3. Strateji: Sıfırsız metin eşleşmesi
+      if (strippedSap !== cleanSap) {
+        const q3 = query(colRef, where('sapNo', '==', strippedSap));
+        const snap3 = await getDocs(q3);
+        if (!snap3.empty) {
+          const docs = snap3.docs.map(d => ({ id: d.id, ...d.data() } as InventoryItem)).filter(matchesCondition);
+          if (docs.length > 0) {
+            docs.sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0));
+            return docs[0];
+          }
+        }
+      }
+
+      // 4. Strateji: Local filter
+      const inventory = await this.getInventory(id);
+      const alphaCleanSap = cleanSap.replace(/[^a-zA-Z0-9-]/g, '');
+      const match = inventory.find(item => {
+        const itemSapClean = String(item.sapNo || '').trim().replace(/[^a-zA-Z0-9-]/g, '');
+        const itemStripped = itemSapClean.replace(/^0+/, '');
+        const searchStripped = alphaCleanSap.replace(/^0+/, '');
+        
+        const sapMatch = itemSapClean === alphaCleanSap || 
+                         itemStripped === searchStripped || 
+                         (Number(itemSapClean) === Number(alphaCleanSap) && !isNaN(Number(alphaCleanSap)));
+        
+        return sapMatch && matchesCondition(item);
+      });
+
+      return match || null;
+    } catch (e) {
+      console.error('Error in getStockBySapAndCondition:', e);
+      return null;
+    }
+  }
+
   async getLogs(id: string): Promise<InventoryLog[]> {
     const warehouseId = this.resolveWarehouseId(id);
     const colRef = collection(db, 'warehouses', warehouseId, 'logs');
     const q = query(colRef, orderBy('timestamp', 'desc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryLog));
+  }
+
+  async clearAllLogs(id: string): Promise<void> {
+    const warehouseId = this.resolveWarehouseId(id);
+    const colRef = collection(db, 'warehouses', warehouseId, 'logs');
+    const snapshot = await getDocs(colRef);
+    const promises = snapshot.docs.map(docSnap => deleteDoc(doc(db, 'warehouses', warehouseId, 'logs', docSnap.id)));
+    await Promise.all(promises);
   }
 
   async addLog(id: string, log: Omit<InventoryLog, 'id' | 'timestamp'>) {
@@ -735,22 +868,25 @@ class WarehouseService {
     }
   }
 
-  async updateStockBySap(id: string, sapNo: string, delta: number, logInfo: { user: string, reason: string, reportNo?: string, materialName?: string }) {
-    const item = await this.getStockBySap(id, sapNo);
+  async updateStockBySap(id: string, sapNo: string, delta: number, logInfo: { user: string, reason: string, reportNo?: string, materialName?: string }, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' = 'NEW', shelfNo?: string, serialNo?: string, note?: string) {
+    const item = await this.getStockBySapAndCondition(id, sapNo, condition);
     const warehouseId = this.resolveWarehouseId(id);
     let itemId = '';
     let currentQty = 0;
     let description = logInfo.materialName || 'Bilinmeyen Malzeme';
 
     if (!item || !item.id) {
-      console.warn(`Item not found for SAP: ${sapNo} in warehouse: ${id}. Creating new entry.`);
+      console.warn(`Item not found for SAP: ${sapNo} with condition ${condition} in warehouse: ${id}. Creating new entry.`);
       const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
       const { addDoc } = await import('firebase/firestore');
       const result = await addDoc(colRef, {
         sapNo: sapNo,
         description: description,
-        quantity: delta, // If delta is negative, it goes below 0 (used before registered)
-        shelfNo: 'Tanımsız',
+        quantity: Math.max(0, delta), // Capped to 0 so it never goes negative
+        shelfNo: shelfNo || 'Tanımsız',
+        condition: condition,
+        serialNo: serialNo || '',
+        note: note || '',
         lastUpdated: serverTimestamp()
       });
       itemId = result.id;
@@ -761,14 +897,29 @@ class WarehouseService {
       description = item.description || description;
       
       const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
-      const newQty = currentQty + delta;
+      const newQty = Math.max(0, currentQty + delta); // Capped to 0 so it never goes negative
+      
+      const updatePayload: any = {
+        quantity: newQty,
+        lastUpdated: serverTimestamp()
+      };
+      if (!item.condition) {
+        updatePayload.condition = condition;
+      }
+      if (shelfNo) {
+        updatePayload.shelfNo = shelfNo;
+      }
+      if (serialNo && (!item.serialNo || item.serialNo === '-')) {
+        updatePayload.serialNo = serialNo;
+      }
+      if (note && !item.note) {
+        updatePayload.note = note;
+      }
+
       if (warehouseId.startsWith('team_') && newQty <= 0) {
         await deleteDoc(docRef);
       } else {
-        await updateDoc(docRef, {
-          quantity: newQty,
-          lastUpdated: serverTimestamp()
-        });
+        await updateDoc(docRef, updatePayload);
       }
     }
 
@@ -777,11 +928,11 @@ class WarehouseService {
       sapNo: sapNo,
       materialName: description,
       oldQty: currentQty,
-      newQty: currentQty + delta,
+      newQty: Math.max(0, currentQty + delta),
       quantity: Math.abs(delta),
       type: delta > 0 ? 'ADD' : 'REMOVE',
       user: logInfo.user,
-      note: logInfo.reason + (logInfo.reportNo ? ` (Rapor: ${logInfo.reportNo})` : ''),
+      note: logInfo.reason + (logInfo.reportNo ? ` (Rapor: ${logInfo.reportNo})` : '') + ` [Durum: ${condition}]`,
       source: 'Sistem'
     });
     
@@ -809,6 +960,46 @@ class WarehouseService {
           ...cached.data[idx], 
           reservedQuantity: currentReserved + quantity,
           
+          lastUpdated: new Date() as any
+        };
+        cached.timestamp = Date.now();
+      }
+    }
+  }
+
+  async decreaseReservation(warehouseId: string, sapNo: string, quantity: number, teamId: string) {
+    const inventory = await this.getInventory(warehouseId);
+    const item = inventory.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+    if (!item || !item.id) return;
+
+    const currentReserved = item.reservedQuantity || 0;
+    const reservations = (item as any).reservations || {};
+    const currentTeamQty = reservations[teamId] || 0;
+
+    const newReservations = {
+      ...reservations,
+      [teamId]: Math.max(0, currentTeamQty - quantity)
+    };
+    if (newReservations[teamId] <= 0) {
+      delete newReservations[teamId];
+    }
+
+    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', item.id);
+    await updateDoc(docRef, {
+      reservedQuantity: Math.max(0, currentReserved - quantity),
+      reservations: newReservations,
+      lastUpdated: serverTimestamp()
+    });
+
+    // Update local cache directly to avoid query lag
+    const cached = this.inventoryCache.get(warehouseId);
+    if (cached) {
+      const idx = cached.data.findIndex(i => i.id === item.id);
+      if (idx !== -1) {
+        cached.data[idx] = { 
+          ...cached.data[idx], 
+          reservedQuantity: Math.max(0, currentReserved - quantity),
+          reservations: newReservations,
           lastUpdated: new Date() as any
         };
         cached.timestamp = Date.now();

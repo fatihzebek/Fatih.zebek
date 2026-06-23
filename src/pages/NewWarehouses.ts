@@ -1,4 +1,6 @@
 import { dataService } from '../services/DataService';
+import { db } from '../firebase';
+import { formatTeamName } from '../utils/formatters';
 import { warehouseService } from '../services/WarehouseService';
 import { warehouseAgent } from '../agents/WarehouseAgent';
 import { fileService } from '../services/FileService';
@@ -10,9 +12,10 @@ import QRCode from 'qrcode';
 import { Html5QrcodeScanner, Html5Qrcode } from 'html5-qrcode';
 import { inventoryService } from '../services/InventoryService';
 const getUserProfile = (): any => {
-  let userProfile = (window as any).appState?.userProfile;
+  let userProfile = (window as any).appState?.userProfile || (window as any).currentUser;
   if (!userProfile) {
     try {
+      // 1. Try auth fallback cache
       const storedFallback = localStorage.getItem('dh_auth_fallback');
       if (storedFallback) {
         const authData = JSON.parse(storedFallback);
@@ -21,6 +24,20 @@ const getUserProfile = (): any => {
           const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
           if (cachedProfile) {
             userProfile = JSON.parse(cachedProfile);
+          }
+        }
+      }
+      
+      // 2. Try looking up any general user profile in localStorage as a last resort
+      if (!userProfile) {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('currentUserProfile_')) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              userProfile = JSON.parse(val);
+              break;
+            }
           }
         }
       }
@@ -51,17 +68,16 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   }
 
   const userProfile = getUserProfile();
-  const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI';
+  const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.role === 'TAMİR' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
   const isMobileWarehouse = currentWarehouse.id.startsWith('team_');
 
   const targetOptions: { id: string, name: string }[] = [];
-  allWarehouses.forEach(w => {
-    if (w.id !== currentWarehouse.id) {
-      targetOptions.push({ id: w.id, name: w.name });
-    }
-  });
-
   if (isMaterialManager) {
+    allWarehouses.forEach(w => {
+      if (w.id !== currentWarehouse.id) {
+        targetOptions.push({ id: w.id, name: w.name });
+      }
+    });
     for (let i = 1; i <= 15; i++) {
       const teamName = `Team ${String(i).padStart(2, '0')}`;
       const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
@@ -72,10 +88,20 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   } else if (userProfile?.team) {
     const teamName = userProfile.team;
     const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
-    if (teamId !== currentWarehouse.id) {
-      targetOptions.push({ id: teamId, name: `Zimmetim (${teamName})` });
+    if (currentWarehouse.id.startsWith('team_')) {
+      // Ekip kendi zimmet sayfasındaysa, malzemeyi iade edebileceği ana depoları listele
+      allWarehouses.forEach(w => {
+        targetOptions.push({ id: w.id, name: w.name });
+      });
+    } else {
+      // Ekip ana depodaysa, sadece kendi zimmetine çekebilir
+      if (teamId !== currentWarehouse.id) {
+        targetOptions.push({ id: teamId, name: `Zimmetim (${teamName})` });
+      }
     }
   }
+
+  (window as any)._warehouseTargetOptions = targetOptions;
 
   const currentTab = ((window as any).currentWarehouseTab || 'inventory').toUpperCase();
   const currentPeriod = localStorage.getItem('warehouse_analytics_period') || 'this-month';
@@ -154,9 +180,11 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                
                turbineData[turbineId].items.push({
                   reportId: report.reportNo || report.id || '',
+                  reportDocId: report.id || '',
                   date: report.date,
                   matFormNo: report.matFormNo || '-',
                   sapNo: mat.sapNo || '-',
+                  serialNo: mat.serialNo || '-',
                   description: mat.description,
                   used: mat.used || 0,
                   defect: mat.defectCount || 0
@@ -167,6 +195,52 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          });
       });
   }
+
+  // Collect all uninstalled (defectCount > 0) items for this site's reports
+  const defectReportItems: any[] = [];
+  if (currentWarehouse) {
+    const isMobileWarehouse = currentWarehouse.id.startsWith('team_');
+    const whNameBase = currentWarehouse.name.toLowerCase().replace('depo', '').trim();
+    
+    reports.forEach(report => {
+      if (!report.materials || report.materials.length === 0 || !report.date) return;
+      
+      let isMatch = false;
+      if (isMobileWarehouse) {
+        const whTeam = formatTeamName(currentWarehouse.id);
+        const reportCreatorTeam = report.createdBy ? formatTeamName(report.createdBy.split('@')[0]) : '';
+        const reportPersonnelStr = Array.isArray(report.personnel) ? report.personnel.join(', ') : (report.personnel || '');
+        const reportPersonnelTeam = reportPersonnelStr ? formatTeamName(reportPersonnelStr) : '';
+        const reportTeamField = report.team ? formatTeamName(report.team) : '';
+        isMatch = (whTeam === reportCreatorTeam || whTeam === reportPersonnelTeam || whTeam === reportTeamField);
+      } else {
+        const reportSiteBase = (report.siteName || '').toLowerCase().trim();
+        isMatch = whNameBase.includes(reportSiteBase) || reportSiteBase.includes(whNameBase) || whNameBase === 'merkez';
+      }
+      
+      if (!isMatch) return;
+      
+      report.materials.forEach(mat => {
+        if (mat.defectCount > 0) {
+          defectReportItems.push({
+            reportId: report.reportNo || report.id || '',
+            reportDocId: report.id || '',
+            date: report.date,
+            matFormNo: report.matFormNo || '-',
+            turbineNo: (report.siteName ? report.siteName + ' ' : '') + (report.turbineNo || report.turbineSerial || 'Bilinmeyen'),
+            type: report.type || 'ARIZA',
+            sapNo: mat.sapNo || '-',
+            serialNo: mat.serialNo || '-',
+            description: mat.description,
+            defect: mat.defectCount || 0,
+            faultCode: report.faultCode || '-',
+            faultDesc: report.faultDesc || '-'
+          });
+        }
+      });
+    });
+  }
+  defectReportItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const sortedTurbines = Object.entries(turbineData).sort((a, b) => (b[1].totalUsed + b[1].totalDefect) - (a[1].totalUsed + a[1].totalDefect));
 
@@ -180,14 +254,198 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   let inventoryItems: any[] = [];
   let inventoryWithQRs: any[] = [];
   if (currentWarehouse) {
-    const rawItems = await warehouseService.getInventory(currentWarehouse.id);
-    inventoryItems = rawItems.map(item => ({ ...item, name: (item as any).name || item.description || 'Bilinmeyen Malzeme' }));
+    const rawItems = await warehouseService.getInventory(currentWarehouse.id, true);
+    inventoryItems = rawItems.map(item => {
+      let resolvedName = (item as any).name || item.description || '';
+      if (!resolvedName || resolvedName === 'Bilinmeyen Malzeme') {
+        const dictMat = inventoryService.getMaterialBySap(item.sapNo);
+        if (dictMat && dictMat.d) {
+          resolvedName = dictMat.d;
+        }
+      }
+      if (!resolvedName) {
+        resolvedName = 'Bilinmeyen Malzeme';
+      }
+      return { ...item, name: resolvedName };
+    });
     (window as any).currentInventoryData = inventoryItems;
     inventoryWithQRs = inventoryItems.map(item => ({ ...item, qrDataUrl: '' }));
+  }
+
+  // Fetch pending repair returns (SENT_BACK status, matching targetWarehouseId)
+  let pendingReturns: any[] = [];
+  let allRepairs: any[] = [];
+  if (currentWarehouse) {
+    try {
+      const { repairService } = await import('../services/RepairService');
+      allRepairs = await repairService.getRepairs();
+      if (isMaterialManager) {
+        pendingReturns = allRepairs.filter(r => r.status === 'SENT_BACK' && r.targetWarehouseId === currentWarehouse.id);
+      }
+    } catch (err) {
+      console.error("Failed to load repairs:", err);
+    }
   }
   
   // Attach logic to window so it runs when rendered
   (window as any).initNewWarehouseLogic = () => {
+    // Inventory Drag & Drop Sidebar handlers
+    (window as any).warehouseInventoryDragStart = async (event: DragEvent, itemId: string) => {
+      event.dataTransfer?.setData('text/plain', itemId);
+      (window as any).draggedWarehouseItemId = itemId;
+
+      const tr = event.currentTarget as HTMLElement;
+      if (tr) tr.classList.add('warehouse-item-dragging');
+
+      let drawer = document.getElementById('warehouse-quick-transfer-drawer');
+      if (!drawer) {
+        drawer = document.createElement('div');
+        drawer.id = 'warehouse-quick-transfer-drawer';
+        drawer.className = 'warehouse-quick-transfer-drawer glass-panel';
+        drawer.style.cssText = `
+          position: fixed;
+          top: 0;
+          right: -340px;
+          width: 320px;
+          height: 100vh;
+          background: rgba(10, 14, 23, 0.95);
+          border-left: 1px solid rgba(20, 241, 149, 0.25);
+          box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+          z-index: 999999;
+          backdrop-filter: blur(16px);
+          padding: 1.5rem;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        `;
+
+        drawer.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem; color: #14f195;">
+            <i class="fa-solid fa-truck-fast" style="font-size: 1.4rem; text-shadow: 0 0 10px rgba(20,241,149,0.3);"></i>
+            <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.25rem; margin: 0; font-weight: 800; letter-spacing: 1px;">HIZLI TRANSFER</h3>
+          </div>
+          <p style="font-size: 0.72rem; color: #94A3B8; margin: 0 0 1.25rem 0; line-height: 1.4;">
+            Malzemeyi sevk etmek istediğiniz hedef deponun veya ekibin üzerine bırakın.
+          </p>
+          
+          <div id="warehouse-drawer-targets-container" class="warehouse-drop-targets-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+            <div style="color: #94A3B8; text-align: center; padding: 2rem; font-size: 0.8rem;">
+              <i class="fa-solid fa-spinner fa-spin" style="margin-right: 6px;"></i> Depo seçenekleri yükleniyor...
+            </div>
+          </div>
+          
+          <style>
+            .warehouse-drop-target.drag-over {
+              background: rgba(20, 241, 149, 0.08) !important;
+              border-color: #14f195 !important;
+              border-style: solid !important;
+              color: #14f195 !important;
+              box-shadow: 0 0 15px rgba(20, 241, 149, 0.2);
+              transform: scale(1.02);
+            }
+            .warehouse-item-dragging {
+              opacity: 0.45;
+              background: rgba(20, 241, 149, 0.05) !important;
+              border: 1px dashed #14f195 !important;
+            }
+          </style>
+        `;
+        document.body.appendChild(drawer);
+      }
+
+      setTimeout(() => {
+        if (drawer) drawer.style.right = '0';
+      }, 10);
+
+      // Asynchronously resolve target options for this specific item!
+      try {
+        const item = (inventoryItems || []).find((i: any) => i.id === itemId);
+        let matchedWh: any = null;
+        
+        if (currentWarehouse.id.startsWith('team_') && !isMaterialManager && item) {
+          const { collection, query, where, getDocs } = await import('firebase/firestore');
+          const logsRef = collection(db, 'warehouses', currentWarehouse.id, 'logs');
+          const q = query(
+            logsRef, 
+            where('sapNo', '==', item.sapNo), 
+            where('type', '==', 'TRANSFER')
+          );
+          const snapshot = await getDocs(q);
+          const logsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          
+          logsList.sort((a, b) => {
+            const aTime = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+            const bTime = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+            return bTime - aTime;
+          });
+
+          for (const logData of logsList) {
+            if (logData.quantity > 0 && logData.note) {
+              const noteLower = logData.note.toLowerCase();
+              const foundWh = allWarehouses.find(w => {
+                const cleanName = w.name.toLowerCase().replace('depo', '').trim();
+                return noteLower.includes(cleanName);
+              });
+              if (foundWh) {
+                matchedWh = foundWh;
+                break;
+              }
+            }
+          }
+        }
+
+        let options = (window as any)._warehouseTargetOptions || [];
+        if (matchedWh) {
+          options = [{ id: matchedWh.id, name: matchedWh.name }];
+        }
+
+        const container = document.getElementById('warehouse-drawer-targets-container');
+        if (container) {
+          if (options.length === 0) {
+            container.innerHTML = `<div style="color: #EF4444; text-align: center; padding: 2rem; font-size: 0.8rem;">İade edilebilecek geçerli depo bulunamadı.</div>`;
+          } else {
+            container.innerHTML = options.map((opt: any) => `
+              <div class="warehouse-drop-target" 
+                   ondragover="event.preventDefault(); this.classList.add('drag-over')" 
+                   ondragleave="this.classList.remove('drag-over')"
+                   ondrop="window.handleWarehouseItemDrop(event, '${opt.id}')"
+                   style="background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.85rem; text-align: center; color: #fff; cursor: pointer; transition: all 0.2s;">
+                <i class="fa-solid fa-truck-moving" style="margin-right: 6px; font-size: 0.75rem; color: #5b9aff;"></i> ${opt.name}
+              </div>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error("Error resolving warehouse targets for item drag:", err);
+      }
+    };
+
+    (window as any).warehouseInventoryDragEnd = (event: DragEvent) => {
+      const tr = event.currentTarget as HTMLElement;
+      if (tr) tr.classList.remove('warehouse-item-dragging');
+
+      const drawer = document.getElementById('warehouse-quick-transfer-drawer');
+      if (drawer) {
+        drawer.style.right = '-340px';
+        setTimeout(() => {
+          drawer.remove();
+        }, 300);
+      }
+    };
+
+    (window as any).handleWarehouseItemDrop = async (event: DragEvent, destWarehouseId: string) => {
+      event.preventDefault();
+      
+      const itemId = (window as any).draggedWarehouseItemId || event.dataTransfer?.getData('text/plain');
+      if (!itemId) return;
+
+      const item = (inventoryItems || []).find((i: any) => i.id === itemId);
+      if (!item) return;
+
+      (window as any).openTransferModal(item.id, item.sapNo, item.name.replace(/'/g, "\\'"), item.quantity, destWarehouseId);
+    };
+
     let html5QrcodeScanner: Html5QrcodeScanner | null = null;
     let auditMode: 'info' | 'audit' = 'info';
     let auditResults: any[] = [];
@@ -228,27 +486,36 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
       try {
         const searchInput = document.getElementById('inventory-search-input') as HTMLInputElement;
-      const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-      // 1. Sort the full inventoryWithQRs array
-      const sortedItems = [...inventoryWithQRs].sort((a, b) => {
-        const locA = String(a.shelfNo || '').trim().toUpperCase();
-        const locB = String(b.shelfNo || '').trim().toUpperCase();
-        if (!locA && locB) return 1;
-        if (locA && !locB) return -1;
-        let locCmp = 0;
-        if (locA && locB) {
-            locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
-        }
-        if (locCmp !== 0) return locCmp;
-        const sapA = String(a.sapNo || '').trim();
-        const sapB = String(b.sapNo || '').trim();
-        if (sapA && sapB) {
-            const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
-            if (sapCmp !== 0) return sapCmp;
-        }
-        return String(a.name || '').localeCompare(String(b.name || ''));
-      });
+        // 1. Sort the full inventoryWithQRs array (excluding DEFECT items, unless in W11)
+        const sortedItems = [...inventoryWithQRs]
+          .filter(item => {
+            if (currentWarehouse.id === 'W11') return true;
+            if (item.condition === 'DEFECT') return false;
+            if (isMobileWarehouse && item.quantity <= 0 && (item.reservedQuantity || 0) <= 0) {
+              return false;
+            }
+            return true;
+          })
+          .sort((a, b) => {
+            const locA = String(a.shelfNo || '').trim().toUpperCase();
+            const locB = String(b.shelfNo || '').trim().toUpperCase();
+            if (!locA && locB) return 1;
+            if (locA && !locB) return -1;
+            let locCmp = 0;
+            if (locA && locB) {
+                locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+            }
+            if (locCmp !== 0) return locCmp;
+            const sapA = String(a.sapNo || '').trim();
+            const sapB = String(b.sapNo || '').trim();
+            if (sapA && sapB) {
+                const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
+                if (sapCmp !== 0) return sapCmp;
+            }
+            return String(a.name || '').localeCompare(String(b.name || ''));
+          });
 
       // 2. Filter sorted items by search term
       const filteredItems = sortedItems.filter(item => {
@@ -286,7 +553,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       } else {
         tbody.innerHTML = paginatedItems.map(item => {
           const kritik = (item.minStock || 0);
-          const rezerve = (item.reserved || 0);
+          const rezerve = (item.reservedQuantity || 0);
           const isKritik = item.quantity <= kritik;
           
           // Escape single quotes for safely passing inside onclick strings
@@ -294,7 +561,14 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           const cleanNameEscaped = item.name.replace(/'/g, "\\'");
           
           return `
-            <tr class="inventory-row" data-sap="${item.sapNo}" data-name="${item.name.toLowerCase()}">
+            <tr class="inventory-row" 
+                draggable="true" 
+                ondragstart="window.warehouseInventoryDragStart(event, '${item.id}')"
+                ondragend="window.warehouseInventoryDragEnd(event)"
+                data-sap="${item.sapNo}" 
+                data-name="${item.name.toLowerCase()}"
+                style="cursor: grab;"
+                title="Sürükleyip açılan sağ menüdeki depolara bırakarak hızlı transfer başlatabilirsiniz">
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);"><input type="checkbox" class="item-checkbox" value="${item.id}" onclick="window.onItemCheckboxClick(this)" /></td>
               <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.sapNo}</td>
               <td id="img-cell-${item.id}" style="padding: 1rem; color: #E2E8F0; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 500; display: flex; align-items: center;">
@@ -303,7 +577,52 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                   ? `<div id="img-btn-${item.id}" onclick="window.showBigImage('${item.imageUrl}', '${cleanName}')" style="width:36px; height:36px; border-radius:6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#3B82F6; cursor: pointer; transition: all 0.2s;" title="Görseli Büyüt" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'"><i class="fa-solid fa-image"></i></div>` 
                   : `<div id="img-btn-${item.id}" onclick="window.triggerImageUpload('${item.id}', '${item.sapNo}')" style="width:36px; height:36px; border-radius:6px; background-color: #1E293B; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#64748B; cursor: pointer; transition: all 0.2s;" title="Görsel Ekle" onmouseover="this.style.backgroundColor='#334155'" onmouseout="this.style.backgroundColor='#1E293B'"><i class="fa-solid fa-image"></i></div>`
                 }
-                ${item.name}
+                <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span style="word-break: break-word;">${item.name}</span>
+                    ${currentWarehouse.id !== 'W11' && item.condition && item.condition !== 'NEW' ? `
+                      <span style="font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; 
+                        ${item.condition === 'DEFECT' ? 'background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);' : 
+                          item.condition === 'REVISED' ? 'background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3);' : 
+                          item.condition === 'SCRAP' ? 'background: rgba(156, 163, 175, 0.15); color: #9CA3AF; border: 1px solid rgba(156, 163, 175, 0.3);' : ''}">
+                        ${item.condition === 'DEFECT' ? 'Arızalı (Defect)' : item.condition === 'REVISED' ? 'Revize' : item.condition === 'SCRAP' ? 'Hurda' : item.condition}
+                      </span>
+                    ` : ''}
+                  </div>
+                  
+                  ${currentWarehouse.id === 'W11' ? `
+                    <div style="font-size: 0.78rem; color: #10B981; margin-top: 4px; font-weight: 700; font-family: monospace;">
+                      Seri No: <span style="color: #FFF; font-weight: normal;">${item.serialNo || '-'}</span>
+                    </div>
+                    ${item.note ? `
+                      <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 2px; font-weight: 500;">
+                        Not: <span style="color: #E2E8F0;">${item.note}</span>
+                      </div>
+                    ` : ''}
+                  ` : ''}
+
+                  ${currentWarehouse.id === 'W11' ? (() => {
+                    const matchingRepairs = (allRepairs || []).filter(r => String(r.sapNo).trim() === String(item.sapNo).trim());
+                    matchingRepairs.sort((a,b) => {
+                      const timeA = a.sentAt?.toDate ? a.sentAt.toDate().getTime() : new Date(a.sentAt).getTime();
+                      const timeB = b.sentAt?.toDate ? b.sentAt.toDate().getTime() : new Date(b.sentAt).getTime();
+                      return timeB - timeA;
+                    });
+                    const latestRepair = matchingRepairs[0];
+                    if (!latestRepair) return '';
+                    const sourceWh = allWarehouses.find(w => w.id === latestRepair.sourceWarehouseId);
+                    const sourceName = sourceWh ? sourceWh.name : (latestRepair.sourceWarehouseId === 'EXTERNAL' ? 'Harici Giriş' : latestRepair.sourceWarehouseId || '-');
+                    
+                    return `
+                      <div style="font-size: 0.78rem; color: #94A3B8; margin-top: 6px; display: flex; flex-direction: column; gap: 3px; border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 6px; width: 100%;">
+                        <div><strong style="color: #E2E8F0;">Kaynak:</strong> ${sourceName}</div>
+                        ${latestRepair.faultCode && latestRepair.faultCode !== '-' ? `<div><strong style="color: #F59E0B;">Arıza:</strong> ${latestRepair.faultCode} ${latestRepair.faultDesc && latestRepair.faultDesc !== '-' ? `(${latestRepair.faultDesc})` : ''}</div>` : ''}
+                        ${latestRepair.receiveNote ? `<div><strong style="color: #14F195;">Kabul Notu:</strong> ${latestRepair.receiveNote}</div>` : ''}
+                        ${latestRepair.repairNotes ? `<div><strong style="color: #3B82F6;">Onarım Notu:</strong> ${latestRepair.repairNotes}</div>` : ''}
+                      </div>
+                    `;
+                  })() : ''}
+                </div>
               </td>
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
                 <span style="background-color: ${isKritik ? 'rgba(239, 68, 68, 0.1)' : 'rgba(20, 241, 149, 0.1)'}; color: ${isKritik ? '#EF4444' : '#14F195'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
@@ -311,17 +630,47 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 </span>
               </td>
               <td style="padding: 1rem; color: ${rezerve > 0 ? '#F59E0B' : '#94A3B8'}; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
-                ${rezerve}
+                ${(() => {
+                  if (rezerve > 0) {
+                    const resDetails: string[] = [];
+                    if (item.reservations) {
+                      Object.entries(item.reservations).forEach(([tId, qty]) => {
+                        if (Number(qty) > 0) {
+                          const cleanTeam = tId.replace('team_', '').replace(/_/g, ' ');
+                          resDetails.push(`${cleanTeam}: ${qty}`);
+                        }
+                      });
+                    }
+                    if (resDetails.length > 0) {
+                      return `
+                        <span style="font-weight: 700; color: #F59E0B;" title="${resDetails.join(', ')}">
+                          ${rezerve} <span style="font-size: 0.75rem; font-weight: 500; color: #94A3B8; margin-left: 2px;">(${resDetails.join(', ')})</span>
+                        </span>
+                      `;
+                    }
+                    return `<span style="font-weight: 700; color: #F59E0B;">${rezerve}</span>`;
+                  }
+                  return '0';
+                })()}
               </td>
               <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.shelfNo || '-'}</td>
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); text-align: right; white-space: nowrap;">
-                ${isMobileWarehouse ? `
-                  <i onclick="window.openP2PTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-qrcode" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="QR Transfer Kodu Oluştur"></i>
-                ` : ''}
-                <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
-                <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
-                <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
-                <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                ${currentWarehouse.id === 'W11' ? `
+                  <i id="edit-btn-${item.id}" onclick="window.openW11EditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.note || ''}', '${item.shelfNo || ''}', ${item.quantity})" class="fa-solid fa-pen-to-square" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s; font-size: 1.15rem;" onmouseover="this.style.opacity='1'; this.style.color='#00cc6a'" onmouseout="this.style.opacity='0.7'; this.style.color='#14F195'" title="Seri No / Not Düzenle"></i>
+                  <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                ` : `
+                  ${isMobileWarehouse ? `
+                    <i onclick="window.openP2PTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-qrcode" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="QR Transfer Kodu Oluştur"></i>
+                  ` : ''}
+                  ${item.condition === 'DEFECT' && isMaterialManager ? `
+                    <i onclick="window.openSendToRepairModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-screwdriver-wrench" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Tamire Gönder"></i>
+                    <i onclick="window.scrapDefectiveItem('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-dumpster" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Hurdaya Ayır"></i>
+                  ` : ''}
+                  <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
+                  <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
+                  <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                  <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                `}
               </td>
             </tr>
           `;
@@ -413,9 +762,13 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
        const searchInput = document.getElementById('manual-audit-search') as HTMLInputElement;
        const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+       
+       const auditInventoryItems = currentWarehouse.id === 'W11'
+          ? inventoryItems
+          : inventoryItems.filter(item => item.condition !== 'DEFECT');
 
        // 1. Sort the items
-       const sortedItems = [...inventoryItems].sort((a, b) => {
+       const sortedItems = [...auditInventoryItems].sort((a, b) => {
           const locA = String(a.shelfNo || '').trim().toUpperCase();
           const locB = String(b.shelfNo || '').trim().toUpperCase();
           if (!locA && locB) return 1;
@@ -1258,9 +1611,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         return;
       }
       
-      const existingSap = inventoryItems.find(i => i.sapNo === sapInput.value);
+      const existingSap = inventoryItems.find(i => i.sapNo === sapInput.value && i.condition !== 'DEFECT');
       if (existingSap) {
-        alert(`Hata: Bu SAP numarası depoda zaten kayıtlı! Lütfen yeni malzeme eklemek yerine mevcut "${existingSap.name}" malzemesini güncellerin.`);
+        alert(`Hata: Bu SAP numarası depoda zaten kayıtlı! Lütfen yeni malzeme eklemek yerine mevcut "${existingSap.name || existingSap.description || ''}" malzemesini güncellerin.`);
         return;
       }
 
@@ -1278,6 +1631,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           quantity: parseInt(quantityInput.value),
           unit: unitInput.value || 'Adet',
           shelfNo: locationInput.value || 'GİRİLMEMİŞ',
+          condition: 'NEW',
           criticalLimit: 0,
           imageUrl: '', // Initial empty
           notes: ''
@@ -1539,6 +1893,512 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
              alert("Silinirken hata oluştu: " + e.message);
          }
      };
+
+     (window as any).openW11EditModal = (id: string, sap: string, name: string, serial: string, note: string, loc: string, qty: number) => {
+        const modal = document.getElementById('new-warehouse-w11-edit-modal');
+        if (modal) {
+          (document.getElementById('w11-edit-item-id') as HTMLInputElement).value = id;
+          const nameText = document.getElementById('w11-edit-name-text');
+          if (nameText) nameText.innerText = name;
+          const sapText = document.getElementById('w11-edit-sap-text');
+          if (sapText) sapText.innerText = sap;
+          (document.getElementById('w11-edit-qty-input') as HTMLInputElement).value = qty !== undefined ? qty.toString() : '0';
+          (document.getElementById('w11-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null') ? '' : serial;
+          (document.getElementById('w11-edit-note-input') as HTMLTextAreaElement).value = (note === 'undefined' || note === 'null') ? '' : note;
+          (document.getElementById('w11-edit-loc-input') as HTMLInputElement).value = (loc === 'undefined' || loc === 'null') ? '' : loc;
+          modal.style.display = 'flex';
+        }
+     };
+     
+     (window as any).closeW11EditModal = () => {
+        const modal = document.getElementById('new-warehouse-w11-edit-modal');
+        if (modal) modal.style.display = 'none';
+     };
+     
+     (window as any).saveW11EditItem = async (btn: HTMLButtonElement) => {
+        const id = (document.getElementById('w11-edit-item-id') as HTMLInputElement).value;
+        const qty = parseInt((document.getElementById('w11-edit-qty-input') as HTMLInputElement).value) || 0;
+        const serial = (document.getElementById('w11-edit-serial-input') as HTMLInputElement).value.trim();
+        const note = (document.getElementById('w11-edit-note-input') as HTMLTextAreaElement).value.trim();
+        const loc = (document.getElementById('w11-edit-loc-input') as HTMLInputElement).value.trim();
+        
+        const originalText = btn.innerText;
+        btn.innerText = 'Kaydediliyor...';
+        btn.disabled = true;
+        
+        try {
+          await warehouseService.updateMaterial(currentWarehouse.id, id, {
+            quantity: qty,
+            serialNo: serial,
+            note: note,
+            shelfNo: loc
+          });
+          
+          (window as any).closeW11EditModal();
+          
+          (window as any).showToast('Başarılı', 'Malzeme bilgileri başarıyla güncellendi.', 'success');
+          
+          if ((window as any).selectWarehouseAndNavigate) {
+            (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+          }
+        } catch (err: any) {
+          console.error('Error saving W11 details:', err);
+          alert('Kaydedilemedi: ' + err.message);
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+      };
+
+     (window as any).openDefectEditModal = (id: string, sap: string, name: string, serial: string, reportDocId: string = '') => {
+        const modal = document.getElementById('new-warehouse-defect-edit-modal');
+        if (modal) {
+          (document.getElementById('defect-edit-item-id') as HTMLInputElement).value = id;
+          const reportDocIdInput = document.getElementById('defect-edit-report-doc-id') as HTMLInputElement;
+          if (reportDocIdInput) reportDocIdInput.value = reportDocId;
+          const nameText = document.getElementById('defect-edit-name-text');
+          if (nameText) nameText.innerText = name;
+          const sapText = document.getElementById('defect-edit-sap-text');
+          if (sapText) sapText.innerText = sap;
+          (document.getElementById('defect-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null' || serial === '-') ? '' : serial;
+          modal.style.display = 'flex';
+        }
+     };
+
+     (window as any).closeDefectEditModal = () => {
+        const modal = document.getElementById('new-warehouse-defect-edit-modal');
+        if (modal) modal.style.display = 'none';
+     };
+
+     (window as any).saveDefectEditItem = async (btn: HTMLButtonElement) => {
+        const id = (document.getElementById('defect-edit-item-id') as HTMLInputElement).value;
+        const serial = (document.getElementById('defect-edit-serial-input') as HTMLInputElement).value.trim();
+        const reportDocId = (document.getElementById('defect-edit-report-doc-id') as HTMLInputElement)?.value || '';
+        const sapTextEl = document.getElementById('defect-edit-sap-text');
+        const sapNo = sapTextEl ? sapTextEl.innerText.trim() : '';
+
+        const originalText = btn.innerText;
+        btn.innerText = 'Kaydediliyor...';
+        btn.disabled = true;
+
+        try {
+          // 1. Update warehouse defect inventory item
+          await warehouseService.updateMaterial(currentWarehouse.id, id, {
+            serialNo: serial
+          });
+
+          // 2. Update matching material in service report
+          if (reportDocId && sapNo) {
+            try {
+              const { doc, getDoc, updateDoc } = await import('firebase/firestore');
+              const reportRef = doc(db, 'serviceReports', reportDocId);
+              const snap = await getDoc(reportRef);
+              if (snap.exists()) {
+                const data = snap.data();
+                const materials = data.materials || [];
+                let updated = false;
+                for (const mat of materials) {
+                  if (String(mat.sapNo).trim() === String(sapNo).trim() && mat.defectCount > 0) {
+                    mat.serialNo = serial;
+                    updated = true;
+                    break;
+                  }
+                }
+                if (updated) {
+                  await updateDoc(reportRef, { materials });
+                }
+              }
+            } catch (reportErr) {
+              console.error('Failed to sync report material serial:', reportErr);
+            }
+          }
+
+          (window as any).closeDefectEditModal();
+
+          (window as any).showToast('Başarılı', 'Seri numarası başarıyla güncellendi.', 'success');
+
+          if ((window as any).selectWarehouseAndNavigate) {
+            (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+          }
+        } catch (err: any) {
+          console.error('Error saving defect serial details:', err);
+          alert('Kaydedilemedi: ' + err.message);
+          btn.innerText = originalText;
+          btn.disabled = false;
+        }
+     };
+
+     (window as any).editAnalizSerial = async (reportDocId: string, sapNo: string, isDefect: boolean, currentSerial: string) => {
+        const newSerial = prompt("Lütfen bu malzeme için yeni seri numarasını girin:", currentSerial);
+        if (newSerial === null) return; // User cancelled
+        const trimmed = newSerial.trim();
+
+        try {
+          const { doc, getDoc, updateDoc } = await import('firebase/firestore');
+
+          // 1. Update the original service report
+          const reportRef = doc(db, 'serviceReports', reportDocId);
+          const snap = await getDoc(reportRef);
+          if (!snap.exists()) {
+             alert("Rapor kaydı bulunamadı.");
+             return;
+          }
+
+          const data = snap.data();
+          const materials = data.materials || [];
+          let updated = false;
+          for (const mat of materials) {
+            const matchesSap = String(mat.sapNo).trim() === String(sapNo).trim();
+            const isCorrectType = isDefect ? (mat.defectCount > 0) : (mat.used > 0);
+            if (matchesSap && isCorrectType) {
+              mat.serialNo = trimmed;
+              updated = true;
+              break;
+            }
+          }
+
+          if (updated) {
+            await updateDoc(reportRef, { materials });
+          } else {
+             alert("Raporda eşleşen malzeme satırı bulunamadı.");
+             return;
+          }
+
+          // 2. If it's a defect, also try to update the defect inventory item in the warehouse
+          if (isDefect) {
+            try {
+              const { getDocs, collection, query, where, updateDoc: updateDocInventory } = await import('firebase/firestore');
+              const colRef = collection(db, 'warehouses', currentWarehouse.id, 'inventory_v2');
+              const q = query(colRef, where('sapNo', '==', sapNo), where('condition', '==', 'DEFECT'));
+              const snapshot = await getDocs(q);
+              if (!snapshot.empty) {
+                for (const dDoc of snapshot.docs) {
+                  await updateDocInventory(dDoc.ref, { serialNo: trimmed });
+                }
+              }
+            } catch (invErr) {
+              console.error("Failed to sync defect inventory item serial:", invErr);
+            }
+          }
+
+          (window as any).showToast('Başarılı', 'Seri numarası başarıyla güncellendi.', 'success');
+
+          if ((window as any).selectWarehouseAndNavigate) {
+            (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+          }
+        } catch (err: any) {
+          console.error("Failed to edit analiz serial:", err);
+          alert("Güncelleme sırasında hata oluştu: " + err.message);
+        }
+     };
+
+     (window as any).toggleAllDefects = (master: HTMLInputElement) => {
+        const checkboxes = document.querySelectorAll('.defect-row-checkbox') as NodeListOf<HTMLInputElement>;
+        checkboxes.forEach(cb => {
+          cb.checked = master.checked;
+        });
+     };
+
+     (window as any).bulkSendToRepair = () => {
+        const checked = Array.from(document.querySelectorAll('.defect-row-checkbox:checked')) as HTMLInputElement[];
+        if (checked.length === 0) {
+          (window as any).showToast('Uyarı', 'Lütfen tamire sevk etmek istediğiniz malzemeleri seçin.', 'warning');
+          return;
+        }
+
+        const items = checked.map(cb => ({
+          id: cb.getAttribute('data-id')!,
+          sapNo: cb.getAttribute('data-sap')!,
+          description: cb.getAttribute('data-name')!,
+          quantity: parseInt(cb.getAttribute('data-qty')!),
+          serialNo: cb.getAttribute('data-serial')!,
+          faultCode: cb.getAttribute('data-faultcode')!,
+          faultDesc: cb.getAttribute('data-faultdesc')!
+        }));
+
+        (window as any).openBulkSendToRepairModal(items);
+     };
+
+     (window as any).bulkScrap = () => {
+        const checked = Array.from(document.querySelectorAll('.defect-row-checkbox:checked')) as HTMLInputElement[];
+        if (checked.length === 0) {
+          (window as any).showToast('Uyarı', 'Lütfen hurdaya ayırmak istediğiniz malzemeleri seçin.', 'warning');
+          return;
+        }
+
+        const items = checked.map(cb => ({
+          id: cb.getAttribute('data-id')!,
+          sapNo: cb.getAttribute('data-sap')!,
+          description: cb.getAttribute('data-name')!,
+          quantity: parseInt(cb.getAttribute('data-qty')!)
+        }));
+
+        (window as any).openBulkScrapModal(items);
+     };
+
+     (window as any).openBulkSendToRepairModal = (items: Array<{
+        id: string;
+        sapNo: string;
+        description: string;
+        quantity: number;
+        serialNo: string;
+        faultCode: string;
+        faultDesc: string;
+     }>) => {
+        const modal = document.createElement('div');
+        modal.id = 'bulk-send-repair-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = `
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+          background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+          z-index: 10002; display: flex; align-items: center; justify-content: center;
+        `;
+
+        const dispatchNo = `SV-${new Date().getFullYear()}${(new Date().getMonth()+1).toString().padStart(2,'0')}${new Date().getDate().toString().padStart(2,'0')}-${Math.floor(100 + Math.random() * 900)}`;
+
+        let itemsRows = items.map((item, idx) => `
+          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px; display:flex; flex-direction:column; gap:6px;">
+            <span style="font-weight:700; color:#FFF; font-size:0.85rem;">${idx + 1}. ${item.description}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94A3B8;">
+              <span>SAP: ${item.sapNo} | Seri: ${item.serialNo}</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span>Miktar:</span>
+                <input type="number" class="bulk-qty-input" data-id="${item.id}" value="${item.quantity}" min="1" max="${item.quantity}" style="width:60px; height:26px; background:rgba(0,0,0,0.3); border:1px solid #1E293B; border-radius:4px; color:#FFF; text-align:center; font-size:0.8rem; outline:none;">
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        modal.innerHTML = `
+          <div class="glass-panel fade-in-up" style="width: 100%; max-width: 500px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5); max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem; flex-shrink:0;">
+              <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.4rem; color:#14F195; font-weight:800; letter-spacing:1px;">
+                <i class="fa-solid fa-screwdriver-wrench" style="margin-right:8px;"></i> TOPLU TAMİRE SEVK
+              </h3>
+              <button onclick="document.getElementById('bulk-send-repair-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div style="margin-bottom:1.25rem; font-size:0.85rem; color:#E2E8F0; flex-shrink:0;">
+              <strong>Sevk No (Otomatik):</strong> <span style="font-family:monospace; color:#14F195; font-weight:bold; font-size:0.95rem; margin-left:4px;">${dispatchNo}</span>
+            </div>
+
+            <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 4px;" class="custom-scrollbar">
+              <p style="color:#94A3B8; font-size:0.85rem; margin:0; font-weight:600;">Sevk Edilecek Malzemeler (${items.length} Kalem)</p>
+              ${itemsRows}
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem; flex-shrink:0;">
+              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Tamir İstasyonu</label>
+              <select id="bulk-send-repair-workshop" class="cyber-input" style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4);">
+                <option value="Merkez Tamir Atölyesi">Merkez Tamir Atölyesi</option>
+              </select>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem; flex-shrink:0;">
+              <button onclick="document.getElementById('bulk-send-repair-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+              <button id="bulk-confirm-send-repair-btn" class="btn-cyber" style="background:linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color:#0A0E17; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(20,241,149,0.3);">SEVK ET</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const confirmBtn = document.getElementById('bulk-confirm-send-repair-btn');
+        if (confirmBtn) {
+          confirmBtn.onclick = async () => {
+            const workshopSelect = document.getElementById('bulk-send-repair-workshop') as HTMLSelectElement;
+            const qtyInputs = document.querySelectorAll('.bulk-qty-input') as NodeListOf<HTMLInputElement>;
+            
+            const itemsWithQty = items.map(item => {
+              const input = Array.from(qtyInputs).find(inp => inp.getAttribute('data-id') === item.id);
+              const qty = parseInt(input?.value || '0', 10);
+              return { ...item, sendQty: qty };
+            });
+
+            for (const item of itemsWithQty) {
+              if (isNaN(item.sendQty) || item.sendQty <= 0 || item.sendQty > item.quantity) {
+                alert(`Lütfen "${item.description}" için 1 ile ${item.quantity} arasında geçerli bir miktar girin.`);
+                return;
+              }
+            }
+
+            confirmBtn.setAttribute('disabled', 'true');
+            confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sevk Ediliyor...';
+
+            try {
+              const { repairService } = await import('../services/RepairService');
+              const currentUser = (window as any).currentUser;
+              const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+              for (const item of itemsWithQty) {
+                await repairService.createRepair({
+                  sapNo: item.sapNo,
+                  serialNo: item.serialNo,
+                  description: item.description,
+                  quantity: item.sendQty,
+                  sourceWarehouseId: currentWarehouse.id,
+                  workshopId: workshopSelect.value,
+                  sentBy: userEmail,
+                  faultCode: item.faultCode,
+                  faultDesc: item.faultDesc,
+                  dispatchNo: dispatchNo
+                } as any);
+
+                await warehouseService.updateStockBySap(
+                  currentWarehouse.id,
+                  item.sapNo,
+                  -item.sendQty,
+                  {
+                    user: userEmail,
+                    reason: `Toplu sevk kapsamında tamir atölyesine gönderildi. Sevk No: ${dispatchNo}`
+                  },
+                  'DEFECT'
+                );
+              }
+
+              (window as any).showToast('Başarılı', `Malzemeler ${dispatchNo} sevk numarası ile başarıyla sevk edildi.`, 'success');
+              modal.remove();
+
+              if ((window as any).selectWarehouseAndNavigate) {
+                (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+              }
+            } catch (e: any) {
+              console.error(e);
+              alert('Toplu sevk esnasında bir hata oluştu: ' + e.message);
+              confirmBtn.removeAttribute('disabled');
+              confirmBtn.innerHTML = 'SEVK ET';
+            }
+          };
+        }
+     };
+
+     (window as any).openBulkScrapModal = (items: Array<{
+        id: string;
+        sapNo: string;
+        description: string;
+        quantity: number;
+     }>) => {
+        const modal = document.createElement('div');
+        modal.id = 'bulk-scrap-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = `
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+          background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+          z-index: 10002; display: flex; align-items: center; justify-content: center;
+        `;
+
+        let itemsRows = items.map((item, idx) => `
+          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px; display:flex; flex-direction:column; gap:6px;">
+            <span style="font-weight:700; color:#FFF; font-size:0.85rem;">${idx + 1}. ${item.description}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94A3B8;">
+              <span>SAP: ${item.sapNo}</span>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span>Miktar:</span>
+                <input type="number" class="bulk-scrap-qty-input" data-id="${item.id}" value="${item.quantity}" min="1" max="${item.quantity}" style="width:60px; height:26px; background:rgba(0,0,0,0.3); border:1px solid #1E293B; border-radius:4px; color:#FFF; text-align:center; font-size:0.8rem; outline:none;">
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        modal.innerHTML = `
+          <div class="glass-panel fade-in-up" style="width: 100%; max-width: 500px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5); max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem; flex-shrink:0;">
+              <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.4rem; color:#EF4444; font-weight:800; letter-spacing:1px;">
+                <i class="fa-solid fa-dumpster" style="margin-right:8px;"></i> TOPLU HURDAYA AYIR
+              </h3>
+              <button onclick="document.getElementById('bulk-scrap-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 4px;" class="custom-scrollbar">
+              <p style="color:#94A3B8; font-size:0.85rem; margin:0; font-weight:600;">Hurdaya Ayrılacak Malzemeler (${items.length} Kalem)</p>
+              ${itemsRows}
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem; flex-shrink:0;">
+              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Gerekçe / Hurda Notu</label>
+              <textarea id="bulk-scrap-note" class="cyber-input" placeholder="Hurdaya ayrılma gerekçesini yazınız..." style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4); height:80px; resize:none;" required></textarea>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem; flex-shrink:0;">
+              <button onclick="document.getElementById('bulk-scrap-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+              <button id="bulk-confirm-scrap-btn" class="btn-cyber" style="background:linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color:#FFF; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(239,68,68,0.3);">HURDAYA AYIR</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const confirmBtn = document.getElementById('bulk-confirm-scrap-btn');
+        if (confirmBtn) {
+          confirmBtn.onclick = async () => {
+            const noteInput = document.getElementById('bulk-scrap-note') as HTMLTextAreaElement;
+            const note = noteInput?.value.trim() || '';
+            const qtyInputs = document.querySelectorAll('.bulk-scrap-qty-input') as NodeListOf<HTMLInputElement>;
+
+            if (!note) {
+              alert('Lütfen hurdaya ayırma gerekçesini yazın.');
+              return;
+            }
+
+            const itemsWithQty = items.map(item => {
+              const input = Array.from(qtyInputs).find(inp => inp.getAttribute('data-id') === item.id);
+              const qty = parseInt(input?.value || '0', 10);
+              return { ...item, scrapQty: qty };
+            });
+
+            for (const item of itemsWithQty) {
+              if (isNaN(item.scrapQty) || item.scrapQty <= 0 || item.scrapQty > item.quantity) {
+                alert(`Lütfen "${item.description}" için 1 ile ${item.quantity} arasında geçerli bir miktar girin.`);
+                return;
+              }
+            }
+
+            confirmBtn.setAttribute('disabled', 'true');
+            confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> İşleniyor...';
+
+            try {
+              const currentUser = (window as any).currentUser;
+              const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+              for (const item of itemsWithQty) {
+                await warehouseService.updateStockBySap(
+                  currentWarehouse.id,
+                  item.sapNo,
+                  -item.scrapQty,
+                  {
+                    user: userEmail,
+                    reason: `Toplu hurdaya ayrıldı. Gerekçe: ${note}`
+                  },
+                  'DEFECT'
+                );
+
+                await warehouseService.updateStockBySap(
+                  currentWarehouse.id,
+                  item.sapNo,
+                  item.scrapQty,
+                  {
+                    user: userEmail,
+                    reason: `Toplu hurda stok girişi. Gerekçe: ${note}`
+                  },
+                  'SCRAP'
+                );
+              }
+
+              (window as any).showToast('Başarılı', 'Seçilen malzemeler başarıyla hurdaya ayrıldı.', 'success');
+              modal.remove();
+
+              if ((window as any).selectWarehouseAndNavigate) {
+                (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+              }
+            } catch (e: any) {
+              console.error(e);
+              alert('Toplu hurdaya ayırma esnasında bir hata oluştu: ' + e.message);
+              confirmBtn.removeAttribute('disabled');
+              confirmBtn.innerHTML = 'HURDAYA AYIR';
+            }
+          };
+        }
+     };
+
         (window as any).openP2PTransferModal = (id: string, sap: string, name: string, maxQty: number) => {
         const modal = document.getElementById('p2p-transfer-modal');
         if (modal) {
@@ -1603,17 +2463,74 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           alert('QR kod oluşturulurken hata: ' + err.message);
         }
      };
-    
-    (window as any).openTransferModal = (id: string, sap: string, name: string, maxQty: number) => {
-       const modal = document.getElementById('new-warehouse-transfer-modal');
-       if(modal) {
-         (document.getElementById('transfer-item-id') as HTMLInputElement).value = id;
-         (document.getElementById('transfer-info') as HTMLElement).innerText = `${sap} - ${name} (Mevcut: ${maxQty})`;
-         (document.getElementById('transfer-qty-input') as HTMLInputElement).max = maxQty.toString();
-         (document.getElementById('transfer-qty-input') as HTMLInputElement).value = '1';
-         modal.style.display = 'flex';
-       }
-    };
+
+     (window as any).openTransferModal = async (id: string, sap: string, name: string, maxQty: number, preselectedTargetWarehouseId?: string) => {
+        const modal = document.getElementById('new-warehouse-transfer-modal');
+        if(modal) {
+          (document.getElementById('transfer-item-id') as HTMLInputElement).value = id;
+          (document.getElementById('transfer-info') as HTMLElement).innerText = `${sap} - ${name} (Mevcut: ${maxQty})`;
+          (document.getElementById('transfer-qty-input') as HTMLInputElement).max = maxQty.toString();
+          (document.getElementById('transfer-qty-input') as HTMLInputElement).value = '1';
+
+          const targetSelect = document.getElementById('transfer-target-input') as HTMLSelectElement;
+          if (targetSelect) {
+             targetSelect.innerHTML = '<option value="">Yükleniyor...</option>';
+             
+             let optionsHtml = '';
+             let matchedWh: any = null;
+
+             if (currentWarehouse.id.startsWith('team_') && !isMaterialManager) {
+               try {
+                 const { collection, query, where, getDocs } = await import('firebase/firestore');
+                 const logsRef = collection(db, 'warehouses', currentWarehouse.id, 'logs');
+                 const q = query(
+                   logsRef, 
+                   where('sapNo', '==', sap), 
+                   where('type', '==', 'TRANSFER')
+                 );
+                 const snapshot = await getDocs(q);
+                 const logsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+                 
+                 // Sort in-memory to avoid missing index errors
+                 logsList.sort((a, b) => {
+                   const aTime = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+                   const bTime = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+                   return bTime - aTime;
+                 });
+
+                 for (const logData of logsList) {
+                   if (logData.quantity > 0 && logData.note) {
+                     const noteLower = logData.note.toLowerCase();
+                     const foundWh = allWarehouses.find(w => {
+                       const cleanName = w.name.toLowerCase().replace('depo', '').trim();
+                       return noteLower.includes(cleanName);
+                     });
+                     if (foundWh) {
+                       matchedWh = foundWh;
+                       break;
+                     }
+                   }
+                 }
+               } catch (e) {
+                 console.error('Error fetching logs to determine source warehouse:', e);
+               }
+             }
+
+             if (matchedWh) {
+               optionsHtml = `<option value="${matchedWh.id}">${matchedWh.name}</option>`;
+             } else {
+               optionsHtml = targetOptions.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+             }
+             
+             targetSelect.innerHTML = optionsHtml;
+             if (preselectedTargetWarehouseId) {
+               targetSelect.value = preselectedTargetWarehouseId;
+             }
+          }
+
+          modal.style.display = 'flex';
+        }
+     };
     
     (window as any).closeTransferModal = () => {
        const modal = document.getElementById('new-warehouse-transfer-modal');
@@ -1701,9 +2618,212 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        }
     };
 
+    (window as any).renderDepoHareketleriLogs = (filteredLogs?: any[]) => {
+       const container = document.getElementById('depo-hareketleri-container');
+       if (!container) return;
+       
+       const logsToRender = filteredLogs || (window as any).__cachedDepoLogs || [];
+       if (logsToRender.length === 0) {
+         container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Herhangi bir hareket kaydı bulunamadı.</div>';
+         return;
+       }
+       
+       const sortedLogs = [...logsToRender].sort((a: any, b: any) => ((b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+       
+       container.innerHTML = `
+         <div style="border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; background-color: #111827;">
+           <div style="overflow-x: auto;">
+             <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; min-width: 800px;">
+               <thead>
+                 <tr style="background-color: #0F172A; border-bottom: 1px solid #1E293B;">
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tarih</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Yapan</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tür</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Malzeme</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Miktar</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Açıklama</th>
+                   ${isMaterialManager ? `<th style="padding: 1rem; color: #94A3B8; font-weight: 600; text-align: right;">Aksiyon</th>` : ''}
+                 </tr>
+               </thead>
+               <tbody>
+                 ${sortedLogs.map((l: any) => {
+                   const date = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString('tr-TR') : '-';
+                   const formatUser = (user: string): string => {
+                      if (!user) return 'Sistem';
+                      const trimmed = user.trim();
+                      
+                      // Match dh-tmXX@demirerholding.com
+                      const match = trimmed.match(/^dh-tm(\d+)@demirerholding\.com$/i);
+                      if (match) {
+                        return `Team ${match[1]}`;
+                      }
+
+                      // Match dhtmXX@demirerholding.com
+                      const match2 = trimmed.match(/^dhtm(\d+)@demirerholding\.com$/i);
+                      if (match2) {
+                        return `Team ${match2[1]}`;
+                      }
+
+                      // Match dh-tmXX
+                      const match3 = trimmed.match(/^dh-tm(\d+)$/i);
+                      if (match3) {
+                        return `Team ${match3[1]}`;
+                      }
+
+                      // Match TeamXX or Team XX
+                      const match4 = trimmed.match(/^team\s*(\d+)$/i);
+                      if (match4) {
+                        return `Team ${match4[1]}`;
+                      }
+
+                      if (trimmed.startsWith('team_')) {
+                        return trimmed.replace('team_', '').replace(/_/g, ' ');
+                      }
+
+                      if (trimmed.includes('@')) {
+                        return trimmed.split('@')[0];
+                      }
+
+                      return trimmed;
+                    };
+                   let typeColor = '#94A3B8';
+                   let typeText: string = l.type;
+                   if (l.type === 'ADD') { typeColor = '#10B981'; typeText = 'Ekleme'; }
+                   if (l.type === 'REMOVE') { typeColor = '#EF4444'; typeText = 'Kullanım'; }
+                   if (l.type === 'TRANSFER') { typeColor = '#3B82F6'; typeText = 'Transfer'; }
+                   if (l.type === 'UPDATE') { typeColor = '#F59E0B'; typeText = 'Güncelleme'; }
+                   
+                   const qtyColor = l.quantity > 0 ? '#10B981' : '#EF4444';
+                   const qtyText = l.quantity > 0 ? `+${l.quantity}` : `${l.quantity}`;
+
+                   // DIRECTION INDICATOR FOR TRANSFER
+                   let directionHtml = '';
+                   if (l.type === 'TRANSFER') {
+                     const currentWhName = currentWarehouse.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim();
+                     let otherWhName = '';
+                     let isIncoming = l.quantity > 0;
+                     
+                     if (l.note) {
+                       if (l.note.includes(' deposuna transfer edildi.')) {
+                         otherWhName = l.note.replace(' deposuna transfer edildi.', '').trim();
+                         isIncoming = false;
+                       } else if (l.note.includes(' deposundan transfer edildi.')) {
+                         otherWhName = l.note.replace(' deposundan transfer edildi.', '').trim();
+                         isIncoming = true;
+                       }
+                     }
+                     
+                     if (!otherWhName) {
+                       otherWhName = 'Diğer Depo';
+                     }
+                     
+                     const cleanCurrent = currentWhName;
+                     const cleanOther = otherWhName;
+                     
+                     if (isIncoming) {
+                       directionHtml = `
+                         <div style="margin-top: 0.35rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981; font-weight: 500;">
+                           <span style="background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanOther}</span>
+                           <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                           <span style="background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanCurrent}</span>
+                         </div>
+                       `;
+                     } else {
+                       directionHtml = `
+                         <div style="margin-top: 0.35rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; font-weight: 500;">
+                           <span style="background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanCurrent}</span>
+                           <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                           <span style="background: rgba(239, 68, 68, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanOther}</span>
+                         </div>
+                       `;
+                     }
+                   }
+
+                   return `
+                     <tr style="border-bottom: 1px solid rgba(30, 41, 59, 0.5); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(30, 41, 59, 0.2)'" onmouseout="this.style.backgroundColor='transparent'">
+                       <td style="padding: 1rem; color: #E2E8F0;">${date}</td>
+                       <td style="padding: 1rem; color: #E2E8F0; font-weight: 500;">${formatUser(l.user)}</td>
+                       <td style="padding: 1rem;"><span style="color: ${typeColor}; font-weight: 600;">${typeText}</span></td>
+                       <td style="padding: 1rem; color: #E2E8F0;">
+                         <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                           <div>
+                             <span style="background-color: rgba(59, 130, 246, 0.1); color: #60A5FA; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.2);">SAP: ${l.sapNo}</span>
+                             <strong>${l.materialName || 'Bilinmeyen Malzeme'}</strong>
+                           </div>
+                           ${directionHtml}
+                         </div>
+                       </td>
+                       <td style="padding: 1rem; color: ${qtyColor}; font-weight: 700;">${qtyText} Adet</td>
+                       <td style="padding: 1rem; color: #94A3B8;">${l.note || ''}</td>
+                       ${isMaterialManager ? `
+                        <td style="padding: 1rem; text-align: right;">
+                          <button onclick="window.deleteDepoLog('${l.id}')" style="background: transparent; border: none; color: #EF4444; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'" title="Kayıt Sil">
+                            <i class="fa-solid fa-trash-can"></i>
+                          </button>
+                        </td>
+                        ` : ''}
+                     </tr>
+                   `;
+                 }).join('')}
+               </tbody>
+             </table>
+           </div>
+         </div>
+       `;
+     };
+
+     (window as any).deleteDepoLog = async (logId: string) => {
+        if (!confirm("Bu hareket kaydını silmek istediğinize emin misiniz?")) {
+          return;
+        }
+        try {
+          await warehouseService.deleteLog(currentWarehouse.id, logId);
+          (window as any).showToast('Başarılı', 'Kayıt silindi.', 'success');
+          if (typeof (window as any).selectWarehouseAndNavigate === 'function') {
+            (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+          }
+        } catch (err: any) {
+          alert("Hata oluştu: " + err.message);
+        }
+     };
+
+     (window as any).clearAllDepoLogs = async () => {
+        if (!confirm("Bu depoya ait tüm hareket geçmişini kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
+          return;
+        }
+        try {
+          (window as any).showToast('Bilgi', 'Temizleniyor, lütfen bekleyin...', 'info');
+          await warehouseService.clearAllLogs(currentWarehouse.id);
+          (window as any).showToast('Başarılı', 'Tüm hareket geçmişi başarıyla temizlendi.', 'success');
+          if (typeof (window as any).selectWarehouseAndNavigate === 'function') {
+            (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+          }
+        } catch (err: any) {
+          alert("Hata oluştu: " + err.message);
+        }
+     };
+
+     (window as any).filterDepoHareketleri = (searchTerm: string) => {
+       const term = searchTerm.toLowerCase().trim();
+       if (!term) {
+         (window as any).renderDepoHareketleriLogs();
+         return;
+       }
+       
+       const filtered = ((window as any).__cachedDepoLogs || []).filter((l: any) => {
+         const sap = String(l.sapNo || '').toLowerCase();
+         const matName = String(l.materialName || '').toLowerCase();
+         const note = String(l.note || '').toLowerCase();
+         const user = String(l.user || '').toLowerCase();
+         return sap.includes(term) || matName.includes(term) || note.includes(term) || user.includes(term);
+       });
+       
+       (window as any).renderDepoHareketleriLogs(filtered);
+     };
+
     (window as any).switchTab = async (tabName: string, id: string) => {
-      const tabs = ['tab-ENVANTER', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI'];
-      const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI'];
+      const tabs = ['tab-ENVANTER', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI', 'tab-DEFECT'];
+      const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI', 'view-DEFECT'];
       
       tabs.forEach(t => {
         const el = document.getElementById(t);
@@ -1754,59 +2874,18 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       }
 
       if (tabName === 'DEPO_HAREKETLERI') {
+         const searchInput = document.getElementById('depo-hareketleri-search') as HTMLInputElement;
+         if (searchInput) {
+           searchInput.value = '';
+         }
          const container = document.getElementById('depo-hareketleri-container');
          if (container) {
            container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
            try {
              const logs = await warehouseService.getLogs(currentWarehouse.id);
-             if (logs.length === 0) {
-               container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Herhangi bir hareket kaydı bulunamadı.</div>';
-             } else {
-               const sortedLogs = logs.sort((a,b:any) => ((b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
-               container.innerHTML = `
-                 <div style="border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; background-color: #111827;">
-                   <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
-                     <thead>
-                       <tr style="background-color: #0F172A; border-bottom: 1px solid #1E293B;">
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tarih</th>
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Yapan</th>
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tür</th>
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Malzeme</th>
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Miktar</th>
-                         <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Açıklama</th>
-                       </tr>
-                     </thead>
-                     <tbody>
-                       ${sortedLogs.map(l => {
-                         const date = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString('tr-TR') : '-';
-                         let typeColor = '#94A3B8';
-                         let typeText: string = l.type;
-                         if (l.type === 'ADD') { typeColor = '#10B981'; typeText = 'Ekleme'; }
-                         if (l.type === 'REMOVE') { typeColor = '#EF4444'; typeText = 'Kullanım'; }
-                         if (l.type === 'TRANSFER') { typeColor = '#3B82F6'; typeText = 'Transfer'; }
-                         if (l.type === 'UPDATE') { typeColor = '#F59E0B'; typeText = 'Güncelleme'; }
-                         
-                         const qtyColor = l.quantity > 0 ? '#10B981' : '#EF4444';
-                         const qtyText = l.quantity > 0 ? `+${l.quantity}` : `${l.quantity}`;
-
-                         return `
-                           <tr style="border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
-                             <td style="padding: 1rem; color: #E2E8F0;">${date}</td>
-                             <td style="padding: 1rem; color: #E2E8F0; font-weight: 500;">${l.user || 'Sistem'}</td>
-                             <td style="padding: 1rem;"><span style="color: ${typeColor}; font-weight: 600;">${typeText}</span></td>
-                             <td style="padding: 1rem; color: #E2E8F0;">
-                               <span style="background-color: rgba(59, 130, 246, 0.1); color: #60A5FA; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.2);">SAP: ${l.sapNo}</span>
-                               <strong>${l.materialName || 'Bilinmeyen Malzeme'}</strong>
-                             </td>
-                             <td style="padding: 1rem; color: ${qtyColor}; font-weight: 700;">${qtyText} Adet</td>
-                             <td style="padding: 1rem; color: #94A3B8;">${l.note || ''}</td>
-                           </tr>
-                         `;
-                       }).join('')}
-                     </tbody>
-                   </table>
-                 </div>
-               `;
+             (window as any).__cachedDepoLogs = logs;
+             if (typeof (window as any).renderDepoHareketleriLogs === 'function') {
+               (window as any).renderDepoHareketleriLogs();
              }
            } catch (err: any) {
              console.error(err);
@@ -1860,12 +2939,23 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                            <span style="font-weight: 600; color: #E2E8F0; font-size: 0.85rem;">Kalem: ${audit.totalItems}</span>
                            <span style="font-weight: 600; color: ${diffColor}; font-size: 0.85rem;">Fark: ${totalDiffText}</span>
                          </div>
-                         <button onclick="event.stopPropagation(); window.importAuditToInventory('${audit.id}')" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; color: #3B82F6; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'">
-                           <i class="fa-solid fa-file-import"></i> Aktar
+                         ${audit.imported ? `
+                            <span style="color: #64748B; font-size: 0.8rem; font-style: italic; display: inline-flex; align-items: center; gap: 0.25rem;" title="Envanter stok aktarımı sayımdan sonra yapıldı">
+                              <i class="fa-solid fa-circle-check" style="color: #10B981;"></i> Aktarıldı
+                            </span>
+                          ` : `
+                            <button onclick="event.stopPropagation(); window.importAuditToInventory('${audit.id}')" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; color: #3B82F6; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'">
+                              <i class="fa-solid fa-file-import"></i> Aktar
+                            </button>
+                          `}
+                         <button onclick="event.stopPropagation(); window.downloadSingleAuditExcel('${audit.id}')" style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; color: #10B981; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#10B981'; this.style.color='#0A0E17'" onmouseout="this.style.backgroundColor='rgba(16, 185, 129, 0.1)'; this.style.color='#10B981'">
+                           <i class="fa-solid fa-file-excel"></i> Excel
                          </button>
-                         <button onclick="event.stopPropagation(); window.deleteAuditRecord('${audit.id}')" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#EF4444'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'; this.style.color='#EF4444'">
-                           <i class="fa-solid fa-trash"></i> Sil
-                         </button>
+                         ${isMaterialManager ? `
+                          <button onclick="event.stopPropagation(); window.deleteAuditRecord('${audit.id}')" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#EF4444'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'; this.style.color='#EF4444'">
+                            <i class="fa-solid fa-trash"></i> Sil
+                          </button>
+                          ` : ''}
                          <div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background-color: #1E293B; border-radius: 4px;">
                            <i class="fa-solid fa-chevron-down" style="color: #94A3B8; font-size: 0.8rem; transition: transform 0.2s;"></i>
                          </div>
@@ -1931,7 +3021,11 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       let hasError = false;
       let firstErrorItemId = '';
 
-      const sortedItems = [...inventoryItems].sort((a, b) => {
+      const auditInventoryItems = currentWarehouse.id === 'W11'
+        ? inventoryItems
+        : inventoryItems.filter(item => item.condition !== 'DEFECT');
+
+      const sortedItems = [...auditInventoryItems].sort((a, b) => {
          const locA = String(a.shelfNo || '').trim().toUpperCase();
          const locB = String(b.shelfNo || '').trim().toUpperCase();
          if (!locA && locB) return 1;
@@ -1958,7 +3052,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          return term === '' || sap.includes(term) || name.includes(term);
       });
 
-      for (const item of inventoryItems) {
+      for (const item of auditInventoryItems) {
         const itemId = item.id;
         const sapNo = item.sapNo;
         const name = item.name;
@@ -1985,12 +3079,12 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               }
             } else {
               manualResults.push({
-                itemId, sapNo, description: name, systemQty, physicalQty, diff, note: noteVal
+                itemId, sapNo, description: name, systemQty, physicalQty, diff, note: noteVal, shelfNo: shelfVal
               });
             }
           } else {
             manualResults.push({
-               itemId, sapNo, description: name, systemQty, physicalQty, diff, note: 'Sayım Uyumlu'
+               itemId, sapNo, description: name, systemQty, physicalQty, diff, note: 'Sayım Uyumlu', shelfNo: shelfVal
             });
           }
         }
@@ -2068,6 +3162,262 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       }
     };
 
+    (window as any).openSendToRepairModal = async (itemId: string, sapNo: string, description: string, maxQty: number, serialNo: string = '-', faultCode: string = '-', faultDesc: string = '-') => {
+      const modal = document.createElement('div');
+      modal.id = 'send-repair-modal';
+      modal.className = 'modal-overlay';
+      modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+        z-index: 10002; display: flex; align-items: center; justify-content: center;
+      `;
+
+      modal.innerHTML = `
+        <div class="glass-panel fade-in-up" style="width: 100%; max-width: 450px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
+            <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.4rem; color:#14F195; font-weight:800; letter-spacing:1px;">
+              <i class="fa-solid fa-screwdriver-wrench" style="margin-right:8px;"></i> TAMİRE SEVK ET
+            </h3>
+            <button onclick="document.getElementById('send-repair-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          
+          <div style="margin-bottom:1.25rem;">
+            <p style="color:#94A3B8; font-size:0.85rem; margin-bottom:0.25rem;">Malzeme Detayı</p>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px;">
+              <span style="font-weight:700; color:#FFF; display:block;">${description}</span>
+              <span style="font-size:0.75rem; color:#94A3B8;"><i class="fa-solid fa-barcode"></i> SAP: ${sapNo} | Seri No: ${serialNo} | Maksimum Sevk: ${maxQty} Adet</span>
+              ${faultCode !== '-' ? `<div style="font-size:0.75rem; color:#F59E0B; margin-top:4px;"><i class="fa-solid fa-triangle-exclamation"></i> Arıza Kodu: ${faultCode}</div>` : ''}
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.25rem;">
+            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Sevk Miktarı</label>
+            <input type="number" id="send-repair-qty" class="cyber-input" value="${maxQty}" min="1" max="${maxQty}" style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4);">
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.5rem;">
+            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Tamir İstasyonu</label>
+            <select id="send-repair-workshop" class="cyber-input" style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4);">
+              <option value="Merkez Tamir Atölyesi">Merkez Tamir Atölyesi</option>
+            </select>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem;">
+            <button onclick="document.getElementById('send-repair-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+            <button id="confirm-send-repair-btn" class="btn-cyber" style="background:linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color:#0A0E17; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(20,241,149,0.3);">GÖNDER</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const confirmBtn = document.getElementById('confirm-send-repair-btn');
+      if (confirmBtn) {
+        confirmBtn.onclick = async () => {
+          const qtyInput = document.getElementById('send-repair-qty') as HTMLInputElement;
+          const workshopSelect = document.getElementById('send-repair-workshop') as HTMLSelectElement;
+          const qty = parseInt(qtyInput?.value || '0', 10);
+          
+          if (isNaN(qty) || qty <= 0 || qty > maxQty) {
+            alert(`Lütfen 1 ile ${maxQty} arasında geçerli bir miktar girin.`);
+            return;
+          }
+
+          confirmBtn.setAttribute('disabled', 'true');
+          confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gönderiliyor...';
+
+          try {
+            const { repairService } = await import('../services/RepairService');
+            const currentUser = (window as any).currentUser;
+            const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+            // 1. Create Repair Record
+            await repairService.createRepair({
+              sapNo,
+              serialNo,
+              description,
+              quantity: qty,
+              sourceWarehouseId: currentWarehouse.id,
+              workshopId: workshopSelect.value,
+              sentBy: userEmail,
+              faultCode,
+              faultDesc
+            });
+
+            // 2. Deduct DEFECT stock from current warehouse
+            await warehouseService.updateStockBySap(
+              currentWarehouse.id,
+              sapNo,
+              -qty,
+              {
+                user: userEmail,
+                reason: `Tamir atölyesine sevk edildi (${workshopSelect.value})`
+              },
+              'DEFECT'
+            );
+
+
+
+            (window as any).showToast('Başarılı', 'Malzeme tamir atölyesine başarıyla sevk edildi.', 'success');
+            modal.remove();
+            
+            // Reload warehouse view
+            if ((window as any).selectWarehouseAndNavigate) {
+              (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+            }
+          } catch (e) {
+            console.error(e);
+            alert('Tamire gönderim esnasında hata oluştu.');
+            confirmBtn.removeAttribute('disabled');
+            confirmBtn.innerHTML = 'GÖNDER';
+          }
+        };
+      }
+    };
+
+    (window as any).scrapDefectiveItem = async (itemId: string, sapNo: string, description: string, maxQty: number) => {
+      const modal = document.createElement('div');
+      modal.id = 'scrap-defect-modal';
+      modal.className = 'modal-overlay';
+      modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+        z-index: 10002; display: flex; align-items: center; justify-content: center;
+      `;
+
+      modal.innerHTML = `
+        <div class="glass-panel fade-in-up" style="width: 100%; max-width: 450px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem;">
+            <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.4rem; color:#EF4444; font-weight:800; letter-spacing:1px;">
+              <i class="fa-solid fa-dumpster" style="margin-right:8px;"></i> HURDAYA AYIR
+            </h3>
+            <button onclick="document.getElementById('scrap-defect-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          
+          <div style="margin-bottom:1.25rem;">
+            <p style="color:#94A3B8; font-size:0.85rem; margin-bottom:0.25rem;">Malzeme Detayı</p>
+            <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px;">
+              <span style="font-weight:700; color:#FFF; display:block;">${description}</span>
+              <span style="font-size:0.75rem; color:#94A3B8;"><i class="fa-solid fa-barcode"></i> SAP: ${sapNo} | Maksimum Hurda: ${maxQty} Adet</span>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.25rem;">
+            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Miktar</label>
+            <input type="number" id="scrap-qty" class="cyber-input" value="${maxQty}" min="1" max="${maxQty}" style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4);">
+          </div>
+
+          <div class="form-group" style="margin-bottom:1.5rem;">
+            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">Gerekçe / Hurda Notu</label>
+            <textarea id="scrap-note" class="cyber-input" placeholder="Hurdaya ayrılma gerekçesini yazınız..." style="width:100%; padding:0.85rem; background:rgba(0,0,0,0.4); height:80px; resize:none;" required></textarea>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem;">
+            <button onclick="document.getElementById('scrap-defect-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+            <button id="confirm-scrap-btn" class="btn-cyber" style="background:linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color:#FFF; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(239,68,68,0.3);">HURDAYA AYIR</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      const confirmBtn = document.getElementById('confirm-scrap-btn');
+      if (confirmBtn) {
+        confirmBtn.onclick = async () => {
+          const qtyInput = document.getElementById('scrap-qty') as HTMLInputElement;
+          const noteInput = document.getElementById('scrap-note') as HTMLTextAreaElement;
+          const qty = parseInt(qtyInput?.value || '0', 10);
+          const note = noteInput?.value.trim() || '';
+
+          if (isNaN(qty) || qty <= 0 || qty > maxQty) {
+            alert(`Lütfen 1 ile ${maxQty} arasında geçerli bir miktar girin.`);
+            return;
+          }
+          if (!note) {
+            alert('Lütfen hurdaya ayırma gerekçesini yazın.');
+            return;
+          }
+
+          confirmBtn.setAttribute('disabled', 'true');
+          confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> İşleniyor...';
+
+          try {
+            const currentUser = (window as any).currentUser;
+            const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+            // 1. Deduct from DEFECT
+            await warehouseService.updateStockBySap(
+              currentWarehouse.id,
+              sapNo,
+              -qty,
+              {
+                user: userEmail,
+                reason: `Hurdaya ayrıldı. Gerekçe: ${note}`
+              },
+              'DEFECT'
+            );
+
+            // 2. Add to SCRAP stock (so it is visible as Scrap in inventory)
+            await warehouseService.updateStockBySap(
+              currentWarehouse.id,
+              sapNo,
+              qty,
+              {
+                user: userEmail,
+                reason: `Hurda stok girişi. Gerekçe: ${note}`
+              },
+              'SCRAP'
+            );
+
+            (window as any).showToast('Başarılı', 'Malzeme başarıyla hurdaya ayrıldı ve hurda stoğuna eklendi.', 'success');
+            modal.remove();
+
+            // Reload warehouse view
+            if ((window as any).selectWarehouseAndNavigate) {
+              (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+            }
+          } catch (e) {
+            console.error(e);
+            alert('Hurdaya ayırma esnasında hata oluştu.');
+            confirmBtn.removeAttribute('disabled');
+            confirmBtn.innerHTML = 'HURDAYA AYIR';
+          }
+        };
+      }
+    };
+
+    (window as any).acceptRepairReturn = async (repairId: string) => {
+      if (!confirm('Bu malzemenin atölyeden sağlam şekilde geri döndüğünü ve depoya kabul edilerek envantere (Revize) ekleneceğini onaylıyor musunuz?')) return;
+
+      try {
+        (window as any).showToast('İşlem', 'Malzeme depoya kabul ediliyor...', 'info');
+        const { repairService } = await import('../services/RepairService');
+        
+        // Retrieve repair details
+        const repairs = await repairService.getRepairs();
+        const rep = repairs.find(r => r.id === repairId);
+        if (!rep) {
+          alert('Tamir kaydı bulunamadı.');
+          return;
+        }
+
+        const currentUser = (window as any).currentUser;
+        const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+        await repairService.acceptReturnedRepair(rep, userEmail);
+
+        (window as any).showToast('Başarılı', 'Malzeme başarıyla kabul edildi ve Revize stok olarak envantere eklendi.', 'success');
+        
+        // Reload warehouse view
+        if ((window as any).selectWarehouseAndNavigate) {
+          (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Kabul işlemi esnasında bir hata oluştu.');
+      }
+    };
+
     (window as any).importAuditToInventory = async (auditId: string) => {
       if(!confirm('Bu sayım geçmişindeki ürünleri mevcut envantere direkt eklemek istediğinize emin misiniz? (Envanterde varsa güncellenir, yoksa yeni eklenir)')) return;
       const audit = (window as any).__cachedAudits?.find((a: any) => a.id === auditId);
@@ -2093,7 +3443,10 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
            }
         }
         
-        alert(`Aktarım başarılı! ${addedCount} yeni ürün eklendi, ${updatedCount} ürün güncellendi.`);
+        // Mark as imported in Firestore
+        await warehouseService.updateAudit(currentWarehouse.id, auditId, { imported: true });
+        
+        alert("Envanter stok aktarımı sayımdan sonra yapıldı.");
         if ((window as any).selectWarehouseAndNavigate) {
             (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
         }
@@ -2287,28 +3640,30 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             placeholder="Parça adı veya SAP numarası..." 
             style="height: 42px; background-color: #111827; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; width: 280px; outline: none; transition: all 0.2s;"
           />
-          ${isMobileWarehouse ? '' : `
-          <button onclick="window.startFastAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
-            <i class="fa-solid fa-bolt"></i> Hızlı Sayım
-          </button>
-          `}
-          <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
-            <i class="fa-solid fa-qrcode"></i> QR Tara
-          </button>
-          <button onclick="window.downloadInventoryExcel()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
-            <i class="fa-solid fa-download"></i> İndir
-          </button>
-          ${isMobileWarehouse ? '' : `
-          <button onclick="window.printWarehouseQR()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;" title="Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)">
-            <i class="fa-solid fa-qrcode"></i> QR Etiket Bas
-          </button>
-          <input type="file" id="excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleExcelUpload(event)" />
-          <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
-            <i class="fa-solid fa-upload"></i> Yükle
-          </button>
-          <button onclick="window.openAddNewModal()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #FFFFFF; color: #000000; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
-            + Yeni Ekle
-          </button>
+          ${currentWarehouse.id === 'W11' ? '' : `
+            ${isMobileWarehouse ? '' : `
+            <button onclick="window.startFastAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+              <i class="fa-solid fa-bolt"></i> Hızlı Sayım
+            </button>
+            `}
+            <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+              <i class="fa-solid fa-qrcode"></i> QR Tara
+            </button>
+            <button onclick="window.downloadInventoryExcel()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+              <i class="fa-solid fa-download"></i> İndir
+            </button>
+            ${isMobileWarehouse ? '' : `
+            <button onclick="window.printWarehouseQR()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;" title="Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)">
+              <i class="fa-solid fa-qrcode"></i> QR Etiket Bas
+            </button>
+            <input type="file" id="excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleExcelUpload(event)" />
+            <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+              <i class="fa-solid fa-upload"></i> Yükle
+            </button>
+            <button onclick="window.openAddNewModal()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #FFFFFF; color: #000000; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+              + Yeni Ekle
+            </button>
+            `}
           `}
         </div>
       </div>
@@ -2383,29 +3738,40 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           <div onclick="window.switchTab('DEPO_HAREKETLERI', 'tab-DEPO_HAREKETLERI')" id="tab-DEPO_HAREKETLERI" data-active="${currentTab === 'DEPO_HAREKETLERI' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-clock-rotate-left"></i> DEPO HAREKETLERİ
           </div>
-        ` : `
-          <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
-            <i class="fa-solid fa-chart-line"></i> ANALİZ
+          <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+            <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
           </div>
+        ` : `
+          ${currentWarehouse.id !== 'W11' ? `
+            <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+              <i class="fa-solid fa-chart-line"></i> ANALİZ
+            </div>
+          ` : ''}
           <div onclick="window.switchTab('SAYIM', 'tab-SAYIM')" id="tab-SAYIM" data-active="${currentTab === 'SAYIM' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'SAYIM' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-clipboard-check"></i> SAYIM
           </div>
           <div onclick="window.switchTab('SAYIM_GECMISI', 'tab-SAYIM_GECMISI')" id="tab-SAYIM_GECMISI" data-active="${currentTab === 'SAYIM_GECMISI' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-file-invoice"></i> SAYIM GEÇMİŞİ
           </div>
+          ${currentWarehouse.id !== 'W11' ? `
+            <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+              <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
+            </div>
+          ` : ''}
         `}
       </div>
 
       <div id="view-ENVANTER" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'block' : 'none'};">
       <!-- Summary Cards -->
+      ${currentWarehouse.id !== 'W11' ? `
       <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
           <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Toplam Kalem</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">${inventoryItems.length}</div>
+          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">${inventoryItems.filter(i => i.condition !== 'DEFECT').length}</div>
         </div>
         <div style="background-color: #111827; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
           <div style="font-size: 0.8rem; color: #EF4444; text-transform: uppercase; letter-spacing: 0.05em;">Kritik Stok</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #EF4444;">${inventoryItems.filter(i => i.quantity <= (i.minStock || 0)).length}</div>
+          <div style="font-size: 1.75rem; font-weight: 700; color: #EF4444;">${inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length}</div>
         </div>
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
           <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Son İşlemler</div>
@@ -2420,8 +3786,65 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           <div style="font-size: 1.75rem; font-weight: 700; color: #14F195;">Çevrimiçi</div>
         </div>
       </div>
+      ` : `
+      <div style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 2rem;">
+        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
+          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Toplam Kalem</div>
+          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">${inventoryItems.length}</div>
+        </div>
+      </div>
+      `}
+      ${isMaterialManager && pendingReturns.length > 0 ? `
+      <div class="glass-panel fade-in-up" style="border: 1px solid rgba(20, 241, 149, 0.3); background: rgba(20, 241, 149, 0.02); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+        <h3 style="margin-top: 0; margin-bottom: 1rem; font-family: 'Rajdhani', sans-serif; font-size: 1.25rem; color: #14F195; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fa-solid fa-screwdriver-wrench"></i> ONAY BEKLEYEN ATÖLYE DÖNÜŞLERİ (KABUL BEKLEYEN)
+        </h3>
+        <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 1rem;">
+          Merkez Tamir Atölyesi tarafından tamiri tamamlanan ve depoya sevk edilen malzemelerin fiziksel olarak teslim alındığını onaylayıp envantere (Revize stok olarak) girişini yapın.
+        </p>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+            <thead>
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: #94A3B8;">
+                <th style="padding: 0.75rem 1rem;">Sevk Tarihi</th>
+                <th style="padding: 0.75rem 1rem;">Malzeme (SAP)</th>
+                <th style="padding: 0.75rem 1rem;">Miktar</th>
+                <th style="padding: 0.75rem 1rem;">Sevk Eden Atölye Yetkilisi</th>
+                <th style="padding: 0.75rem 1rem; text-align: right;">Aksiyon</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pendingReturns.map(rep => {
+                const formatTime = (ts: any) => {
+                  if (!ts) return '-';
+                  const date = ts.toDate ? ts.toDate() : new Date(ts);
+                  return date.toLocaleString('tr-TR');
+                };
+                return `
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 0.75rem 1rem; color: #94A3B8;">${formatTime(rep.repairedAt || rep.sentAt)}</td>
+                    <td style="padding: 0.75rem 1rem;">
+                      <div style="font-weight: bold; color: #FFF;">${rep.description}</div>
+                      <div style="font-size: 0.75rem; color: #94A3B8;"><i class="fa-solid fa-barcode"></i> ${rep.sapNo}</div>
+                    </td>
+                    <td style="padding: 0.75rem 1rem; font-weight: bold; color: #14F195;">${rep.quantity} Adet</td>
+                    <td style="padding: 0.75rem 1rem; color: #E2E8F0;">${rep.receivedBy || 'Atölye Sorumlusu'}</td>
+                    <td style="padding: 0.75rem 1rem; text-align: right;">
+                      <button onclick="window.acceptRepairReturn('${rep.id}')" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-weight: 800; border: none; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 10px rgba(20, 241, 149, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+                        <i class="fa-solid fa-square-check" style="margin-right: 4px;"></i> Kabul Et
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      ` : ''}
 
       <!-- AI Analytics Banner -->
+      ${currentWarehouse.id !== 'W11' ? `
       <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
         <div style="color: #FCA5A5; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
           <i class="fa-solid fa-triangle-exclamation"></i>
@@ -2431,6 +3854,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           Sipariş Oluştur
         </button>
       </div>
+      ` : ''}
 
       <!-- Inventory Table -->
       <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden;">
@@ -2520,6 +3944,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Rapor No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">MÇF No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">SAP No</th>
+                          <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Seri No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Malzeme Açıklaması</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: center; color: #4ade80;">Takılan</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: center; color: #f87171;">Sökülen</th>
@@ -2532,6 +3957,14 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                             <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${item.reportId}</td>
                             <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 600;">${item.matFormNo}</td>
                             <td style="padding: 0.75rem 1rem; color: #3B82F6; font-family: monospace;">${item.sapNo}</td>
+                            <td style="padding: 0.75rem 1rem; color: #10B981; font-family: monospace; font-weight: 600;">
+                              <div style="display: inline-flex; align-items: center; gap: 8px;">
+                                <span>${item.serialNo || '-'}</span>
+                                ${isMaterialManager && item.reportDocId ? `
+                                  <i onclick="window.editAnalizSerial('${item.reportDocId}', '${item.sapNo}', ${item.defect > 0}, '${item.serialNo && item.serialNo !== '-' ? item.serialNo.replace(/'/g, "\\'") : ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.5; color: #94A3B8; font-size: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'" title="Seri No Düzenle"></i>
+                                ` : ''}
+                              </div>
+                            </td>
                             <td style="padding: 0.75rem 1rem; font-weight: 500; color: #E2E8F0;">${item.description}</td>
                             <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #4ade80;">${item.used > 0 ? `+${item.used}` : '-'}</td>
                             <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #f87171;">${item.defect > 0 ? `-${item.defect}` : '-'}</td>
@@ -2563,9 +3996,11 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; align-items: center;">
                 <!-- Dynamically populated via updateManualSummaryBar -->
               </div>
+              ${isMaterialManager ? `
               <button onclick="window.clearDraftAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: transparent; color: #EF4444; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'">
                 <i class="fa-solid fa-trash-can"></i> Taslağı Sil
               </button>
+              ` : ''}
               <button onclick="window.saveManualAudit(this)" style="height: 42px; padding: 0 1.5rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.95rem; font-weight: 600; cursor: pointer;">
                 <i class="fa-solid fa-save"></i> Tüm Sayımı Kaydet
               </button>
@@ -2595,8 +4030,17 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <!-- Audit History View -->
       <div id="view-SAYIM_GECMISI" style="display: ${currentTab === 'SAYIM_GECMISI' ? 'block' : 'none'};">
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.5rem;">
-          <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Sayım Geçmişi</h2>
-          <div style="color: #94A3B8; font-size: 0.9rem; margin-bottom: 1.5rem;">Geçmişte yapılan tüm QR ve Manuel sayım kayıtlarını burada inceleyebilirsiniz.</div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Sayım Geçmişi</h2>
+              <div style="color: #94A3B8; font-size: 0.9rem;">Geçmişte yapılan tüm QR ve Manuel sayım kayıtlarını burada inceleyebilirsiniz.</div>
+            </div>
+            <div>
+              <button onclick="window.downloadAllAuditsExcel()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#111827'">
+                <i class="fa-solid fa-file-excel" style="color: #10B981; margin-right: 0.5rem;"></i> Toplu Excel İndir
+              </button>
+            </div>
+          </div>
           <div id="audit-history-container">
             <!-- Dynamically populated when tab is opened -->
           </div>
@@ -2607,14 +4051,296 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <!-- Depo Hareketleri View -->
       <div id="view-DEPO_HAREKETLERI" style="display: ${currentTab === 'DEPO_HAREKETLERI' ? 'block' : 'none'};">
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.5rem;">
-          <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Zimmet & Depo Hareketleri</h2>
-          <div style="color: #94A3B8; font-size: 0.9rem; margin-bottom: 1.5rem;">Malzemelerin depodan zimmete alınması, saha raporlarında kullanılması ve depoya iade edilme geçmişi.</div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Zimmet & Depo Hareketleri</h2>
+              <div style="color: #94A3B8; font-size: 0.9rem;">Malzemelerin depodan zimmete alınması, saha raporlarında kullanılması ve depoya iade edilme geçmişi.</div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input 
+                id="depo-hareketleri-search" 
+                type="text" 
+                placeholder="SAP No veya Tanım ara..." 
+                oninput="window.filterDepoHareketleri(this.value)"
+                style="height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none; font-size: 0.9rem; width: 280px; transition: all 0.2s;"
+                onfocus="this.style.borderColor='#14F195'"
+                onblur="this.style.borderColor='#1E293B'"
+              />
+              ${isMaterialManager ? `
+              <button onclick="window.clearAllDepoLogs()" class="btn-cyber" style="background: linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color: #FFF; font-weight: 800; border: none; height: 42px; padding: 0 1.25rem; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+                <i class="fa-solid fa-trash-can"></i> GEÇMİŞİ TEMİZLE
+              </button>
+              ` : ''}
+            </div>
+          </div>
           <div id="depo-hareketleri-container">
             <!-- Dynamically populated when tab is opened -->
           </div>
         </div>
       </div>
       <!-- End of view-DEPO_HAREKETLERI -->
+
+      <!-- DEFECT LİSTESİ View -->
+      <div id="view-DEFECT" style="display: ${currentTab === 'DEFECT' ? 'block' : 'none'};">
+        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; padding: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h2 style="color: #FFFFFF; margin: 0; font-size: 1.25rem;">Depo Defect (Sökülen) Malzeme Listesi</h2>
+              <div style="color: #94A3B8; font-size: 0.9rem;">Saha servis raporlarında söküldüğü belirtilen ve depoda bulunan defect malzemelerin listesi ve aksiyonları.</div>
+            </div>
+            ${isMaterialManager ? `
+            <div style="display: flex; gap: 8px;">
+              <button onclick="window.bulkSendToRepair()" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-weight: 800; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(20, 241, 149, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+                <i class="fa-solid fa-screwdriver-wrench"></i> Seçilenleri Tamire Gönder
+              </button>
+              <button onclick="window.bulkScrap()" class="btn-cyber" style="background: linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color: #FFF; font-weight: 800; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+                <i class="fa-solid fa-dumpster"></i> Seçilenleri Hurdaya Ayır
+              </button>
+            </div>
+            ` : ''}
+          </div>
+          
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.02); color: #94A3B8; border-bottom: 1px solid #1E293B;">
+                  ${isMaterialManager ? `
+                  <th style="padding: 1rem; width: 40px; text-align: center;">
+                    <input type="checkbox" id="defect-select-all" onclick="window.toggleAllDefects(this)" style="cursor: pointer; width: 16px; height: 16px;">
+                  </th>
+                  ` : ''}
+                  <th style="padding: 1rem;">Tarih</th>
+                  <th style="padding: 1rem;">Türbin</th>
+                  <th style="padding: 1rem;">Rapor No</th>
+                  <th style="padding: 1rem;">MÇF No</th>
+                  <th style="padding: 1rem;">İşlem Türü</th>
+                  <th style="padding: 1rem;">SAP No</th>
+                  <th style="padding: 1rem;">Seri No</th>
+                  <th style="padding: 1rem;">Malzeme Açıklaması</th>
+                  <th style="padding: 1rem;">Arıza Kodu / Nedeni</th>
+                  <th style="padding: 1rem;">Konum (Raf)</th>
+                  <th style="padding: 1rem; text-align: center;">Sökülen</th>
+                  <th style="padding: 1rem; text-align: right;">Aksiyonlar</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(() => {
+                  const activeDefects = inventoryItems
+                    .filter(inv => inv.condition === 'DEFECT' && inv.quantity > 0)
+                    .map(inv => {
+                      const reportItem = defectReportItems.find(rep => 
+                        String(rep.sapNo).trim() === String(inv.sapNo).trim()
+                      );
+                      
+                      let finalReportItem = reportItem;
+                      if (!finalReportItem && currentWarehouse.id === 'W11') {
+                        for (const report of reports) {
+                          if (report.materials) {
+                            const mat = report.materials.find(m => String(m.sapNo).trim() === String(inv.sapNo).trim() && m.defectCount > 0);
+                            if (mat) {
+                              finalReportItem = {
+                                reportId: report.reportNo || report.id || '',
+                                reportDocId: report.id || '',
+                                date: report.date,
+                                matFormNo: report.matFormNo || '-',
+                                turbineNo: (report.siteName ? report.siteName + ' ' : '') + (report.turbineNo || report.turbineSerial || 'Bilinmeyen'),
+                                type: report.type || 'ARIZA',
+                                sapNo: mat.sapNo || '-',
+                                serialNo: mat.serialNo || '-',
+                                description: mat.description,
+                                defect: mat.defectCount || 0,
+                                faultCode: report.faultCode || '-',
+                                faultDesc: report.faultDesc || '-'
+                              };
+                              break;
+                            }
+                          }
+                        }
+                      }
+                      
+                      let displayDate = '-';
+                      if (finalReportItem && finalReportItem.date) {
+                        try {
+                          displayDate = new Date(finalReportItem.date).toLocaleDateString('tr-TR');
+                        } catch (e) {}
+                      } else if (inv.lastUpdated) {
+                        try {
+                          const parsedDate = inv.lastUpdated.toDate ? inv.lastUpdated.toDate() : new Date(inv.lastUpdated);
+                          displayDate = parsedDate.toLocaleDateString('tr-TR');
+                        } catch (e) {
+                          displayDate = new Date().toLocaleDateString('tr-TR');
+                        }
+                      }
+                      
+                      return {
+                        id: inv.id,
+                        sapNo: inv.sapNo,
+                        description: inv.description,
+                        shelfNo: inv.shelfNo || 'Tanımsız',
+                        quantity: inv.quantity,
+                        minStock: inv.minStock || 0,
+                        imageUrl: inv.imageUrl || '',
+                        displayDate,
+                        turbineNo: finalReportItem?.turbineNo || '-',
+                        reportId: finalReportItem?.reportId || '-',
+                        reportDocId: finalReportItem?.reportDocId || '',
+                        matFormNo: finalReportItem?.matFormNo || '-',
+                        type: finalReportItem?.type || 'ARIZA',
+                        serialNo: inv.serialNo || finalReportItem?.serialNo || '-',
+                        faultCode: finalReportItem?.faultCode || '-',
+                        faultDesc: finalReportItem?.faultDesc || '-',
+                        defect: finalReportItem?.defect || inv.quantity || 1
+                      };
+                    });
+
+                  if (activeDefects.length === 0) {
+                    return `
+                      <tr>
+                        <td colspan="${isMaterialManager ? 13 : 12}" style="text-align: center; padding: 3rem; color: #94A3B8; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">
+                          Bu sahaya ait sökülen (defect) malzeme kaydı bulunamadı.
+                        </td>
+                      </tr>
+                    `;
+                  }
+                  
+                  return activeDefects.map(item => {
+                    const cleanNameEscaped = item.description.replace(/'/g, "\\'");
+                    
+                    return `
+                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                        ${isMaterialManager ? `
+                        <td style="padding: 0.75rem 1rem; text-align: center;">
+                          <input type="checkbox" class="defect-row-checkbox" 
+                            data-id="${item.id}" 
+                            data-sap="${item.sapNo}" 
+                            data-name="${cleanNameEscaped}" 
+                            data-qty="${item.defect}" 
+                            data-serial="${item.serialNo || '-'}" 
+                            data-faultcode="${item.faultCode || '-'}" 
+                            data-faultdesc="${item.faultDesc ? item.faultDesc.replace(/'/g, "\\'") : '-'}" 
+                            style="cursor: pointer; width: 16px; height: 16px;">
+                        </td>
+                        ` : ''}
+                        <td style="padding: 0.75rem 1rem; color: #E2E8F0;">${item.displayDate}</td>
+                        <td style="padding: 0.75rem 1rem; font-weight: bold; color: #FFF;">${item.turbineNo}</td>
+                        <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${item.reportId}</td>
+                        <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 600;">${item.matFormNo}</td>
+                        <td style="padding: 0.75rem 1rem;">
+                          <span style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;
+                            ${item.type === 'BAKIM' ? 'background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3);' : 
+                              'background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);'}">
+                            ${item.type === 'BAKIM' ? 'Bakım' : 'Arıza'}
+                          </span>
+                        </td>
+                        <td style="padding: 0.75rem 1rem; color: #3B82F6; font-family: monospace;">${item.sapNo}</td>
+                        <td style="padding: 0.75rem 1rem; color: #10B981; font-family: monospace; font-weight: bold;">${item.serialNo || '-'}</td>
+                        <td style="padding: 0.75rem 1rem; font-weight: 500; color: #E2E8F0;">${item.description}</td>
+                        <td style="padding: 0.75rem 1rem; color: #E2E8F0;">
+                          <span style="font-weight: 600; color: #FFF;">${item.faultCode}</span>
+                          ${item.faultDesc && item.faultDesc !== '-' ? `<div style="font-size: 0.75rem; color: #94A3B8; margin-top: 2px;">${item.faultDesc}</div>` : ''}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; color: #14F195; font-weight: 600;">${item.shelfNo}</td>
+                        <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #f87171;">${item.defect}</td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;">
+                          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                            ${isMaterialManager ? `
+                              <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
+                              <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                            ` : `
+                              <span style="color: #64748B; font-size: 0.75rem; font-style: italic;"><i class="fa-solid fa-info-circle"></i> Sadece Bilgi</span>
+                            `}
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('');
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- End of view-DEFECT -->
+
+      <!-- Defect Edit Modal -->
+      <div id="new-warehouse-defect-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 450px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem;">
+            <h3 style="font-size: 1.25rem; font-weight: 700; color: #14F195; margin: 0; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+              <i class="fa-solid fa-pen-to-square" style="margin-right: 8px;"></i> Seri No Düzenle (Defect)
+            </h3>
+            <button onclick="window.closeDefectEditModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <input type="hidden" id="defect-edit-item-id">
+            <input type="hidden" id="defect-edit-report-doc-id">
+            
+            <div>
+              <p style="color: #94A3B8; font-size: 0.8rem; margin: 0 0 0.25rem 0; font-weight: 600;">MALZEME TANIMI</p>
+              <div id="defect-edit-name-text" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; color: #FFF; font-weight: 500; font-size: 0.9rem;"></div>
+            </div>
+
+            <div>
+              <span style="color: #64748B; font-size: 0.75rem;">SAP Numarası:</span>
+              <span id="defect-edit-sap-text" style="color: #14F195; font-weight: 600; display: block; font-family: monospace; font-size: 0.95rem; margin-top: 2px;"></span>
+            </div>
+            
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; font-weight: 700; text-transform: uppercase;">Seri Numarası</label>
+              <input id="defect-edit-serial-input" type="text" placeholder="Seri numarasını girin" style="width: 100%; height: 42px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.95rem; font-family: monospace; outline: none;">
+            </div>
+            
+            <button onclick="window.saveDefectEditItem(this)" style="height: 44px; margin-top: 0.5rem; border-radius: 8px; border: none; background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; box-shadow: 0 0 15px rgba(20,241,149,0.25); transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">Değişiklikleri Kaydet</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- W11 Edit Modal -->
+      <div id="new-warehouse-w11-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 450px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem;">
+            <h3 style="font-size: 1.25rem; font-weight: 700; color: #14F195; margin: 0; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+              <i class="fa-solid fa-pen-to-square" style="margin-right: 8px;"></i> Seri No & Not Düzenle
+            </h3>
+            <button onclick="window.closeW11EditModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <input type="hidden" id="w11-edit-item-id">
+            
+            <div>
+              <p style="color: #94A3B8; font-size: 0.8rem; margin: 0 0 0.25rem 0; font-weight: 600;">MALZEME TANIMI</p>
+              <div id="w11-edit-name-text" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; color: #FFF; font-weight: 500; font-size: 0.9rem;"></div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+              <div>
+                <span style="color: #64748B; font-size: 0.75rem;">SAP Numarası:</span>
+                <span id="w11-edit-sap-text" style="color: #14F195; font-weight: 600; display: block; font-family: monospace; font-size: 0.95rem; margin-top: 2px;"></span>
+              </div>
+              <div>
+                <span style="color: #64748B; font-size: 0.75rem;">Miktar:</span>
+                <input id="w11-edit-qty-input" type="number" min="0" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
+              </div>
+              <div>
+                <span style="color: #64748B; font-size: 0.75rem;">Raf Konumu (W11):</span>
+                <input id="w11-edit-loc-input" type="text" placeholder="Örn: A-1" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
+              </div>
+            </div>
+            
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; font-weight: 700; text-transform: uppercase;">Seri Numarası</label>
+              <input id="w11-edit-serial-input" type="text" placeholder="Seri numarasını girin" style="width: 100%; height: 42px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.95rem; font-family: monospace; outline: none;">
+            </div>
+
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; font-weight: 700; text-transform: uppercase;">Not / Açıklama</label>
+              <textarea id="w11-edit-note-input" placeholder="Malzeme hakkında eklemek istediğiniz not..." style="width: 100%; height: 90px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0.75rem 1rem; font-size: 0.9rem; outline: none; resize: none;"></textarea>
+            </div>
+            
+            <button onclick="window.saveW11EditItem(this)" style="height: 44px; margin-top: 0.5rem; border-radius: 8px; border: none; background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; box-shadow: 0 0 15px rgba(20,241,149,0.25); transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">Değişiklikleri Kaydet</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Edit Modal -->
       <div id="new-warehouse-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
@@ -2843,6 +4569,35 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
    
    const { excelService } = await import('../services/ExcelService');
    await excelService.exportToExcel(inventory, audits, name + ' Envanteri');
+};
+
+(window as any).downloadSingleAuditExcel = async (auditId: string) => {
+   const audits = (window as any).__cachedAudits || [];
+   const audit = audits.find((a: any) => a.id === auditId);
+   const name = (window as any).currentWarehouseName || 'Depo';
+   const inventory = (window as any).currentInventoryData || [];
+   
+   if (!audit) {
+      alert('İndirilecek sayım kaydı bulunamadı.');
+      return;
+   }
+   
+   const { excelService } = await import('../services/ExcelService');
+   excelService.exportSingleAuditToExcel(audit, name, inventory);
+};
+
+(window as any).downloadAllAuditsExcel = async () => {
+   const audits = (window as any).__cachedAudits || [];
+   const name = (window as any).currentWarehouseName || 'Depo';
+   const inventory = (window as any).currentInventoryData || [];
+   
+   if (audits.length === 0) {
+      alert('İndirilecek sayım geçmişi bulunamadı veya henüz yüklenmedi.');
+      return;
+   }
+   
+   const { excelService } = await import('../services/ExcelService');
+   excelService.exportAllAuditsToExcel(audits, name, inventory);
 };
 
 (window as any).printWarehouseQR = async () => {

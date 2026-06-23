@@ -77,7 +77,7 @@ const trTargetStr = `                  <tr class="archive-row" style="border-bot
 
 const trReplacementStr = `                  <tr class="archive-row" data-date="\${report.date}" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.3s;">
                     <td style="padding: 1rem; text-align: center;">
-                        <input type="checkbox" class="archive-checkbox" value="\${report.reportNo}" data-type="\${report.templateName ? 'Bakim' : 'Ariza'}" data-turbin="\${report.turbineNo}" data-template="\${report.templateName || report.faultCode || 'Rapor'}" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);">
+                         <input type="checkbox" class="archive-checkbox" value="\${report.reportNo}" data-type="\${report.type === 'BAKIM' ? 'Bakim' : 'Ariza'}" data-turbin="\${report.turbineNo}" data-template="\${report.templateName || report.faultCode || 'Rapor'}" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);">
                     </td>
                     <td style="padding: 1rem; color: var(--text-muted); font-weight: 600;">\${new Date(report.date).toLocaleDateString('tr-TR')}</td>`;
 

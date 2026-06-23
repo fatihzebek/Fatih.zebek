@@ -26,9 +26,9 @@ export const TicketsPage = async () => {
           </button>
         </div>
         
-        <div class="tickets-filters" style="display:flex; flex-direction:column; gap:0.5rem;">
-          <input type="text" id="ticket-search-input" placeholder="Konu ara..." class="cyber-input" style="padding: 6px; font-size: 0.75rem;" onkeyup="window.renderTicketList()">
-          <select id="ticket-status-filter" onchange="window.renderTicketList()" class="cyber-input" style="padding: 6px; font-size: 0.75rem;">
+        <div class="tickets-filters" style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <input type="text" id="ticket-search-input" placeholder="Konu ara..." class="cyber-input" style="padding: 8px 12px; font-size: 0.75rem; width: 100%;" onkeyup="window.renderTicketList()">
+          <select id="ticket-status-filter" onchange="window.renderTicketList()" class="cyber-input" style="padding: 8px 12px; font-size: 0.75rem; width: 100%;">
             <option value="all">Tüm Durumlar</option>
             <option value="open">Açık</option>
             <option value="in_progress">İşlemde</option>
@@ -43,10 +43,47 @@ export const TicketsPage = async () => {
       </div>
 
       <!-- RIGHT PANEL: CHAT / DETAILS -->
-      <div class="tickets-main glass-panel" id="ticket-main-area">
-        <div class="empty-ticket-state">
-          <i class="fa-solid fa-comments" style="font-size: 3rem; opacity: 0.2; margin-bottom: 1rem;"></i>
-          <p>Lütfen detaylarını görmek için soldan bir bilet seçin.</p>
+      <div class="tickets-main glass-panel" id="ticket-main-area" style="background: rgba(10, 15, 25, 0.4); border: 1px solid rgba(0, 242, 254, 0.1);">
+        <div class="empty-ticket-state" style="padding: 3rem 2rem; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+          
+          <div class="empty-headset-glow" style="width: 100px; height: 100px; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 2rem; box-shadow: 0 0 30px rgba(0, 243, 255, 0.1); animation: float-bubble 4s ease-in-out infinite;">
+            <i class="fa-solid fa-headset" style="font-size: 3rem; color: var(--accent-cyan); text-shadow: 0 0 15px var(--accent-cyan);"></i>
+          </div>
+
+          <h2 style="font-family: 'Rajdhani', sans-serif; font-size: 2rem; font-weight: 900; letter-spacing: 1px; color: var(--text-main); margin: 0 0 0.5rem 0; text-transform: uppercase;">
+            SAHA DESTEK PORTALI
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.95rem; max-width: 500px; line-height: 1.6; margin: 0 0 2.5rem 0;">
+            Saha operasyonları, türbin sorunları ve teknik destek taleplerinizi yönetmek için tasarlanmış canlı iletişim ve takip paneli.
+          </p>
+
+          <!-- 3-Column Info Cards -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; max-width: 800px; width: 100%; margin-bottom: 3rem;">
+            
+            <div class="empty-info-card" style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: left; transition: all 0.3s;">
+              <div style="color: var(--accent-cyan); font-size: 1.5rem; margin-bottom: 0.75rem;"><i class="fa-solid fa-circle-plus"></i></div>
+              <h4 style="margin: 0 0 0.5rem 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">HIZLI BİLDİRİM</h4>
+              <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">Santral ve ilgili türbini seçerek doğrudan teknik ekibe arıza veya danışma talebi açın.</p>
+            </div>
+
+            <div class="empty-info-card-purple" style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: left; transition: all 0.3s;">
+              <div style="color: #a78bfa; font-size: 1.5rem; margin-bottom: 0.75rem;"><i class="fa-solid fa-comments"></i></div>
+              <h4 style="margin: 0 0 0.5rem 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">CANLI İLETİŞİM</h4>
+              <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">Mühendis ve teknisyenler ile mesajlaşın, sahada çektiğiniz fotoğrafları doğrudan paylaşın.</p>
+            </div>
+
+            <div class="empty-info-card-orange" style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: left; transition: all 0.3s;">
+              <div style="color: #f59e0b; font-size: 1.5rem; margin-bottom: 0.75rem;"><i class="fa-solid fa-tags"></i></div>
+              <h4 style="margin: 0 0 0.5rem 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">DURUM TAKİBİ</h4>
+              <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">Taleplerinizin durumlarını (Açık, İşlemde, Yanıt Bekleniyor) adım adım şeffafça izleyin.</p>
+            </div>
+
+          </div>
+
+          <button onclick="window.openNewTicketModal()" class="cyber-button primary" style="padding: 0.8rem 2rem; font-family:'Rajdhani'; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:10px;">
+            <i class="fa-solid fa-plus" style="font-size: 1rem;"></i> YENİ DESTEK TALEBİ OLUŞTUR
+          </button>
+          
         </div>
       </div>
     </div>
@@ -115,10 +152,45 @@ export const TicketsPage = async () => {
       .tickets-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
       .tickets-main { flex: 1; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
       
-      .ticket-item { padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; background: rgba(255,255,255,0.02); }
-      .ticket-item:hover { background: rgba(255,255,255,0.05); }
-      .ticket-item.active { background: rgba(0,242,254,0.1); border-color: rgba(0,242,254,0.3); }
-      .ticket-item.unread { border-left: 3px solid var(--accent-cyan); }
+      .ticket-item { 
+        padding: 1.1rem 1rem; 
+        border-radius: 10px; 
+        margin-bottom: 0.6rem; 
+        cursor: pointer; 
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
+        border: 1px solid rgba(255,255,255,0.03); 
+        background: rgba(255,255,255,0.015); 
+        position: relative;
+        overflow: hidden;
+      }
+      .ticket-item:hover { 
+        background: rgba(255,255,255,0.04); 
+        border-color: rgba(0, 242, 254, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      }
+      .ticket-item.active { 
+        background: rgba(0,242,254,0.08) !important; 
+        border-color: rgba(0,242,254,0.3) !important; 
+        box-shadow: inset 0 0 10px rgba(0,242,254,0.05), 0 4px 15px rgba(0,0,0,0.3);
+      }
+      .ticket-item.unread::after {
+        content: '';
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        width: 8px;
+        height: 8px;
+        background: var(--accent-cyan, #00f3ff);
+        border-radius: 50%;
+        box-shadow: 0 0 8px var(--accent-cyan);
+        animation: pulse-dot 1.5s infinite;
+      }
+      @keyframes pulse-dot {
+        0% { transform: scale(0.9); opacity: 0.6; }
+        50% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(0.9); opacity: 0.6; }
+      }
       
       .ti-top { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.7rem; font-weight: 800; }
       .ti-no { color: var(--text-muted); }
@@ -127,12 +199,43 @@ export const TicketsPage = async () => {
       .ti-bottom { display: flex; justify-content: space-between; align-items: center; }
       .ti-turbine { font-size: 0.7rem; color: #a78bfa; background: rgba(167,139,250,0.1); padding: 2px 6px; border-radius: 4px; }
       
-      .status-badge { font-size: 0.6rem; font-weight: 800; padding: 3px 8px; border-radius: 12px; }
-      .status-open { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); }
-      .status-in_progress { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.2); }
-      .status-resolved { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.2); }
+      .status-badge { 
+        font-size: 0.65rem; 
+        font-weight: 800; 
+        padding: 3px 10px; 
+        border-radius: 12px; 
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+      .status-open { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.25); }
+      .status-in_progress { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid rgba(245,158,11,0.25); }
+      .status-waiting_for_user { background: rgba(167,139,250,0.1); color: #a78bfa; border: 1px solid rgba(167,139,250,0.25); }
+      .status-resolved { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid rgba(16,185,129,0.25); }
+      .status-closed { background: rgba(156,163,175,0.1); color: #9ca3af; border: 1px solid rgba(156,163,175,0.25); }
 
       .empty-ticket-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted); }
+      
+      .empty-info-card:hover {
+        background: rgba(0, 243, 255, 0.02) !important;
+        border-color: rgba(0, 243, 255, 0.15) !important;
+        transform: translateY(-2px);
+      }
+      .empty-info-card-purple:hover {
+        background: rgba(167, 139, 250, 0.02) !important;
+        border-color: rgba(167, 139, 250, 0.15) !important;
+        transform: translateY(-2px);
+      }
+      .empty-info-card-orange:hover {
+        background: rgba(245, 158, 11, 0.02) !important;
+        border-color: rgba(245, 158, 11, 0.15) !important;
+        transform: translateY(-2px);
+      }
+      
+      @keyframes float-bubble {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+      }
       
       .chat-header { padding: 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); }
       .chat-messages { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
@@ -233,24 +336,33 @@ export const TicketsPage = async () => {
   }
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div style="text-align:center; padding: 2rem; color:var(--text-muted); font-size:0.8rem;">Gösterilecek bilet bulunamadı.</div>`;
+    container.innerHTML = `
+      <div style="text-align:center; padding: 3rem 1rem; color:var(--text-muted); border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px; margin: 1rem 0;">
+        <i class="fa-solid fa-magnifying-glass" style="font-size: 1.5rem; opacity: 0.3; margin-bottom: 0.75rem; display: block;"></i>
+        <div style="font-size:0.8rem; font-weight:700;">Gösterilecek bilet bulunamadı.</div>
+        <p style="font-size: 0.7rem; margin: 4px 0 0 0; opacity: 0.6;">Arama terimini değiştirmeyi veya filtreleri temizlemeyi deneyin.</p>
+      </div>
+    `;
     return;
   }
 
   const statusLabels: Record<string, string> = { open: 'AÇIK', in_progress: 'İŞLEMDE', waiting_for_user: 'YANIT BEKLENİYOR', resolved: 'ÇÖZÜLDÜ', closed: 'KAPALI' };
-  const prioIcons: Record<string, string> = { low: '🟢', normal: '🟡', high: '🔴' };
+  const prioColors: Record<string, string> = { low: '#10b981', normal: '#f59e0b', high: '#ef4444' };
 
   container.innerHTML = filtered.map(t => {
     const isUnread = isAdmin ? t.unreadAdmin : t.unreadUser;
     const dateStr = t.updatedAt ? new Date(t.updatedAt.toMillis()).toLocaleString('tr-TR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'}) : '';
+    const prioColor = prioColors[t.priority] || '#f59e0b';
     
     return `
-      <div class="ticket-item ${t.id === currentTicketId ? 'active' : ''} ${isUnread ? 'unread' : ''}" onclick="window.openTicket('${t.id}')">
+      <div class="ticket-item ${t.id === currentTicketId ? 'active' : ''} ${isUnread ? 'unread' : ''}" 
+           onclick="window.openTicket('${t.id}')"
+           style="border-left: 4px solid ${prioColor};">
         <div class="ti-top">
           <span class="ti-no">${t.ticketNo}</span>
           <span class="ti-date">${dateStr}</span>
         </div>
-        <div class="ti-title">${prioIcons[t.priority] || '🟡'} ${t.title}</div>
+        <div class="ti-title">${t.title}</div>
         <div class="ti-bottom">
           <span class="ti-turbine"><i class="fa-solid fa-wind"></i> ${t.turbineName}</span>
           <span class="status-badge status-${t.status}">${statusLabels[t.status]}</span>

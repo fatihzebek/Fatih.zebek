@@ -57,20 +57,22 @@ export class WorkOrderAgent extends BaseAgent {
       console.log(`[Adım 3] Ekip ataması uygun veya bypass edildi: ${stepData.teamId}`);
 
       // ADIM 4: Onay ve Firestore Kaydı (Priority Alanı Yok!)
+      const isBakim = stepData.type === 'Bakım' || (stepData.type || '').toLowerCase().includes('bakim') || (stepData.type || '').toLowerCase().includes('bakım');
+      
       const newGorev: Omit<Gorev, 'id' | 'createdAt' | 'updatedAt'> = {
         baslik: baslik,
         aciklama: stepData.description,
         turbinNo: turbine.turbineNo,
         atananEkip: stepData.teamId,
         durum: stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Açık',
-        secilenSablon: stepData.type === 'Bakım' ? 'Bakım Formu' : 'form-ariza'
+        secilenSablon: isBakim ? 'Bakım Formu' : 'form-ariza'
       };
 
       const taskId = await gorevService.saveGorev(newGorev);
 
       // Ayrıca ana 'tasks' koleksiyonuna da kaydedelim ki 'İş Emirleri' sayfasında görünsün!
       await taskService.createNewTask({
-        secilenSablon: stepData.type === 'Bakım' ? 'Bakım Formu' : 'Türbin Arıza Formu',
+        secilenSablon: isBakim ? 'Bakım Formu' : 'Türbin Arıza Formu',
         sahaBilgisi: turbine.siteName,
         siteId: turbine.siteId,
         turbinSeriNo: stepData.serialNumber,

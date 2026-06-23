@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { doc, updateDoc, onSnapshot, collection, setDoc, deleteDoc } from 'firebase/firestore';
 
 /**
@@ -15,6 +15,12 @@ class PresenceService {
    */
   async updateStatus(uid: string, status: 'online' | 'offline') {
     if (!uid) return;
+    
+    // Safe check: do not write to Firestore if Auth SDK is not yet ready
+    if (!auth.currentUser) {
+      console.warn(`[Presence] Skipping status update for ${uid} as Firebase Auth SDK session is not yet active.`);
+      return;
+    }
 
     try {
       const userRef = doc(db, 'users', uid);

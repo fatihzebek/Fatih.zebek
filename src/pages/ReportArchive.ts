@@ -3,6 +3,38 @@ import { dataService } from '../services/DataService';
 import { formatTeamName } from '../utils/formatters';
 import { renderReportPDF } from '../components/ReportTemplate';
 
+const getReportBadge = (report: any) => {
+    const name = (report.templateName || report.faultCode || '').toLowerCase();
+    const type = (report.type || '').toUpperCase();
+    
+    // Check if it is a maintenance report
+    const isBakim = type === 'BAKIM' || name.includes('bakım') || name.includes('bakim') || name.includes('yağ') || name.includes('temizlik') || name.includes('kontrol') || name.includes('t44') || name.includes('t13');
+    const isAriza = type === 'ARIZA' || name.includes('arıza') || name.includes('ariza') || name.includes('hata') || name.includes('formu') || name.includes('feeding');
+    
+    let color = '#f39c12'; // Default amber/orange (planlı duruş vs)
+    let bg = 'rgba(243, 156, 18, 0.1)';
+    let border = 'rgba(243, 156, 18, 0.25)';
+    let icon = 'fa-solid fa-clock';
+    
+    if (isBakim) {
+        color = '#10b981'; // Emerald green
+        bg = 'rgba(16, 185, 129, 0.1)';
+        border = 'rgba(16, 185, 129, 0.25)';
+        icon = 'fa-solid fa-screwdriver-wrench';
+    } else if (isAriza) {
+        color = '#ef4444'; // Crimson red
+        bg = 'rgba(239, 68, 68, 0.1)';
+        border = 'rgba(239, 68, 68, 0.25)';
+        icon = 'fa-solid fa-circle-exclamation';
+    }
+    
+    return `
+      <span class="report-badge" style="background: ${bg}; color: ${color}; border: 1px solid ${border}; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; width: fit-content; text-transform: uppercase;">
+        <i class="${icon}" style="font-size: 0.75rem;"></i> ${report.templateName || report.faultCode || '---'}
+      </span>
+    `;
+};
+
 
 (window as any).toggleAllArchiveCheckboxes = (el: HTMLInputElement) => {
     const checkboxes = document.querySelectorAll('.archive-checkbox');
@@ -28,11 +60,41 @@ const archiveItemsPerPage = 50;
 
     const monthSelect = document.getElementById('archive-month') as HTMLSelectElement;
     const yearSelect = document.getElementById('archive-year') as HTMLSelectElement;
+    const searchInput = document.getElementById('archive-search-input') as HTMLInputElement;
+
     const mVal = monthSelect ? monthSelect.value : 'all';
     const yVal = yearSelect ? yearSelect.value : 'all';
+    const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+    // Handle pagination reset when search query changes
+    if (searchVal !== ((window as any).lastArchiveSearchVal || '')) {
+        (window as any).lastArchiveSearchVal = searchVal;
+        (window as any).archiveCurrentPage = 1;
+    }
 
     const reports = (window as any).archiveReports || [];
     const filtered = reports.filter((report: any) => {
+        if (searchVal) {
+            const reportNo = (report.reportNo || '').toLowerCase();
+            const faultCode = (report.faultCode || '').toLowerCase();
+            const faultDesc = (report.faultDesc || '').toLowerCase();
+            const turbineNo = (report.turbineNo || '').toLowerCase();
+            const turbineSerial = (report.turbineSerial || '').toLowerCase();
+            const templateName = (report.templateName || '').toLowerCase();
+            const teamName = (report.team || '').toLowerCase();
+
+            const matches = 
+                reportNo.includes(searchVal) ||
+                faultCode.includes(searchVal) ||
+                faultDesc.includes(searchVal) ||
+                turbineNo.includes(searchVal) ||
+                turbineSerial.includes(searchVal) ||
+                templateName.includes(searchVal) ||
+                teamName.includes(searchVal);
+
+            if (!matches) return false;
+        }
+
         if (!report.date) return true;
         const d = new Date(report.date);
         if (mVal !== 'all' && d.getMonth().toString() !== mVal) return false;
@@ -76,64 +138,67 @@ const archiveItemsPerPage = 50;
         tbody.innerHTML = paginated.map((report: any) => {
            const isDownloaded = report.isDownloaded;
            return `
-             <tr class="archive-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.3s;">
-               <td style="padding: 1rem; text-align: center;">
-                   <input type="checkbox" class="archive-checkbox" value="${report.reportNo}" data-type="${report.templateName ? 'Bakim' : 'Ariza'}" data-turbin="${report.turbineNo}" data-template="${report.templateName || report.faultCode || 'Rapor'}" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);">
-               </td>
-               <td style="padding: 1rem; color: var(--text-muted); font-weight: 600;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
-               <td style="padding: 1rem;">
-                 <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--accent-cyan);">${report.reportNo}</span>
-                 ${isDownloaded ? `<div style="margin-top: 4px;"><span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.65rem;"><i class="fa-solid fa-check-double"></i> İNDİRİLDİ</span></div>` : ''}
-               </td>
-               <td style="padding: 1rem;">
-                 <div style="font-weight: 700;">${report.turbineNo}</div>
-                 <div style="font-size: 0.7rem; color: var(--text-muted);">${report.turbineSerial}</div>
-               </td>
-               <td style="padding: 1rem;">
-                 <div style="display: flex; flex-direction: column; gap: 4px;">
-                   <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                     <span style="background: rgba(0, 242, 254, 0.1); color: var(--accent-cyan); padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; width: fit-content; border: 1px solid rgba(0, 242, 254, 0.2);">
-                       ${report.templateName || report.faultCode || '---'}
-                     </span>
-                     ${isAdmin && report.auditMetrics?.isSuspiciouslyFast ? `
-                     <span style="background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid #ff0055; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; width: fit-content; box-shadow: 0 0 8px rgba(255,0,85,0.25); display: flex; align-items: center; gap: 4px;" title="${report.auditMetrics.suspicionReason || 'Hızlı doldurma şüphesi'}">
-                       <i class="fa-solid fa-triangle-exclamation"></i> ŞÜPHELİ HIZLI
-                     </span>
-                     ` : ''}
-                   </div>
-                   <span style="font-size: 0.65rem; color: var(--text-muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; text-transform: uppercase;">
-                     ${report.faultDesc || ''}
-                   </span>
-                 </div>
-               </td>
-               <td style="padding: 1rem;">
-                 <span style="background: rgba(255,255,255,0.05); color: #fff; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.1);">
-                   ${formatTeamName(report.team)}
-                 </span>
-               </td>
-               <td style="padding: 1rem; text-align: right; white-space: nowrap;">
-                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-                   <button class="btn-cyber" title="Görüntüle" style="padding: 6px 10px; font-size: 0.7rem; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan);" onclick="window.viewArchiveReport('${report.reportNo}')">
-                     <i class="fa-solid fa-eye"></i>
-                   </button>
-                   ${canEdit ? `
-                   <button class="btn-cyber" title="Düzenle" style="padding: 6px 10px; font-size: 0.7rem; background: rgba(255, 153, 0, 0.1); border: 1px solid #ff9900; color: #ff9900;" onclick="window.editArchiveReport('${report.reportNo}')">
-                     <i class="fa-solid fa-pen-to-square"></i>
-                   </button>
-                   ` : ''}
-                   ${canReturn ? `
-                   <button class="btn-cyber" title="Ekibe Geri Gönder" style="padding: 6px 10px; font-size: 0.7rem; background: rgba(155, 89, 182, 0.1); border: 1px solid #9b59b2; color: #9b59b2;" onclick="window.sendReportBackToTeam('${report.id}', '${report.reportNo}', '${siteId}')">
-                     <i class="fa-solid fa-reply"></i>
-                   </button>
-                   ` : ''}
-                   ${canDelete ? `
-                   <button class="btn-cyber" title="Sil" style="padding: 6px 10px; font-size: 0.7rem; background: rgba(255, 0, 85, 0.1); border: 1px solid #ff0055; color: #ff0055;" onclick="window.deleteArchiveReport('${report.id}', '${report.reportNo}', '${siteId}')">
-                     <i class="fa-solid fa-trash-can"></i>
-                   </button>
-                   ` : ''}
-                 </div>
-               </td>
-             </tr>
+             <tr class="archive-row">
+                <td style="padding: 1rem; text-align: center;">
+                    <input type="checkbox" class="archive-checkbox" value="${report.reportNo}" data-id="${report.id}" data-type="${report.type === 'BAKIM' ? 'Bakim' : 'Ariza'}" data-turbin="${report.turbineNo}" data-template="${report.templateName || report.faultCode || 'Rapor'}" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);">
+                </td>
+                <td style="padding: 1rem; color: var(--text-muted); font-weight: 600;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
+                <td style="padding: 1rem;">
+                  <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--accent-cyan); font-size: 0.95rem; letter-spacing: 0.5px;">${report.reportNo}</span>
+                  ${isDownloaded ? `<div style="margin-top: 4px;"><span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.65rem;"><i class="fa-solid fa-check-double"></i> İNDİRİLDİ</span></div>` : ''}
+                </td>
+                <td style="padding: 1rem;">
+                  <div style="font-weight: 700;">${report.turbineNo}</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">${report.turbineSerial}</div>
+                </td>
+                <td style="padding: 1rem;">
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                      ${getReportBadge(report)}
+                      ${report.templateName && report.faultCode && report.faultCode !== report.templateName ? `
+                        <span class="report-badge-code" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.25); display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.7rem; width: fit-content; text-transform: uppercase;">
+                          <i class="fa-solid fa-code" style="font-size: 0.7rem;"></i> KOD: ${report.faultCode}
+                        </span>
+                      ` : ''}
+                      ${isAdmin && report.auditMetrics?.isSuspiciouslyFast ? `
+                      <span style="background: rgba(255, 0, 85, 0.15); color: #ff0055; border: 1px solid #ff0055; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.65rem; width: fit-content; box-shadow: 0 0 8px rgba(255,0,85,0.25); display: flex; align-items: center; gap: 4px;" title="${report.auditMetrics.suspicionReason || 'Hızlı doldurma şüphesi'}">
+                        <i class="fa-solid fa-triangle-exclamation"></i> ŞÜPHELİ HIZLI
+                      </span>
+                      ` : ''}
+                    </div>
+                    <span style="font-size: 0.7rem; color: var(--text-muted); max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; text-transform: uppercase;">
+                      ${report.faultDesc || ''}
+                    </span>
+                  </div>
+                </td>
+                <td style="padding: 1rem;">
+                  <span style="background: rgba(255,255,255,0.03); color: #fff; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.08);">
+                    ${formatTeamName(report.team)}
+                  </span>
+                </td>
+                <td style="padding: 1rem; text-align: right; white-space: nowrap;">
+                  <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                    <button class="cyber-action-btn view-btn" title="Görüntüle" onclick="window.viewArchiveReport('${report.reportNo}')">
+                      <i class="fa-solid fa-eye"></i>
+                    </button>
+                    ${canEdit ? `
+                    <button class="cyber-action-btn edit-btn" title="Düzenle" onclick="window.editArchiveReport('${report.reportNo}')">
+                      <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    ` : ''}
+                    ${canReturn ? `
+                    <button class="cyber-action-btn return-btn" title="Ekibe Geri Gönder" onclick="window.sendReportBackToTeam('${report.id}', '${report.reportNo}', '${siteId}')">
+                      <i class="fa-solid fa-reply"></i>
+                    </button>
+                    ` : ''}
+                    ${canDelete ? `
+                    <button class="cyber-action-btn delete-btn" title="Sil" onclick="window.deleteArchiveReport('${report.id}', '${report.reportNo}', '${siteId}')">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                    ` : ''}
+                  </div>
+                </td>
+              </tr>
            `;
         }).join('');
     }
@@ -352,24 +417,28 @@ export const ReportArchivePage = async (siteId?: string) => {
             <p style="color: var(--text-muted); font-size: 0.95rem; font-weight: 500; margin: 0;">Raporlarını incelemek istediğiniz sahayı seçiniz</p>
           </div>
 
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.75rem;">
             ${sites.map(site => {
               return `
-                <div onclick="window.selectReportSiteAndNavigate('${site.id}')" class="glass-panel hover-scale-card" style="padding: 2rem; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.05); background: linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(30, 41, 59, 0.4) 100%); cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 1rem; align-items: center; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                <div onclick="window.selectReportSiteAndNavigate('${site.id}')" class="site-select-card" style="padding: 2.2rem 2rem; border-radius: 16px; cursor: pointer; position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 1.25rem; align-items: center; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
                   <!-- Glowing Background Effect -->
-                  <div style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(0, 242, 254, 0.05) 0%, transparent 60%); pointer-events: none; transition: opacity 0.3s;"></div>
+                  <div class="glow-overlay" style="position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: radial-gradient(circle at center, rgba(0, 242, 254, 0.08) 0%, transparent 60%); pointer-events: none; transition: opacity 0.3s; opacity: 0.4;"></div>
                   
-                  <div style="width: 60px; height: 60px; border-radius: 12px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan); font-size: 1.8rem; transition: all 0.3s;">
-                    <i class="fa-solid fa-wind"></i>
+                  <div class="site-icon-wrapper" style="position: relative; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;">
+                    <!-- Pulse rings -->
+                    <div class="pulse-ring" style="position: absolute; inset: -4px; border: 1.5px dashed rgba(0, 242, 254, 0.2); border-radius: 50%; animation: spin-dashed 12s linear infinite;"></div>
+                    <div class="site-icon-box" style="width: 54px; height: 54px; border-radius: 50%; background: rgba(0, 242, 254, 0.06); border: 1px solid rgba(0, 242, 254, 0.2); display: flex; align-items: center; justify-content: center; color: var(--accent-cyan); font-size: 1.6rem; transition: all 0.3s; box-shadow: 0 0 15px rgba(0,242,254,0.1);">
+                      <i class="fa-solid fa-wind"></i>
+                    </div>
                   </div>
                   
-                  <div>
-                    <h3 style="margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; font-weight: 800; color: #fff; letter-spacing: 0.5px;">${site.name}</h3>
-                    <span style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">SAHA KODU: ${site.id}</span>
+                  <div style="z-index: 1;">
+                    <h3 style="margin: 0 0 4px 0; font-family: 'Rajdhani', sans-serif; font-size: 1.4rem; font-weight: 800; color: #fff; letter-spacing: 0.5px; text-transform: uppercase;">${site.name}</h3>
+                    <span style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: 700; letter-spacing: 1px; opacity: 0.85;">SAHA KODU: ${site.id}</span>
                   </div>
 
-                  <div class="cyber-button-mini" style="margin-top: 0.5rem; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); color: var(--accent-cyan); padding: 6px 16px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
-                    ARŞİVE GİRİŞ <i class="fa-solid fa-arrow-right"></i>
+                  <div class="cyber-enter-btn" style="margin-top: 0.5rem; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: var(--accent-cyan); padding: 8px 20px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; display: flex; align-items: center; gap: 8px; transition: all 0.3s; font-family: 'Rajdhani'; letter-spacing: 0.5px;">
+                    ARŞİVE GİRİŞ <i class="fa-solid fa-chevron-right" style="font-size: 0.7rem; transition: transform 0.2s;"></i>
                   </div>
                 </div>
               `;
@@ -423,59 +492,79 @@ export const ReportArchivePage = async (siteId?: string) => {
 
      return `
     <div class="fade-in-up content-area">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-          <button onclick="window.selectReportSiteAndNavigate('')" class="cyber-button" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 8px 14px; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; font-size: 0.85rem; font-family: 'Rajdhani', sans-serif; font-weight: 700; transition: all 0.2s; letter-spacing: 0.5px;">
-            <i class="fa-solid fa-arrow-left"></i> GERİ
-          </button>
-          <div>
-            <h1 class="page-title" style="margin: 0 0 0.15rem 0; display: flex; align-items: center; gap: 0.5rem;">
-              <i class="fa-solid fa-box-archive" style="color: var(--accent-blue);"></i> ${site?.name} Rapor Arşivi
-            </h1>
-            <p id="archive-counter" style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; margin: 0;">TOPLAM ${visibleReports.length} RAPOR BULUNDU</p>
+      <!-- Title Area -->
+      <div style="display: flex; align-items: center; gap: 1.25rem; margin-bottom: 2rem;">
+        <button onclick="window.selectReportSiteAndNavigate('')" class="cyber-back-btn" style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.25s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(0, 242, 254, 0.3)'; this.style.boxShadow='0 0 10px rgba(0, 242, 254, 0.15)';" onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.boxShadow='none';">
+          <i class="fa-solid fa-arrow-left" style="font-size: 1rem;"></i>
+        </button>
+        <div>
+          <h1 class="page-title" style="margin: 0 0 4px 0; font-family:'Rajdhani',sans-serif; font-size: 2.2rem; font-weight: 900; letter-spacing: -0.5px; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase;">
+            <i class="fa-solid fa-box-archive" style="color: var(--accent-cyan); text-shadow: 0 0 15px rgba(0,242,254,0.35);"></i> ${site?.name} Rapor Arşivi
+          </h1>
+          <p id="archive-counter" style="color: var(--text-dim); font-size: 0.85rem; font-weight: 600; margin: 0; font-family: monospace; letter-spacing: 0.5px;">[ TOPLAM ${visibleReports.length} RAPOR BULUNDU ]</p>
+        </div>
+      </div>
+
+      <!-- Cyber Control Bar -->
+      <div class="cyber-control-bar" style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; margin-bottom: 2rem; padding: 1rem; border-radius: 12px; background: rgba(10, 15, 25, 0.4); border: 1px solid rgba(0, 243, 255, 0.15); box-shadow: 0 5px 20px rgba(0,0,0,0.3); flex-wrap: wrap;">
+        <!-- Left Side: Dropdown Filters -->
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.25); padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+            <i class="fa-regular fa-calendar" style="color: var(--accent-cyan); font-size: 0.9rem;"></i>
+            <select id="archive-month" onchange="window.filterArchiveByMonth()" class="cyber-dropdown-select" style="background: transparent; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; outline: none; font-weight: 700; font-family: 'Rajdhani', sans-serif; cursor: pointer;">
+              <option value="all" style="background:#0f172a;">Tüm Aylar</option>
+              <option value="0" style="background:#0f172a;">Ocak</option>
+              <option value="1" style="background:#0f172a;">Şubat</option>
+              <option value="2" style="background:#0f172a;">Mart</option>
+              <option value="3" style="background:#0f172a;">Nisan</option>
+              <option value="4" style="background:#0f172a;">Mayıs</option>
+              <option value="5" style="background:#0f172a;">Haziran</option>
+              <option value="6" style="background:#0f172a;">Temmuz</option>
+              <option value="7" style="background:#0f172a;">Ağustos</option>
+              <option value="8" style="background:#0f172a;">Eylül</option>
+              <option value="9" style="background:#0f172a;">Ekim</option>
+              <option value="10" style="background:#0f172a;">Kasım</option>
+              <option value="11" style="background:#0f172a;">Aralık</option>
+            </select>
+            <span style="opacity: 0.2; color: #fff;">|</span>
+            <select id="archive-year" onchange="window.filterArchiveByMonth()" class="cyber-dropdown-select" style="background: transparent; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; outline: none; font-weight: 700; font-family: 'Rajdhani', sans-serif; cursor: pointer;">
+              <option value="all" style="background:#0f172a;">Tüm Yıllar</option>
+              <option value="2024" style="background:#0f172a;">2024</option>
+              <option value="2025" style="background:#0f172a;">2025</option>
+              <option value="2026" style="background:#0f172a;">2026</option>
+              <option value="2027" style="background:#0f172a;">2027</option>
+            </select>
+          </div>
+
+          <!-- Real-time Cyber Search Input -->
+          <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.25); padding: 4px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+            <i class="fa-solid fa-magnifying-glass" style="color: var(--accent-cyan); font-size: 0.85rem;"></i>
+            <input type="text" id="archive-search-input" placeholder="Rapor No, Kod veya Açıklama Ara..." oninput="window.renderArchiveTable()" style="background: transparent; color: #fff; border: none; padding: 6px 4px; font-size: 0.85rem; outline: none; width: 220px; font-family: 'Rajdhani', sans-serif; font-weight: 700;">
+          </div>
+          
+          <div style="background: rgba(0, 242, 254, 0.05); padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15); display: flex; align-items: center; gap: 8px; font-size: 0.8rem; font-family: monospace;">
+            <span style="color: var(--text-dim);">SAHA ID:</span>
+            <span style="font-weight: 800; color: var(--accent-cyan);">${siteId}</span>
           </div>
         </div>
-        
-        <div style="display: flex; gap: 1rem; align-items: center;">
-            <div style="background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid var(--glass-border); display: flex; gap: 0.5rem; align-items: center;">
-              <select id="archive-month" onchange="window.filterArchiveByMonth()" style="background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--glass-border); padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;">
-                <option value="all">Tüm Aylar</option>
-                <option value="0">Ocak</option>
-                <option value="1">Şubat</option>
-                <option value="2">Mart</option>
-                <option value="3">Nisan</option>
-                <option value="4">Mayıs</option>
-                <option value="5">Haziran</option>
-                <option value="6">Temmuz</option>
-                <option value="7">Ağustos</option>
-                <option value="8">Eylül</option>
-                <option value="9">Ekim</option>
-                <option value="10">Kasım</option>
-                <option value="11">Aralık</option>
-              </select>
-              <select id="archive-year" onchange="window.filterArchiveByMonth()" style="background: rgba(0,0,0,0.5); color: #fff; border: 1px solid var(--glass-border); padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; outline: none;">
-                <option value="all">Tüm Yıllar</option>
-                <option value="2024">2024</option>
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-                <option value="2027">2027</option>
-              </select>
-            </div>
-            
-            <button onclick="window.downloadSelectedAsZip('${site?.name}', '${siteId}')" class="cyber-button" style="background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 8px 16px;">
-              <i class="fa-solid fa-file-zipper"></i> SEÇİLENLERİ ZIP İNDİR
-            </button>
-            
-            ${canUseAi ? `
-            <button onclick="window.openAiExecutiveSummary()" class="cyber-button" style="background: linear-gradient(135deg, rgba(155, 89, 182, 0.2), rgba(0, 242, 254, 0.2)); border: 1px solid #9b59b2; color: #fff; padding: 8px 16px; border-radius: 8px; display: flex; align-items: center; gap: 8px; box-shadow: 0 0 15px rgba(155,89,182,0.3); transition: all 0.3s;" onmouseover="this.style.boxShadow='0 0 25px rgba(155,89,182,0.6)'" onmouseout="this.style.boxShadow='0 0 15px rgba(155,89,182,0.3)'">
-              <i class="fa-solid fa-wand-magic-sparkles" style="color: #e0b0ff;"></i> <span style="font-weight: 800; letter-spacing: 0.5px;">YAPAY ZEKA ANALİZİ</span>
-            </button>
-            ` : ''}
-            
-            <div style="background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 10px; border: 1px solid var(--glass-border);">
-              <span style="font-size: 0.7rem; color: var(--text-muted);">SAHA ID:</span>
-              <span style="font-family: 'Rajdhani', sans-serif; font-weight: 800; color: var(--accent-cyan);">${siteId}</span>
-            </div>
+
+        <!-- Right Side: Cyber Buttons -->
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          <button onclick="window.downloadSelectedAsZip('${site?.name}', '${siteId}')" class="cyber-action-bar-btn" style="background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: var(--accent-cyan); display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Rajdhani'; font-weight: 800; letter-spacing: 0.5px; transition: all 0.25s;">
+            <i class="fa-solid fa-file-zipper" style="font-size: 0.9rem;"></i> SEÇİLENLERİ ZIP İNDİR
+          </button>
+          
+          ${canDelete ? `
+          <button onclick="window.deleteSelectedReports('${siteId}')" class="cyber-action-bar-btn delete" style="background: rgba(255, 0, 85, 0.08); border: 1px solid rgba(255, 0, 85, 0.25); color: #ff0055; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Rajdhani'; font-weight: 800; letter-spacing: 0.5px; transition: all 0.25s;">
+            <i class="fa-solid fa-trash-can" style="font-size: 0.9rem;"></i> SEÇİLENLERİ SİL
+          </button>
+          ` : ''}
+          
+          ${canUseAi ? `
+          <button onclick="window.openAiExecutiveSummary()" class="cyber-ai-btn" style="position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 8px; font-family: 'Rajdhani'; font-weight: 800; letter-spacing: 0.5px; cursor: pointer;">
+            <i class="fa-solid fa-wand-magic-sparkles" style="color: #e0b0ff;"></i> YAPAY ZEKA ANALİZİ
+          </button>
+          ` : ''}
         </div>
       </div>
 
@@ -483,14 +572,14 @@ export const ReportArchivePage = async (siteId?: string) => {
         <div style="overflow-x: auto;">
           <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
           <thead>
-            <tr style="text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--glass-border);">
-              <th style="padding: 1rem; width: 40px; text-align: center;"><input type="checkbox" id="archive-select-all" onchange="window.toggleAllArchiveCheckboxes(this)" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);"></th>
-              <th style="padding: 1rem;">TARİH</th>
-              <th style="padding: 1rem;">RAPOR NO</th>
-              <th style="padding: 1rem;">TÜRBİN / SERİ</th>
-              <th style="padding: 1rem;">ARIZA / BAKIM</th>
-              <th style="padding: 1rem;">EKİP</th>
-              <th style="padding: 1rem; text-align: right;">AKSİYON</th>
+            <tr class="archive-header-row">
+              <th style="padding: 1.1rem 1rem; width: 40px; text-align: center;"><input type="checkbox" id="archive-select-all" onchange="window.toggleAllArchiveCheckboxes(this)" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);"></th>
+              <th style="padding: 1.1rem 1rem;">TARİH</th>
+              <th style="padding: 1.1rem 1rem;">RAPOR NO</th>
+              <th style="padding: 1.1rem 1rem;">TÜRBİN / SERİ</th>
+              <th style="padding: 1.1rem 1rem;">ARIZA / BAKIM</th>
+              <th style="padding: 1.1rem 1rem;">EKİP</th>
+              <th style="padding: 1.1rem 1rem; text-align: right;">AKSİYON</th>
             </tr>
           </thead>
           <tbody id="archive-tbody">
@@ -559,9 +648,146 @@ export const ReportArchivePage = async (siteId?: string) => {
     ` : ''}
     
       <style>
-        .archive-row:hover {
-          background: rgba(255, 255, 255, 0.05) !important;
+        /* Santral Seçim Kartları */
+        .site-select-card {
+          background: linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, rgba(30, 41, 59, 0.4) 100%) !important;
+          border: 1px solid rgba(255, 255, 255, 0.05) !important;
+          backdrop-filter: blur(15px);
         }
+        .site-select-card:hover {
+          transform: translateY(-5px);
+          border-color: rgba(0, 242, 254, 0.35) !important;
+          box-shadow: 0 15px 35px rgba(0, 242, 254, 0.12) !important;
+        }
+        .site-select-card:hover .site-icon-box {
+          background: rgba(0, 242, 254, 0.15) !important;
+          box-shadow: 0 0 15px rgba(0, 242, 254, 0.3) !important;
+          transform: scale(1.05);
+        }
+        .site-select-card:hover .cyber-enter-btn {
+          background: rgba(0, 242, 254, 0.15) !important;
+          border-color: rgba(0, 242, 254, 0.5) !important;
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+        .site-select-card:hover .cyber-enter-btn i {
+          transform: translateX(3px);
+        }
+        .site-select-card:hover .glow-overlay {
+          opacity: 0.8 !important;
+        }
+
+        /* Radar Animasyonu */
+        @keyframes spin-dashed {
+          100% { transform: rotate(360deg); }
+        }
+
+        /* Tablo Satırı Efekti */
+        .archive-row {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+          transition: all 0.25s ease !important;
+        }
+        .archive-row:hover {
+          background: rgba(0, 242, 254, 0.02) !important;
+          box-shadow: inset 3px 0 0 var(--accent-cyan);
+        }
+
+        .archive-header-row {
+          background: rgba(0, 242, 254, 0.03) !important;
+          border-bottom: 2px solid rgba(0, 242, 254, 0.15) !important;
+          text-align: left;
+          color: rgba(255, 255, 255, 0.8);
+          font-family: 'Rajdhani', sans-serif;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          font-size: 0.9rem;
+        }
+
+        /* Kontrol Bar Butonları */
+        .cyber-action-bar-btn {
+          transition: all 0.25s ease !important;
+        }
+        .cyber-action-bar-btn:hover {
+          background: rgba(0, 242, 254, 0.15) !important;
+          border-color: rgba(0, 242, 254, 0.5) !important;
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+        }
+        .cyber-action-bar-btn.delete:hover {
+          background: rgba(255, 0, 85, 0.15) !important;
+          border-color: rgba(255, 0, 85, 0.5) !important;
+          box-shadow: 0 0 10px rgba(255, 0, 85, 0.15);
+        }
+
+        /* Yapay Zeka Butonu */
+        .cyber-ai-btn {
+          background: linear-gradient(135deg, rgba(155, 89, 182, 0.2), rgba(0, 242, 254, 0.2)) !important;
+          border: 1px solid #9b59b2 !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(155, 89, 182, 0.25) !important;
+          transition: all 0.3s ease !important;
+          overflow: hidden;
+        }
+        .cyber-ai-btn::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+          transform: translateX(-100%);
+          transition: transform 0.6s ease;
+        }
+        .cyber-ai-btn:hover {
+          box-shadow: 0 0 25px rgba(155, 89, 182, 0.5), 0 0 10px rgba(0, 242, 254, 0.2) !important;
+          border-color: #00f2fe !important;
+          transform: scale(1.02);
+        }
+        .cyber-ai-btn:hover::after {
+          transform: translateX(100%);
+        }
+
+        /* Yuvarlak Dairesel Aksiyon Butonları */
+        .cyber-action-btn {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.02);
+          color: rgba(255,255,255,0.6);
+          font-size: 0.8rem;
+        }
+        .cyber-action-btn:hover {
+          transform: scale(1.1);
+          color: #fff;
+        }
+        
+        .cyber-action-btn.view-btn:hover {
+          background: rgba(0, 242, 254, 0.15) !important;
+          border-color: var(--accent-cyan) !important;
+          color: var(--accent-cyan) !important;
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.3) !important;
+        }
+        .cyber-action-btn.edit-btn:hover {
+          background: rgba(255, 153, 0, 0.15) !important;
+          border-color: #ff9900 !important;
+          color: #ff9900 !important;
+          box-shadow: 0 0 10px rgba(255, 153, 0, 0.3) !important;
+        }
+        .cyber-action-btn.return-btn:hover {
+          background: rgba(155, 89, 182, 0.15) !important;
+          border-color: #9b59b2 !important;
+          color: #9b59b2 !important;
+          box-shadow: 0 0 10px rgba(155, 89, 182, 0.3) !important;
+        }
+        .cyber-action-btn.delete-btn:hover {
+          background: rgba(255, 0, 85, 0.15) !important;
+          border-color: #ff0055 !important;
+          color: #ff0055 !important;
+          box-shadow: 0 0 10px rgba(255, 0, 85, 0.3) !important;
+        }
+
         .hidden { display: none !important; }
         .cyber-button { border-radius: 4px; font-weight: 600; transition: all 0.2s; }
         .cyber-button:hover { opacity: 0.8; }
@@ -581,6 +807,7 @@ export const ReportArchivePage = async (siteId?: string) => {
           flex: none !important;
           height: auto !important;
           overflow: visible !important;
+          margin-bottom: 40px;
         }
         #report-modal-content #pdf-container {
           max-width: 950px !important;
@@ -856,6 +1083,39 @@ export const ReportArchivePage = async (siteId?: string) => {
             (window as any).navigate('reports-archive', siteId);
         } catch (error) {
             alert("Silme sırasında hata oluştu: " + error);
+        }
+    }
+};
+
+(window as any).deleteSelectedReports = async (siteId: string) => {
+    const checkboxes = document.querySelectorAll('.archive-checkbox:checked');
+    if (checkboxes.length === 0) {
+        alert("Lütfen silmek istediğiniz raporları seçin.");
+        return;
+    }
+
+    const currentUser = (window as any).currentUser;
+    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+    const perms = currentUser?.allowedTabs?.['reports-archive'] || {};
+    if (!isAdmin && !perms.deleteReport) {
+        alert("Silme yetkiniz bulunmamaktadır.");
+        return;
+    }
+
+    if (confirm(`Seçilen ${checkboxes.length} adet raporu kalıcı olarak silmek istediğinize emin misiniz?`)) {
+        try {
+            const deletePromises = Array.from(checkboxes).map(async (cb: any) => {
+                const docId = cb.getAttribute('data-id');
+                if (docId) {
+                    await serviceReportService.deleteReport(docId);
+                }
+            });
+            
+            await Promise.all(deletePromises);
+            alert("Seçilen raporlar başarıyla silindi.");
+            (window as any).navigate('reports-archive', siteId);
+        } catch (error) {
+            alert("Toplu silme sırasında hata oluştu: " + error);
         }
     }
 };

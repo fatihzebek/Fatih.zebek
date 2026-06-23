@@ -211,6 +211,72 @@ class AiService {
       throw new Error(`Tahmin analizi sırasında bir hata oluştu: ${error.message}`);
     }
   }
+
+  /**
+   * PDF dokümanına dayalı olarak teknisyenin sorusunu cevaplandırır.
+   */
+  async askLibraryAgent(docData: any, userQuestion: string): Promise<string> {
+    if (!this.model) {
+      throw new Error("Yapay Zeka API anahtarı yapılandırılmamış.");
+    }
+
+    try {
+      if (!docData) {
+        // General Chat Mode
+        const prompt = `
+        Sen Demirer Holding rüzgar türbini teknik kütüphanesinde görevli uzman bir 'Teknik Destek Yapay Zeka Asistanı'sın.
+        Sahadaki teknisyenlere rüzgar türbini bakımı, arıza teşhisi, devre şemaları okuma ve genel mühendislik konularında yardımcı oluyorsun.
+        
+        Soru: ${userQuestion}
+        
+        Lütfen Türkçe olarak, net, anlaşılır ve mühendislik pratiklerine uygun bir teknik dilde cevap ver.
+        Gerektiğinde adımları maddeler halinde sırala ve markdown formatı (kalın yazılar vb.) kullan.
+        `;
+        const result = await this.model.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      }
+
+      // 1. Dokümanın tüm chunklarını Firestore'dan çekip base64'ü birleştir
+      const { tsiService } = await import('./TsiService');
+      const base64Data = await tsiService.getChunkedFileBase64(docData);
+
+      if (!base64Data) {
+        throw new Error("Doküman verisi okunamadı (boş base64).");
+      }
+
+      // 2. Gemini API'sine base64 inline PDF data ve soruyu gönder
+      const prompt = `
+      Sen rüzgar türbini teknik kütüphanesinde görevli uzman bir 'Teknik Doküman Asistanı'sın.
+      Sana ekte verilen '${docData.fileName}' (Doküman Başlığı: '${docData.title}') isimli resmi teknik dokümana dayanarak aşağıdaki soruyu cevapla.
+      
+      Soru: ${userQuestion}
+      
+      Kurallar:
+      1. Yanıtını tamamen bu dokümandaki bilgilere, tablolara ve talimatlara dayandır.
+      2. Eğer aranan bilgi dokümanda geçmiyorsa, bunu dürüstçe belirt ama genel rüzgar türbini teknik uzmanlık bilgine dayanarak olası çözüm yollarını ve kontrolleri de teknisyene öner.
+      3. Yanıtı Türkçe olarak, adımlar halinde, son derece net ve sahadaki bir teknisyenin işine yarayacak pratik teknik dilde yaz.
+      4. Markdown formatı kullanarak önemli terimleri kalın yaz veya adımları maddeler halinde sırala.
+      `;
+
+      const result = await this.model.generateContent([
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: "application/pdf"
+          }
+        },
+        prompt
+      ]);
+
+      const response = await result.response;
+      return response.text();
+
+    } catch (error: any) {
+      console.error("AI Library Agent Error:", error);
+      throw new Error(`Yapay Zeka dokümanı analiz edemedi: ${error.message}`);
+    }
+  }
 }
 
 export const aiService = new AiService();

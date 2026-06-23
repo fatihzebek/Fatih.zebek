@@ -11,7 +11,27 @@ export const formatTeamName = (teamStr: string): string => {
   if (!teamStr) return 'SİSTEM';
   
   // Normalize: handle email-like strings or team codes
-  const clean = teamStr.toLowerCase().trim();
+  const clean = teamStr.toLowerCase().trim().replace(/_/g, ' ');
+
+  // Specific mapping for Hurşit AKTER (with Turkish character support)
+  if (clean.includes('hursit.akter')) {
+    return 'Hurşit AKTER';
+  }
+
+  // General email formatting for other personnel
+  if (clean.includes('@')) {
+    const prefix = clean.split('@')[0];
+    const teamMatch = prefix.match(/tm(\d+)|team\s*(\d+)/i);
+    if (!teamMatch) {
+      const parts = prefix.split('.');
+      if (parts.length > 1) {
+        const first = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        const last = parts[parts.length - 1].toUpperCase();
+        return `${first} ${last}`;
+      }
+      return prefix.toUpperCase();
+    }
+  }
   
   // Extract number using regex
   const match = clean.match(/tm(\d+)|team\s*(\d+)/i);

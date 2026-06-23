@@ -36,7 +36,10 @@ export const UserManagementPage = async () => {
     ...dataService.getSites().map(s => ({ id: 'site_' + s.id, label: 'Saha: ' + s.name }))
   ];
 
-  (granularOptions as any)['tsi-library'] = tsiCategories.map(c => ({ id: 'tsicat_' + c.id, label: 'Kategori: ' + c.name }));
+  (granularOptions as any)['tsi-library'] = [
+    { id: 'aiAgent', label: 'Yapay Zeka Asistanı (Ajan) Yetkisi' },
+    ...tsiCategories.map(c => ({ id: 'tsicat_' + c.id, label: 'Kategori: ' + c.name }))
+  ];
 
   const baseWarehouses = [
     { id: 'addMaterial', label: 'Malzeme Ekleme' },
@@ -105,7 +108,19 @@ export const UserManagementPage = async () => {
               </div>
 
               <!-- Actions -->
-              <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <div style="display: flex; gap: 1rem; align-items: center;">
+                ${user.role !== 'ADMIN' ? `
+                  <!-- On/Off Switch -->
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <span id="user-status-label-${user.uid}" style="font-size: 0.65rem; font-weight: 800; color: ${user.isActive !== false ? '#10b981' : '#ff4d4d'}; letter-spacing: 0.5px; width: 42px; text-align: right;">
+                      ${user.isActive !== false ? 'AKTİF' : 'PASİF'}
+                    </span>
+                    <label class="cyber-switch">
+                      <input type="checkbox" ${user.isActive !== false ? 'checked' : ''} onchange="window.toggleUserActiveStatus('${user.uid}', this)">
+                      <span class="cyber-switch-slider"></span>
+                    </label>
+                  </div>
+                ` : ''}
                 <button class="action-icon-btn" onclick="window.editUserPermissions('${user.uid}')" title="Yetkileri Düzenle">
                   <i class="fa-solid fa-pencil"></i>
                 </button>
@@ -163,10 +178,10 @@ export const UserManagementPage = async () => {
         <div style="padding: 1.5rem;">
           <div class="form-grid" style="display: grid; gap: 1.25rem;">
             <div class="form-group">
-              <label class="permission-label" style="margin-bottom: 0.5rem; display: block;">KURUMSAL E-POSTA</label>
+              <label class="permission-label" style="margin-bottom: 0.5rem; display: block;">E-POSTA VEYA KULLANICI ADI</label>
               <div style="position: relative;">
-                <i class="fa-solid fa-envelope" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
-                <input type="email" id="new-user-email" class="cyber-input" placeholder="ornek@demirer.com" style="padding-left: 2.5rem;" required>
+                <i class="fa-solid fa-user" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
+                <input type="text" id="new-user-email" class="cyber-input" placeholder="ornek@demirer.com veya kullanıcı adı" style="padding-left: 2.5rem;" required>
               </div>
             </div>
 
@@ -187,6 +202,7 @@ export const UserManagementPage = async () => {
                     <option value="TECHNICIAN">TECHNICIAN</option>
                     <option value="MALZEME_YONETIMI">MALZEME YÖNETİMİ</option>
                     <option value="ADMIN">ADMIN</option>
+                    <option value="TAMİR">TAMİR ATÖLYESİ</option>
                     <option value="GUEST">GUEST</option>
                   </select>
                 </div>
@@ -826,13 +842,28 @@ export const UserManagementPage = async () => {
   }
 
   try {
-    // 1. Firebase Authentication'da kullanıcı oluştur
-    //    İkincil app kullanarak mevcut admin oturumunu bozmaz
-    (window as any).showToast('İşlem', 'Firebase hesabı oluşturuluyor...', 'info');
-    const firebaseUid = await authService.createAuthUser(emailInput.value, passInput.value);
+    const isEmail = emailInput.value.includes('@');
+    let firebaseUid = '';
 
-    // 2. Firestore profilini Firebase Auth uid ile oluştur
-    const tabsArray = roleInput.value === 'MALZEME_YONETIMI' ? ['warehouses', 'reports-archive'] : ['dashboard', 'tasks'];
+    if (isEmail) {
+      // 1. Firebase Authentication'da kullanıcı oluştur
+      //    İkincil app kullanarak mevcut admin oturumunu bozmaz
+      (window as any).showToast('İşlem', 'Firebase hesabı oluşturuluyor...', 'info');
+      firebaseUid = await authService.createAuthUser(emailInput.value, passInput.value);
+    } else {
+      // Düz kullanıcı adı ile kayıtta Firebase Auth'u atla, doğrudan Firestore kullanıcısı oluştur
+      const cleanVal = emailInput.value.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      firebaseUid = 'usr_' + cleanVal + '_' + Math.random().toString(36).substr(2, 5);
+    }
+
+    // 2. Firestore profilini oluştur
+    let tabsArray = ['dashboard', 'tasks'];
+    if (roleInput.value === 'MALZEME_YONETIMI') {
+      tabsArray = ['warehouses', 'reports-archive'];
+    } else if (roleInput.value === 'TAMİR') {
+      tabsArray = ['workshop'];
+    }
+
     const allowedTabs: Record<string, any> = {};
     tabsArray.forEach(t => allowedTabs[t] = true);
 
@@ -845,11 +876,15 @@ export const UserManagementPage = async () => {
       allowedTabs,
       allowedSites: [],
       allowedWarehouses: [],
-      team: teamInput?.value || ''
+      team: teamInput?.value || '',
+      isActive: true
     };
 
     await userService.saveProfile(newUser);
-    (window as any).showToast('Başarılı', 'Kullanıcı hem Firebase Auth hem Firestore\'da oluşturuldu. Artık e-posta/şifre ile giriş yapabilir.', 'success');
+    const successMsg = isEmail 
+      ? "Kullanıcı hem Firebase Auth hem Firestore'da oluşturuldu. Artık e-posta/şifre ile giriş yapabilir."
+      : "Kullanıcı başarıyla Firestore'da oluşturuldu. Artık kullanıcı adı/şifre ile giriş yapabilir.";
+    (window as any).showToast('Başarılı', successMsg, 'success');
     (window as any).closeNewUserModal();
     (window as any).navigate('users');
   } catch (error: any) {
@@ -874,6 +909,29 @@ export const UserManagementPage = async () => {
       (window as any).navigate('users');
     } catch (e) {
       (window as any).showToast('Hata', 'Kullanıcı silinemedi.', 'error');
+    }
+  }
+};
+
+(window as any).toggleUserActiveStatus = async (uid: string, input: HTMLInputElement) => {
+  const isActive = input.checked;
+  const statusLabel = document.getElementById(`user-status-label-${uid}`);
+  if (statusLabel) {
+    statusLabel.innerText = isActive ? 'AKTİF' : 'PASİF';
+    statusLabel.style.color = isActive ? '#10b981' : '#ff4d4d';
+  }
+
+  try {
+    await userService.updateActiveStatus(uid, isActive);
+    (window as any).showToast('Başarılı', `Kullanıcı durumu ${isActive ? 'Aktif' : 'Pasif'} olarak güncellendi.`, 'success');
+  } catch (error) {
+    console.error("Kullanıcı durumu güncellenemedi:", error);
+    (window as any).showToast('Hata', 'Kullanıcı durumu güncellenemedi.', 'error');
+    // Revert state
+    input.checked = !isActive;
+    if (statusLabel) {
+      statusLabel.innerText = !isActive ? 'AKTİF' : 'PASİF';
+      statusLabel.style.color = !isActive ? '#10b981' : '#ff4d4d';
     }
   }
 };

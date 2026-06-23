@@ -22,7 +22,9 @@ class StatusService {
   }
 
   getCodeByKod(kod: string): FaultCode | undefined {
-    return this.codes.find(c => c.KOD === kod);
+    if (!kod) return undefined;
+    const normalized = kod.trim().toLowerCase();
+    return this.codes.find(c => c.KOD.trim().toLowerCase() === normalized);
   }
 }
 

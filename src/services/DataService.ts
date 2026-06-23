@@ -17,7 +17,8 @@ export class DataService {
     { id: 'W07', name: 'Dares Datça Depo' },
     { id: 'W08', name: 'Alize Keltepe Depo' },
     { id: 'W09', name: 'Alize Kuyucak Depo' },
-    { id: 'W10', name: 'Alize Çataltape Depo' }
+    { id: 'W10', name: 'Alize Çataltape Depo' },
+    { id: 'W11', name: 'Merkez Tamir Atölyesi Deposu' }
   ];
   private sites: Site[] = [
     { id: '0752', name: 'Alize Germiyan', turbineCount: 7 },
@@ -42,7 +43,8 @@ export class DataService {
     'Alize Keltepe',
     'Alize Sarıkaya',
     'Alize Kuyucak',
-    'Alize Çataltape'
+    'Alize Çataltape',
+    'Merkez Tamir Atölyesi'
   ];
 
   public getSortedSites(): Site[] {
@@ -553,6 +555,13 @@ export class DataService {
 
   getWarehouseIdBySiteId(siteId: string): string | null {
     return this.siteToWarehouseMap[siteId] || null;
+  }
+
+  getSiteIdByWarehouseId(warehouseId: string): string | null {
+    for (const [siteId, whId] of Object.entries(this.siteToWarehouseMap)) {
+      if (whId === warehouseId) return siteId;
+    }
+    return null;
   }
 
   findTurbineBySerial(serial: string, targetSiteId?: string) {

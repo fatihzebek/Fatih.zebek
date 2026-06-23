@@ -99,9 +99,16 @@ export const FaultFormUI = {
                       ${isMaintenanceTask ? 'Periyodik Bakım ve Kontrol Raporu' : 'Servis ve Müdahale Kayıt Formu'}
                     </p>
                   </div>
-                  <div style="text-align: right;">
-                    <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">REFERANS NO</div>
-                    <div style="font-size: 1rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">#${currentTask?.id?.slice(-6).toUpperCase() || 'NEW-FORM'}</div>
+                  <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    ${(window as any).isRestoredFromDraft ? `
+                      <span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #f97316; font-size: 0.55rem; padding: 2px 8px; border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 4px; font-weight: 800; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 4px;">
+                        <i class="fa-solid fa-clock-rotate-left"></i> TASLAKTAN YÜKLENDİ
+                      </span>
+                    ` : ''}
+                    <div>
+                      <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">REFERANS NO</div>
+                      <div style="font-size: 1rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">#${currentTask?.id?.slice(-6).toUpperCase() || 'NEW-FORM'}</div>
+                    </div>
                   </div>
                 </header>
 
@@ -287,10 +294,7 @@ export const FaultFormUI = {
                               <th style="padding: 0.5rem; text-align: left; width: 120px;">SAP NO</th>
                               <th style="padding: 0.5rem; text-align: left; width: 140px;">SERİ NO</th>
                               <th style="padding: 0.5rem; text-align: left;">MALZEME AÇIKLAMASI</th>
-                              <th style="padding: 0.5rem; text-align: center; width: 85px;">DEPODAN ALINAN</th>
-                              <th style="padding: 0.5rem; text-align: center; width: 85px;">DEPOYA İADE</th>
-                              <th style="padding: 0.5rem; text-align: center; width: 85px;">KULLANILAN</th>
-                              <th style="padding: 0.5rem; text-align: center; width: 85px;">DEFECT</th>
+                              <th style="padding: 0.5rem; text-align: center; width: 100px;">ADET</th>
                             </tr>
                           </thead>
                           <tbody id="material-rows"></tbody>
@@ -326,14 +330,11 @@ export const FaultFormUI = {
             <td style="padding: 0.25rem 0.35rem;"><input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.serialNo || ''}"></td>
             <td style="padding: 0.25rem 0.35rem;">
                 <div style="position: relative; display: flex; align-items: center; width: 100%;">
-                    <input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 6px !important; padding-right: 80px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.description || ''}">
-                    ${type === 'T' ? `<span class="stock-badge" style="display: none; position: absolute; right: 6px; padding: 0.1rem 0.3rem; font-size: 0.6rem; border-radius: 4px; font-weight: 800; font-family: monospace; white-space: nowrap; pointer-events: none; z-index: 2;"></span>` : ''}
+                    <input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 165px 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.description || ''}">
+                    ${type === 'T' ? `<span class="stock-badge" style="display: none; position: absolute; right: 4px; padding: 0.1rem 0.3rem; font-size: 0.65rem; border-radius: 4px; font-weight: 800; font-family: monospace; white-space: nowrap; pointer-events: none; z-index: 2;"></span>` : ''}
                 </div>
             </td>
-            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 65px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.received || 0}"></td>
-            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 65px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.returned || 0}"></td>
-            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 65px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.used || 0}"></td>
-            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 65px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.defectCount || 0}"></td>
+            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 80px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${type === 'S' ? (data?.defectCount || 0) : (data?.used || 0)}"></td>
         </tr>
     `,
     renderWorkSessionRow: (ws: any, isLast: boolean) => {

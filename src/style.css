@@ -43,6 +43,40 @@ body.light-mode .nav-item:not(.active) {
   color: #475569;
 }
 
+body.light-mode .sidebar-footer {
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+body.light-mode .user-badge {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.light-mode .connection-status {
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+body.light-mode select.cyber-input option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+body.light-mode select.cyber-input:focus {
+  background-color: #ffffff;
+}
+
+body.light-mode .cyber-table th {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+body.light-mode .cyber-table .cyber-input {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
 
 @keyframes pulse-orange {
   0% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4); }
@@ -900,18 +934,27 @@ html {
   gap: 0.75rem;
   color: var(--text-muted);
   font-weight: 500;
-  transition: var(--transition-smooth);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.85rem;
+  border-left: 2px solid transparent;
 }
 
 .nav-item i {
   width: 16px;
   text-align: center;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: linear-gradient(90deg, rgba(0, 242, 254, 0.06), rgba(255, 255, 255, 0.01));
   color: var(--text-main);
+  border-left-color: rgba(0, 242, 254, 0.4);
+  transform: translateX(5px);
+}
+
+.nav-item:hover i {
+  transform: scale(1.15);
+  color: var(--accent-cyan);
 }
 
 .nav-item.active {
@@ -931,12 +974,17 @@ html {
   font-size: 0.75rem;
   color: var(--text-muted);
   cursor: pointer;
-  transition: var(--transition-smooth);
+  transition: all 0.2s ease;
   border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .sub-item:hover {
   color: var(--accent-cyan);
+  background: rgba(0, 242, 254, 0.03);
+  transform: translateX(4px);
 }
 
 .sub-item.active {
@@ -947,7 +995,7 @@ html {
 /* Page Components */
 .content-area {
   padding: 1.5rem 2rem 4rem 2rem;
-  max-width: 1400px;
+  max-width: 1650px;
   margin: 0 auto;
 }
 

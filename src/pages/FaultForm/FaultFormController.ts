@@ -122,58 +122,143 @@ export class FaultFormController {
                             }
                         } catch (e) {}
                     }
-                    if (userProfile?.team) {
-                        siteId = `team_${userProfile.team.replace(/\s+/g, '_')}`;
+                    let teamName = userProfile?.team || '';
+                    if (!teamName && w.currentTaskContext?.personnel && w.currentTaskContext?.personnel !== 'Atanmadı') {
+                        teamName = w.currentTaskContext.personnel;
+                    }
+                    if (teamName) {
+                        siteId = `team_${teamName.replace(/\s+/g, '_')}`;
+                    } else if (siteId) {
+                        siteId = warehouseService.resolveWarehouseId(siteId);
                     }
 
                     let stockQty = 0;
-                    if (siteId) {
-                        try {
-                            const stockItem = await warehouseService.getStockBySap(siteId, sapNo);
-                            
-                            if (input.getAttribute('data-lookup-id') !== lookupId) return;
+                    let scanResults: { id: string; name: string; qty: number; description?: string }[] = [];
+                    
+                    try {
+                        const candidateWarehouses = new Map<string, string>();
+                        
+                        // Add standard warehouses
+                        const stdWarehouses = (window as any).dataService?.getWarehouses() || [];
+                        stdWarehouses.forEach((w: any) => {
+                            candidateWarehouses.set(w.id, w.name);
+                        });
+                        
+                        // Add Team 01 to Team 15
+                        for (let i = 1; i <= 15; i++) {
+                            const tName = `Team ${String(i).padStart(2, '0')}`;
+                            const tId = `team_${tName.replace(/\s+/g, '_')}`;
+                            candidateWarehouses.set(tId, `${tName} Deposu`);
+                        }
+                        
+                        // Add active team if any
+                        if (teamName) {
+                            const activeTeamId = `team_${teamName.replace(/\s+/g, '_')}`;
+                            candidateWarehouses.set(activeTeamId, `${teamName} Deposu`);
+                        }
 
-                            if (stockItem) {
-                                stockQty = stockItem.quantity || 0;
-                                badge.setAttribute('data-debug', JSON.stringify({id: stockItem.id, q: stockItem.quantity}));
+                        // Query all candidate warehouses in parallel
+                        const scanPromises = Array.from(candidateWarehouses.entries()).map(async ([whId, whName]) => {
+                            try {
+                                const stockItem = await warehouseService.getStockBySap(whId, sapNo);
+                                if (stockItem && (stockItem.quantity || 0) > 0) {
+                                    return {
+                                        id: whId,
+                                        name: whName,
+                                        qty: stockItem.quantity || 0,
+                                        description: stockItem.description || ''
+                                    };
+                                }
+                            } catch (e) {
+                                // ignore
+                            }
+                            return null;
+                        });
+                        
+                        const resolvedResults = await Promise.all(scanPromises);
+                        scanResults = resolvedResults.filter((r): r is { id: string; name: string; qty: number; description: string } => r !== null);
+                        
+                        if (input.getAttribute('data-lookup-id') !== lookupId) return;
+
+                        if (siteId) {
+                            const myStockResult = scanResults.find(r => r.id === siteId);
+                            if (myStockResult) {
+                                stockQty = myStockResult.qty;
+                                badge.setAttribute('data-debug', JSON.stringify({id: myStockResult.id, q: myStockResult.qty}));
                             } else {
                                 badge.setAttribute('data-debug', 'null_item');
-                                
-                                // O anki depoda malzeme yoksa, açıklamasını bulmak için diğer depoları tara
-                                const allSites = (window as any).dataService?.getWarehouses() || [];
-                                for (const site of allSites) {
-                                    if (site.id !== siteId) {
-                                        const otherItem = await warehouseService.getStockBySap(site.id, sapNo);
-                                        if (otherItem && otherItem.description) {
-                                            const descInput = inputs[2] as HTMLInputElement;
-                                            if (descInput && !descInput.value) {
-                                                descInput.value = otherItem.description;
-                                            }
-                                            break;
-                                        }
-                                    }
-                                }
                             }
-                        } catch (err: any) {
-                            badge.setAttribute('data-debug', 'err_' + err.message);
                         }
-                    } else {
-                        badge.setAttribute('data-debug', 'no_siteId');
+
+                        // Update description input with description if empty
+                        if (inputs && inputs[2] && !inputs[2].value) {
+                            const foundDesc = scanResults.find(r => r.description)?.description;
+                            if (foundDesc) {
+                                inputs[2].value = foundDesc;
+                            }
+                        }
+                    } catch (err: any) {
+                        badge.setAttribute('data-debug', 'err_' + err.message);
                     }
+
                     if (badge) {
-                        const debugInfo = badge.getAttribute('data-debug') || '';
-                        badge.textContent = `STOK: ${stockQty} ${stockQty === 0 ? '(' + debugInfo + ')' : ''}`;
-                        badge.style.display = 'inline-block';
+                        const getShortWarehouseName = (id: string, fullName: string): string => {
+                            if (id.startsWith('team_')) {
+                                return id.replace('team_Team_', 'T').replace('team_', 'T').replace('_Deposu', '');
+                            }
+                            const clean = fullName
+                                .replace('Anemon', '')
+                                .replace('Alize', '')
+                                .replace('Mare', '')
+                                .replace('Doğal', '')
+                                .replace('Dares', '')
+                                .replace('Deposu', '')
+                                .replace('Depo', '')
+                                .replace('Merkez Tamir Atölyesi', 'Atölye')
+                                .trim();
+                            return clean;
+                        };
+
+                        let badgeText = '';
+                        const otherStocks = scanResults.filter(r => r.id !== siteId);
+                        otherStocks.sort((a, b) => b.qty - a.qty);
+
                         if (stockQty > 0) {
+                            badgeText = `STOK: ${stockQty}`;
                             badge.style.backgroundColor = 'rgba(0, 230, 118, 0.15)';
                             badge.style.color = '#00e676';
                             badge.style.border = '1px solid #00e676';
                             badge.style.boxShadow = '0 0 10px rgba(0, 230, 118, 0.4)';
                         } else {
+                            if (scanResults.length > 0) {
+                                badgeText = `STOK: 0`;
+                            } else {
+                                badgeText = `STOK YOK!`;
+                            }
                             badge.style.backgroundColor = 'rgba(255, 0, 85, 0.15)';
                             badge.style.color = '#ff0055';
                             badge.style.border = '1px solid #ff0055';
                             badge.style.boxShadow = '0 0 10px rgba(255, 0, 85, 0.4)';
+                        }
+
+                        if (otherStocks.length > 0) {
+                            const top2 = otherStocks.slice(0, 2).map(os => {
+                                const sName = getShortWarehouseName(os.id, os.name);
+                                return `${sName}:${os.qty}`;
+                            });
+                            badgeText += ` (${top2.join(', ')})`;
+                        }
+
+                        badge.textContent = badgeText;
+                        badge.style.display = 'inline-block';
+
+                        if (scanResults.length > 0) {
+                            const fullBreakdown = scanResults
+                                .map(os => `${os.name}: ${os.qty} Adet`)
+                                .join('\n');
+                            badge.title = `Tüm Depolardaki Stok Durumu:\n${fullBreakdown}`;
+                        } else {
+                            badge.title = 'Hiçbir depoda stok bulunamadı.';
                         }
                     }
                 } else {
@@ -1384,19 +1469,20 @@ export class FaultFormController {
             return Array.from(document.querySelectorAll('#material-rows tr')).map(row => {
                 const cells = (row as HTMLTableRowElement).cells;
                 const inputs = row.querySelectorAll('input');
-                if (inputs.length < 7) return null;
+                if (inputs.length < 4) return null;
                 const sapNo = inputs[0].value.trim();
                 const type = (row as HTMLElement).getAttribute('data-type') || '';
+                const qtyVal = parseFloat(inputs[3].value) || 0;
                 return {
                     poz: cells[0]?.textContent?.trim() || '',
                     type: type.toUpperCase(),
                     sapNo: sapNo,
                     serialNo: inputs[1].value.trim(),
                     description: inputs[2].value.trim(),
-                    received: parseFloat(inputs[3].value) || 0,
-                    returned: parseFloat(inputs[4].value) || 0,
-                    used: parseFloat(inputs[5].value) || 0,
-                    defectCount: parseFloat(inputs[6].value) || 0
+                    received: 0,
+                    returned: 0,
+                    used: type.toUpperCase() === 'T' ? qtyVal : 0,
+                    defectCount: type.toUpperCase() === 'S' ? qtyVal : 0
                 };
             }).filter(e => e !== null);
         };
@@ -1458,6 +1544,7 @@ export class FaultFormController {
 
             try {
                 const currentTask = w.currentTaskContext;
+                const isEditMode = !!w.isEditMode;
                 const turbineSerial = (document.getElementById('turbin-seri') as HTMLInputElement).value.trim();
                 const siteId = (document.getElementById('form-site') as HTMLInputElement).value.trim();
                 const siteName = (document.getElementById('form-site-name') as HTMLInputElement).value.trim();
@@ -1478,7 +1565,72 @@ export class FaultFormController {
                 const hasDeduction = materials.some((mat: any) => mat.type?.toUpperCase() === 'T' && mat.used > 0);
                 if (hasDeduction && !matFormNo) throw new Error("Malzeme sarfiyatı mevcut (Takılan > 0). Lütfen MÇF NO (Malzeme Çıkış Form No) giriniz.");
 
-                                const activeTeam = (w.teamPersonnel || []).filter((p: string) => p && p.trim() !== '');
+                if (!isEditMode && hasDeduction) {
+                    let userProfile = (window as any).appState?.userProfile;
+                    if (!userProfile) {
+                        try {
+                            const storedFallback = localStorage.getItem('dh_auth_fallback');
+                            if (storedFallback) {
+                                const authData = JSON.parse(storedFallback);
+                                const uid = authData?.user?.uid;
+                                if (uid) {
+                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
+                                    if (cachedProfile) {
+                                        userProfile = JSON.parse(cachedProfile);
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+
+                    let teamName = userProfile?.team || '';
+                    if (!teamName && currentTask?.personnel && currentTask?.personnel !== 'Atanmadı') {
+                        teamName = currentTask.personnel;
+                    }
+                    let usedWarehouseId = '';
+                    if (teamName) {
+                        usedWarehouseId = `team_${teamName.replace(/\s+/g, '_')}`;
+                    } else {
+                        const resolvedSiteWh = warehouseService.resolveWarehouseId(siteId);
+                        usedWarehouseId = resolvedSiteWh || siteId;
+                    }
+
+                    if (usedWarehouseId) {
+                        for (const mat of materials) {
+                            const typeUpper = mat.type?.toUpperCase();
+                            const isTakilan = !mat.type || typeUpper === 'T';
+                            if (mat.sapNo && mat.used > 0 && isTakilan) {
+                                const stockItem = await warehouseService.getStockBySap(usedWarehouseId, mat.sapNo);
+                                const availableQty = stockItem ? (stockItem.quantity || 0) : 0;
+                                if (availableQty < mat.used) {
+                                    throw new Error(`Zimmetinizde (${teamName || 'Ekip Deposu'}) yeterli stok bulunmamaktadır.\nMalzeme: ${mat.sapNo} - ${mat.description}\nMevcut Stok: ${availableQty}\nGereken: ${mat.used}\nLütfen önce depodan üzerinize transfer edin.`);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // PCB/Electronic Card Serial Number Validation
+                for (const mat of materials) {
+                    if (mat && mat.sapNo && mat.sapNo.trim() !== '') {
+                        const dictMat = inventoryService.getMaterialBySap(mat.sapNo);
+                        const resolvedDesc = dictMat?.d || mat.description || '';
+                        
+                        const isPcb = resolvedDesc.toUpperCase().includes('PCB') || 
+                                      resolvedDesc.toUpperCase().includes('KART') || 
+                                      resolvedDesc.toUpperCase().includes('CARD') ||
+                                      resolvedDesc.toUpperCase().includes('BOARD') ||
+                                      mat.sapNo.toUpperCase().includes('PCB');
+                                      
+                        if (isPcb && (mat.used > 0 || mat.defectCount > 0)) {
+                            if (!mat.serialNo || mat.serialNo.trim() === '') {
+                                throw new Error(`Poz ${mat.poz} (${mat.sapNo} - ${resolvedDesc}): Elektronik Kart (PCB) düşümlerinde Seri Numarası girilmesi zorunludur! Lütfen seri numarasını yazıp tekrar deneyiniz.`);
+                            }
+                        }
+                    }
+                }
+
+                const activeTeam = (w.teamPersonnel || []).filter((p: string) => p && p.trim() !== '');
                 
                 const workSessions = (w.workSessions || []).map((ws: any, idx: number) => {
                     const isSessionLocked = ws.locked === true || !(idx === (w.workSessions.length - 1));
@@ -1627,7 +1779,6 @@ export class FaultFormController {
                 };
 
                 const files = w.selectedFaultFiles || [];
-                const isEditMode = w.isEditMode;
                 const reportId = w.currentEditReportId;
 
                 if (isEditMode && reportId) {
@@ -1657,23 +1808,70 @@ export class FaultFormController {
                         } catch (e) {}
                     }
                     
-                    let deductionWarehouseId = siteId;
-                    if (userProfile?.team) {
-                        deductionWarehouseId = `team_${userProfile.team.replace(/\s+/g, '_')}`;
+                    let teamName = userProfile?.team || '';
+                    if (!teamName && currentTask?.personnel && currentTask?.personnel !== 'Atanmadı') {
+                        teamName = currentTask.personnel;
+                    }
+                    if (!teamName && reportData.personnel) {
+                        const parsedTeam = formatTeamName(reportData.personnel);
+                        if (parsedTeam.startsWith('TEAM ')) {
+                            const teamNum = parsedTeam.replace('TEAM ', '').padStart(2, '0');
+                            teamName = `Team ${teamNum}`;
+                        }
+                    }
+                    
+                    let usedWarehouseId = '';
+                    if (teamName) {
+                        usedWarehouseId = `team_${teamName.replace(/\s+/g, '_')}`;
+                    } else {
+                        const resolvedSiteWh = warehouseService.resolveWarehouseId(siteId);
+                        usedWarehouseId = resolvedSiteWh || siteId;
                     }
 
-                    if (deductionWarehouseId && reportData.materials && reportData.materials.length > 0) {
+                    const siteWarehouseId = warehouseService.resolveWarehouseId(siteId) || siteId;
+
+                    if (reportData.materials && reportData.materials.length > 0) {
                         setBtnStatus('STOK DÜŞÜLÜYOR...');
                         for (const mat of reportData.materials) {
                             const typeUpper = mat.type?.toUpperCase();
                             const isTakilan = !mat.type || typeUpper === 'T';
-                            if (mat.sapNo && mat.used > 0 && isTakilan) {
-                                await warehouseService.updateStockBySap(deductionWarehouseId, mat.sapNo, -mat.used, {
+                            
+                            // 1. Takılan malzeme: Teknisyenin kendi zimmet deposundan (usedWarehouseId) düşülür
+                            if (mat.sapNo && mat.used > 0 && isTakilan && usedWarehouseId) {
+                                await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -mat.used, {
                                     user: currentUser?.email || 'Sistem',
                                     reason: 'Saha Raporu ile Malzeme Kullanımı',
                                     reportNo: reportData.reportNo,
                                     materialName: mat.description
-                                });
+                                }, 'NEW');
+                                if (usedWarehouseId.startsWith('team_') && siteWarehouseId) {
+                                    try {
+                                        await warehouseService.decreaseReservation(siteWarehouseId, mat.sapNo, mat.used, usedWarehouseId);
+                                    } catch (e) {
+                                        console.warn("Failed to decrease reservation:", e);
+                                    }
+                                }
+                            }
+
+                            
+                            // 2. Defect (Arızalı) malzeme: hem sahanın kendi ana deposuna hem de team zimmet deposuna defect olarak eklenir
+                            if (mat.sapNo && mat.defectCount > 0) {
+                                if (siteWarehouseId) {
+                                    await warehouseService.updateStockBySap(siteWarehouseId, mat.sapNo, mat.defectCount, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Saha Raporunda Sökülen Arızalı Parça',
+                                        reportNo: reportData.reportNo,
+                                        materialName: mat.description
+                                    }, 'DEFECT');
+                                }
+                                if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
+                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Saha Raporunda Sökülen Arızalı Parça',
+                                        reportNo: reportData.reportNo,
+                                        materialName: mat.description
+                                    }, 'DEFECT');
+                                }
                             }
                         }
                     }
@@ -1895,13 +2093,18 @@ export class FaultFormController {
         const faultDescEl = document.getElementById('ariza-tanimi') as HTMLTextAreaElement;
         if (faultDescEl) {
             const faultCodeInput = document.getElementById('form-fault-search') as HTMLInputElement;
-            const faultCode = faultCodeInput?.value || initialData?.faultCode || initialData?.rawFaultCode || '';
+            let faultCode = faultCodeInput?.value || initialData?.rawFaultCode || initialData?.faultCode || '';
+            if (faultCode && faultCode.includes(' - ')) {
+                faultCode = faultCode.split(' - ')[0].trim();
+            }
             if (faultCode) {
                 const exact = statusService.getCodeByKod(faultCode);
                 if (exact) {
                     faultDescEl.value = exact.Aciklama;
                 } else if (initialData?.faultDesc) {
                     faultDescEl.value = initialData.faultDesc;
+                } else if (initialData?.faultCode && initialData.faultCode.includes(' - ')) {
+                    faultDescEl.value = initialData.faultCode.split(' - ').slice(1).join(' - ').trim();
                 }
             }
         }

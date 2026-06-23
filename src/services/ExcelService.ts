@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { InventoryItem, InventoryLog } from './WarehouseService';
+import type { InventoryItem, InventoryLog, AuditRecord } from './WarehouseService';
 import { inventoryService } from './InventoryService';
 
 class ExcelService {
@@ -151,6 +151,7 @@ class ExcelService {
         'RAPOR NO': item.reportId,
         'MÇF / FORM NO': item.matFormNo,
         'SAP NO': item.sapNo,
+        'SERİ NO': item.serialNo || '-',
         'MALZEME': item.description,
         'KULLANILAN (TAKILAN)': item.used,
         'DEFECT (SÖKÜLEN)': item.defect
@@ -173,6 +174,7 @@ class ExcelService {
         { wch: 15 }, // Rapor No
         { wch: 20 }, // MCF
         { wch: 15 }, // SAP
+        { wch: 20 }, // Seri No
         { wch: 40 }, // Malzeme
         { wch: 25 }, // Kullanılan
         { wch: 25 }  // Defect
@@ -193,6 +195,128 @@ class ExcelService {
 
     const safeDate = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `Turbin_Analizi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
+  }
+
+  exportSingleAuditToExcel(audit: AuditRecord, warehouseName: string, inventory: InventoryItem[] = []) {
+    const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : (audit.date || '');
+    const data = audit.results.map((r: any) => {
+      let shelfNo = r.shelfNo || '';
+      if (!shelfNo && inventory.length > 0) {
+        const invItem = inventory.find((i: any) => i.sapNo === r.sapNo || (i.sapNo === '' && i.description === r.description));
+        if (invItem) {
+          shelfNo = invItem.shelfNo || '';
+        }
+      }
+      return {
+        'SAP NO': r.sapNo || '---',
+        'MALZEME TANIMI': r.description,
+        'RAF KONUMU': shelfNo || '---',
+        'SİSTEM STOĞU': r.systemQty,
+        'FİZİKSEL SAYIM': r.physicalQty,
+        'FARK': r.diff,
+        'AÇIKLAMA': r.note || ''
+      };
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      [`DEMİRER HOLDİNG - DETAYLI DEPO SAYIM RAPORU`],
+      ['Depo:', warehouseName],
+      ['Sayım Tarihi:', date],
+      ['Sayımı Yapan:', audit.user || 'Bilinmeyen Kullanıcı'],
+      ['Toplam Kalem:', audit.totalItems, 'Toplam Fark:', audit.totalDiff],
+      [] // Boş satır
+    ]);
+
+    XLSX.utils.sheet_add_json(worksheet, data, { origin: 'A7' });
+
+    worksheet['!cols'] = [
+      { wch: 15 }, // SAP
+      { wch: 50 }, // Tanım
+      { wch: 15 }, // Raf Konumu
+      { wch: 15 }, // Sistem
+      { wch: 15 }, // Sayılan
+      { wch: 10 }, // Fark
+      { wch: 25 }  // Açıklama
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const cleanDate = date.replace(/[\s\.\:\/]/g, '_');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sayım Detayları');
+    XLSX.writeFile(workbook, `Sayim_Raporu_${warehouseName.replace(/\s+/g, '_')}_${cleanDate}.xlsx`);
+  }
+
+  exportAllAuditsToExcel(audits: AuditRecord[], warehouseName: string, inventory: InventoryItem[] = []) {
+    const workbook = XLSX.utils.book_new();
+
+    // Sheet 1: Sayım Özetleri
+    const summaryData = audits.map((audit: any) => {
+      const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : (audit.date || '');
+      return {
+        'SAYIM TARİHİ': date,
+        'SAYIMI YAPAN': audit.user || 'Bilinmeyen Kullanıcı',
+        'TOPLAM FARKLI KALEM': audit.totalItems,
+        'TOPLAM ADET FARKI': audit.totalDiff
+      };
+    });
+
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet([
+      [`DEMİRER HOLDİNG - DEPO SAYIM GEÇMİŞİ ÖZETİ`],
+      ['Depo:', warehouseName],
+      ['Oluşturulma Tarihi:', new Date().toLocaleString('tr-TR')],
+      [] // Boş satır
+    ]);
+    XLSX.utils.sheet_add_json(summaryWorksheet, summaryData, { origin: 'A5' });
+    summaryWorksheet['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Sayım Özetleri');
+
+    // Sheet 2: Sayım Detayları
+    const detailData: any[] = [];
+    audits.forEach((audit: any) => {
+      const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : (audit.date || '');
+      audit.results.forEach((r: any) => {
+        let shelfNo = r.shelfNo || '';
+        if (!shelfNo && inventory.length > 0) {
+          const invItem = inventory.find((i: any) => i.sapNo === r.sapNo || (i.sapNo === '' && i.description === r.description));
+          if (invItem) {
+            shelfNo = invItem.shelfNo || '';
+          }
+        }
+        detailData.push({
+          'SAYIM TARİHİ': date,
+          'SAYIMI YAPAN': audit.user || 'Bilinmeyen Kullanıcı',
+          'SAP NO': r.sapNo || '---',
+          'MALZEME TANIMI': r.description,
+          'RAF KONUMU': shelfNo || '---',
+          'SİSTEM STOĞU': r.systemQty,
+          'FİZİKSEL SAYIM': r.physicalQty,
+          'FARK': r.diff,
+          'AÇIKLAMA': r.note || ''
+        });
+      });
+    });
+
+    const detailWorksheet = XLSX.utils.aoa_to_sheet([
+      [`DEMİRER HOLDİNG - TÜM DEPO SAYIM DETAYLARI`],
+      ['Depo:', warehouseName],
+      ['Oluşturulma Tarihi:', new Date().toLocaleString('tr-TR')],
+      [] // Boş satır
+    ]);
+    XLSX.utils.sheet_add_json(detailWorksheet, detailData, { origin: 'A5' });
+    detailWorksheet['!cols'] = [
+      { wch: 20 }, // Tarih
+      { wch: 25 }, // Yapan
+      { wch: 15 }, // SAP
+      { wch: 50 }, // Tanım
+      { wch: 15 }, // Raf Konumu
+      { wch: 15 }, // Sistem
+      { wch: 15 }, // Sayılan
+      { wch: 10 }, // Fark
+      { wch: 25 }  // Açıklama
+    ];
+    XLSX.utils.book_append_sheet(workbook, detailWorksheet, 'Tüm Sayım Detayları');
+
+    const safeDate = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Toplu_Sayim_Gecmisi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
   }
 }
 

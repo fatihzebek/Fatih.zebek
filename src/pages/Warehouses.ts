@@ -161,7 +161,8 @@ export const WarehousePage = async (
   const hasUploadExcel = isAdmin || (typeof allowedTabs === 'object' && !!allowedTabs.uploadExcel);
 
   const allWarehouses = dataService.getWarehouses() || [];
-  const accessibleWarehouses = isAdmin 
+  const isMaterialManager = isAdmin || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+  const accessibleWarehouses = isMaterialManager 
     ? allWarehouses 
     : allWarehouses.filter(w => userProfile?.allowedWarehouses?.includes(w.id));
 

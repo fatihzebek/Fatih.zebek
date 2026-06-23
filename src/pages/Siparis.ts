@@ -10,7 +10,8 @@ let isSubmitting = false;
 
 export const SiparisPage = async (userProfile: any) => {
     const warehouses = dataService.getWarehouses();
-    const allowedWarehouses = userProfile?.role === 'ADMIN' 
+    const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+    const allowedWarehouses = isMaterialManager 
         ? warehouses 
         : warehouses.filter((w: any) => userProfile?.allowedWarehouses?.includes(w.id));
 
@@ -69,7 +70,12 @@ export const SiparisPage = async (userProfile: any) => {
                 </div>
 
                 <!-- Shopping Cart / Basket -->
-                <div class="glass-panel" style="padding: 1.5rem; border-radius: 24px; position: sticky; top: 2rem; border-color: ${basket.length > 0 ? 'var(--accent-cyan)' : 'var(--glass-border)'}; transition: all 0.3s;">
+                <div class="glass-panel siparis-basket-dropzone" 
+                     id="siparis-basket-dropzone"
+                     ondragover="window.siparisDragOver(event)" 
+                     ondragleave="window.siparisDragLeave(event)" 
+                     ondrop="window.siparisDrop(event)"
+                     style="padding: 1.5rem; border-radius: 24px; position: sticky; top: 2rem; border: 1px solid ${basket.length > 0 ? 'var(--accent-cyan)' : 'var(--glass-border)'}; transition: all 0.3s;">
                     <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
                         <span>SEPETİM</span>
                         <span style="font-size: 0.7rem; background: rgba(0, 255, 255, 0.1); color: var(--accent-cyan); padding: 2px 8px; border-radius: 10px;">${basket.length} ÜRÜN</span>
@@ -191,7 +197,11 @@ const getStatusColor = (status: string, isBg = false) => {
     }
 
     resultsDiv.innerHTML = results.map(item => `
-        <div class="hover-row-premium" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255,255,255,0.02); margin-bottom: 0.5rem; border-radius: 12px; transition: all 0.3s;">
+        <div class="hover-row-premium" 
+             draggable="true" 
+             ondragstart="window.siparisDragStart(event, '${item.n}', '${item.d.replace(/'/g, "\\'")}')"
+             style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255,255,255,0.02); margin-bottom: 0.5rem; border-radius: 12px; transition: all 0.3s; cursor: grab;"
+             title="Sürükleyip sağdaki sepet alanına bırakarak ekleyebilirsiniz">
             <div style="flex: 1;">
                 <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${item.d}</div>
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-cyan); margin-top: 4px;">${item.n}</div>
@@ -202,6 +212,44 @@ const getStatusColor = (status: string, isBg = false) => {
             </button>
         </div>
     `).join('');
+};
+
+(window as any).siparisDragStart = (event: DragEvent, sapNo: string, description: string) => {
+    event.dataTransfer?.setData('text/plain', JSON.stringify({ n: sapNo, d: description }));
+};
+
+(window as any).siparisDragOver = (event: DragEvent) => {
+    event.preventDefault();
+    const target = event.currentTarget as HTMLElement;
+    target.style.border = '2px dashed var(--accent-cyan)';
+    target.style.background = 'rgba(0, 255, 255, 0.05)';
+    target.style.boxShadow = '0 0 15px rgba(0, 255, 255, 0.2)';
+};
+
+(window as any).siparisDragLeave = (event: DragEvent) => {
+    const target = event.currentTarget as HTMLElement;
+    target.style.border = basket.length > 0 ? '1px solid var(--accent-cyan)' : '1px solid var(--glass-border)';
+    target.style.background = 'transparent';
+    target.style.boxShadow = 'none';
+};
+
+(window as any).siparisDrop = (event: DragEvent) => {
+    event.preventDefault();
+    const target = event.currentTarget as HTMLElement;
+    target.style.border = basket.length > 0 ? '1px solid var(--accent-cyan)' : '1px solid var(--glass-border)';
+    target.style.background = 'transparent';
+    target.style.boxShadow = 'none';
+    
+    const rawData = event.dataTransfer?.getData('text/plain');
+    if (!rawData) return;
+    
+    try {
+        const { n, d } = JSON.parse(rawData);
+        (window as any).addToSiparisBasket(n, d);
+        (window as any).showToast?.('Başarılı', `${d} sepete eklendi.`, 'success');
+    } catch (e) {
+        console.error("Drop parsing error:", e);
+    }
 };
 
 (window as any).addToSiparisBasket = (n: string, d: string) => {

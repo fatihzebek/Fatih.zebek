@@ -29,7 +29,7 @@ class QRService {
                         <title>Malzeme Etiketi - ${material.sapNo}</title>
                         <style>
                             @page { size: 80mm 50mm; margin: 0; }
-                            body { font-family: 'Inter', sans-serif; margin: 0; padding: 15px; display: flex; align-items: center; justify-content: center; height: 100vh; background: white; }
+                            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 15px; display: flex; align-items: center; justify-content: center; height: 100vh; background: white; }
                             .label-card { border: 2px solid #000; width: 100%; height: 100%; display: flex; align-items: center; gap: 20px; padding: 10px; box-sizing: border-box; border-radius: 10px; }
                             .qr-code { width: 120px; height: 120px; }
                             .details { flex: 1; }
@@ -126,7 +126,7 @@ class QRService {
                         body { 
                             margin: 0; 
                             padding: 0; 
-                            font-family: 'Inter', system-ui, sans-serif; 
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
                             background: white; 
                             box-sizing: border-box; 
                         }
