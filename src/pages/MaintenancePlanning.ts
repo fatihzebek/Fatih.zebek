@@ -535,16 +535,19 @@ export const MaintenancePlanningPage = async () => {
       // Calculate dynamic filter counts
       const overdueCount = allItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
       const warningCount = allItems.filter((i: any) => i.status === 'warning').length;
+      const safeCount = allItems.filter((i: any) => i.status === 'safe' && i.lastDate !== '-').length;
       const nodataCount = allItems.filter((i: any) => i.lastDate === '-').length;
       
       const tabAll = document.getElementById('maint-tab-all');
       const tabOverdue = document.getElementById('maint-tab-overdue');
       const tabWarning = document.getElementById('maint-tab-warning');
+      const tabSafe = document.getElementById('maint-tab-safe');
       const tabNodata = document.getElementById('maint-tab-nodata');
       
       if (tabAll) tabAll.querySelector('.c')!.textContent = String(allItems.length);
       if (tabOverdue) tabOverdue.querySelector('.c')!.textContent = String(overdueCount);
       if (tabWarning) tabWarning.querySelector('.c')!.textContent = String(warningCount);
+      if (tabSafe) tabSafe.querySelector('.c')!.textContent = String(safeCount);
       if (tabNodata) tabNodata.querySelector('.c')!.textContent = String(nodataCount);
       
       // Filter items
@@ -553,6 +556,8 @@ export const MaintenancePlanningPage = async () => {
         items = allItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-');
       } else if (activeMaintFilter === 'WARNING') {
         items = allItems.filter((i: any) => i.status === 'warning');
+      } else if (activeMaintFilter === 'SAFE') {
+        items = allItems.filter((i: any) => i.status === 'safe' && i.lastDate !== '-');
       } else if (activeMaintFilter === 'NODATA') {
         items = allItems.filter((i: any) => i.lastDate === '-');
       }
@@ -645,15 +650,15 @@ export const MaintenancePlanningPage = async () => {
           <p>6 Aylık periyodik bakım döngüsü ve saha bazlı takip merkezi.</p>
         </div>
         <div class="header-stats">
-          <div class="h-stat overdue">
+          <div class="h-stat overdue" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('OVERDUE')" title="Gecikmiş bakımları listele">
             <span class="v">${maintenancePlan.filter(p => p.status === 'overdue' && p.lastDate !== '-').length}</span>
             <span class="l">GECİKMİŞ</span>
           </div>
-          <div class="h-stat warning">
+          <div class="h-stat warning" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('WARNING')" title="Kritik/Yaklaşan bakımları listele">
             <span class="v">${maintenancePlan.filter(p => p.status === 'warning').length}</span>
             <span class="l">KRİTİK</span>
           </div>
-          <div class="h-stat safe-stat">
+          <div class="h-stat safe-stat" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('SAFE')" title="Planlı ve güvenli olanları listele">
             <span class="v">${maintenancePlan.filter(p => p.status === 'safe' && p.lastDate !== '-').length}</span>
             <span class="l">PLANLI & GÜVENLİ</span>
           </div>
@@ -724,6 +729,9 @@ export const MaintenancePlanningPage = async () => {
             </button>
             <button class="maint-tab warning" id="maint-tab-warning" onclick="window.filterMaintTable('WARNING')">
               <i class="fa-solid fa-circle-exclamation"></i> YAKLAŞANLAR <span class="c">-</span>
+            </button>
+            <button class="maint-tab safe" id="maint-tab-safe" onclick="window.filterMaintTable('SAFE')">
+              <i class="fa-solid fa-circle-check"></i> PLANLI & GÜVENLİ <span class="c">-</span>
             </button>
             <button class="maint-tab nodata" id="maint-tab-nodata" onclick="window.filterMaintTable('NODATA')">
               <i class="fa-solid fa-circle-question"></i> VERİ YOK <span class="c">-</span>
@@ -880,6 +888,16 @@ export const MaintenancePlanningPage = async () => {
         background: rgba(255, 159, 67, 0.2) !important;
         color: #ff9f43 !important;
         border-color: rgba(255, 159, 67, 0.25);
+      }
+      .maint-tab.safe.active {
+        background: linear-gradient(135deg, rgba(30, 215, 96, 0.12), rgba(30, 215, 96, 0.02)) !important;
+        border-color: rgba(30, 215, 96, 0.35) !important;
+        color: #1ed760 !important;
+      }
+      .maint-tab.safe.active .c {
+        background: rgba(30, 215, 96, 0.2) !important;
+        color: #1ed760 !important;
+        border-color: rgba(30, 215, 96, 0.25);
       }
 
       .maint-action-btn {
