@@ -28,13 +28,26 @@ interface KkdInspection {
 }
 
 const CHECKLIST_LABELS: Record<string, string> = {
-  webbing: 'Dokuma Kolon ve Halat Durumu (Yıpranma, Kesik, Aşınma)',
-  stitching: 'Dikişlerin Durumu (Sökülme, Aşınma, Kopma)',
-  metalParts: 'Metal Aksam, Karabina ve Bağlantı Halkaları (Korozyon, Deformasyon)',
-  buckles: 'Ayar Tokaları ve Kilit Mekanizmaları (Fonksiyon Kontrolü)',
-  labelReadable: 'Ürün Etiketi ve Seri Numarası Okunabilirliği',
-  shockAbsorber: 'Şok Emici Durumu (Varsa Aktifleşme Kontrolü)',
-  rescueKitSeal: 'Kurtarma Kiti Çantası ve Mühür Bütünlüğü (Varsa)'
+  'check-straps': 'Dokuma Kolonları (Straps) Durumu',
+  'check-stitches': 'Yük Taşıyan Dikişlerin Durumu',
+  'check-metals': 'D-Halkalar ve Metal Aksam Durumu',
+  'check-buckles': 'Ayar Tokaları ve Kilit Sistemleri',
+  'check-labels': 'Etiket ve Seri No Okunabilirliği',
+  'check-rope': 'Halat veya Kolon Yıpranma Durumu',
+  'check-absorber': 'Şok Emici (Absorber) Açılma Kontrolü',
+  'check-carabiners': 'Karabina Kapısı ve Kilit Mekanizması',
+  'check-seal': 'Kurtarma Çantası ve Güvenlik Mührü',
+  'check-devices': 'Kurtarma/İniş Cihazları Mekanizması',
+  'check-baret-shell': 'Baret Dış Kabuk Hasar ve UV Kontrolü',
+  'check-baret-suspension': 'Kask İç Süspansiyonu ve Bağlantıları',
+  'check-baret-chinstrap': 'Çene Bağı Mukavemeti ve Tokası',
+  'check-baret-ratchet': 'Boyut Ayar Mekanizması (Çark Ayarı)',
+  'check-baret-labels': 'Baret Üretim Tarihi ve Etiketi',
+  'check-general-webbing': 'Genel Taşıyıcı Kolon Kontrolü',
+  'check-general-stitching': 'Genel Dikiş Mukavemeti',
+  'check-general-metals': 'Genel Metal/Plastik Parçalar',
+  'check-general-buckles': 'Genel Kilit ve Bağlantılar',
+  'check-general-labels': 'Genel Seri No ve Etiket Durumu'
 };
 
 function getLifespanInfo(mfgDate: string | undefined, lifespanYears: number = 10) {
@@ -300,20 +313,18 @@ export async function renderKkdPublicQueryPage(serialNumber: string): Promise<st
     if (lastLog && lastLog.checklist && Object.keys(lastLog.checklist).length > 0) {
       checklistHtml = `
         <div class="section-subtitle-pub">Son Muayene Kontrol Listesi</div>
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 10px;">
-          <table class="chk-table">
-            ${Object.entries(lastLog.checklist).map(([key, value]) => {
-              const label = CHECKLIST_LABELS[key] || key;
-              return `
-                <tr>
-                  <td style="color:#e2e8f0; text-align:left;">${label}</td>
-                  <td style="width: 60px; font-weight:bold; text-align:right; color:${value ? '#10B981' : '#EF4444'};">
-                    ${value ? 'TAM' : 'UYSUZ'}
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </table>
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+          ${Object.entries(lastLog.checklist).map(([key, value]) => {
+            const label = CHECKLIST_LABELS[key] || key;
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px; gap: 12px;">
+                <span style="color: #e2e8f0; text-align: left; line-height: 1.3;">${label}</span>
+                <span style="flex-shrink: 0; font-weight: bold; text-align: right; color: ${value ? '#10B981' : '#EF4444'};">
+                  ${value ? 'TAM' : 'UYSUZ'}
+                </span>
+              </div>
+            `;
+          }).join('')}
         </div>
       `;
     }
