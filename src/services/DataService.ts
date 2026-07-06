@@ -4,21 +4,22 @@ export interface Warehouse {
   id: string;
   name: string;
   location?: string;
+  description?: string;
 }
 
 export class DataService {
   private warehouses: Warehouse[] = [
-    { id: 'W01', name: 'Anemon İntepe Depo' },
-    { id: 'W02', name: 'Alize Sarıkaya Depo' },
-    { id: 'W03', name: 'Alize Çamseki Depo' },
-    { id: 'W04', name: 'Mare Manastır Depo' },
-    { id: 'W05', name: 'Alize Germiyan Depo' },
-    { id: 'W06', name: 'Doğal Sayalar Depo' },
-    { id: 'W07', name: 'Dares Datça Depo' },
-    { id: 'W08', name: 'Alize Keltepe Depo' },
-    { id: 'W09', name: 'Alize Kuyucak Depo' },
-    { id: 'W10', name: 'Alize Çataltape Depo' },
-    { id: 'W11', name: 'Merkez Tamir Atölyesi Deposu' }
+    { id: '2688', name: 'Anemon İntepe Depo' },
+    { id: '3439', name: 'Alize Sarıkaya Depo' },
+    { id: '3243', name: 'Alize Çamseki Depo' },
+    { id: '2678', name: 'Mare Manastır Depo' },
+    { id: '0752', name: 'Alize Germiyan Depo' },
+    { id: '2990', name: 'Doğal Sayalar Depo' },
+    { id: '3213', name: 'Dares Datça Depo' },
+    { id: '3245', name: 'Alize Keltepe Depo' },
+    { id: '3793', name: 'Alize Kuyucak Depo' },
+    { id: '3892', name: 'Alize Çataltape Depo' },
+    { id: 'MTA', name: 'Merkez Tamir Atölyesi Deposu' }
   ];
   private sites: Site[] = [
     { id: '0752', name: 'Alize Germiyan', turbineCount: 7 },
@@ -60,16 +61,16 @@ export class DataService {
 
 
   private siteToWarehouseMap: Record<string, string> = {
-    '2688': 'W01', // Anemon İntepe
-    '3439': 'W02', // Alize Sarıkaya
-    '3243': 'W03', // Alize Çamseki
-    '2678': 'W04', // Mare Manastır
-    '0752': 'W05', // Alize Germiyan
-    '2990': 'W06', // Doğal Sayalar
-    '3213': 'W07', // Dares Datça
-    '3245': 'W08', // Alize Keltepe
-    '3793': 'W09', // Alize Kuyucak
-    '3892': 'W10'  // Alize Çataltape
+    '2688': '2688', // Anemon İntepe
+    '3439': '3439', // Alize Sarıkaya
+    '3243': '3243', // Alize Çamseki
+    '2678': '2678', // Mare Manastır
+    '0752': '0752', // Alize Germiyan
+    '2990': '2990', // Doğal Sayalar
+    '3213': '3213', // Dares Datça
+    '3245': '3245', // Alize Keltepe
+    '3793': '3793', // Alize Kuyucak
+    '3892': '3892'  // Alize Çataltape
   };
 
   private turbineData: Record<string, { no: number, serial: string, label?: string, latitude?: number, longitude?: number, controlType?: string, commissioningDate?: string, type?: string }[]> = {
@@ -480,6 +481,17 @@ export class DataService {
     });
   }
 
+  getAllSites(): Site[] {
+    return [...this.sites].sort((a, b) => {
+      const indexA = DataService.customOrder.findIndex(o => o.toLowerCase() === a.name.toLowerCase());
+      const indexB = DataService.customOrder.findIndex(o => o.toLowerCase() === b.name.toLowerCase());
+      if (indexA === -1 && indexB === -1) return a.name.localeCompare(b.name);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  }
+
   getAllowedTeams(): string[] {
     const user = (window as any).currentUser;
     const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
@@ -610,10 +622,15 @@ export class DataService {
   }
 
   resolveName(id: string): string {
+    if (!id) return '';
     const warehouse = this.warehouses.find(w => w.id === id);
     if (warehouse) return warehouse.name;
     const site = this.sites.find(s => s.id === id);
     if (site) return site.name;
+    if (id.startsWith('team_')) {
+      const cleanName = id.replace('team_', '').replace(/_/g, ' ');
+      return `${cleanName} Deposu`;
+    }
     return id;
   }
 }

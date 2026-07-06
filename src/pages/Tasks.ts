@@ -6,7 +6,7 @@ import { serviceReportService } from '../services/ServiceReportService';
 import { formatTeamName } from '../utils/formatters';
 import { dataService, DataService } from '../services/DataService';
 import type { ServiceReport } from '../services/ServiceReportService';
-import personnelList from '../data/personnel.json';
+import { personnelService } from '../services/PersonnelService';
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '')
@@ -597,7 +597,6 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                               <div>
                                 <div style="font-weight: 900; font-size: 0.78rem; line-height: 1.2; color: #ff6b6b; margin-bottom: 3px; letter-spacing: 0.3px;">${task.rawFaultCode}</div>
                                 <div style="font-weight: 700; font-size: 0.73rem; color: rgba(255,255,255,0.7); line-height: 1.3; white-space: normal;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</div>
-                                <div style="font-size: 0.58rem; color: rgba(255,255,255,0.35); font-weight: 700; margin-top: 5px; line-height: 1.2; letter-spacing: 0.3px;">${cleanSablonName(task.secilenSablon) || 'Standart Form'}</div>
                               </div>
                             </div>
                           ` : isReturned ? `
@@ -862,31 +861,33 @@ export const TasksPage = async () => {
       
       // Adminler her zaman görünür olsun
       if (userRole === 'ADMIN') return true;
-      
-      const allowedSites = currentUser?.allowedSites || [];
-      if (allowedSites.length > 0 && !allowedSites.includes(t.siteId)) return false;
 
       const userTeam = (window as any).currentUserTeam || '';
       const managedTeams = (currentUser?.managedTeams || []).map((mt: string) => mt.toUpperCase().trim());
-      
-      if (!userTeam && managedTeams.length === 0) return true;
-
       const taskPersonnel = String(t.personnel || '').toUpperCase().trim();
       const searchTeam = userTeam.toUpperCase().trim();
+
+      const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
+      const userNum = searchTeam.replace(/[^0-9]/g, '');
+
+      // Kendi ekibi veya yönettiği ekiplerden biri mi?
+      const isMyTeamTask = (taskNum && userNum && parseInt(taskNum) === parseInt(userNum)) || 
+                           taskPersonnel.includes(searchTeam) || 
+                           searchTeam.includes(taskPersonnel) || 
+                           managedTeams.some((mt: string) => taskPersonnel.includes(mt)) ||
+                           (t as any).isReturnedReport;
+
+      // Ekibe doğrudan atanmış görevleri, allowedSites kısıtlamasından bağımsız olarak göster
+      if (isMyTeamTask) return true;
       
+      // Diğer durumlar (örneğin SİSTEM veya boş olanlar) için allowedSites kontrolü uygula
+      const allowedSites = currentUser?.allowedSites || [];
+      if (allowedSites.length > 0 && !allowedSites.includes(t.siteId)) return false;
+
       // "SİSTEM" veya boş olanları herkese göster
       if (taskPersonnel === 'SİSTEM' || !taskPersonnel || taskPersonnel === 'ATANMADI') return true;
       
-      const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
-      const userNum = searchTeam.replace(/[^0-9]/g, '');
-      
-      if (taskNum && userNum && parseInt(taskNum) === parseInt(userNum)) return true;
-      
-      // Kendi ekibi veya yönettiği ekiplerden biri mi?
-      if (taskPersonnel.includes(searchTeam) || searchTeam.includes(taskPersonnel) || managedTeams.some((mt: string) => taskPersonnel.includes(mt))) return true;
-
-      // İade durumu varsa göster
-      if ((t as any).isReturnedReport) return true;
+      if (!userTeam && managedTeams.length === 0) return true;
 
       return false;
     });
@@ -993,7 +994,7 @@ export const TasksPage = async () => {
       return;
   }
 
-  const matches = (personnelList as string[]).filter(name => name.toLocaleLowerCase('tr-TR').includes(lowerQuery));
+  const matches = personnelService.getPersonnelList().filter(name => name.toLocaleLowerCase('tr-TR').includes(lowerQuery));
 
   if (matches.length === 0) {
       container.style.display = 'none';
@@ -1042,30 +1043,28 @@ export const TasksPage = async () => {
       const noteVal = existingData[`q${i}Note`] || '';
       
       questionsHtml += `
-          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1rem; border-radius: 8px;">
-            <label style="display: flex; align-items: flex-start; gap: 1rem; cursor: pointer;">
-              <input type="checkbox" id="ohs-q${i}" style="margin-top: 4px; width: 18px; height: 18px; accent-color: #f39c12;" ${isChecked} onchange="document.getElementById('ohs-q${i}-details').style.display = this.checked ? 'block' : 'none'">
-              <span style="font-size: 0.95rem; color: #fff; line-height: 1.4;">${i}. ${q}</span>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); padding: 0.6rem 0.8rem; border-radius: 8px;">
+            <label style="display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; margin: 0;">
+              <input type="checkbox" id="ohs-q${i}" style="margin-top: 3px; width: 16px; height: 16px; accent-color: #f39c12; flex-shrink: 0;" ${isChecked} onchange="document.getElementById('ohs-q${i}-details').style.display = this.checked ? 'block' : 'none'">
+              <span style="font-size: 0.82rem; color: #fff; line-height: 1.4; font-weight: 500;">${i}. ${q}</span>
             </label>
             
-            <div id="ohs-q${i}-details" style="margin-top: 1rem; margin-left: 34px; display: ${isChecked ? 'block' : 'none'};">
-              
-              <div style="position: relative; margin-bottom: 0.8rem;">
-                <input type="text" id="ohs-q${i}-name" class="cyber-input" placeholder="Personel adını yazın ve seçin..." value="${nameVal}" style="width: 100%; border-color: rgba(243, 156, 18, 0.3);"
+            <div id="ohs-q${i}-details" style="margin-top: 0.5rem; margin-left: 26px; display: ${isChecked ? 'block' : 'none'};">
+              <div style="position: relative; margin-bottom: 0.4rem;">
+                <input type="text" id="ohs-q${i}-name" class="cyber-input" placeholder="Personel adını yazın..." value="${nameVal}" style="width: 100%; border-color: rgba(243, 156, 18, 0.3); height: 28px !important; font-size: 0.75rem; padding: 4px 8px !important;"
                        onfocus="window.showOHSNameSuggestions(${i}, this.value)"
                        oninput="window.showOHSNameSuggestions(${i}, this.value)"
                        onblur="setTimeout(() => { const el = document.getElementById('ohs-personnel-dropdown-${i}'); if (el) el.style.display = 'none'; }, 200);">
-                
-                <div id="ohs-personnel-dropdown-${i}" class="search-results-dropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; max-height: 180px; overflow-y: auto; z-index: 100000; margin-top: 4px; background: rgba(10, 20, 30, 0.98); border: 1px solid var(--accent-cyan); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); padding: 2px 0;"></div>
+                <div id="ohs-personnel-dropdown-${i}" class="search-results-dropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; max-height: 150px; overflow-y: auto; z-index: 100000; margin-top: 4px; background: rgba(10, 20, 30, 0.98); border: 1px solid var(--accent-cyan); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); padding: 2px 0;"></div>
               </div>
               
-              <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin-bottom: 0.5rem; color: var(--accent-orange); font-size: 0.85rem;">
+              <label style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; margin-bottom: 0.3rem; color: var(--accent-orange); font-size: 0.75rem;">
                 <input type="checkbox" id="ohs-q${i}-has-note" ${hasNote} onchange="document.getElementById('ohs-q${i}-note-container').style.display = this.checked ? 'block' : 'none'">
                 <i class="fa-solid fa-pen-to-square"></i> Sorun / Not Ekle
               </label>
               
               <div id="ohs-q${i}-note-container" style="display: ${hasNote ? 'block' : 'none'};">
-                <textarea id="ohs-q${i}-note" class="cyber-input" placeholder="Notunuzu veya sorunu buraya yazınız..." rows="2" style="width: 100%; border-color: rgba(243, 156, 18, 0.3); resize: vertical;">${noteVal}</textarea>
+                <textarea id="ohs-q${i}-note" class="cyber-input" placeholder="Notunuzu veya sorunu buraya yazınız..." rows="2" style="width: 100%; border-color: rgba(243, 156, 18, 0.3); resize: vertical; font-size: 0.75rem; padding: 4px 8px !important;">${noteVal}</textarea>
               </div>
             </div>
           </div>
@@ -1074,26 +1073,26 @@ export const TasksPage = async () => {
     
     const modal = document.createElement('div');
     modal.className = 'cyber-modal-overlay fade-in';
-    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px); padding: 1rem; box-sizing: border-box;';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding: 1rem; box-sizing: border-box;';
     
     modal.innerHTML = `
-      <div class="glass-panel" style="width: 100%; max-width: 650px; max-height: 90vh; overflow-y: auto; padding: 2rem; position: relative; border-top: 4px solid #f39c12; display: flex; flex-direction: column;">
-        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+      <div class="glass-panel" style="width: 100%; max-width: 580px; max-height: 85vh; overflow-y: auto; padding: 1.25rem 1.5rem; position: relative; border-top: 4px solid #f39c12; display: flex; flex-direction: column; background: #0b0f19;">
+        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 0.75rem; right: 1rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.3rem;">&times;</button>
         
-        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; color: #f39c12;">
-          <i class="fa-solid fa-hard-hat" style="font-size: 2rem;"></i>
-          <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; margin: 0; font-weight: 800;">İSG & SAHA GÜVENLİK KONTROLÜ</h3>
+        <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; color: #f39c12;">
+          <i class="fa-solid fa-hard-hat" style="font-size: 1.3rem;"></i>
+          <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.15rem; margin: 0; font-weight: 800; letter-spacing: 0.5px;">İSG & SAHA GÜVENLİK KONTROLÜ</h3>
         </div>
         
-        <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 2rem; line-height: 1.5;">Göreve başlamadan önce lütfen aşağıdaki iş sağlığı ve güvenliği kurallarını teyit ediniz.</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.8rem; line-height: 1.4;">Göreve başlamadan önce lütfen aşağıdaki iş sağlığı ve güvenliği kurallarını teyit ediniz.</div>
   
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
           ${questionsHtml}
         </div>
   
-        <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 1rem;">
-          <button onclick="this.closest('.cyber-modal-overlay').remove()" class="btn-cyber-mini" style="background: transparent; color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.5);">İPTAL</button>
-          <button id="submit-ohs-btn" class="cyber-button primary" style="background: #f39c12; color: #000; border: none;"><i class="fa-solid fa-check"></i> ONAYLA VE GÖREVE BAŞLA</button>
+        <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+          <button onclick="this.closest('.cyber-modal-overlay').remove()" class="btn-cyber-mini" style="background: transparent; color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.5); font-size: 0.7rem; padding: 4px 10px; height: auto;">İPTAL</button>
+          <button id="submit-ohs-btn" class="cyber-button primary" style="background: #f39c12; color: #000; border: none; font-size: 0.75rem; padding: 6px 12px; height: auto;"><i class="fa-solid fa-check"></i> ONAYLA VE GÖREVE BAŞLA</button>
         </div>
       </div>
     `;

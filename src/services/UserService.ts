@@ -46,7 +46,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
   "6zUvK7g204Z9qBWKhk3ThTSQ0iR2": {
     uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2",
     email: "dh-tm13@demirerholding.com",
-    displayName: "TM13 Bakım Teknisyeni",
+    displayName: "Team13",
     role: "TECHNICIAN",
     allowedTabs: {
       dashboard: true,
@@ -62,7 +62,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
   "UNclj0NKXdTVkET9Tp566rouMvh2": {
     uid: "UNclj0NKXdTVkET9Tp566rouMvh2",
     email: "dh-tm15@demirerholding.com",
-    displayName: "TM15 Bakım Teknisyeni",
+    displayName: "Team15",
     role: "TECHNICIAN",
     allowedTabs: {
       dashboard: true,
@@ -78,7 +78,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
   "VELpZxAedmh0WLuL8JpZBSUxgCp2": {
     uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2",
     email: "dh-tm04@demirerholding.com",
-    displayName: "TM04 Bakım Teknisyeni",
+    displayName: "Team04",
     role: "TECHNICIAN",
     allowedTabs: {
       dashboard: true,
@@ -169,6 +169,20 @@ class UserService {
   async deleteUser(uid: string) {
     const docRef = doc(this.collectionRef, uid);
     await deleteDoc(docRef);
+  }
+
+  async getPreset(role: string): Promise<{ allowedTabs: Record<string, any>; allowedTsiCategories?: string[] } | null> {
+    const docRef = doc(db, 'permission_presets', role);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as any;
+    }
+    return null;
+  }
+
+  async savePreset(role: string, data: { allowedTabs: Record<string, any>; allowedTsiCategories: string[] }) {
+    const docRef = doc(db, 'permission_presets', role);
+    await setDoc(docRef, data);
   }
 }
 

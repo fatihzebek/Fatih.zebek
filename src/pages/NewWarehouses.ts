@@ -1,5 +1,6 @@
 import { dataService } from '../services/DataService';
 import { db } from '../firebase';
+import { doc, onSnapshot, setDoc, deleteDoc, getDoc, serverTimestamp, writeBatch, collection, getCountFromServer, query, where } from 'firebase/firestore';
 import { formatTeamName } from '../utils/formatters';
 import { warehouseService } from '../services/WarehouseService';
 import { warehouseAgent } from '../agents/WarehouseAgent';
@@ -48,11 +49,324 @@ const getUserProfile = (): any => {
   return userProfile;
 };
 
+const renderWarehouseDashboardHTML = (allowedMain: any[], allowedTeams: any[]) => {
+  return `
+    <style>
+      .wh-agent-card {
+        background: rgba(10, 15, 25, 0.45);
+        border: 1px solid rgba(0, 242, 254, 0.12);
+        border-radius: 14px;
+        padding: 1.1rem;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 120px;
+        box-sizing: border-box;
+      }
+      
+      .wh-agent-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: linear-gradient(90deg, #00f3ff, transparent);
+        opacity: 0.6;
+        transition: opacity 0.3s;
+      }
+
+      .wh-agent-card.team::before {
+        background: linear-gradient(90deg, #8f94fb, transparent);
+      }
+
+      .wh-agent-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(0, 242, 254, 0.35);
+        box-shadow: 0 10px 25px rgba(0, 242, 254, 0.08), inset 0 0 12px rgba(0, 242, 254, 0.03);
+      }
+
+      .wh-agent-card.team {
+        border-color: rgba(143, 148, 251, 0.12);
+      }
+
+      .wh-agent-card.team:hover {
+        border-color: rgba(143, 148, 251, 0.35);
+        box-shadow: 0 10px 25px rgba(143, 148, 251, 0.08), inset 0 0 12px rgba(143, 148, 251, 0.03);
+      }
+
+      .wh-agent-card:hover::before {
+        opacity: 1;
+      }
+
+      .wh-agent-card .wh-icon-box {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: rgba(0, 242, 254, 0.06);
+        border: 1px solid rgba(0, 242, 254, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #00f3ff;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+        transition: all 0.3s;
+      }
+
+      .wh-agent-card.team .wh-icon-box {
+        background: rgba(143, 148, 251, 0.06);
+        border: 1px solid rgba(143, 148, 251, 0.15);
+        color: #8f94fb;
+      }
+
+      .wh-agent-card:hover .wh-icon-box {
+        background: rgba(0, 242, 254, 0.12);
+        border-color: rgba(0, 242, 254, 0.3);
+        transform: scale(1.05);
+      }
+
+      .wh-agent-card.team:hover .wh-icon-box {
+        background: rgba(143, 148, 251, 0.12);
+        border-color: rgba(143, 148, 251, 0.3);
+      }
+
+      .wh-agent-card .wh-name {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #ffffff;
+        font-family: 'Rajdhani', sans-serif;
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .wh-agent-card .wh-desc {
+        font-size: 0.72rem;
+        color: #94a3b8;
+        display: block;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .wh-agent-card .enter-btn {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #94a3b8;
+        transition: all 0.2s;
+        font-family: 'Rajdhani', sans-serif;
+      }
+
+      .wh-agent-card:hover .enter-btn {
+        color: #00f3ff;
+      }
+
+      .wh-agent-card.team:hover .enter-btn {
+        color: #8f94fb;
+      }
+
+      .wh-agent-card:hover .enter-btn i {
+        transform: translateX(2px);
+      }
+
+      .wh-dash-section-title {
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: #94A3B8;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-bottom: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+    </style>
+
+    <div style="background-color: #0A0E17; min-height: 100vh; color: #E2E8F0; font-family: 'Inter', sans-serif; padding: 2rem; box-sizing: border-box;">
+      <!-- Header -->
+      <div style="margin-bottom: 2.5rem;">
+        <h1 style="font-size: 1.75rem; font-weight: 800; color: #FFFFFF; margin: 0; display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff;"></i> Servis Depoları & Zimmetler
+        </h1>
+        <div style="font-size: 0.9rem; color: #64748B; margin-top: 0.25rem;">Sahaların stok, envanter ve mobil zimmet yönetim paneli</div>
+      </div>
+
+      <!-- Main Warehouses Section -->
+      ${allowedMain.length > 0 ? `
+        <div class="wh-dash-section-title" style="color: #00f3ff;">
+          <i class="fa-solid fa-warehouse"></i> Ana Saha Depoları
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; margin-bottom: 3rem;">
+          ${allowedMain.map(wh => `
+            <div class="wh-agent-card main" onclick="window.selectWarehouseAndNavigate('${wh.id}')">
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <div class="wh-icon-box">
+                  <i class="fa-solid fa-warehouse"></i>
+                </div>
+                <div style="min-width: 0; flex: 1;">
+                  <h3 class="wh-name" title="${wh.name}">${wh.name}</h3>
+                  <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-top: 4px; gap: 8px;">
+                    <span class="wh-desc" title="${wh.description || 'Saha Deposu'}" style="margin: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;">${wh.description || 'Saha Deposu'}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; margin-top: -2px;">
+                      <span id="wh-count-${wh.id}" style="font-size: 0.7rem; color: #00f3ff; font-weight: bold; background: rgba(0, 242, 254, 0.08); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(0, 242, 254, 0.15); white-space: nowrap;">Stok: ... Adet</span>
+                      <span id="wh-defect-${wh.id}" style="font-size: 0.65rem; color: #EF4444; font-weight: bold; background: rgba(239, 68, 68, 0.08); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.15); white-space: nowrap; display: none;">Defekt: 0 Adet</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.6rem; margin-top: 0.5rem;">
+                <span style="font-family: monospace; font-size: 0.72rem; font-weight: 700; color: #00f3ff; background: rgba(0, 242, 254, 0.08); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 242, 254, 0.15);">ID: ${wh.id}</span>
+                <div class="enter-btn">
+                  <span>GİRİŞ</span>
+                  <i class="fa-solid fa-chevron-right"></i>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Team Warehouses Section -->
+      ${allowedTeams.length > 0 ? `
+        <div class="wh-dash-section-title" style="color: #8f94fb;">
+          <i class="fa-solid fa-truck-ramp-box"></i> Ekiplerin Mobil Zimmetleri
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; margin-bottom: 3rem;">
+          ${allowedTeams.map(wh => `
+            <div class="wh-agent-card team" onclick="window.selectWarehouseAndNavigate('${wh.id}')">
+              <div style="display: flex; align-items: flex-start; gap: 0.75rem;">
+                <div class="wh-icon-box">
+                  <i class="fa-solid fa-truck-ramp-box"></i>
+                </div>
+                <div style="min-width: 0; flex: 1;">
+                  <h3 class="wh-name" title="${wh.name}">${wh.name}</h3>
+                  <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-top: 4px; gap: 8px;">
+                    <span class="wh-desc" title="${wh.description || 'Zimmet Deposu'}" style="margin: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;">${wh.description || 'Zimmet Deposu'}</span>
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; margin-top: -2px;">
+                      <span id="wh-count-${wh.id}" style="font-size: 0.7rem; color: #8f94fb; font-weight: bold; background: rgba(143, 148, 251, 0.08); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(143, 148, 251, 0.15); white-space: nowrap;">Stok: ... Adet</span>
+                      <span id="wh-defect-${wh.id}" style="font-size: 0.65rem; color: #EF4444; font-weight: bold; background: rgba(239, 68, 68, 0.08); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.15); white-space: nowrap; display: none;">Defekt: 0 Adet</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.6rem; margin-top: 0.5rem;">
+                <span style="font-family: monospace; font-size: 0.72rem; font-weight: 700; color: #8f94fb; background: rgba(143, 148, 251, 0.08); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(143, 148, 251, 0.15);">ID: ${wh.id.replace('team_', '').replace(/_/g, '')}</span>
+                <div class="enter-btn">
+                  <span>GİRİŞ</span>
+                  <i class="fa-solid fa-chevron-right"></i>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      ${allowedMain.length === 0 && allowedTeams.length === 0 ? `
+        <div style="padding: 4rem 2rem; color: #64748B; text-align: center; border: 1px dashed rgba(255,255,255,0.05); border-radius: 16px;">
+          <i class="fa-solid fa-warehouse" style="font-size: 2.5rem; color: rgba(255,255,255,0.15); margin-bottom: 1rem; display: block;"></i>
+          <p style="font-size: 1rem; font-weight: 600; color: #94A3B8;">Erişebileceğiniz Kayıtlı Depo Bulunmamaktadır</p>
+          <p style="font-size: 0.8rem; margin-top: 0.25rem;">Depoları görüntülemek için yetkilendirilmiş olmanız gerekir.</p>
+        </div>
+      ` : ''}
+    </div>
+  `;
+};
+
 export const NewWarehousePage = async (warehouseId?: string | null) => {
   const allWarehouses = dataService.getWarehouses();
-  let currentWarehouse = warehouseId 
-    ? allWarehouses.find(w => w.id === warehouseId) 
-    : allWarehouses[0];
+  const userProfile = getUserProfile();
+  const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.role === 'TAMİR' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+
+  if (!warehouseId) {
+    const allowedMainWarehouses = userProfile?.role === 'ADMIN' || isMaterialManager
+      ? allWarehouses
+      : allWarehouses.filter(w => (userProfile?.allowedWarehouses || []).includes(w.id));
+
+    const teamWarehouses: { id: string; name: string; description: string }[] = [];
+    for (let i = 1; i <= 15; i++) {
+      const teamName = `Team ${String(i).padStart(2, '0')}`;
+      const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
+      const userTeamCanonical = userProfile?.team ? formatTeamName(userProfile.team) : '';
+      const isUserOwnTeam = userTeamCanonical === teamName;
+      const isAllowed = userProfile?.role === 'ADMIN' || isMaterialManager || isUserOwnTeam || (userProfile?.allowedWarehouses || []).includes(teamId);
+      if (isAllowed) {
+        teamWarehouses.push({
+          id: teamId,
+          name: `${teamName} Deposu`,
+          description: `${teamName} Mobil Zimmet Deposu`
+        });
+      }
+    }
+    
+    // Load warehouse item counts asynchronously
+    setTimeout(async () => {
+      try {
+        const allWhIds = [
+          ...allowedMainWarehouses.map(w => w.id),
+          ...teamWarehouses.map(w => w.id)
+        ];
+        
+        await Promise.all(allWhIds.map(async (whId) => {
+          try {
+            const collRef = collection(db, 'warehouses', whId, 'inventory_v2');
+            
+            // 1. Get total count
+            const totalSnapshot = await getCountFromServer(collRef);
+            const totalCount = totalSnapshot.data().count;
+            
+            // 2. Get defect count
+            const defectQuery = query(collRef, where('condition', '==', 'DEFECT'));
+            const defectSnapshot = await getCountFromServer(defectQuery);
+            const defectCount = defectSnapshot.data().count;
+            
+            // 3. Normal count is total minus defect
+            const normalCount = Math.max(0, totalCount - defectCount);
+
+            const el = document.getElementById(`wh-count-${whId}`);
+            if (el) {
+              el.innerText = `Stok: ${normalCount} Adet`;
+            }
+            
+            const defectEl = document.getElementById(`wh-defect-${whId}`);
+            if (defectEl) {
+              defectEl.innerText = `Defekt: ${defectCount} Adet`;
+              if (defectCount > 0) {
+                defectEl.style.display = 'inline-block';
+              } else {
+                defectEl.style.display = 'none';
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch count for warehouse ${whId}`, e);
+            const el = document.getElementById(`wh-count-${whId}`);
+            if (el) el.innerText = 'Stok: 0 Adet';
+            const defectEl = document.getElementById(`wh-defect-${whId}`);
+            if (defectEl) defectEl.style.display = 'none';
+          }
+        }));
+      } catch (err) {
+        console.error("Failed to load warehouse counts:", err);
+      }
+    }, 50);
+
+    return renderWarehouseDashboardHTML(allowedMainWarehouses, teamWarehouses);
+  }
+
+  let currentWarehouse = allWarehouses.find(w => w.id === warehouseId);
 
   if (!currentWarehouse && warehouseId && warehouseId.startsWith('team_')) {
     const teamNameClean = warehouseId.replace('team_', '').replace(/_/g, ' ');
@@ -67,8 +381,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
     return `<div style="padding: 2rem; color: #94A3B8; text-align: center;">Kayıtlı depo bulunamadı.</div>`;
   }
 
-  const userProfile = getUserProfile();
-  const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.role === 'TAMİR' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+  (window as any).currentWarehouseId = currentWarehouse.id;
+
   const isMobileWarehouse = currentWarehouse.id.startsWith('team_');
 
   const targetOptions: { id: string, name: string }[] = [];
@@ -187,7 +501,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                   serialNo: mat.serialNo || '-',
                   description: mat.description,
                   used: mat.used || 0,
-                  defect: mat.defectCount || 0
+                  defect: mat.defectCount || 0,
+                  faultCode: report.faultCode || '-',
+                  faultDesc: report.faultDesc || '-'
                });
                turbineData[turbineId].totalUsed += (mat.used || 0);
                turbineData[turbineId].totalDefect += (mat.defectCount || 0);
@@ -250,9 +566,21 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
   const warehouseName = currentWarehouse ? currentWarehouse.name : 'Depo Seçilmedi';
   
+  // Fetch draft reservations
+  let draftReservations = { bySap: {} as Record<string, number>, details: [] as any[] };
+  if (currentWarehouse) {
+    try {
+      draftReservations = await warehouseService.getReservationsFromDrafts(currentWarehouse.id);
+    } catch (e) {
+      console.error("Failed to load draft reservations:", e);
+    }
+  }
+  (window as any).draftReservations = draftReservations;
+
   // Fetch live inventory items
   let inventoryItems: any[] = [];
   let inventoryWithQRs: any[] = [];
+  let onlyShowCritical = false;
   if (currentWarehouse) {
     const rawItems = await warehouseService.getInventory(currentWarehouse.id, true);
     inventoryItems = rawItems.map(item => {
@@ -453,20 +781,319 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
     let itemsPerPage = 25;
     let currentAuditPage = 1;
 
-    const draftKey = `draft_audit_${currentWarehouse.id}`;
-    const draftStr = localStorage.getItem(draftKey);
-    let draftData = draftStr ? JSON.parse(draftStr) : {};
+    // Set up real-time listener for tasks (reservations)
+    if ((window as any)._tasksUnsubscribe) {
+      try { (window as any)._tasksUnsubscribe(); } catch(e) {}
+      (window as any)._tasksUnsubscribe = null;
+    }
+
+    if (currentWarehouse) {
+      (async () => {
+        try {
+          const { collection, query, where, onSnapshot } = await import('firebase/firestore');
+          const tasksQuery = query(collection(db, 'tasks'), where('taskInfo.siteId', '==', currentWarehouse.id));
+          (window as any)._tasksUnsubscribe = onSnapshot(tasksQuery, (snap: any) => {
+             const bySap: Record<string, number> = {};
+             const details: any[] = [];
+             
+             snap.docs.forEach((docSnap: any) => {
+               const data = docSnap.data();
+               if (data.workflow?.durum === 'Tamamlandı') return;
+               
+               const materials = data.maintenanceData?.materials || [];
+               const usedMaterials: any[] = [];
+               
+               materials.forEach((mat: any) => {
+                 const typeUpper = mat.type?.toUpperCase();
+                 const isTakilan = !mat.type || typeUpper === 'T';
+                 if (mat.sapNo && mat.used > 0 && isTakilan) {
+                   const sap = String(mat.sapNo).trim();
+                   bySap[sap] = (bySap[sap] || 0) + Number(mat.used);
+                   usedMaterials.push({
+                     sapNo: sap,
+                     description: mat.description || '',
+                     used: Number(mat.used)
+                   });
+                 }
+               });
+               
+               if (usedMaterials.length > 0) {
+                 details.push({
+                   taskId: docSnap.id,
+                   team: data.assignment?.assignedTeam || '-',
+                   turbinNo: data.taskInfo?.turbinNo || '-',
+                   sablon: data.taskInfo?.secilenSablon || '-',
+                   durum: data.workflow?.durum || '-',
+                   createdBy: data.assignment?.createdBy || '-',
+                   personnel: data.maintenanceData?.teamPersonnel?.map((p: any) => typeof p === 'string' ? p : p.name || '-') || [],
+                   materials: usedMaterials
+                 });
+               }
+             });
+             
+             draftReservations = { bySap, details };
+             (window as any).draftReservations = draftReservations;
+             
+             if ((window as any).updateRealTimeReservationsAndStats) {
+               (window as any).updateRealTimeReservationsAndStats();
+             }
+          });
+        } catch (e) {
+          console.error("Failed to set up real-time tasks listener:", e);
+        }
+      })();
+    }
+
+    // Set up real-time listener for warehouse inventory items
+    if ((window as any)._inventoryUnsubscribe) {
+      try { (window as any)._inventoryUnsubscribe(); } catch(e) {}
+      (window as any)._inventoryUnsubscribe = null;
+    }
+
+    if (currentWarehouse) {
+      (async () => {
+        try {
+          const { collection, onSnapshot } = await import('firebase/firestore');
+          const invCol = collection(db, 'warehouses', currentWarehouse.id, 'inventory_v2');
+          (window as any)._inventoryUnsubscribe = onSnapshot(invCol, (snap: any) => {
+             const rawItems = snap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() }));
+             inventoryItems = rawItems.map((item: any) => {
+               let resolvedName = (item as any).name || item.description || '';
+               if (!resolvedName || resolvedName === 'Bilinmeyen Malzeme') {
+                 const dictMat = inventoryService.getMaterialBySap(item.sapNo);
+                 if (dictMat && dictMat.d) {
+                   resolvedName = dictMat.d;
+                 }
+               }
+               if (!resolvedName) {
+                 resolvedName = 'Bilinmeyen Malzeme';
+               }
+               return { ...item, name: resolvedName };
+             });
+             
+             inventoryWithQRs = inventoryItems.map(item => ({ ...item, qrDataUrl: '' }));
+             (window as any).inventoryItems = inventoryItems;
+             (window as any).inventoryWithQRs = inventoryWithQRs;
+
+             if ((window as any).updateRealTimeReservationsAndStats) {
+               (window as any).updateRealTimeReservationsAndStats();
+             }
+             if ((window as any).renderInventoryTable) {
+               (window as any).renderInventoryTable();
+             }
+          });
+        } catch (e) {
+          console.error("Failed to set up real-time inventory listener:", e);
+        }
+      })();
+    }
+
+    (window as any).setInventoryCriticalFilter = (val: boolean) => {
+       onlyShowCritical = val;
+       currentPage = 1;
+       
+       const totalCard = document.getElementById('total-kalem-card');
+       const kritikCard = document.getElementById('kritik-stok-card');
+       
+       if (totalCard) {
+          if (!val) {
+             totalCard.style.borderColor = '#3B82F6';
+             totalCard.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+          } else {
+             totalCard.style.borderColor = '#1E293B';
+             totalCard.style.backgroundColor = '#111827';
+          }
+       }
+       
+       if (kritikCard) {
+          if (val) {
+             kritikCard.style.borderColor = '#EF4444';
+             kritikCard.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+          } else {
+             kritikCard.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+             kritikCard.style.backgroundColor = '#111827';
+          }
+       }
+       
+       if (typeof (window as any).renderInventoryTable === 'function') {
+          (window as any).renderInventoryTable();
+       }
+    };
+
+    // Dom update helper for reservations & stats card
+    (window as any).updateRealTimeReservationsAndStats = () => {
+      const totalKalemEl = document.getElementById('total-kalem-count');
+      const kritikStokEl = document.getElementById('kritik-stok-count');
+      
+      const totalKalemCount = inventoryItems.filter(i => i.condition !== 'DEFECT').length;
+      const kritikStokCount = inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length;
+      
+      if (totalKalemEl) totalKalemEl.innerText = String(totalKalemCount);
+      if (kritikStokEl) kritikStokEl.innerText = String(kritikStokCount);
+      
+      const tbody = document.getElementById('reservations-tbody');
+      if (tbody) {
+        const rows: any[] = [];
+        
+        // 1. Task-based reservations
+        draftReservations.details.forEach((d: any) => {
+          d.materials.forEach((m: any) => {
+            const invItem = inventoryItems.find((item: any) => String(item.sapNo).trim() === String(m.sapNo).trim());
+            const shelf = invItem ? (invItem.shelfNo || '-') : '-';
+            rows.push({
+              team: d.team,
+              sapNo: m.sapNo,
+              description: m.description,
+              qty: m.used,
+              shelf: shelf
+            });
+          });
+        });
+
+        // 2. Transfer-based reservations
+        inventoryItems.forEach((item: any) => {
+          if (item.reservations) {
+            Object.entries(item.reservations).forEach(([tId, qty]) => {
+              const numericQty = Number(qty);
+              if (numericQty > 0) {
+                const cleanTeam = tId.replace('team_', '').replace(/_/g, ' ');
+                const exists = rows.some((r: any) => 
+                  String(r.team).toLowerCase().trim() === cleanTeam.toLowerCase().trim() && 
+                  String(r.sapNo).trim() === String(item.sapNo).trim()
+                );
+                if (!exists) {
+                  rows.push({
+                    team: cleanTeam,
+                    sapNo: item.sapNo,
+                    description: item.name || item.description || '-',
+                    qty: numericQty,
+                    shelf: item.shelfNo || '-'
+                  });
+                }
+              }
+            });
+          }
+        });
+
+        const htmlRows = rows.map((r: any) => `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); color: #E2E8F0;">
+            <td style="padding: 0.4rem 0.5rem; font-weight: bold; color: #ff9800;">${r.team}</td>
+            <td style="padding: 0.4rem 0.5rem; font-family: monospace;">${r.sapNo}</td>
+            <td style="padding: 0.4rem 0.5rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.description}">${r.description}</td>
+            <td style="padding: 0.4rem 0.5rem; text-align: center; font-weight: 600; color: #14F195;">${r.qty} Adet</td>
+            <td style="padding: 0.4rem 0.5rem; text-align: right; color: #94A3B8;">${r.shelf}</td>
+          </tr>
+        `);
+
+        tbody.innerHTML = htmlRows.length > 0 ? htmlRows.join('') : `
+          <tr>
+            <td colspan="5" style="padding: 1.5rem 0.5rem; text-align: center; color: #64748B;">
+              Aktif ekip rezervasyonu bulunmuyor.
+            </td>
+          </tr>
+        `;
+      }
+    };
+
+    // Set up real-time Firestore listener for draft audit collaboration
+    if ((window as any)._draftAuditUnsubscribe) {
+      try {
+        (window as any)._draftAuditUnsubscribe();
+      } catch (e) {
+        console.error(e);
+      }
+      (window as any)._draftAuditUnsubscribe = null;
+    }
+
+    let draftData: any = {};
+    if (currentWarehouse) {
+      const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+      (window as any)._draftAuditUnsubscribe = onSnapshot(draftDocRef, (snap: any) => {
+        let incomingDraft: any = {};
+        let updatedBy = '';
+        let lastUpdated: any = null;
+        if (snap.exists()) {
+          const data = snap.data();
+          incomingDraft = data.draftData || {};
+          updatedBy = data.updatedBy || '';
+          lastUpdated = data.lastUpdated;
+        }
+        draftData = incomingDraft;
+        (window as any).currentDraftData = draftData;
+
+        // Update the collaboration banner
+        const banner = document.getElementById('manual-audit-collaboration-banner');
+        const bannerText = document.getElementById('collaboration-banner-text');
+        if (banner && bannerText) {
+          if (updatedBy) {
+            const timeStr = lastUpdated?.toDate ? lastUpdated.toDate().toLocaleTimeString('tr-TR') : new Date().toLocaleTimeString('tr-TR');
+            bannerText.innerHTML = `<strong>Ortak Sayım Aktif</strong>: En son <strong>${updatedBy}</strong> tarafından saat <strong>${timeStr}</strong> civarında güncellendi. Kaldığı yerden devam edebilirsiniz.`;
+            banner.style.display = 'flex';
+          } else {
+            banner.style.display = 'none';
+          }
+        }
+
+        // Update input elements on screen, except the one currently focused
+        const activeElId = document.activeElement ? document.activeElement.id : null;
+        
+        const qtyInputs = document.querySelectorAll('.manual-audit-input');
+        qtyInputs.forEach((input: any) => {
+          const itemId = input.dataset.id;
+          const val = draftData[itemId]?.qty || '';
+          if (input.id !== activeElId) {
+            input.value = val;
+          }
+        });
+        
+        const shelfInputs = document.querySelectorAll('.manual-audit-shelf');
+        shelfInputs.forEach((input: any) => {
+          const itemId = input.dataset.id;
+          const val = draftData[itemId]?.shelf !== undefined ? draftData[itemId].shelf : (input.dataset.original || '');
+          if (input.id !== activeElId) {
+            input.value = val;
+          }
+        });
+
+        qtyInputs.forEach((input: any) => {
+          const itemId = input.dataset.id;
+          const noteInput = document.getElementById('manual-note-' + itemId) as HTMLInputElement;
+          if (noteInput && noteInput.id !== activeElId) {
+            const val = draftData[itemId]?.note || '';
+            const qtyVal = draftData[itemId]?.qty || '';
+            noteInput.value = val;
+            const sysQty = parseFloat(input.dataset.sysqty || '0');
+            if (qtyVal !== '' && parseFloat(qtyVal) !== sysQty) {
+              noteInput.style.display = 'block';
+            } else {
+              noteInput.style.display = 'none';
+            }
+          }
+        });
+
+        if ((window as any).updateManualSummaryBar) {
+          (window as any).updateManualSummaryBar();
+        }
+      });
+    }
 
     (window as any).changePage = (page: number) => {
        currentPage = page;
        (window as any).renderInventoryTable();
     };
 
+
     (window as any).changeItemsPerPage = (limit: string) => {
        itemsPerPage = limit === 'all' ? 999999 : parseInt(limit, 10);
        currentPage = 1;
        (window as any).renderInventoryTable();
     };
+
+    (window as any).filterInventory = () => {
+       currentPage = 1;
+       (window as any).renderInventoryTable();
+    };
+
 
     let renderRetryCount = 0;
     (window as any).renderInventoryTable = async () => {
@@ -491,10 +1118,15 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         // 1. Sort the full inventoryWithQRs array (excluding DEFECT items, unless in W11)
         const sortedItems = [...inventoryWithQRs]
           .filter(item => {
-            if (currentWarehouse.id === 'W11') return true;
+            if (currentWarehouse.id === 'MTA') return true;
             if (item.condition === 'DEFECT') return false;
             if (isMobileWarehouse && item.quantity <= 0 && (item.reservedQuantity || 0) <= 0) {
               return false;
+            }
+            if (onlyShowCritical) {
+              if (item.quantity > (item.minStock || 0)) {
+                return false;
+              }
             }
             return true;
           })
@@ -580,7 +1212,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <span style="word-break: break-word;">${item.name}</span>
-                    ${currentWarehouse.id !== 'W11' && item.condition && item.condition !== 'NEW' ? `
+                    ${currentWarehouse.id !== 'MTA' && item.condition && item.condition !== 'NEW' ? `
                       <span style="font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; 
                         ${item.condition === 'DEFECT' ? 'background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);' : 
                           item.condition === 'REVISED' ? 'background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3);' : 
@@ -590,7 +1222,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                     ` : ''}
                   </div>
                   
-                  ${currentWarehouse.id === 'W11' ? `
+                  ${currentWarehouse.id === 'MTA' ? `
                     <div style="font-size: 0.78rem; color: #10B981; margin-top: 4px; font-weight: 700; font-family: monospace;">
                       Seri No: <span style="color: #FFF; font-weight: normal;">${item.serialNo || '-'}</span>
                     </div>
@@ -601,7 +1233,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                     ` : ''}
                   ` : ''}
 
-                  ${currentWarehouse.id === 'W11' ? (() => {
+                  ${currentWarehouse.id === 'MTA' ? (() => {
                     const matchingRepairs = (allRepairs || []).filter(r => String(r.sapNo).trim() === String(item.sapNo).trim());
                     matchingRepairs.sort((a,b) => {
                       const timeA = a.sentAt?.toDate ? a.sentAt.toDate().getTime() : new Date(a.sentAt).getTime();
@@ -655,21 +1287,30 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               </td>
               <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.shelfNo || '-'}</td>
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); text-align: right; white-space: nowrap;">
-                ${currentWarehouse.id === 'W11' ? `
-                  <i id="edit-btn-${item.id}" onclick="window.openW11EditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.note || ''}', '${item.shelfNo || ''}', ${item.quantity})" class="fa-solid fa-pen-to-square" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s; font-size: 1.15rem;" onmouseover="this.style.opacity='1'; this.style.color='#00cc6a'" onmouseout="this.style.opacity='0.7'; this.style.color='#14F195'" title="Seri No / Not Düzenle"></i>
-                  <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                ${currentWarehouse.id === 'MTA' ? `
+                  <i id="edit-btn-${item.id}" onclick="window.openMtaEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.note || ''}', '${item.shelfNo || ''}', ${item.quantity})" class="fa-solid fa-pen-to-square" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s; font-size: 1.15rem;" onmouseover="this.style.opacity='1'; this.style.color='#00cc6a'" onmouseout="this.style.opacity='0.7'; this.style.color='#14F195'" title="Seri No / Not Düzenle"></i>
+                  ${isMaterialManager ? `
+                    <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                  ` : ''}
                 ` : `
                   ${isMobileWarehouse ? `
                     <i onclick="window.openP2PTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-qrcode" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="QR Transfer Kodu Oluştur"></i>
-                  ` : ''}
-                  ${item.condition === 'DEFECT' && isMaterialManager ? `
-                    <i onclick="window.openSendToRepairModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-screwdriver-wrench" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Tamire Gönder"></i>
-                    <i onclick="window.scrapDefectiveItem('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-dumpster" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Hurdaya Ayır"></i>
-                  ` : ''}
-                  <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
-                  <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
-                  <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
-                  <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                    <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                  ` : `
+                    ${item.condition === 'DEFECT' && isMaterialManager ? `
+                      <i onclick="window.openSendToRepairModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-screwdriver-wrench" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Tamire Gönder"></i>
+                      <i onclick="window.scrapDefectiveItem('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-dumpster" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Hurdaya Ayır"></i>
+                    ` : ''}
+                    <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
+                    ${isMaterialManager ? `
+                      <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
+                    ` : ''}
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                    ${isMaterialManager ? `
+                      <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                    ` : ''}
+                  `}
                 `}
               </td>
             </tr>
@@ -763,7 +1404,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        const searchInput = document.getElementById('manual-audit-search') as HTMLInputElement;
        const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
        
-       const auditInventoryItems = currentWarehouse.id === 'W11'
+       const auditInventoryItems = currentWarehouse.id === 'MTA'
           ? inventoryItems
           : inventoryItems.filter(item => item.condition !== 'DEFECT');
 
@@ -1376,6 +2017,259 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        (window as any)._currentBigQRItem = null;
     };
 
+     (window as any).showRecoveryInfoList = (itemId: string) => {
+        const inventory = (window as any).currentInventoryData || [];
+        const item = inventory.find((i: any) => i.id === itemId);
+        if (!item) return;
+
+        let notes: string[] = [];
+        if (item.recoveryNotes && Array.isArray(item.recoveryNotes)) {
+          notes = item.recoveryNotes;
+        } else if (item.recoveryNote) {
+          notes = [item.recoveryNote];
+        }
+
+        if (notes.length === 0) return;
+
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.6); 
+          backdrop-filter: blur(4px); z-index: 999999; display: flex; 
+          align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;
+        `;
+
+        let cardsHtml = notes.map((recoveryNote, index) => {
+          let turbine = '-';
+          let report = '-';
+          let serial = '-';
+          let desc = recoveryNote;
+
+          const turbineMatch = recoveryNote.match(/Türbin:\s*([^,]+)/);
+          const reportMatch = recoveryNote.match(/Rapor:\s*([^,]+)/);
+          const serialMatch = recoveryNote.match(/Seri No:\s*([^,]+)/);
+          const descMatch = recoveryNote.match(/Açıklama:\s*(.+)$/);
+
+          if (turbineMatch) turbine = turbineMatch[1].trim();
+          if (reportMatch) report = reportMatch[1].trim();
+          if (serialMatch) serial = serialMatch[1].trim();
+          if (descMatch) desc = descMatch[1].trim();
+
+          return `
+            <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.05); padding-bottom: 0.5rem;">
+                <span style="font-weight: 700; color: #14F195; font-size: 0.85rem;">Kayıt #${index + 1}</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.8rem;">
+                <div>
+                  <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;">Söküldüğü Türbin</span>
+                  <span style="color: #FFF; font-weight: 700;">${turbine}</span>
+                </div>
+                <div>
+                  <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;">Rapor No</span>
+                  <span style="color: #F59E0B; font-weight: 700; font-family: monospace;">${report}</span>
+                </div>
+              </div>
+              <div>
+                <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.2rem;">Seri Numarası</span>
+                <span style="color: #10B981; font-weight: bold; font-family: monospace; font-size: 0.85rem; background: rgba(16, 185, 129, 0.05); padding: 2px 6px; border-radius: 4px; border: 1px dashed rgba(16, 185, 129, 0.15);">${serial}</span>
+              </div>
+              <div>
+                <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; margin-bottom: 0.2rem;">Açıklama / Gerekçe</span>
+                <div style="background: rgba(0,0,0,0.2); padding: 0.5rem 0.75rem; border-radius: 6px; color: #E2E8F0; font-size: 0.85rem; line-height: 1.4;">
+                  ${desc}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        modal.innerHTML = `
+          <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 520px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); transform: scale(0.95); transition: transform 0.2s; display: flex; flex-direction: column; max-height: 80vh;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; margin-bottom: 1.25rem;">
+              <h3 style="font-size: 1.25rem; font-weight: 700; color: #60A5FA; margin: 0; font-family: 'Rajdhani', sans-serif;">
+                <i class="fa-solid fa-circle-info" style="margin-right: 8px;"></i> Malzeme Geri Kazanım Geçmişi
+              </h3>
+              <i class="fa-solid fa-xmark" id="btn-close-recovery-modal" style="cursor: pointer; color: #64748B; font-size: 1.1rem;"></i>
+            </div>
+            
+            <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem; padding-right: 4px; margin-bottom: 1.5rem;">
+              ${cardsHtml}
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+              <button id="btn-close-recovery-ok" style="background: #3B82F6; color: #FFF; border: none; padding: 0.5rem 1.5rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 700; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#2563EB';" onmouseout="this.style.backgroundColor='#3B82F6';">
+                Anlaşıldı
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+        setTimeout(() => {
+          modal.style.opacity = '1';
+          (modal.firstElementChild as HTMLElement).style.transform = 'scale(1)';
+        }, 10);
+
+        const closeModal = () => {
+          modal.style.opacity = '0';
+          (modal.firstElementChild as HTMLElement).style.transform = 'scale(0.95)';
+          setTimeout(() => modal.remove(), 200);
+        };
+
+        document.getElementById('btn-close-recovery-modal')?.addEventListener('click', closeModal);
+        document.getElementById('btn-close-recovery-ok')?.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) closeModal();
+        });
+     };
+
+     (window as any).returnDefectToInventory = async (itemId: string, sapNo: string, name: string, initialSerial: string = '', turbineNo: string = '', reportId: string = '') => {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.6); 
+          backdrop-filter: blur(4px); z-index: 999999; display: flex; 
+          align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;
+        `;
+        modal.innerHTML = `
+          <div onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()" onkeydown="event.stopPropagation()" onkeyup="event.stopPropagation()" oninput="event.stopPropagation()" style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 480px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); transform: scale(0.95); transition: transform 0.2s;">
+            <h3 style="font-size: 1.25rem; font-weight: 700; color: #14F195; margin-top: 0; margin-bottom: 1rem; font-family: 'Rajdhani', sans-serif;">
+              <i class="fa-solid fa-reply-all" style="margin-right: 8px;"></i> Stoğa Geri Kazanım
+            </h3>
+            <p style="color: #E2E8F0; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.25rem;">
+              <strong>"${name}"</strong> sökülen (defect) malzemesinin sağlam olduğu anlaşıldı. Lütfen detayları girip geri alım durumunu seçin:
+            </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
+              ${turbineNo || reportId ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem;">
+                <div>
+                  <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;">Türbin</span>
+                  <span style="color: #FFF; font-weight: 700;">${turbineNo || '-'}</span>
+                </div>
+                <div>
+                  <span style="color: #64748B; display: block; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;">Rapor</span>
+                  <span style="color: #F59E0B; font-weight: 700; font-family: monospace;">${reportId || '-'}</span>
+                </div>
+              </div>
+              ` : ''}
+              <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0.75rem;">
+                <div>
+                  <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 600; text-transform: uppercase;">SAP No</label>
+                  <input id="return-sap-input" type="text" value="${sapNo}" placeholder="SAP No" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; font-family: monospace; outline: none;">
+                </div>
+                <div>
+                  <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 600; text-transform: uppercase;">Malzeme Adı / Versiyon</label>
+                  <input id="return-name-input" type="text" value="${name}" placeholder="Malzeme Adı" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+                </div>
+              </div>
+              <div>
+                <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 600; text-transform: uppercase;">Malzeme Seri No (İsteğe Bağlı)</label>
+                <input id="return-serial-input" type="text" value="${initialSerial && initialSerial !== '-' ? initialSerial : ''}" placeholder="Seri numarası girin (varsa)" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; font-family: monospace; outline: none;">
+              </div>
+              <div>
+                <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 600; text-transform: uppercase;">Gerekçe Açıklaması</label>
+                <textarea id="return-desc-input" rows="3" style="width: 100%; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0.5rem 0.75rem; font-size: 0.85rem; outline: none; resize: none; line-height: 1.4;">Sıfır kart takıldı, çıkan kartın sağlam olduğu tespit edildi. Arıza farklı malzemeden çıktığı için stoğa geri alıyorum.</textarea>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+              <button id="btn-return-revised" style="height: 42px; background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); color: #FFF; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem;">
+                <i class="fa-solid fa-wrench" style="margin-right: 6px;"></i> REVİZE (Kullanılabilir/İkinci El) Olarak Al
+              </button>
+              <button id="btn-return-new" style="height: 42px; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #FFF; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.9rem;">
+                <i class="fa-solid fa-box" style="margin-right: 6px;"></i> SIFIR (Yeni/Kullanılmamış) Olarak Al
+              </button>
+            </div>
+            <div style="display: flex; justify-content: flex-end;">
+              <button id="btn-return-cancel" style="background: none; border: 1px solid #334155; color: #94A3B8; padding: 0.5rem 1.25rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s;">
+                İptal Et
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+        setTimeout(() => {
+          modal.style.opacity = '1';
+          (modal.firstElementChild as HTMLElement).style.transform = 'scale(1)';
+        }, 10);
+
+        const closeModal = () => {
+          modal.style.opacity = '0';
+          (modal.firstElementChild as HTMLElement).style.transform = 'scale(0.95)';
+          setTimeout(() => modal.remove(), 200);
+        };
+
+        const handleReturn = async (cond: 'NEW' | 'REVISED') => {
+          try {
+            const btnRevised = document.getElementById('btn-return-revised') as HTMLButtonElement;
+            const btnNew = document.getElementById('btn-return-new') as HTMLButtonElement;
+            const btnCancel = document.getElementById('btn-return-cancel') as HTMLButtonElement;
+            
+            const sapInput = document.getElementById('return-sap-input') as HTMLInputElement;
+            const nameInput = document.getElementById('return-name-input') as HTMLInputElement;
+            const serialInput = document.getElementById('return-serial-input') as HTMLInputElement;
+            const descInput = document.getElementById('return-desc-input') as HTMLTextAreaElement;
+            
+            const enteredSap = sapInput ? sapInput.value.trim() : sapNo;
+            const enteredName = nameInput ? nameInput.value.trim() : name;
+            const enteredSerial = serialInput ? serialInput.value.trim() : '';
+            const enteredDesc = descInput ? descInput.value.trim() : '';
+
+            if (!enteredSap) {
+              alert('Lütfen geçerli bir SAP Numarası girin.');
+              return;
+            }
+            if (!enteredName) {
+              alert('Lütfen geçerli bir Malzeme Adı girin.');
+              return;
+            }
+
+            if (btnRevised) btnRevised.disabled = true;
+            if (btnNew) btnNew.disabled = true;
+            if (btnCancel) btnCancel.disabled = true;
+
+            const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            const email = currentUser.email || 'Sistem';
+
+            const finalRecoveryNote = `Türbin: ${turbineNo || '-'}, Rapor: ${reportId || '-'}, Seri No: ${enteredSerial || '-'}, Açıklama: ${enteredDesc}`;
+
+            await warehouseService.returnDefectToInventory(currentWarehouse.id, itemId, cond, email, enteredSerial, finalRecoveryNote, enteredSap, enteredName);
+            closeModal();
+            
+            if ((window as any).selectWarehouseAndNavigate) {
+              (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+            }
+          } catch (err) {
+            console.error(err);
+            alert('Geri alım işlemi sırasında hata oluştu.');
+            closeModal();
+          }
+        };
+
+        document.getElementById('btn-return-revised')?.addEventListener('click', () => handleReturn('REVISED'));
+        document.getElementById('btn-return-new')?.addEventListener('click', () => handleReturn('NEW'));
+        document.getElementById('btn-return-cancel')?.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) closeModal();
+        });
+        
+        // Auto dictionary lookup on SAP input change
+        const sapInput = document.getElementById('return-sap-input') as HTMLInputElement;
+        const nameInput = document.getElementById('return-name-input') as HTMLInputElement;
+        if (sapInput && nameInput) {
+          sapInput.addEventListener('input', () => {
+            const val = sapInput.value.trim();
+            if (val.length >= 4) {
+              const match = inventoryService.getMaterialBySap(val);
+              if (match && match.d) {
+                nameInput.value = match.d;
+              }
+            }
+          });
+        }
+     };
+
     (window as any).printSingleQRFromModal = async () => {
        const item = (window as any)._currentBigQRItem;
        if (!item) return;
@@ -1894,33 +2788,33 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          }
      };
 
-     (window as any).openW11EditModal = (id: string, sap: string, name: string, serial: string, note: string, loc: string, qty: number) => {
-        const modal = document.getElementById('new-warehouse-w11-edit-modal');
+     (window as any).openMtaEditModal = (id: string, sap: string, name: string, serial: string, note: string, loc: string, qty: number) => {
+        const modal = document.getElementById('new-warehouse-mta-edit-modal');
         if (modal) {
-          (document.getElementById('w11-edit-item-id') as HTMLInputElement).value = id;
-          const nameText = document.getElementById('w11-edit-name-text');
+          (document.getElementById('mta-edit-item-id') as HTMLInputElement).value = id;
+          const nameText = document.getElementById('mta-edit-name-text');
           if (nameText) nameText.innerText = name;
-          const sapText = document.getElementById('w11-edit-sap-text');
+          const sapText = document.getElementById('mta-edit-sap-text');
           if (sapText) sapText.innerText = sap;
-          (document.getElementById('w11-edit-qty-input') as HTMLInputElement).value = qty !== undefined ? qty.toString() : '0';
-          (document.getElementById('w11-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null') ? '' : serial;
-          (document.getElementById('w11-edit-note-input') as HTMLTextAreaElement).value = (note === 'undefined' || note === 'null') ? '' : note;
-          (document.getElementById('w11-edit-loc-input') as HTMLInputElement).value = (loc === 'undefined' || loc === 'null') ? '' : loc;
+          (document.getElementById('mta-edit-qty-input') as HTMLInputElement).value = qty !== undefined ? qty.toString() : '0';
+          (document.getElementById('mta-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null') ? '' : serial;
+          (document.getElementById('mta-edit-note-input') as HTMLTextAreaElement).value = (note === 'undefined' || note === 'null') ? '' : note;
+          (document.getElementById('mta-edit-loc-input') as HTMLInputElement).value = (loc === 'undefined' || loc === 'null') ? '' : loc;
           modal.style.display = 'flex';
         }
      };
      
-     (window as any).closeW11EditModal = () => {
-        const modal = document.getElementById('new-warehouse-w11-edit-modal');
+     (window as any).closeMtaEditModal = () => {
+        const modal = document.getElementById('new-warehouse-mta-edit-modal');
         if (modal) modal.style.display = 'none';
      };
      
-     (window as any).saveW11EditItem = async (btn: HTMLButtonElement) => {
-        const id = (document.getElementById('w11-edit-item-id') as HTMLInputElement).value;
-        const qty = parseInt((document.getElementById('w11-edit-qty-input') as HTMLInputElement).value) || 0;
-        const serial = (document.getElementById('w11-edit-serial-input') as HTMLInputElement).value.trim();
-        const note = (document.getElementById('w11-edit-note-input') as HTMLTextAreaElement).value.trim();
-        const loc = (document.getElementById('w11-edit-loc-input') as HTMLInputElement).value.trim();
+     (window as any).saveMtaEditItem = async (btn: HTMLButtonElement) => {
+        const id = (document.getElementById('mta-edit-item-id') as HTMLInputElement).value;
+        const qty = parseInt((document.getElementById('mta-edit-qty-input') as HTMLInputElement).value) || 0;
+        const serial = (document.getElementById('mta-edit-serial-input') as HTMLInputElement).value.trim();
+        const note = (document.getElementById('mta-edit-note-input') as HTMLTextAreaElement).value.trim();
+        const loc = (document.getElementById('mta-edit-loc-input') as HTMLInputElement).value.trim();
         
         const originalText = btn.innerText;
         btn.innerText = 'Kaydediliyor...';
@@ -1934,7 +2828,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             shelfNo: loc
           });
           
-          (window as any).closeW11EditModal();
+          (window as any).closeMtaEditModal();
           
           (window as any).showToast('Başarılı', 'Malzeme bilgileri başarıyla güncellendi.', 'success');
           
@@ -2563,6 +3457,11 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        finally { btn.innerText = originalText; btn.disabled = false; }
     };
     
+    (window as any).closeHistoryModal = () => {
+       const modal = document.getElementById('new-warehouse-history-modal');
+       if(modal) modal.style.display = 'none';
+    };
+    
     (window as any).openHistoryModal = async (id: string, name: string) => {
        const modal = document.getElementById('new-warehouse-history-modal');
        if(modal) {
@@ -2606,16 +3505,19 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        }
     };
     
-    (window as any).closeHistoryModal = () => {
-       const modal = document.getElementById('new-warehouse-history-modal');
-       if(modal) modal.style.display = 'none';
-    };
-
-    (window as any).filterInventory = () => {
-       currentPage = 1;
-       if ((window as any).renderInventoryTable) {
-         (window as any).renderInventoryTable();
-       }
+    (window as any).toggleDateGroup = (dayStr: string) => {
+      const rows = document.querySelectorAll(`tr[data-group-date="${dayStr}"]`);
+      const icon = document.querySelector(`i[data-group-icon-date="${dayStr}"]`) as HTMLElement | null;
+      if (rows.length === 0) return;
+      
+      const isHidden = (rows[0] as HTMLElement).style.display === 'none';
+      rows.forEach((row: any) => {
+        row.style.display = isHidden ? '' : 'none';
+      });
+      
+      if (icon) {
+        icon.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+      }
     };
 
     (window as any).renderDepoHareketleriLogs = (filteredLogs?: any[]) => {
@@ -2630,15 +3532,29 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        
        const sortedLogs = [...logsToRender].sort((a: any, b: any) => ((b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
        
+       // Group logs by day string (toLocaleDateString)
+       const groupedLogs: Record<string, any[]> = {};
+       const daysOrder: string[] = [];
+       sortedLogs.forEach((l: any) => {
+         const logDate = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : null;
+         const dayStr = logDate ? logDate.toLocaleDateString('tr-TR') : 'Bilinmeyen Tarih';
+         if (!groupedLogs[dayStr]) {
+           groupedLogs[dayStr] = [];
+           daysOrder.push(dayStr);
+         }
+         groupedLogs[dayStr].push(l);
+       });
+
        container.innerHTML = `
          <div style="border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; background-color: #111827;">
            <div style="overflow-x: auto;">
              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; min-width: 800px;">
                <thead>
                  <tr style="background-color: #0F172A; border-bottom: 1px solid #1E293B;">
-                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tarih</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Saat</th>
                    <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Yapan</th>
-                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Tür</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">İşlem</th>
+                   <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Rota</th>
                    <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Malzeme</th>
                    <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Miktar</th>
                    <th style="padding: 1rem; color: #94A3B8; font-weight: 600;">Açıklama</th>
@@ -2646,124 +3562,185 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                  </tr>
                </thead>
                <tbody>
-                 ${sortedLogs.map((l: any) => {
-                   const date = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString('tr-TR') : '-';
-                   const formatUser = (user: string): string => {
-                      if (!user) return 'Sistem';
-                      const trimmed = user.trim();
-                      
-                      // Match dh-tmXX@demirerholding.com
-                      const match = trimmed.match(/^dh-tm(\d+)@demirerholding\.com$/i);
-                      if (match) {
-                        return `Team ${match[1]}`;
-                      }
-
-                      // Match dhtmXX@demirerholding.com
-                      const match2 = trimmed.match(/^dhtm(\d+)@demirerholding\.com$/i);
-                      if (match2) {
-                        return `Team ${match2[1]}`;
-                      }
-
-                      // Match dh-tmXX
-                      const match3 = trimmed.match(/^dh-tm(\d+)$/i);
-                      if (match3) {
-                        return `Team ${match3[1]}`;
-                      }
-
-                      // Match TeamXX or Team XX
-                      const match4 = trimmed.match(/^team\s*(\d+)$/i);
-                      if (match4) {
-                        return `Team ${match4[1]}`;
-                      }
-
-                      if (trimmed.startsWith('team_')) {
-                        return trimmed.replace('team_', '').replace(/_/g, ' ');
-                      }
-
-                      if (trimmed.includes('@')) {
-                        return trimmed.split('@')[0];
-                      }
-
-                      return trimmed;
-                    };
-                   let typeColor = '#94A3B8';
-                   let typeText: string = l.type;
-                   if (l.type === 'ADD') { typeColor = '#10B981'; typeText = 'Ekleme'; }
-                   if (l.type === 'REMOVE') { typeColor = '#EF4444'; typeText = 'Kullanım'; }
-                   if (l.type === 'TRANSFER') { typeColor = '#3B82F6'; typeText = 'Transfer'; }
-                   if (l.type === 'UPDATE') { typeColor = '#F59E0B'; typeText = 'Güncelleme'; }
+                 ${daysOrder.map(dayStr => {
+                   const dayLogs = groupedLogs[dayStr];
                    
-                   const qtyColor = l.quantity > 0 ? '#10B981' : '#EF4444';
-                   const qtyText = l.quantity > 0 ? `+${l.quantity}` : `${l.quantity}`;
-
-                   // DIRECTION INDICATOR FOR TRANSFER
-                   let directionHtml = '';
-                   if (l.type === 'TRANSFER') {
-                     const currentWhName = currentWarehouse.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim();
-                     let otherWhName = '';
-                     let isIncoming = l.quantity > 0;
-                     
-                     if (l.note) {
-                       if (l.note.includes(' deposuna transfer edildi.')) {
-                         otherWhName = l.note.replace(' deposuna transfer edildi.', '').trim();
-                         isIncoming = false;
-                       } else if (l.note.includes(' deposundan transfer edildi.')) {
-                         otherWhName = l.note.replace(' deposundan transfer edildi.', '').trim();
-                         isIncoming = true;
-                       }
-                     }
-                     
-                     if (!otherWhName) {
-                       otherWhName = 'Diğer Depo';
-                     }
-                     
-                     const cleanCurrent = currentWhName;
-                     const cleanOther = otherWhName;
-                     
-                     if (isIncoming) {
-                       directionHtml = `
-                         <div style="margin-top: 0.35rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #10B981; font-weight: 500;">
-                           <span style="background: rgba(16, 185, 129, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanOther}</span>
-                           <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                           <span style="background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanCurrent}</span>
-                         </div>
-                       `;
-                     } else {
-                       directionHtml = `
-                         <div style="margin-top: 0.35rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; color: #EF4444; font-weight: 500;">
-                           <span style="background: rgba(59, 130, 246, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanCurrent}</span>
-                           <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
-                           <span style="background: rgba(239, 68, 68, 0.1); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanOther}</span>
-                         </div>
-                       `;
-                     }
-                   }
-
-                   return `
-                     <tr style="border-bottom: 1px solid rgba(30, 41, 59, 0.5); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(30, 41, 59, 0.2)'" onmouseout="this.style.backgroundColor='transparent'">
-                       <td style="padding: 1rem; color: #E2E8F0;">${date}</td>
-                       <td style="padding: 1rem; color: #E2E8F0; font-weight: 500;">${formatUser(l.user)}</td>
-                       <td style="padding: 1rem;"><span style="color: ${typeColor}; font-weight: 600;">${typeText}</span></td>
-                       <td style="padding: 1rem; color: #E2E8F0;">
-                         <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                           <div>
-                             <span style="background-color: rgba(59, 130, 246, 0.1); color: #60A5FA; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.2);">SAP: ${l.sapNo}</span>
-                             <strong>${l.materialName || 'Bilinmeyen Malzeme'}</strong>
-                           </div>
-                           ${directionHtml}
+                   const headerRowHtml = `
+                     <tr class="date-group-header" onclick="window.toggleDateGroup('${dayStr}')" style="background-color: rgba(30, 41, 59, 0.6); cursor: pointer; user-select: none; border-bottom: 1px solid #1E293B;">
+                       <td colspan="${isMaterialManager ? 8 : 7}" style="padding: 0.75rem 1rem; font-weight: 700; color: #14F195;">
+                         <div style="display: flex; align-items: center; gap: 8px;">
+                           <i class="fa-solid fa-chevron-down date-group-icon" data-group-icon-date="${dayStr}" style="transition: transform 0.2s; color: #14F195;"></i>
+                           <span style="font-family: 'Rajdhani', sans-serif; font-size: 1rem; letter-spacing: 0.5px;">${dayStr}</span>
+                           <span style="font-size: 0.75rem; background: rgba(20, 241, 149, 0.1); border: 1px solid rgba(20, 241, 149, 0.2); padding: 2px 6px; border-radius: 4px; color: #14F195; font-weight: 600;">${dayLogs.length} İşlem</span>
                          </div>
                        </td>
-                       <td style="padding: 1rem; color: ${qtyColor}; font-weight: 700;">${qtyText} Adet</td>
-                       <td style="padding: 1rem; color: #94A3B8;">${l.note || ''}</td>
-                       ${isMaterialManager ? `
-                        <td style="padding: 1rem; text-align: right;">
-                          <button onclick="window.deleteDepoLog('${l.id}')" style="background: transparent; border: none; color: #EF4444; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'" title="Kayıt Sil">
-                            <i class="fa-solid fa-trash-can"></i>
-                          </button>
-                        </td>
-                        ` : ''}
                      </tr>
                    `;
+                   
+                   const rowsHtml = dayLogs.map((l: any) => {
+                     const logDate = l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000) : null;
+                     const timeStr = logDate ? logDate.toLocaleTimeString('tr-TR') : '-';
+                     
+                     const formatUser = (user: string): string => {
+                        if (!user) return 'Sistem';
+                        const trimmed = user.trim();
+                        
+                        // Match TMXX Bakım Teknisyeni
+                        const match0 = trimmed.match(/^TM(\d+)\s*Bakım\s*Teknisyeni$/i);
+                        if (match0) {
+                          return `Team${match0[1]}`;
+                        }
+
+                        // Match dh-tmXX@demirerholding.com
+                        const match = trimmed.match(/^dh-tm(\d+)@demirerholding\.com$/i);
+                        if (match) {
+                          return `Team${match[1]}`;
+                        }
+  
+                        // Match dhtmXX@demirerholding.com
+                        const match2 = trimmed.match(/^dhtm(\d+)@demirerholding\.com$/i);
+                        if (match2) {
+                          return `Team${match2[1]}`;
+                        }
+  
+                        // Match dh-tmXX
+                        const match3 = trimmed.match(/^dh-tm(\d+)$/i);
+                        if (match3) {
+                          return `Team${match3[1]}`;
+                        }
+  
+                        // Match TeamXX or Team XX
+                        const match4 = trimmed.match(/^team\s*(\d+)$/i);
+                        if (match4) {
+                          return `Team${match4[1]}`;
+                        }
+  
+                        if (trimmed.startsWith('team_')) {
+                          return trimmed.replace('team_', '').replace(/_/g, ' ');
+                        }
+  
+                        if (trimmed.includes('@')) {
+                          return trimmed.split('@')[0];
+                        }
+  
+                        return trimmed;
+                      };
+                      
+                     let badgeHtml = '';
+                     if (l.type === 'ADD') {
+                       badgeHtml = `
+                         <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; box-shadow: 0 0 6px rgba(16, 185, 129, 0.15);">
+                           <i class="fa-solid fa-circle-plus" style="font-size: 0.75rem;"></i> STOK GİRİŞ
+                         </span>
+                       `;
+                     } else if (l.type === 'REMOVE') {
+                       badgeHtml = `
+                         <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; box-shadow: 0 0 6px rgba(239, 68, 68, 0.15);">
+                           <i class="fa-solid fa-circle-minus" style="font-size: 0.75rem;"></i> STOK ÇIKIŞ
+                         </span>
+                       `;
+                     } else if (l.type === 'TRANSFER') {
+                       badgeHtml = `
+                         <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; box-shadow: 0 0 6px rgba(245, 158, 11, 0.15);">
+                           <i class="fa-solid fa-circle-arrow-right" style="font-size: 0.75rem;"></i> TRANSFER
+                         </span>
+                       `;
+                     } else {
+                       badgeHtml = `
+                         <span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.72rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; box-shadow: 0 0 6px rgba(59, 130, 246, 0.15);">
+                           <i class="fa-solid fa-pen" style="font-size: 0.75rem;"></i> GÜNCELLEME
+                         </span>
+                       `;
+                     }
+                     
+                     const qtyColor = l.quantity > 0 ? '#10B981' : '#EF4444';
+                     const qtyText = l.quantity > 0 ? `+${l.quantity}` : `${l.quantity}`;
+  
+                     // DIRECTION INDICATOR FOR TRANSFER
+                     let directionHtml = '';
+                     if (l.type === 'TRANSFER') {
+                       const currentWhName = currentWarehouse.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim();
+                       let otherWhName = '';
+                       let isIncoming = l.quantity > 0;
+                       
+                       if (l.note) {
+                         if (l.note.includes(' deposuna transfer edildi.')) {
+                           otherWhName = l.note.replace(' deposuna transfer edildi.', '').trim();
+                           isIncoming = false;
+                         } else if (l.note.includes(' deposundan transfer edildi.')) {
+                           otherWhName = l.note.replace(' deposundan transfer edildi.', '').trim();
+                           isIncoming = true;
+                         }
+                       }
+                       
+                       if (!otherWhName) {
+                         otherWhName = 'Diğer Depo';
+                       }
+                       
+                       const cleanCurrent = formatUser(currentWhName);
+                       const cleanOther = formatUser(otherWhName);
+                       
+                       if (isIncoming) {
+                         directionHtml = `
+                           <div style="font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; color: #10B981; font-weight: 600;">
+                             <span style="background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.2); white-space: nowrap;">${cleanOther}</span>
+                             <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                             <span style="background: rgba(59, 130, 246, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); white-space: nowrap;">${cleanCurrent}</span>
+                           </div>
+                         `;
+                       } else {
+                         directionHtml = `
+                           <div style="font-size: 0.75rem; display: inline-flex; align-items: center; gap: 0.35rem; color: #EF4444; font-weight: 600;">
+                             <span style="background: rgba(59, 130, 246, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(59, 130, 246, 0.2); white-space: nowrap;">${cleanCurrent}</span>
+                             <i class="fa-solid fa-arrow-right-long" style="font-size: 0.7rem; opacity: 0.8;"></i>
+                             <span style="background: rgba(239, 68, 68, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.2); white-space: nowrap;">${cleanOther}</span>
+                           </div>
+                         `;
+                       }
+                     }
+  
+                     // Retrieve serial number (check log document first, fall back to current inventory)
+                     let serialNo = l.serialNo || '';
+                     if (!serialNo && inventoryItems) {
+                       const matched = inventoryItems.find((inv: any) => inv.id === l.itemId || inv.sapNo === l.sapNo);
+                       if (matched) {
+                         serialNo = matched.serialNo || '';
+                       }
+                     }
+  
+                     return `
+                       <tr data-group-date="${dayStr}" style="border-bottom: 1px solid rgba(30, 41, 59, 0.5); transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='rgba(30, 41, 59, 0.2)'" onmouseout="this.style.backgroundColor='transparent'">
+                         <td style="padding: 1rem; color: #E2E8F0; white-space: nowrap;">${timeStr}</td>
+                         <td style="padding: 1rem; color: #E2E8F0; font-weight: 500; white-space: nowrap;">${formatUser(l.user)}</td>
+                         <td style="padding: 1rem; white-space: nowrap;">${badgeHtml}</td>
+                         <td style="padding: 1rem; white-space: nowrap;">${directionHtml || '<span style="color: #475569; font-size: 0.85rem;">-</span>'}</td>
+                         <td style="padding: 1rem; color: #E2E8F0;">
+                           <div style="display: flex; flex-direction: column; gap: 4px;">
+                             <div style="display: flex; align-items: center; gap: 0.5rem;">
+                               <span style="background-color: rgba(59, 130, 246, 0.1); color: #60A5FA; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(59, 130, 246, 0.2); white-space: nowrap;">SAP: ${l.sapNo}</span>
+                               <span style="font-weight: 600; color: #FFF;">${l.materialName || 'Bilinmeyen Malzeme'}</span>
+                             </div>
+                             ${serialNo && serialNo !== '-' ? `
+                               <div style="font-size: 0.8rem; color: #10B981; font-weight: 600; font-family: monospace; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                                 <i class="fa-solid fa-microchip" style="font-size: 0.75rem;"></i> Seri No: <span style="color: #FFF; font-weight: normal;">${serialNo}</span>
+                               </div>
+                             ` : ''}
+                           </div>
+                         </td>
+                         <td style="padding: 1rem; color: ${qtyColor}; font-weight: 700; white-space: nowrap;">${qtyText} Adet</td>
+                         <td style="padding: 1rem; color: #94A3B8;">${l.note || ''}</td>
+                         ${isMaterialManager ? `
+                          <td style="padding: 1rem; text-align: right;">
+                            <button onclick="window.deleteDepoLog('${l.id}')" style="background: transparent; border: none; color: #EF4444; cursor: pointer; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'" title="Kayıt Sil">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                          </td>
+                          ` : ''}
+                       </tr>
+                     `;
+                   }).join('');
+                   
+                   return headerRowHtml + rowsHtml;
                  }).join('')}
                </tbody>
              </table>
@@ -2896,74 +3873,103 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
       // Fetch audit history if needed
       if (tabName === 'SAYIM_GECMISI') {
-         const container = document.getElementById('audit-history-container');
-         if (container) {
-           container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
-           try {
-             const audits = await warehouseService.getAuditHistory(currentWarehouse.id);
-             (window as any).__cachedAudits = audits;
-             if (audits.length === 0) {
-               container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
-             } else {
-               container.innerHTML = audits.map(audit => {
-                 const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : audit.date;
-                 const diffColor = audit.totalDiff < 0 ? '#EF4444' : (audit.totalDiff > 0 ? '#F59E0B' : '#14F195');
-                 const totalDiffText = audit.totalDiff > 0 ? '+' + audit.totalDiff : audit.totalDiff;
-                 
-                 const resultsHtml = audit.results.map(r => {
-                    const isDiff = r.diff !== 0;
-                    const rColor = r.diff < 0 ? '#EF4444' : (r.diff > 0 ? '#F59E0B' : '#14F195');
-                    return `
-                      <div style="display: flex; justify-content: space-between; padding: 0.5rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-size: 0.85rem; align-items: center;">
-                        <span style="color: #E2E8F0; width: 40%; display: flex; align-items: center; gap: 0.5rem;">
-                           <span style="background-color: rgba(59, 130, 246, 0.15); color: #60A5FA; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; border: 1px solid rgba(59, 130, 246, 0.3);">SAP: ${r.sapNo || '-'}</span>
-                           <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.description}">${r.description}</span>
-                        </span>
-                        <span style="color: #94A3B8; width: 15%;">Sys: ${r.systemQty}</span>
-                        <span style="color: #94A3B8; width: 15%;">Fizik: ${r.physicalQty}</span>
-                        <span style="color: ${rColor}; font-weight: 600; width: 15%;">Fark: ${r.diff > 0 ? '+'+r.diff : r.diff}</span>
-                        <span style="color: #64748B; width: 15%; font-style: italic;">${r.note || 'Uyumlu'}</span>
-                      </div>
-                    `;
-                 }).join('');
+          const container = document.getElementById('audit-history-container');
+          if (container) {
+            container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
+            try {
+              const audits = await warehouseService.getAuditHistory(currentWarehouse.id);
+              (window as any).__cachedAudits = audits;
+              if (audits.length === 0) {
+                container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
+              } else {
+                container.innerHTML = audits.map(audit => {
+                  const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : audit.date;
+                  const diffColor = audit.totalDiff < 0 ? '#EF4444' : (audit.totalDiff > 0 ? '#F59E0B' : '#14F195');
+                  const totalDiffText = audit.totalDiff > 0 ? '+' + audit.totalDiff : audit.totalDiff;
+                  
+                  const sortedResults = [...audit.results].map(r => {
+                     let shelfNo = r.shelfNo || '';
+                     if (!shelfNo && (window as any).currentInventoryData) {
+                       const invItem = (window as any).currentInventoryData.find((i: any) => i.sapNo === r.sapNo || (i.sapNo === '' && i.name === r.description));
+                       if (invItem) shelfNo = invItem.shelfNo || '';
+                     }
+                     return { ...r, calculatedShelfNo: shelfNo };
+                  }).sort((a, b) => {
+                     const locA = String(a.calculatedShelfNo || '').trim().toUpperCase();
+                     const locB = String(b.calculatedShelfNo || '').trim().toUpperCase();
+                     if (!locA && locB) return 1;
+                     if (locA && !locB) return -1;
+                     let locCmp = 0;
+                     if (locA && locB) {
+                         locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+                     }
+                     if (locCmp !== 0) return locCmp;
+                     const sapA = String(a.sapNo || '').trim();
+                     const sapB = String(b.sapNo || '').trim();
+                     if (sapA && sapB) {
+                         const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
+                         if (sapCmp !== 0) return sapCmp;
+                     }
+                     return String(a.description || '').localeCompare(String(b.description || ''));
+                  });
 
-                 return `
-                   <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 8px; margin-bottom: 1rem; overflow: hidden;">
-                     <div onclick="const content = this.nextElementSibling; const icon = this.querySelector('.fa-chevron-down, .fa-chevron-up'); if(content.style.display === 'none') { content.style.display = 'block'; icon.classList.replace('fa-chevron-down', 'fa-chevron-up'); } else { content.style.display = 'none'; icon.classList.replace('fa-chevron-up', 'fa-chevron-down'); }" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; cursor: pointer; background-color: #0F172A; border-bottom: 1px solid #1E293B; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#0F172A'">
-                       <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                         <span style="font-weight: 600; color: #FFFFFF; font-size: 0.95rem;"><i class="fa-solid fa-calendar-day" style="color: #3B82F6; margin-right: 0.5rem;"></i>${date}</span>
-                         <span style="color: #94A3B8; font-size: 0.8rem;"><i class="fa-solid fa-user" style="margin-right: 0.3rem;"></i>${audit.user}</span>
+                  const resultsHtml = sortedResults.map(r => {
+                     const isDiff = r.diff !== 0;
+                     const rColor = r.diff < 0 ? '#EF4444' : (r.diff > 0 ? '#F59E0B' : '#14F195');
+                     const shelfNo = r.calculatedShelfNo || '---';
+
+                     return `
+                       <div style="display: flex; justify-content: space-between; padding: 0.5rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-size: 0.85rem; align-items: center;">
+                         <span style="color: #E2E8F0; width: 35%; display: flex; align-items: center; gap: 0.5rem; min-width: 0;">
+                            <span style="background-color: rgba(59, 130, 246, 0.15); color: #60A5FA; padding: 0.2rem 0; width: 95px; display: inline-flex; justify-content: center; align-items: center; flex-shrink: 0; border-radius: 4px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; border: 1px solid rgba(59, 130, 246, 0.3);">SAP: ${r.sapNo || '-'}</span>
+                            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.description}">${r.description}</span>
+                         </span>
+                         <span style="color: #10B981; font-weight: 600; width: 15%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><i class="fa-solid fa-box" style="margin-right: 0.3rem; opacity: 0.7;"></i>Raf: ${shelfNo}</span>
+                         <span style="color: #94A3B8; width: 12%;">Sys: ${r.systemQty}</span>
+                         <span style="color: #94A3B8; width: 12%;">Fizik: ${r.physicalQty}</span>
+                         <span style="color: ${rColor}; font-weight: 600; width: 11%;">Fark: ${r.diff > 0 ? '+'+r.diff : r.diff}</span>
+                         <span style="color: #64748B; width: 15%; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${r.note || 'Sayılan Uyumlu'}">${r.note || 'Sayılan Uyumlu'}</span>
                        </div>
-                       <div style="display: flex; align-items: center; gap: 1.5rem;">
-                         <div style="display: flex; flex-direction: column; text-align: right; gap: 0.2rem;">
-                           <span style="font-weight: 600; color: #E2E8F0; font-size: 0.85rem;">Kalem: ${audit.totalItems}</span>
-                           <span style="font-weight: 600; color: ${diffColor}; font-size: 0.85rem;">Fark: ${totalDiffText}</span>
-                         </div>
-                         ${audit.imported ? `
-                            <span style="color: #64748B; font-size: 0.8rem; font-style: italic; display: inline-flex; align-items: center; gap: 0.25rem;" title="Envanter stok aktarımı sayımdan sonra yapıldı">
-                              <i class="fa-solid fa-circle-check" style="color: #10B981;"></i> Aktarıldı
-                            </span>
-                          ` : `
-                            <button onclick="event.stopPropagation(); window.importAuditToInventory('${audit.id}')" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; color: #3B82F6; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'">
-                              <i class="fa-solid fa-file-import"></i> Aktar
-                            </button>
-                          `}
-                         <button onclick="event.stopPropagation(); window.downloadSingleAuditExcel('${audit.id}')" style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; color: #10B981; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#10B981'; this.style.color='#0A0E17'" onmouseout="this.style.backgroundColor='rgba(16, 185, 129, 0.1)'; this.style.color='#10B981'">
-                           <i class="fa-solid fa-file-excel"></i> Excel
-                         </button>
-                         ${isMaterialManager ? `
-                          <button onclick="event.stopPropagation(); window.deleteAuditRecord('${audit.id}')" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; transition: all 0.2s;" onmouseover="this.style.backgroundColor='#EF4444'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'; this.style.color='#EF4444'">
-                            <i class="fa-solid fa-trash"></i> Sil
+                     `;
+                  }).join('');
+
+                  return `
+                    <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 8px; margin-bottom: 1rem; overflow: hidden;">
+                      <div onclick="window.toggleAuditCollapse(this)" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; cursor: pointer; background-color: #0F172A; border-bottom: 1px solid #1E293B; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#0F172A'">
+                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                          <span style="font-weight: 600; color: #FFFFFF; font-size: 0.95rem;"><i class="fa-solid fa-calendar-day" style="color: #3B82F6; margin-right: 0.5rem;"></i>${date}</span>
+                          <span style="color: #94A3B8; font-size: 0.8rem;"><i class="fa-solid fa-user" style="margin-right: 0.3rem;"></i>${audit.user}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 1rem; height: 32px;">
+                          <div style="display: flex; flex-direction: column; text-align: right; justify-content: center; gap: 2px; line-height: 1.1;">
+                            <span style="font-weight: 600; color: #E2E8F0; font-size: 0.8rem;">Kalem: <strong style="color: #FFF;">${audit.totalItems}</strong></span>
+                            <span style="font-weight: 600; color: ${diffColor}; font-size: 0.8rem;">Fark: <strong>${totalDiffText}</strong></span>
+                          </div>
+                          ${audit.imported ? `
+                              <button disabled style="background-color: rgba(16, 185, 129, 0.12); border: 1px solid #10B981; color: #10B981; padding: 0 0.8rem; height: 32px; border-radius: 6px; cursor: default; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; box-sizing: border-box;">
+                                <i class="fa-solid fa-circle-check"></i> Aktarıldı
+                              </button>
+                            ` : `
+                              <button onclick="event.stopPropagation(); window.importAuditToInventory('${audit.id}')" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; color: #3B82F6; padding: 0 0.8rem; height: 32px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; transition: all 0.2s; box-sizing: border-box;" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'">
+                                <i class="fa-solid fa-file-import"></i> Aktar
+                              </button>
+                            `}
+                          <button onclick="event.stopPropagation(); window.downloadSingleAuditExcel('${audit.id}')" style="background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; color: #10B981; padding: 0 0.8rem; height: 32px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; transition: all 0.2s; box-sizing: border-box;" onmouseover="this.style.backgroundColor='#10B981'; this.style.color='#0A0E17'" onmouseout="this.style.backgroundColor='rgba(16, 185, 129, 0.1)'; this.style.color='#10B981'">
+                            <i class="fa-solid fa-file-excel"></i> Excel
                           </button>
+                          ${isMaterialManager ? `
+                            <button onclick="event.stopPropagation(); window.deleteAuditRecord('${audit.id}')" style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; color: #EF4444; padding: 0 0.8rem; height: 32px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; transition: all 0.2s; box-sizing: border-box;" onmouseover="this.style.backgroundColor='#EF4444'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'; this.style.color='#EF4444'">
+                              <i class="fa-solid fa-trash"></i> Sil
+                            </button>
                           ` : ''}
-                         <div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background-color: #1E293B; border-radius: 4px;">
-                           <i class="fa-solid fa-chevron-down" style="color: #94A3B8; font-size: 0.8rem; transition: transform 0.2s;"></i>
-                         </div>
-                       </div>
-                     </div>
-                     <div style="display: none; padding: 1rem; max-height: 400px; overflow-y: auto; background-color: #0A0E17;">
-                        ${resultsHtml}
+                          <div style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background-color: #1E293B; border-radius: 6px; box-sizing: border-box;">
+                            <i class="fa-solid fa-chevron-down" style="color: #94A3B8; font-size: 0.8rem; transition: transform 0.2s;"></i>
+                          </div>
+                        </div>
                       </div>
+                      <div style="display: none; padding: 1rem; max-height: 400px; overflow-y: auto; background-color: #0A0E17;">
+                         ${resultsHtml}
+                       </div>
                     </div>
                   `;
                 }).join('');
@@ -3021,7 +4027,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       let hasError = false;
       let firstErrorItemId = '';
 
-      const auditInventoryItems = currentWarehouse.id === 'W11'
+      const auditInventoryItems = currentWarehouse.id === 'MTA'
         ? inventoryItems
         : inventoryItems.filter(item => item.condition !== 'DEFECT');
 
@@ -3126,6 +4132,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
       if (!confirm(confirmMessage)) return;
 
+      const startTime = localStorage.getItem(`draft_audit_start_time_${currentWarehouse.id}`) || new Date().toISOString();
+      const endTime = new Date().toISOString();
+
       const originalText = btn.innerText;
       btn.innerText = 'Kaydediliyor...';
       btn.disabled = true;
@@ -3134,21 +4143,37 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         if (manualResults.length > 0) {
             const totalDiff = manualResults.reduce((sum: number, r: any) => sum + r.diff, 0);
             const userProfile = getUserProfile();
-            const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
+            const displayName = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
+            const user = userProfile?.team ? `${displayName} (${userProfile.team})` : displayName;
             
             await warehouseService.saveAudit(currentWarehouse.id, {
               user: user,
               totalItems: manualResults.length,
               totalDiff: totalDiff,
-              results: manualResults
+              results: manualResults,
+              startTime: startTime,
+              endTime: endTime
             });
         }
 
-        for (const update of shelfUpdates) {
-            await warehouseService.updateMaterial(currentWarehouse.id, update.itemId, { shelfNo: update.shelfNo });
+        if (shelfUpdates.length > 0) {
+            await Promise.all(
+              shelfUpdates.map(update =>
+                warehouseService.updateMaterial(currentWarehouse.id, update.itemId, { shelfNo: update.shelfNo })
+              )
+            );
+        }
+
+        // Clear Firestore draft audit document
+        try {
+          const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+          await deleteDoc(draftDocRef);
+        } catch (e) {
+          console.error("Failed to clear Firestore draft on save:", e);
         }
 
         localStorage.removeItem(`draft_audit_${currentWarehouse.id}`);
+        localStorage.removeItem(`draft_audit_start_time_${currentWarehouse.id}`);
 
         alert('Değişiklikler başarıyla kaydedildi!');
         if ((window as any).selectWarehouseAndNavigate) {
@@ -3422,37 +4447,106 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       if(!confirm('Bu sayım geçmişindeki ürünleri mevcut envantere direkt eklemek istediğinize emin misiniz? (Envanterde varsa güncellenir, yoksa yeni eklenir)')) return;
       const audit = (window as any).__cachedAudits?.find((a: any) => a.id === auditId);
       if(!audit) return;
+
+      // 1. Create and inject cyber progress overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'audit-transfer-progress-overlay';
+      overlay.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,14,23,0.94); z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding: 2rem; box-sizing: border-box; transition: all 0.3s ease;';
+      
+      overlay.innerHTML = `
+        <div class="glass-panel" style="width: 100%; max-width: 480px; padding: 2.5rem; text-align: center; border-top: 4px solid var(--accent-cyan); box-shadow: 0 20px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; gap: 1.5rem; background: #111827; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
+          <div style="color: #00f2ff; text-shadow: 0 0 12px rgba(0,242,255,0.4);">
+            <i class="fa-solid fa-cloud-arrow-up fa-spin-pulse" style="font-size: 3rem;"></i>
+          </div>
+          
+          <div>
+            <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.4rem; margin: 0 0 0.5rem 0; font-weight: 800; letter-spacing: 2px; color: #fff;">SAYIM VERİLERİ AKTARILIYOR</h3>
+            <p style="font-size: 0.8rem; color: #94A3B8; margin: 0; line-height: 1.4;">Sayım sonuçları toplu işlemle sistem envanterine işleniyor. Lütfen tarayıcınızı kapatmayınız.</p>
+          </div>
+          
+          <!-- Progress Bar Container -->
+          <div style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); height: 12px; border-radius: 6px; overflow: hidden; position: relative;">
+            <div id="transfer-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00f2ff, #00ff87); transition: width 0.1s ease; border-radius: 6px;"></div>
+          </div>
+          
+          <!-- Percent Text -->
+          <div style="font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 2rem; color: #00f2ff; text-shadow: 0 0 10px rgba(0,242,255,0.35);">
+            <span id="transfer-progress-percent">0%</span>
+          </div>
+          
+          <!-- Item Counter -->
+          <div style="font-size: 0.8rem; font-weight: 700; color: #94A3B8; font-family: monospace; letter-spacing: 0.5px;">
+            İşlenen: <span id="transfer-progress-counter" style="color: #fff;">0 / 0</span>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
       
       try {
         let addedCount = 0;
         let updatedCount = 0;
+
+        // Filter results: only update materials where the physical quantity is actually different from the current quantity!
+        const itemsToUpdate = audit.results.filter((res: any) => {
+          const existingItem = inventoryItems.find((item: any) => item.sapNo === res.sapNo || (item.sapNo === '' && item.name === res.description));
+          if (!existingItem) return true; // New item, need to add
+          return existingItem.quantity !== res.physicalQty; // Quantity has changed, need to update
+        });
+
+        const totalToUpdate = itemsToUpdate.length;
+
+        const progressPercentEl = document.getElementById('transfer-progress-percent');
+        const progressBarEl = document.getElementById('transfer-progress-bar');
+        const progressCounterEl = document.getElementById('transfer-progress-counter');
         
-        for (const res of audit.results) {
-           const existingItem = inventoryItems.find((i: any) => i.sapNo === res.sapNo || (i.sapNo === '' && i.name === res.description));
-           if (existingItem) {
-              await warehouseService.updateMaterial(currentWarehouse.id, existingItem.id, { quantity: res.physicalQty });
-              updatedCount++;
-           } else {
-              await warehouseService.addMaterial(currentWarehouse.id, {
-                 sapNo: res.sapNo || '',
-                 description: res.description || 'Bilinmeyen Malzeme',
-                 quantity: res.physicalQty,
-                 shelfNo: 'Tanımsız'
-              });
-              addedCount++;
-           }
+        if (progressCounterEl) progressCounterEl.innerText = `0 / ${totalToUpdate}`;
+
+        if (totalToUpdate > 0) {
+          for (let i = 0; i < totalToUpdate; i++) {
+            const res = itemsToUpdate[i];
+            const existingItem = inventoryItems.find((item: any) => item.sapNo === res.sapNo || (item.sapNo === '' && item.name === res.description));
+
+            if (existingItem) {
+               await warehouseService.updateMaterial(currentWarehouse.id, existingItem.id, { quantity: res.physicalQty });
+               updatedCount++;
+            } else {
+               await warehouseService.addMaterial(currentWarehouse.id, {
+                  sapNo: res.sapNo || '',
+                  description: res.description || 'Bilinmeyen Malzeme',
+                  quantity: res.physicalQty,
+                  shelfNo: 'Tanımsız'
+               });
+               addedCount++;
+            }
+
+            // Update Progress UI
+            const pct = Math.round(((i + 1) / totalToUpdate) * 100);
+            if (progressPercentEl) progressPercentEl.innerText = `${pct}%`;
+            if (progressBarEl) progressBarEl.style.width = `${pct}%`;
+            if (progressCounterEl) progressCounterEl.innerText = `${i + 1} / ${totalToUpdate}`;
+
+            // Relinquish control briefly
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+        } else {
+          // If no changes, complete immediately
+          if (progressPercentEl) progressPercentEl.innerText = '100%';
+          if (progressBarEl) progressBarEl.style.width = '100%';
+          if (progressCounterEl) progressCounterEl.innerText = '0 / 0';
         }
         
         // Mark as imported in Firestore
         await warehouseService.updateAudit(currentWarehouse.id, auditId, { imported: true });
         
-        alert("Envanter stok aktarımı sayımdan sonra yapıldı.");
         if ((window as any).selectWarehouseAndNavigate) {
             (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        alert('Aktarım sırasında hata oluştu.');
+        alert('Aktarım sırasında hata oluştu: ' + (err?.message || err));
+      } finally {
+        // Always clean up overlay
+        overlay.remove();
       }
     };
 
@@ -3505,6 +4599,26 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       event.target.value = ''; // Reset file input
     };
 
+    (window as any).toggleAuditCollapse = (el: HTMLElement) => {
+       const content = el.nextElementSibling as HTMLElement;
+       if (!content) return;
+       const icon = el.querySelector('.fa-chevron-down, .fa-chevron-up') as HTMLElement;
+       const isHidden = content.style.display === 'none' || content.style.display === '';
+       if (isHidden) {
+          content.style.display = 'block';
+          if (icon) {
+             icon.classList.remove('fa-chevron-down');
+             icon.classList.add('fa-chevron-up');
+          }
+       } else {
+          content.style.display = 'none';
+          if (icon) {
+             icon.classList.remove('fa-chevron-up');
+             icon.classList.add('fa-chevron-down');
+          }
+       }
+    };
+
     (window as any).deleteAuditRecord = async (auditId: string) => {
        if (!confirm('Bu sayım geçmişi kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) return;
        try {
@@ -3519,8 +4633,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        }
     };
     
-    (window as any).saveDraftAudit = () => {
+    (window as any).saveDraftAudit = async () => {
        const inputs = document.querySelectorAll('.manual-audit-input');
+       const newDraftData = { ...draftData };
        inputs.forEach((input: any) => {
          const itemId = input.dataset.id;
          const shelfInput = document.getElementById('manual-shelf-' + itemId) as HTMLInputElement;
@@ -3530,15 +4645,32 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          const noteVal = noteInput ? noteInput.value.trim() : '';
 
          if (input.value !== '' || (shelfVal !== originalShelf)) {
-           draftData[itemId] = { 
+           newDraftData[itemId] = { 
                qty: input.value, 
                note: noteVal, 
                shelf: shelfVal 
            };
          } else {
-           delete draftData[itemId];
+           delete newDraftData[itemId];
          }
        });
+       draftData = newDraftData;
+
+       if (currentWarehouse) {
+         try {
+           const userProfile = getUserProfile();
+           const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
+           const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+           await setDoc(draftDocRef, {
+             draftData: newDraftData,
+             updatedBy: user,
+             lastUpdated: serverTimestamp()
+           });
+         } catch (e) {
+           console.error("Failed to save draft to Firestore:", e);
+         }
+       }
+
        localStorage.setItem(`draft_audit_${currentWarehouse.id}`, JSON.stringify(draftData));
        if ((window as any).updateManualSummaryBar) {
          (window as any).updateManualSummaryBar();
@@ -3550,8 +4682,16 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        (window as any).renderManualAuditTable();
     };
 
-    (window as any).clearDraftAudit = () => {
+    (window as any).clearDraftAudit = async () => {
        if(confirm('Mevcut sayım taslağını tamamen silip sıfırdan başlamak istediğinize emin misiniz?')) {
+          if (currentWarehouse) {
+            try {
+              const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+              await deleteDoc(draftDocRef);
+            } catch (e) {
+              console.error("Failed to clear draft in Firestore:", e);
+            }
+          }
           localStorage.removeItem(`draft_audit_${currentWarehouse.id}`);
           draftData = {};
           if ((window as any).selectWarehouseAndNavigate) {
@@ -3560,7 +4700,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        }
     };
 
-    (window as any).onManualQtyChange = (inputId: string, noteId: string, sysQty: number) => {
+    (window as any).onManualQtyChange = async (inputId: string, noteId: string, sysQty: number) => {
       const input = document.getElementById(inputId) as HTMLInputElement;
       const noteInput = document.getElementById(noteId) as HTMLInputElement;
       if (!input || !noteInput) return;
@@ -3577,14 +4717,39 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       const shelfInput = document.getElementById('manual-shelf-' + itemId) as HTMLInputElement;
       const shelfVal = shelfInput ? shelfInput.value.trim() : '';
       
-      draftData[itemId] = {
+      const newDraftData = { ...draftData };
+      newDraftData[itemId] = {
         qty: input.value,
         note: noteInput.value.trim(),
         shelf: shelfVal
       };
 
       if (input.value === '' && shelfVal === (shelfInput ? (shelfInput.dataset.original || '').trim() : '')) {
-         delete draftData[itemId];
+         delete newDraftData[itemId];
+      }
+      draftData = newDraftData;
+
+      // Ensure startTime is set
+      let localStartTime = localStorage.getItem(`draft_audit_start_time_${currentWarehouse.id}`);
+      if (!localStartTime) {
+         localStartTime = new Date().toISOString();
+         localStorage.setItem(`draft_audit_start_time_${currentWarehouse.id}`, localStartTime);
+      }
+
+      if (currentWarehouse) {
+        try {
+          const userProfile = getUserProfile();
+          const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
+          const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+          await setDoc(draftDocRef, {
+            draftData: newDraftData,
+            updatedBy: user,
+            lastUpdated: serverTimestamp(),
+            startTime: localStartTime
+          });
+        } catch (e) {
+          console.error("Failed to save draft to Firestore:", e);
+        }
       }
 
       localStorage.setItem(`draft_audit_${currentWarehouse.id}`, JSON.stringify(draftData));
@@ -3619,48 +4784,88 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   };
 
   // Load draft data for manual audit
-  const draftKey = `draft_audit_${currentWarehouse.id}`;
-  const draftStr = localStorage.getItem(draftKey);
-  const draftData = draftStr ? JSON.parse(draftStr) : {};
+  let draftData: any = {};
+  let startTime = '';
+  if (currentWarehouse) {
+    try {
+      const draftDocRef = doc(db, 'warehouses', currentWarehouse.id, 'active_audit', 'draft');
+      const draftSnap = await getDoc(draftDocRef);
+      if (draftSnap.exists()) {
+        const data = draftSnap.data();
+        draftData = data.draftData || {};
+        startTime = data.startTime || '';
+      }
+    } catch (e) {
+      console.error("Failed to load initial Firestore draft audit:", e);
+    }
+    
+    // Fallback to localStorage if Firestore draft is empty or failed
+    if (Object.keys(draftData).length === 0) {
+      try {
+        const localDraft = localStorage.getItem(`draft_audit_${currentWarehouse.id}`);
+        if (localDraft) {
+          draftData = JSON.parse(localDraft) || {};
+        }
+      } catch (err) {
+        console.error("Failed to load localStorage draft fallback:", err);
+      }
+    }
+
+    // Set start time if active draft but no start time, or initialize it
+    if (Object.keys(draftData).length > 0) {
+       if (!startTime) {
+          startTime = localStorage.getItem(`draft_audit_start_time_${currentWarehouse.id}`) || '';
+       }
+       if (!startTime) {
+          startTime = new Date().toISOString();
+          localStorage.setItem(`draft_audit_start_time_${currentWarehouse.id}`, startTime);
+       }
+    }
+  }
 
   return `
     <div style="background-color: #0A0E17; min-height: 100vh; color: #E2E8F0; font-family: 'Inter', sans-serif; padding: 2rem; box-sizing: border-box; position: relative;">
       
       <!-- Header Section -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <div>
-          <h1 style="font-size: 1.5rem; font-weight: 600; color: #FFFFFF; margin: 0;">${warehouseName}</h1>
-          <div style="font-size: 0.85rem; color: #64748B; margin-top: 0.25rem;">Stok ve Envanter Sistemi</div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <button onclick="window.selectWarehouseAndNavigate(null)" style="background: none; border: none; color: #94A3B8; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0.5rem; border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.color='#FFFFFF'; this.style.backgroundColor='#1E293B';" onmouseout="this.style.color='#94A3B8'; this.style.backgroundColor='transparent';">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <div>
+            <h1 style="font-size: 1.5rem; font-weight: 600; color: #FFFFFF; margin: 0;">${warehouseName}</h1>
+            <div style="font-size: 0.85rem; color: #64748B; margin-top: 0.25rem;">Stok ve Envanter Sistemi</div>
+          </div>
         </div>
-        <div id="inventory-action-bar" style="display: ${currentTab === 'INVENTORY' ? 'flex' : 'none'}; gap: 0.75rem; align-items: center;">
+        <div id="inventory-action-bar" style="display: ${currentTab === 'INVENTORY' ? 'flex' : 'none'}; gap: 0.5rem; align-items: center;">
           <input 
             id="inventory-search-input"
             oninput="window.filterInventory()"
             type="text" 
             placeholder="Parça adı veya SAP numarası..." 
-            style="height: 42px; background-color: #111827; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; width: 280px; outline: none; transition: all 0.2s;"
+            style="height: 34px; background-color: #111827; border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.8rem; width: 220px; outline: none; transition: all 0.2s;"
           />
-          ${currentWarehouse.id === 'W11' ? '' : `
+          ${currentWarehouse.id === 'MTA' ? '' : `
             ${isMobileWarehouse ? '' : `
-            <button onclick="window.startFastAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+            <button onclick="window.startFastAudit()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
               <i class="fa-solid fa-bolt"></i> Hızlı Sayım
             </button>
             `}
-            <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+            <button onclick="window.startQRScanner()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
               <i class="fa-solid fa-qrcode"></i> QR Tara
             </button>
-            <button onclick="window.downloadInventoryExcel()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+            <button onclick="window.downloadInventoryExcel()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
               <i class="fa-solid fa-download"></i> İndir
             </button>
             ${isMobileWarehouse ? '' : `
-            <button onclick="window.printWarehouseQR()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;" title="Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)">
+            <button onclick="window.printWarehouseQR()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;" title="Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)">
               <i class="fa-solid fa-qrcode"></i> QR Etiket Bas
             </button>
             <input type="file" id="excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleExcelUpload(event)" />
-            <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer;">
+            <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
               <i class="fa-solid fa-upload"></i> Yükle
             </button>
-            <button onclick="window.openAddNewModal()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #FFFFFF; color: #000000; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
+            <button onclick="window.openAddNewModal()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: none; background-color: #FFFFFF; color: #000000; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
               + Yeni Ekle
             </button>
             `}
@@ -3730,31 +4935,31 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       </div>
 
       <!-- Tabs Section -->
-      <div style="display: flex; gap: 1rem; border-bottom: 1px solid #1E293B; margin-bottom: 2rem; padding-bottom: 0.5rem; overflow-x: auto;">
-        <div onclick="window.switchTab('ENVANTER', 'tab-ENVANTER')" id="tab-ENVANTER" data-active="${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;">
+      <div style="display: flex; gap: 0.75rem; border-bottom: 1px solid #1E293B; margin-bottom: 2rem; padding-bottom: 0.5rem; overflow-x: auto;">
+        <div onclick="window.switchTab('ENVANTER', 'tab-ENVANTER')" id="tab-ENVANTER" data-active="${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;">
           <i class="fa-solid fa-layer-group"></i> ENVANTER
         </div>
         ${isMobileWarehouse ? `
-          <div onclick="window.switchTab('DEPO_HAREKETLERI', 'tab-DEPO_HAREKETLERI')" id="tab-DEPO_HAREKETLERI" data-active="${currentTab === 'DEPO_HAREKETLERI' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          <div onclick="window.switchTab('DEPO_HAREKETLERI', 'tab-DEPO_HAREKETLERI')" id="tab-DEPO_HAREKETLERI" data-active="${currentTab === 'DEPO_HAREKETLERI' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-clock-rotate-left"></i> DEPO HAREKETLERİ
           </div>
-          <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
           </div>
         ` : `
-          ${currentWarehouse.id !== 'W11' ? `
-            <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          ${currentWarehouse.id !== 'MTA' ? `
+            <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
               <i class="fa-solid fa-chart-line"></i> ANALİZ
             </div>
           ` : ''}
-          <div onclick="window.switchTab('SAYIM', 'tab-SAYIM')" id="tab-SAYIM" data-active="${currentTab === 'SAYIM' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'SAYIM' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          <div onclick="window.switchTab('SAYIM', 'tab-SAYIM')" id="tab-SAYIM" data-active="${currentTab === 'SAYIM' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'SAYIM' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-clipboard-check"></i> SAYIM
           </div>
-          <div onclick="window.switchTab('SAYIM_GECMISI', 'tab-SAYIM_GECMISI')" id="tab-SAYIM_GECMISI" data-active="${currentTab === 'SAYIM_GECMISI' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          <div onclick="window.switchTab('SAYIM_GECMISI', 'tab-SAYIM_GECMISI')" id="tab-SAYIM_GECMISI" data-active="${currentTab === 'SAYIM_GECMISI' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM_GECMISI' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-file-invoice"></i> SAYIM GEÇMİŞİ
           </div>
-          ${currentWarehouse.id !== 'W11' ? `
-            <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.5rem 1rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          ${currentWarehouse.id !== 'MTA' ? `
+            <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
               <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
             </div>
           ` : ''}
@@ -3763,36 +4968,136 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
       <div id="view-ENVANTER" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'block' : 'none'};">
       <!-- Summary Cards -->
-      ${currentWarehouse.id !== 'W11' ? `
-      <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 2rem;">
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Toplam Kalem</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">${inventoryItems.filter(i => i.condition !== 'DEFECT').length}</div>
+      ${(currentWarehouse.id !== 'MTA' && !isMobileWarehouse) ? `
+      <div style="display: grid; grid-template-columns: 260px 1fr; gap: 0.75rem; margin-bottom: 1.5rem; align-items: start;">
+        <!-- Sol Sütun: Toplam Kalem & Kritik Stok -->
+        <div style="display: flex; flex-direction: column; gap: 0.6rem; justify-content: space-between; height: 86px; box-sizing: border-box;">
+          <div id="total-kalem-card" onclick="window.setInventoryCriticalFilter(false)" style="background-color: ${onlyShowCritical ? '#111827' : 'rgba(59, 130, 246, 0.05)'}; border: 1px solid ${onlyShowCritical ? '#1E293B' : '#3B82F6'}; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
+              <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Kalem</div>
+            </div>
+            <div id="total-kalem-count" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${inventoryItems.filter(i => i.condition !== 'DEFECT').length}</div>
+          </div>
+          <div id="kritik-stok-card" onclick="window.setInventoryCriticalFilter(true)" style="background-color: ${onlyShowCritical ? 'rgba(239, 68, 68, 0.1)' : '#111827'}; border: 1px solid ${onlyShowCritical ? '#EF4444' : 'rgba(239, 68, 68, 0.25)'}; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fa-solid fa-triangle-exclamation" style="color: #EF4444; font-size: 0.9rem;"></i>
+              <div style="font-size: 0.75rem; color: #EF4444; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Kritik Stok</div>
+            </div>
+            <div id="kritik-stok-count" style="font-size: 1.15rem; font-weight: 800; color: #EF4444;">${inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length}</div>
+          </div>
         </div>
-        <div style="background-color: #111827; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #EF4444; text-transform: uppercase; letter-spacing: 0.05em;">Kritik Stok</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #EF4444;">${inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length}</div>
-        </div>
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Son İşlemler</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">45</div>
-        </div>
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Son Hareket</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">10 Dk Önce</div>
-        </div>
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Depo Durumu</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #14F195;">Çevrimiçi</div>
+
+        <!-- Sağ Sütun: EKİPLERİN REZERVASYON DETAYLARI -->
+        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.6rem 0.85rem; display: flex; flex-direction: column; min-height: 86px; max-height: 350px; height: auto; box-sizing: border-box;">
+          <h3 style="margin-top: 0; margin-bottom: 0.35rem; font-family: 'Rajdhani', sans-serif; font-size: 0.82rem; color: #ff9800; font-weight: 800; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.4rem; text-transform: uppercase;">
+            <i class="fa-solid fa-bookmark"></i> EKİPLERİN REZERVASYON DETAYLARI
+          </h3>
+          <div style="flex: 1; overflow-y: auto; padding-right: 0.25rem;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.72rem; text-align: left;">
+              <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); color: #64748B;">
+                  <th style="padding: 0.2rem 0.3rem; font-weight: 700;">EKİP</th>
+                  <th style="padding: 0.2rem 0.3rem; font-weight: 700;">SAP NO</th>
+                  <th style="padding: 0.2rem 0.3rem; font-weight: 700;">MALZEME TANIMI</th>
+                  <th style="padding: 0.2rem 0.3rem; font-weight: 700; text-align: center;">MİKTAR</th>
+                  <th style="padding: 0.2rem 0.3rem; font-weight: 700; text-align: right;">RAF KONUMU</th>
+                </tr>
+              </thead>
+              <tbody id="reservations-tbody">
+                ${(() => {
+                  const rows: any[] = [];
+                  
+                  // 1. Gather task-based reservations
+                  draftReservations.details.forEach((d: any) => {
+                    d.materials.forEach((m: any) => {
+                      const invItem = inventoryItems.find((item: any) => String(item.sapNo).trim() === String(m.sapNo).trim());
+                      const shelf = invItem ? (invItem.shelfNo || '-') : '-';
+                      rows.push({
+                        team: d.team,
+                        sapNo: m.sapNo,
+                        description: m.description,
+                        qty: m.used,
+                        shelf: shelf
+                      });
+                    });
+                  });
+
+                  // 2. Gather transfer-based reservations from inventory items
+                  inventoryItems.forEach((item: any) => {
+                    if (item.reservations) {
+                      Object.entries(item.reservations).forEach(([tId, qty]) => {
+                        const numericQty = Number(qty);
+                        if (numericQty > 0) {
+                          const cleanTeam = tId.replace('team_', '').replace(/_/g, ' ');
+                          
+                          // Check if we already have this exact combination of team + sapNo to prevent duplicates
+                          const exists = rows.some((r: any) => 
+                            String(r.team).toLowerCase().trim() === cleanTeam.toLowerCase().trim() && 
+                            String(r.sapNo).trim() === String(item.sapNo).trim()
+                          );
+                          
+                          if (!exists) {
+                            rows.push({
+                              team: cleanTeam,
+                              sapNo: item.sapNo,
+                              description: item.name || item.description || '-',
+                              qty: numericQty,
+                              shelf: item.shelfNo || '-'
+                            });
+                          }
+                        }
+                      });
+                    }
+                  });
+
+                  const htmlRows = rows.map((r: any) => `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); color: #E2E8F0;">
+                      <td style="padding: 0.2rem 0.3rem; font-weight: bold; color: #ff9800;">${r.team}</td>
+                      <td style="padding: 0.2rem 0.3rem; font-family: monospace;">${r.sapNo}</td>
+                      <td style="padding: 0.2rem 0.3rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.description}">${r.description}</td>
+                      <td style="padding: 0.2rem 0.3rem; text-align: center; font-weight: 700; color: #14F195;">${r.qty} Adet</td>
+                      <td style="padding: 0.2rem 0.3rem; text-align: right; color: #94A3B8;">${r.shelf}</td>
+                    </tr>
+                  `);
+                  
+                  return htmlRows.length > 0 ? htmlRows.join('') : `
+                    <tr>
+                      <td colspan="5" style="padding: 0.6rem 0.3rem; text-align: center; color: #475569; font-size: 0.72rem;">
+                        Aktif ekip rezervasyonu bulunmuyor.
+                      </td>
+                    </tr>
+                  `;
+                })()}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       ` : `
-      <div style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-bottom: 2rem;">
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-          <div style="font-size: 0.8rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Toplam Kalem</div>
-          <div style="font-size: 1.75rem; font-weight: 700; color: #FFFFFF;">${inventoryItems.length}</div>
-        </div>
-      </div>
+        ${currentWarehouse.id === 'MTA' ? `
+          <!-- Repair Workshop (W11) Stats -->
+          <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 260px; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
+                <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Kalem</div>
+              </div>
+              <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${inventoryItems.length}</div>
+            </div>
+          </div>
+        ` : `
+          <!-- Mobile Warehouse Summary -->
+          <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 260px; box-sizing: border-box;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
+                <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Zimmetli Kalem</div>
+              </div>
+              <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${inventoryItems.length}</div>
+            </div>
+          </div>
+        `}
       `}
       ${isMaterialManager && pendingReturns.length > 0 ? `
       <div class="glass-panel fade-in-up" style="border: 1px solid rgba(20, 241, 149, 0.3); background: rgba(20, 241, 149, 0.02); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
@@ -3840,19 +5145,6 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             </tbody>
           </table>
         </div>
-      </div>
-      ` : ''}
-
-      <!-- AI Analytics Banner -->
-      ${currentWarehouse.id !== 'W11' ? `
-      <div style="background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-        <div style="color: #FCA5A5; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem;">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          Envanter Analitiği (AI): Önümüzdeki 30 gün içinde 12 kalemde stok tükenme riski tespit edildi. <span style="color: #EF4444; font-weight: bold; margin-left: 10px;">(Bu modül şu an güncelleme aşamasındadır ve aktif değildir.)</span>
-        </div>
-        <button onclick="alert('Bu modül şu an güncelleme aşamasındadır ve aktif değildir.')" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #EF4444; color: #FFFFFF; font-size: 0.9rem; font-weight: 600; cursor: not-allowed; opacity: 0.7;">
-          Sipariş Oluştur
-        </button>
       </div>
       ` : ''}
 
@@ -3943,6 +5235,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Tarih</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Rapor No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">MÇF No</th>
+                          <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Arıza Kodu</th>
+                          <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Arıza Açıklaması</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">SAP No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Seri No</th>
                           <th style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05);">Malzeme Açıklaması</th>
@@ -3956,6 +5250,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                             <td style="padding: 0.75rem 1rem; color: #E2E8F0;">${new Date(item.date).toLocaleDateString('tr-TR')}</td>
                             <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${item.reportId}</td>
                             <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 600;">${item.matFormNo}</td>
+                            <td style="padding: 0.75rem 1rem; color: #E2E8F0; font-weight: 600;">${item.faultCode || '-'}</td>
+                            <td style="padding: 0.75rem 1rem; color: #94A3B8; font-size: 0.8rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${(item.faultDesc || '').replace(/"/g, '&quot;')}">${item.faultDesc || '-'}</td>
                             <td style="padding: 0.75rem 1rem; color: #3B82F6; font-family: monospace;">${item.sapNo}</td>
                             <td style="padding: 0.75rem 1rem; color: #10B981; font-family: monospace; font-weight: 600;">
                               <div style="display: inline-flex; align-items: center; gap: 8px;">
@@ -3983,27 +5279,44 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <!-- Manual Audit View -->
       <div id="view-SAYIM" style="display: ${currentTab === 'SAYIM' ? 'block' : 'none'};">
         <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden; padding: 1.5rem;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+          <!-- Collaboration Banner -->
+          <div id="manual-audit-collaboration-banner" style="display: none; align-items: center; gap: 0.75rem; background-color: rgba(20, 241, 149, 0.1); border: 1px solid rgba(20, 241, 149, 0.3); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: #14F195; font-size: 0.9rem;">
+            <i class="fa-solid fa-users" style="font-size: 1.1rem;"></i>
+            <span id="collaboration-banner-text"></span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
             <div>
               <h2 style="color: #FFFFFF; margin: 0 0 0.5rem 0; font-size: 1.25rem;">Manuel Sayım Ekranı</h2>
               <div style="color: #94A3B8; font-size: 0.9rem;">Listedeki ürünlerin fiziksel sayılarını girerek hızlıca stokları güncelleyebilirsiniz. Değişiklik olmayan sayımlar geçmişe uyumlu olarak kaydedilecektir.</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 1.5rem;">
-              <div style="position: relative;">
-                <i class="fa-solid fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #64748B;"></i>
-                <input type="text" id="manual-audit-search" oninput="window.filterManualAudit(this.value)" placeholder="SAP No veya Tanım ara..." style="width: 250px; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem 0 2.5rem; outline: none; font-size: 0.9rem;" />
+            <div style="display: flex; align-items: center; gap: 0.75rem; justify-content: space-between; flex-wrap: nowrap; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+                <div style="position: relative;">
+                  <i class="fa-solid fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #64748B;"></i>
+                  <input type="text" id="manual-audit-search" oninput="window.filterManualAudit(this.value)" placeholder="SAP No veya Tanım ara..." style="width: 250px; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem 0 2.5rem; outline: none; font-size: 0.9rem;" />
+                </div>
+                <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem; align-items: center; height: 42px; box-sizing: border-box; white-space: nowrap;">
+                  <!-- Dynamically populated via updateManualSummaryBar -->
+                </div>
               </div>
-              <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 0.5rem 1rem; font-size: 0.85rem; align-items: center;">
-                <!-- Dynamically populated via updateManualSummaryBar -->
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                ${currentWarehouse.id === 'MTA' ? '' : `
+                <button onclick="window.startFastAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;">
+                  <i class="fa-solid fa-bolt"></i> Hızlı Sayım (QR)
+                </button>
+                <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#111827'">
+                  <i class="fa-solid fa-qrcode"></i> QR Tara
+                </button>
+                `}
+                ${isMaterialManager ? `
+                <button onclick="window.clearDraftAudit()" style="height: 42px; padding: 0 1.25rem; border-radius: 8px; border: 1px solid #1E293B; background-color: transparent; color: #EF4444; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'">
+                  <i class="fa-solid fa-trash-can"></i> Taslağı Sil
+                </button>
+                ` : ''}
+                <button onclick="window.saveManualAudit(this)" style="height: 42px; padding: 0 1.25rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;">
+                  <i class="fa-solid fa-save"></i> Tüm Sayımı Kaydet
+                </button>
               </div>
-              ${isMaterialManager ? `
-              <button onclick="window.clearDraftAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: transparent; color: #EF4444; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'">
-                <i class="fa-solid fa-trash-can"></i> Taslağı Sil
-              </button>
-              ` : ''}
-              <button onclick="window.saveManualAudit(this)" style="height: 42px; padding: 0 1.5rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.95rem; font-weight: 600; cursor: pointer;">
-                <i class="fa-solid fa-save"></i> Tüm Sayımı Kaydet
-              </button>
             </div>
           </div>
           
@@ -4133,7 +5446,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                       );
                       
                       let finalReportItem = reportItem;
-                      if (!finalReportItem && currentWarehouse.id === 'W11') {
+                      if (!finalReportItem && currentWarehouse.id === 'MTA') {
                         for (const report of reports) {
                           if (report.materials) {
                             const mat = report.materials.find(m => String(m.sapNo).trim() === String(inv.sapNo).trim() && m.defectCount > 0);
@@ -4176,7 +5489,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         id: inv.id,
                         sapNo: inv.sapNo,
                         description: inv.description,
-                        shelfNo: inv.shelfNo || 'Tanımsız',
+                        shelfNo: (inv.shelfNo && inv.shelfNo !== 'Tanımsız') ? inv.shelfNo : 'Defect Rafı',
                         quantity: inv.quantity,
                         minStock: inv.minStock || 0,
                         imageUrl: inv.imageUrl || '',
@@ -4189,7 +5502,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         serialNo: inv.serialNo || finalReportItem?.serialNo || '-',
                         faultCode: finalReportItem?.faultCode || '-',
                         faultDesc: finalReportItem?.faultDesc || '-',
-                        defect: finalReportItem?.defect || inv.quantity || 1
+                        defect: finalReportItem?.defect || inv.quantity || 1,
+                        recoveryNotes: inv.recoveryNotes || [],
+                        recoveryNote: inv.recoveryNote || ''
                       };
                     });
 
@@ -4244,6 +5559,10 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;">
                           <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
                             ${isMaterialManager ? `
+                              <i onclick="window.returnDefectToInventory('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo !== '-' ? item.serialNo : ''}', '${item.turbineNo !== '-' ? item.turbineNo : ''}', '${item.reportId !== '-' ? item.reportId : ''}')" class="fa-solid fa-reply" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sağlam Olarak Stoğa Geri Al"></i>
+                              ${item.recoveryNotes || item.recoveryNote ? `
+                                <i onclick="window.showRecoveryInfoList('${item.id}')" class="fa-solid fa-circle-info" style="cursor: pointer; opacity: 0.7; color: #60A5FA; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geri Kazanım Geçmişini Gör"></i>
+                              ` : ''}
                               <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
                               <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
                             ` : `
@@ -4295,49 +5614,49 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         </div>
       </div>
 
-      <!-- W11 Edit Modal -->
-      <div id="new-warehouse-w11-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+      <!-- MTA Edit Modal -->
+      <div id="new-warehouse-mta-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
         <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 450px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem;">
             <h3 style="font-size: 1.25rem; font-weight: 700; color: #14F195; margin: 0; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
               <i class="fa-solid fa-pen-to-square" style="margin-right: 8px;"></i> Seri No & Not Düzenle
             </h3>
-            <button onclick="window.closeW11EditModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+            <button onclick="window.closeMtaEditModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
           </div>
           <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-            <input type="hidden" id="w11-edit-item-id">
+            <input type="hidden" id="mta-edit-item-id">
             
             <div>
               <p style="color: #94A3B8; font-size: 0.8rem; margin: 0 0 0.25rem 0; font-weight: 600;">MALZEME TANIMI</p>
-              <div id="w11-edit-name-text" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; color: #FFF; font-weight: 500; font-size: 0.9rem;"></div>
+              <div id="mta-edit-name-text" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; color: #FFF; font-weight: 500; font-size: 0.9rem;"></div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
               <div>
                 <span style="color: #64748B; font-size: 0.75rem;">SAP Numarası:</span>
-                <span id="w11-edit-sap-text" style="color: #14F195; font-weight: 600; display: block; font-family: monospace; font-size: 0.95rem; margin-top: 2px;"></span>
+                <span id="mta-edit-sap-text" style="color: #14F195; font-weight: 600; display: block; font-family: monospace; font-size: 0.95rem; margin-top: 2px;"></span>
               </div>
               <div>
                 <span style="color: #64748B; font-size: 0.75rem;">Miktar:</span>
-                <input id="w11-edit-qty-input" type="number" min="0" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
+                <input id="mta-edit-qty-input" type="number" min="0" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
               </div>
               <div>
-                <span style="color: #64748B; font-size: 0.75rem;">Raf Konumu (W11):</span>
-                <input id="w11-edit-loc-input" type="text" placeholder="Örn: A-1" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
+                <span style="color: #64748B; font-size: 0.75rem;">Raf Konumu (MTA):</span>
+                <input id="mta-edit-loc-input" type="text" placeholder="Örn: A-1" style="width: 100%; height: 38px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.5rem; font-size: 0.9rem; outline: none; margin-top: 2px;">
               </div>
             </div>
             
             <div>
               <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; font-weight: 700; text-transform: uppercase;">Seri Numarası</label>
-              <input id="w11-edit-serial-input" type="text" placeholder="Seri numarasını girin" style="width: 100%; height: 42px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.95rem; font-family: monospace; outline: none;">
+              <input id="mta-edit-serial-input" type="text" placeholder="Seri numarasını girin" style="width: 100%; height: 42px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.95rem; font-family: monospace; outline: none;">
             </div>
 
             <div>
               <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; font-weight: 700; text-transform: uppercase;">Not / Açıklama</label>
-              <textarea id="w11-edit-note-input" placeholder="Malzeme hakkında eklemek istediğiniz not..." style="width: 100%; height: 90px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0.75rem 1rem; font-size: 0.9rem; outline: none; resize: none;"></textarea>
+              <textarea id="mta-edit-note-input" placeholder="Malzeme hakkında eklemek istediğiniz not..." style="width: 100%; height: 90px; background-color: rgba(0,0,0,0.3); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0.75rem 1rem; font-size: 0.9rem; outline: none; resize: none;"></textarea>
             </div>
             
-            <button onclick="window.saveW11EditItem(this)" style="height: 44px; margin-top: 0.5rem; border-radius: 8px; border: none; background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; box-shadow: 0 0 15px rgba(20,241,149,0.25); transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">Değişiklikleri Kaydet</button>
+            <button onclick="window.saveMtaEditItem(this)" style="height: 44px; margin-top: 0.5rem; border-radius: 8px; border: none; background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-size: 0.95rem; font-weight: 800; cursor: pointer; width: 100%; box-shadow: 0 0 15px rgba(20,241,149,0.25); transition: all 0.2s;" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">Değişiklikleri Kaydet</button>
           </div>
         </div>
       </div>
@@ -4583,7 +5902,11 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
    }
    
    const { excelService } = await import('../services/ExcelService');
-   excelService.exportSingleAuditToExcel(audit, name, inventory);
+   const { warehouseService } = await import('../services/WarehouseService');
+   const activeWhId = (window as any).currentWarehouseId || 'MTA';
+   const logs = await warehouseService.getLogs(activeWhId);
+   
+   excelService.exportSingleAuditToExcel(audit, name, inventory, audits, logs);
 };
 
 (window as any).downloadAllAuditsExcel = async () => {

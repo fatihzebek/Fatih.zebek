@@ -1,8 +1,24 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import fs from 'fs';
+import path from 'path';
+
+function writeVersionPlugin() {
+  return {
+    name: 'write-version-plugin',
+    writeBundle() {
+      const ver = { version: Date.now().toString() };
+      fs.writeFileSync(
+        path.resolve(__dirname, 'dist/version.json'),
+        JSON.stringify(ver)
+      );
+    }
+  };
+}
 
 export default defineConfig({
   plugins: [
+    writeVersionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {

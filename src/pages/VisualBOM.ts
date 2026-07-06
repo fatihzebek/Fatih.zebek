@@ -104,6 +104,145 @@ export const VisualBOMPage = async () => {
     if (item) item.classList.add('active-item');
   };
 
+  (window as any).handleBOMSearch = (value: string) => {
+    (window as any)._bomSearchQuery = value;
+    (window as any).renderBOMSystemsList();
+    
+    const clearBtn = document.getElementById('bom-clear-btn');
+    if (clearBtn) {
+      clearBtn.style.display = value ? 'block' : 'none';
+    }
+  };
+
+  (window as any).clearBOMSearch = () => {
+    (window as any)._bomSearchQuery = '';
+    const input = document.getElementById('bom-search-input') as HTMLInputElement;
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('bom-clear-btn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    (window as any).renderBOMSystemsList();
+  };
+
+  (window as any).selectBOMSearchResult = (model: string, category: string, systemId: string, sapNo: string) => {
+    (window as any)._selectedModel = model;
+    (window as any)._selectedCategory = category;
+    (window as any)._selectedSystemId = systemId;
+    (window as any)._highlightBOMSap = sapNo;
+    (window as any)._bomSearchQuery = '';
+    (window as any).render();
+  };
+
+  (window as any).renderBOMSystemsList = () => {
+    const container = document.getElementById('bom-systems-container');
+    if (!container) return;
+
+    const query = ((window as any)._bomSearchQuery || '').trim().toLowerCase();
+
+    if (query) {
+      const results: any[] = [];
+
+      for (const [model, categories] of Object.entries(turbineBOMData)) {
+        for (const [category, systems] of Object.entries(categories as any)) {
+          for (const sys of (systems as any[])) {
+            if (sys.parts) {
+              for (const part of sys.parts) {
+                const sapNoStr = String(part.sapNo || '').toLowerCase();
+                const altSapStr = String(part.alternativeSap || '').toLowerCase();
+                const nameStr = String(part.name || '').toLowerCase();
+                const descStr = String(part.desc || '').toLowerCase();
+
+                if (sapNoStr.includes(query) || altSapStr.includes(query) || nameStr.includes(query) || descStr.includes(query)) {
+                  results.push({
+                    model,
+                    category,
+                    systemId: sys.id,
+                    systemName: sys.name,
+                    sapNo: part.sapNo,
+                    alternativeSap: part.alternativeSap,
+                    name: part.name,
+                    desc: part.desc
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (results.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-dim); padding: 2rem 1rem;">
+            <i class="fa-solid fa-magnifying-glass-minus fa-2x" style="opacity: 0.3; margin-bottom: 0.5rem; color: #ef4444;"></i>
+            <p style="font-size: 0.75rem; margin: 0;">Arama kriterine uygun malzeme bulunamadı.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = results.map(res => {
+        const isMatchedModel = (window as any)._selectedModel === res.model;
+        const isMatchedCat = (window as any)._selectedCategory === res.category;
+        const isMatchedSys = (window as any)._selectedSystemId === res.systemId;
+        const isActive = isMatchedModel && isMatchedCat && isMatchedSys;
+        
+        const catLabel = res.category === 'nacelle' ? 'Nacelle' : res.category === 'rotor' ? 'Rotor' : 'Kule';
+        const modelLabel = res.model === 'E44' ? 'E44-E48' : res.model === 'E70' ? 'E70-E82' : 'E82/E2-E92';
+
+        return `
+          <div class="system-list-item ${isActive ? 'active-item' : ''}" 
+               onclick="window.selectBOMSearchResult('${res.model}', '${res.category}', '${res.systemId}', '${res.sapNo}')"
+               style="padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s; margin-bottom: 6px;">
+            <div style="font-size: 0.8rem; font-weight: bold; color: ${isActive ? '#64ffda' : '#fff'}; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <i class="fa-solid fa-cube" style="font-size: 0.75rem; color: ${isActive ? '#64ffda' : 'var(--accent-cyan)'}; flex-shrink: 0;"></i>
+                ${res.name}
+              </span>
+              <span style="font-family: monospace; font-size: 0.75rem; color: var(--accent-cyan); font-weight: 800; flex-shrink: 0;">${res.sapNo}</span>
+            </div>
+            <div style="font-size: 0.65rem; color: var(--text-dim); margin-top: 4px; line-height: 1.3;">
+              Şema: <strong>${res.systemName}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 0.6rem; color: rgba(255,255,255,0.35);">
+              <span>Model: ${modelLabel}</span>
+              <span style="text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 1px 4px; border-radius: 3px;">${catLabel}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } else {
+      const model = (window as any)._selectedModel;
+      const category = (window as any)._selectedCategory;
+      const listSystems = turbineBOMData[model]?.[category as 'nacelle' | 'rotor' | 'tower'] || [];
+
+      container.innerHTML = listSystems.map(sys => {
+        const isActive = (window as any)._selectedSystemId === sys.id;
+        const hasPreExtracted = sys.parts && sys.parts.length > 0;
+        return `
+          <div id="sys-item-${sys.id}" 
+               class="system-list-item ${isActive ? 'active-item' : ''}" 
+               onclick="window.selectBOMSystem('${sys.id}')"
+               style="padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s; margin-bottom: 6px;">
+            <div style="font-size: 0.8rem; font-weight: bold; color: ${isActive ? '#64ffda' : '#fff'}; display: flex; align-items: center; gap: 6px;">
+               <i class="fa-solid fa-file-image" style="font-size: 0.75rem; color: ${isActive ? '#64ffda' : 'var(--text-dim)'};"></i>
+               ${sys.name}
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 0.65rem; color: var(--text-dim);">
+              <span style="font-family: monospace;">${sys.imageName.split(' ')[0]} / ${sys.imageName.slice(-7)}</span>
+              ${hasPreExtracted ? `
+                <span style="color: var(--accent-green); font-weight: 800; display: flex; align-items: center; gap: 2px;">
+                  <span style="width: 5px; height: 5px; background: #00e676; border-radius: 50%;"></span> SAP Eşleşti
+                </span>
+              ` : `
+                <span style="color: var(--text-dim);">Görsel İncele</span>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  };
+
   (window as any).zoomBOMImage = (src: string, title: string) => {
     let modal = document.getElementById('bom-zoom-modal');
     if (!modal) {
@@ -673,8 +812,13 @@ export const VisualBOMPage = async () => {
                     altStockHtml = `<span style="color: var(--text-dim); opacity: 0.5; font-size: 0.7rem; border: 1px dashed rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-plus" style="font-size:0.6rem;"></i> Ekle</span>`;
                   }
 
+                  const isHighlighted = (window as any)._highlightBOMSap === p.sapNo;
+                  if (isHighlighted) {
+                    setTimeout(() => { (window as any)._highlightBOMSap = ''; }, 3000);
+                  }
+
                   return `
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);" title="${stockDetails}">
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); ${isHighlighted ? 'background: rgba(100, 255, 218, 0.08); border-left: 3px solid #64ffda;' : ''}" title="${stockDetails}">
                       <td onclick="window.copyBOMSap('${p.sapNo}')" title="Kopyalamak için tıklayın" style="padding: 8px 6px; font-family: monospace; font-weight: 700; color: var(--accent-cyan); cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='#64ffda'" onmouseout="this.style.color='var(--accent-cyan)'">${p.sapNo}</td>
                       <td style="padding: 8px 6px;">
                         <div style="font-weight: bold; color: #fff;">${p.name}</div>
@@ -807,6 +951,7 @@ export const VisualBOMPage = async () => {
   // Pre-trigger detail render after main layout is placed in DOM
   setTimeout(() => {
     (window as any).renderBOMDetailPanel();
+    (window as any).renderBOMSystemsList();
   }, 100);
 
   return `
@@ -893,36 +1038,23 @@ export const VisualBOMPage = async () => {
 
         <!-- Column 2: System / Blueprint List -->
         <div class="glass-panel" style="background: #0a0e17; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(255,255,255,0.03);">
-          <div style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.03); font-family: 'Rajdhani'; font-weight: 800; font-size: 0.8rem; color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 0.5px;">
-            <i class="fa-solid fa-list-ul"></i> SİSTEMLER VE ŞEMALAR
+          <div style="padding: 1rem; border-bottom: 1px solid rgba(255,255,255,0.03); font-family: 'Rajdhani'; font-weight: 800; font-size: 0.8rem; color: var(--accent-cyan); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">
+            <span><i class="fa-solid fa-list-ul"></i> SİSTEMLER VE ŞEMALAR</span>
           </div>
           
-          <div style="flex: 1; overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 6px;">
-            ${listSystems.map(sys => {
-              const isActive = (window as any)._selectedSystemId === sys.id;
-              const hasPreExtracted = sys.parts && sys.parts.length > 0;
-              return `
-                <div id="sys-item-${sys.id}" 
-                     class="system-list-item ${isActive ? 'active-item' : ''}" 
-                     onclick="window.selectBOMSystem('${sys.id}')"
-                     style="padding: 10px 12px; border-radius: 8px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); cursor: pointer; transition: all 0.2s;">
-                  <div style="font-size: 0.8rem; font-weight: bold; color: ${isActive ? '#64ffda' : '#fff'}; display: flex; align-items: center; gap: 6px;">
-                     <i class="fa-solid fa-file-image" style="font-size: 0.75rem; color: ${isActive ? '#64ffda' : 'var(--text-dim)'};"></i>
-                     ${sys.name}
-                  </div>
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; font-size: 0.65rem; color: var(--text-dim);">
-                    <span style="font-family: monospace;">${sys.imageName.split(' ')[0]} / ${sys.imageName.slice(-7)}</span>
-                    ${hasPreExtracted ? `
-                      <span style="color: var(--accent-green); font-weight: 800; display: flex; align-items: center; gap: 2px;">
-                        <span style="width: 5px; height: 5px; background: #00e676; border-radius: 50%;"></span> SAP Eşleşti
-                      </span>
-                    ` : `
-                      <span style="color: var(--text-dim);">Görsel İncele</span>
-                    `}
-                  </div>
-                </div>
-              `;
-            }).join('')}
+          <!-- SAP / Material Search Bar -->
+          <div style="padding: 0.6rem 0.8rem; border-bottom: 1px solid rgba(255,255,255,0.03); background: rgba(0,0,0,0.15);">
+            <div style="position: relative; display: flex; align-items: center;">
+              <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; color: rgba(255,255,255,0.3); font-size: 0.75rem;"></i>
+              <input type="text" id="bom-search-input" placeholder="SAP No veya Malzeme Ara..." oninput="window.handleBOMSearch(this.value)" style="width: 100%; padding: 6px 10px 6px 28px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; font-size: 0.75rem; outline: none; box-sizing: border-box;" value="${(window as any)._bomSearchQuery || ''}">
+              <button id="bom-clear-btn" onclick="window.clearBOMSearch()" style="position: absolute; right: 8px; background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; font-size: 0.8rem; padding: 0; display: ${(window as any)._bomSearchQuery ? 'block' : 'none'};">
+                <i class="fa-solid fa-circle-xmark"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div id="bom-systems-container" style="flex: 1; overflow-y: auto; padding: 0.5rem; display: flex; flex-direction: column; gap: 6px;">
+            <!-- Systems or search results will be rendered here dynamically -->
           </div>
         </div>
 

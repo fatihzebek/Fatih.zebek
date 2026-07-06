@@ -49,9 +49,20 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
               <input type="hidden" id="selected-material-name">
             </div>
 
-            <div class="form-group" style="margin-bottom: 2rem;">
-              <label>ADET / MİKTAR</label>
-              <input type="number" id="transfer-qty" class="cyber-input" value="1" min="1" required>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+              <div class="form-group">
+                <label>ADET / MİKTAR</label>
+                <input type="number" id="transfer-qty" class="cyber-input" value="1" min="1" required>
+              </div>
+              <div class="form-group">
+                <label>SEVK TÜRÜ</label>
+                <select id="transfer-type" class="cyber-input" required>
+                  <option value="SEVK">SEVK (VARSAYILAN)</option>
+                  <option value="GERI_ODE">GERİ ÖDE</option>
+                  <option value="SATIS">SATIŞ YAP</option>
+                  <option value="HIBE">HİBE ET</option>
+                </select>
+              </div>
             </div>
 
             <button type="submit" class="btn-cyber" style="width: 100%; justify-content: center; padding: 1rem;">
@@ -74,6 +85,7 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
                 <thead>
                   <tr style="text-align: left; color: var(--text-muted); border-bottom: 1px solid var(--glass-border);">
                     <th style="padding: 0.75rem;">ROTA</th>
+                    <th style="padding: 0.75rem;">SEVK TÜRÜ</th>
                     <th style="padding: 0.75rem;">MALZEME</th>
                     <th style="padding: 0.75rem;">MİKTAR</th>
                     <th style="padding: 0.75rem;">DURUM</th>
@@ -83,6 +95,14 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
                   ${transfers.map(t => {
                     const fromWh = allWarehouses.find(w => w.id === t.fromSiteId);
                     const toWh = allWarehouses.find(w => w.id === t.toSiteId);
+                    const tType = t.type || 'SEVK';
+                    const typeMapping: Record<string, { label: string, color: string }> = {
+                      'SEVK': { label: 'SEVK', color: '#38bdf8' },
+                      'GERI_ODE': { label: 'GERİ ÖDE', color: '#fbbf24' },
+                      'SATIS': { label: 'SATIŞ YAP', color: '#34d399' },
+                      'HIBE': { label: 'HİBE ET', color: '#c084fc' }
+                    };
+                    const typeInfo = typeMapping[tType] || { label: 'SEVK', color: '#38bdf8' };
                     return `
                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
                       <td style="padding: 0.75rem;">
@@ -91,6 +111,11 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
                           <i class="fa-solid fa-arrow-right" style="font-size: 0.5rem; color: var(--accent-cyan); margin: 0 4px;"></i> 
                           ${toWh?.name || t.toSiteId}
                         </div>
+                      </td>
+                      <td style="padding: 0.75rem;">
+                        <span style="font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; background: ${typeInfo.color}15; color: ${typeInfo.color}; border: 1px solid ${typeInfo.color}30; font-weight: bold;">
+                          ${typeInfo.label}
+                        </span>
                       </td>
                       <td style="padding: 0.75rem;">
                         <div style="color: var(--text-main);">${t.materialName}</div>
@@ -141,22 +166,28 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
   const resultsDiv = document.getElementById('transfer-material-results');
   const form = document.getElementById('transfer-form');
 
+  let debounceTimer: any = null;
+
   if (searchInput && resultsDiv) {
-    searchInput.addEventListener('input', async (e) => {
+    searchInput.addEventListener('input', (e) => {
       const query = (e.target as HTMLInputElement).value;
+      clearTimeout(debounceTimer);
+      
       if (query.length < 2) {
         resultsDiv.classList.add('hidden');
         return;
       }
 
-      const results = await inventoryService.searchMaterials(query);
-      resultsDiv.innerHTML = results.slice(0, 10).map(m => `
-        <div class="search-item" onclick="window.selectTransferMaterial('${m.n}', '${m.d}')">
-          <div style="font-weight: 700; color: var(--accent-cyan);">${m.n}</div>
-          <div style="font-size: 0.7rem; color: var(--text-muted);">${m.d}</div>
-        </div>
-      `).join('');
-      resultsDiv.classList.remove('hidden');
+      debounceTimer = setTimeout(async () => {
+        const results = await inventoryService.searchMaterials(query);
+        resultsDiv.innerHTML = results.slice(0, 10).map(m => `
+          <div class="search-item" onclick="window.selectTransferMaterial('${m.n}', '${m.d}')">
+            <div style="font-weight: 700; color: var(--accent-cyan);">${m.n}</div>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">${m.d}</div>
+          </div>
+        `).join('');
+        resultsDiv.classList.remove('hidden');
+      }, 150);
     });
   }
 
@@ -175,6 +206,7 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
       }
 
       try {
+        const transferType = (document.getElementById('transfer-type') as HTMLSelectElement).value;
         await transferService.createTransfer({
           fromSiteId: fromSite,
           toSiteId: toSite,
@@ -182,7 +214,8 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
           materialName,
           quantity,
           status: 'PENDING',
-          requestedBy: authService.getCurrentUser()?.email || 'Admin'
+          requestedBy: authService.getCurrentUser()?.email || 'Admin',
+          type: transferType as any
         });
         alert('Transfer talebi oluşturuldu!');
         (window as any).navigate('transfers');

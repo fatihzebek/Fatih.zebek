@@ -112,7 +112,7 @@ export const MaintenancePlanningPage = async () => {
   });
 
   const savedSite = sessionStorage.getItem('activeMaintSiteName');
-  const initialSite = (savedSite && siteList.includes(savedSite)) ? savedSite : (siteList[0] || '');
+  const initialSite = (savedSite && (siteList.includes(savedSite) || savedSite === 'TÜM SAHALAR')) ? savedSite : 'TÜM SAHALAR';
 
   // Expose to window for initialization
   (window as any).maintData = groupedPlan;
@@ -276,6 +276,400 @@ export const MaintenancePlanningPage = async () => {
           (saveBtn as HTMLButtonElement).disabled = false;
         }
       };
+    }
+  };
+
+  (window as any).downloadMaintTemplateExcel = async () => {
+    const sampleData = [
+      {
+        'TÜRBİN NO': '1',
+        'SERİ NO': 'T-01',
+        'BAKIM TİPİ': 'Ana Bakım',
+        'BAKIM TARİHİ': '01.06.2026',
+        'NOTLAR': 'Yıllık ana bakım yapıldı.'
+      },
+      {
+        'TÜRBİN NO': '2',
+        'SERİ NO': 'T-02',
+        'BAKIM TİPİ': 'Yağlama Bakımı',
+        'BAKIM TARİHİ': '15.06.2026',
+        'NOTLAR': 'Dişli kutusu yağlaması yapıldı.'
+      }
+    ];
+
+    try {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(sampleData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Şablon');
+      
+      const maxLens = { 'TÜRBİN NO': 12, 'SERİ NO': 12, 'BAKIM TİPİ': 15, 'BAKIM TARİHİ': 15, 'NOTLAR': 30 };
+      const colWidths = Object.keys(maxLens).map(key => ({ wch: (maxLens as any)[key] }));
+      ws['!cols'] = colWidths;
+
+      XLSX.writeFile(wb, 'Bakim_Yukleme_Sablonu.xlsx');
+    } catch (err: any) {
+      console.error(err);
+      alert('Şablon indirilirken bir hata oluştu: ' + err.message);
+    }
+  };
+
+  (window as any).downloadMaintPlanningExcel = async () => {
+    const siteId = (window as any).activeMaintSiteId;
+    const siteName = (window as any).activeMaintSiteName || 'Saha';
+    if (!siteId) {
+      alert("Lütfen önce bir saha seçiniz.");
+      return;
+    }
+
+    const turbines = dataService.getTurbinesBySite(siteId).sort((a, b) => a.no - b.no);
+    if (turbines.length === 0) {
+      alert("Bu sahada indirilecek türbin bulunamadı.");
+      return;
+    }
+
+    // Prepare rows
+    const data = turbines.map(t => {
+      // Find current last maintenance of this turbine
+      const turbineReports = reports.filter(r => r.turbineSerial === t.id);
+      const lastMaint = turbineReports
+        .filter(r => {
+          const typeLower = (r.type || '').toLowerCase();
+          const templateLower = (r.templateName || '').toLowerCase();
+          const faultLower = (r.faultCode || '').toLowerCase();
+          return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
+                 templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
+                 faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+      let lastType = '';
+      let lastDate = '';
+      if (lastMaint) {
+        const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
+        lastType = searchStr.includes('ana') ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
+        lastDate = lastMaint.date;
+      }
+
+      return {
+        'TÜRBİN NO': t.no > 0 ? t.no.toString() : (t.label || t.id),
+        'SERİ NO': t.id,
+        'BAKIM TİPİ': lastType || 'ANA BAKIM',
+        'BAKIM TARİHİ': lastDate || '',
+        'NOTLAR': lastMaint?.notes || ''
+      };
+    });
+
+    try {
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Bakım Planı');
+      
+      // Auto-fit column widths
+      const maxLens = { 'TÜRBİN NO': 12, 'SERİ NO': 12, 'BAKIM TİPİ': 15, 'BAKIM TARİHİ': 15, 'NOTLAR': 25 };
+      const colWidths = Object.keys(maxLens).map(key => ({ wch: (maxLens as any)[key] }));
+      ws['!cols'] = colWidths;
+
+      XLSX.writeFile(wb, `${siteName.replace(/\s+/g, '_')}_Bakim_Plani.xlsx`);
+    } catch (err: any) {
+      console.error(err);
+      alert('Excel indirilirken bir hata oluştu: ' + err.message);
+    }
+  };
+
+  (window as any).handleMaintExcelUpload = async (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const siteId = (window as any).activeMaintSiteId;
+    const siteName = (window as any).activeMaintSiteName;
+    if (!siteId) {
+      alert("Lütfen önce bir saha seçiniz.");
+      event.target.value = '';
+      return;
+    }
+
+    const btn = document.getElementById('btn-upload-maint-excel');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Dosya Okunuyor...';
+
+    try {
+      const XLSX = await import('xlsx');
+      const reader = new FileReader();
+
+      reader.onload = async (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+          if (btn) btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Doğrulanıyor...';
+
+          const siteTurbines = dataService.getTurbinesBySite(siteId);
+
+          const matchedRows: any[] = [];
+          const unmatchedRows: any[] = [];
+
+          for (let i = 0; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            const getVal = (possibleKeys: string[]) => {
+              for (const key of Object.keys(row)) {
+                if (possibleKeys.includes(key.trim().toUpperCase())) {
+                  return row[key];
+                }
+              }
+              return '';
+            };
+
+            const rowTurbine = String(getVal(['TÜRBİN', 'TURBINE', 'TÜRBİN NO', 'TÜRBİN NUMARASI']) || '').trim();
+            const rowSerial = String(getVal(['SERİ NO', 'SERINO', 'SERIAL', 'SERİ NUMARASI']) || '').trim();
+            let rowType = String(getVal(['BAKIM TİPİ', 'BAKIM TIPI', 'BAKIM TÜRÜ', 'BAKIM TURU', 'TİP', 'TIP']) || '').trim().toUpperCase();
+            const rowDateRaw = getVal(['BAKIM TARİHİ', 'BAKIM TARIHI', 'TARİH', 'TARIH']);
+            const rowNotes = String(getVal(['NOTLAR', 'NOT', 'AÇIKLAMA', 'ACIKLAMA']) || '').trim();
+
+            if (!rowTurbine && !rowSerial) continue; // Skip completely empty rows
+
+            // 1. Eşleştirme (Türbin No veya Seri No)
+            let matchedTurbine = siteTurbines.find(t => {
+              const matchesSerial = rowSerial && t.id.trim() === rowSerial;
+              const matchesNo = rowTurbine && (
+                String(t.no).trim() === rowTurbine ||
+                `T-${t.no}` === rowTurbine ||
+                `T-${String(t.no).padStart(2, '0')}` === rowTurbine
+              );
+              return matchesSerial || matchesNo;
+            });
+
+            // 2. Bakım Tipi Belirleme
+            if (rowType.includes('ANA') || rowType.includes('RÜZGAR') || rowType.includes('RUZGAR')) {
+              rowType = 'ANA BAKIM';
+            } else if (rowType.includes('YAĞ') || rowType.includes('YAG')) {
+              rowType = 'YAĞLAMA BAKIMI';
+            } else {
+              rowType = 'ANA BAKIM'; // Default
+            }
+
+            // 3. Tarih Parse Etme
+            let maintDateStr = '';
+            if (typeof rowDateRaw === 'number') {
+              const dateObj = new Date((rowDateRaw - 25569) * 86400 * 1000);
+              maintDateStr = dateObj.toISOString().split('T')[0];
+            } else if (rowDateRaw) {
+              const cleanRaw = String(rowDateRaw).trim();
+              const parts = cleanRaw.split('.');
+              if (parts.length === 3) {
+                maintDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+              } else {
+                const d = new Date(cleanRaw);
+                if (!isNaN(d.getTime())) {
+                  maintDateStr = d.toISOString().split('T')[0];
+                }
+              }
+            }
+
+            // Validations
+            if (!matchedTurbine) {
+              unmatchedRows.push({
+                rowNum: i + 2,
+                reason: `Saha (${siteName}) altında eşleşen türbin bulunamadı (Türbin: ${rowTurbine || '-'}, Seri No: ${rowSerial || '-'})`
+              });
+            } else if (!maintDateStr) {
+              unmatchedRows.push({
+                rowNum: i + 2,
+                reason: `${matchedTurbine.label || 'T-' + matchedTurbine.no} için geçerli bir tarih bulunamadı (${rowDateRaw || '-'})`
+              });
+            } else {
+              matchedRows.push({
+                turbineSerial: matchedTurbine.id,
+                turbineNo: matchedTurbine.no > 0 ? 'T-' + matchedTurbine.no : (matchedTurbine.label || matchedTurbine.id),
+                maintType: rowType,
+                maintDate: maintDateStr,
+                notes: rowNotes
+              });
+            }
+          }
+
+          if (btn) btn.innerHTML = originalText;
+          event.target.value = '';
+
+          // Önizleme modalını açalım
+          (window as any).openMaintExcelPreviewModal(matchedRows, unmatchedRows);
+        } catch (err: any) {
+          console.error(err);
+          if (btn) btn.innerHTML = originalText;
+          event.target.value = '';
+          alert('Excel verileri çözümlenirken hata oluştu: ' + err.message);
+        }
+      };
+
+      reader.onerror = () => {
+        if (btn) btn.innerHTML = originalText;
+        event.target.value = '';
+        alert('Dosya okunurken hata oluştu.');
+      };
+
+      reader.readAsArrayBuffer(file);
+    } catch (err: any) {
+      console.error(err);
+      if (btn) btn.innerHTML = originalText;
+      event.target.value = '';
+      alert('Excel yükleme modülü yüklenirken hata oluştu: ' + err.message);
+    }
+  };
+
+  (window as any).handleMaintTurbineSearch = (val: string) => {
+    (window as any).maintTurbineSearchQuery = val;
+    const currentSite = sessionStorage.getItem('activeMaintSiteName') || initialSite;
+    if (currentSite && (window as any).updateMaintTable) {
+      (window as any).updateMaintTable(currentSite);
+    }
+  };
+
+  (window as any).openMaintExcelPreviewModal = (matched: any[], unmatched: any[]) => {
+    const modal = document.createElement('div');
+    modal.className = 'cyber-modal-overlay fade-in';
+    modal.id = 'maint-excel-preview-modal';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding: 1rem; box-sizing: border-box;';
+
+    const matchedHtml = matched.map(m => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(20,241,149,0.04); border:1px solid rgba(20,241,149,0.15); border-radius:6px; font-size:0.8rem; color:#fff;">
+        <div>
+          <span style="font-weight:800; color:#14F195; font-family:'Rajdhani',sans-serif; font-size:0.95rem; margin-right:8px;">${m.turbineNo}</span>
+          <span style="color:#94A3B8; font-family:monospace; font-size:0.78rem;">(${m.turbineSerial})</span>
+        </div>
+        <div style="text-align:right;">
+          <span style="background:rgba(20,241,149,0.15); color:#14F195; font-size:0.7rem; font-weight:800; padding:2px 6px; border-radius:4px; margin-right:8px;">${m.maintType}</span>
+          <span style="font-family:monospace; font-weight:700;">${new Date(m.maintDate).toLocaleDateString('tr-TR')}</span>
+        </div>
+      </div>
+    `).join('');
+
+    const unmatchedHtml = unmatched.map(u => `
+      <div style="display:flex; flex-direction:column; gap:2px; padding:8px 12px; background:rgba(239,68,68,0.04); border:1px solid rgba(239,68,68,0.15); border-radius:6px; font-size:0.8rem; color:#fff;">
+        <div style="font-weight:800; color:#EF4444; font-family:'Rajdhani',sans-serif;">Satır ${u.rowNum}</div>
+        <div style="color:#94A3B8; font-size:0.75rem;">${u.reason}</div>
+      </div>
+    `).join('');
+
+    let modalContent = `
+      <div class="glass-panel" style="width: 100%; max-width: 550px; padding: 2.2rem; position: relative; border-top: 4px solid #14F195; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.8); max-height: 85vh;">
+        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+        
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; color: #14F195;">
+          <i class="fa-solid fa-file-invoice" style="font-size: 1.8rem; text-shadow: 0 0 10px rgba(20,241,149,0.35);"></i>
+          <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.4rem; margin: 0; font-weight: 800; letter-spacing: 1px;">EXCEL BAKIM YÜKLEME ÖNİZLEME</h3>
+        </div>
+
+        <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:1.25rem; padding-right:6px;" class="custom-scrollbar">
+    `;
+
+    if (matched.length > 0) {
+      modalContent += `
+            <div>
+              <h4 style="color:#14F195; font-size:0.82rem; font-weight:800; margin:0 0 0.5rem 0; letter-spacing:0.5px;">EŞLEŞEN VE YÜKLENECEK KAYITLAR (${matched.length})</h4>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                ${matchedHtml}
+              </div>
+            </div>
+      `;
+    }
+
+    if (unmatched.length > 0) {
+      modalContent += `
+            <div>
+              <h4 style="color:#EF4444; font-size:0.82rem; font-weight:800; margin:0 0 0.5rem 0; letter-spacing:0.5px;">HATALI / EŞLEŞEMEYEN SATIRLAR (${unmatched.length})</h4>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                ${unmatchedHtml}
+              </div>
+            </div>
+      `;
+    }
+
+    modalContent += `
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1.5rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1rem;">
+          <button onclick="this.closest('.cyber-modal-overlay').remove()" class="btn-cyber-mini" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--text-muted); padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight:700; font-size:0.8rem;">İPTAL</button>
+    `;
+
+    if (matched.length > 0) {
+      modalContent += `
+            <button id="maint-excel-confirm-btn" class="cyber-button primary" style="background: #14F195; color: #0A0E17; border: none; font-weight: 800; padding: 8px 20px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size:0.8rem;">
+              <i class="fa-solid fa-circle-check"></i> YÜKLEMEYİ TAMAMLA
+            </button>
+      `;
+    }
+
+    modalContent += `
+        </div>
+      </div>
+    `;
+
+    modal.innerHTML = modalContent;
+    document.body.appendChild(modal);
+
+    const confirmBtn = document.getElementById('maint-excel-confirm-btn');
+    if (confirmBtn) {
+      confirmBtn.onclick = () => {
+        (window as any).saveMaintExcelItems(matched, confirmBtn);
+      };
+    }
+  };
+
+  (window as any).saveMaintExcelItems = async (matchedItems: any[], btn: HTMLButtonElement) => {
+    const siteId = (window as any).activeMaintSiteId;
+    const siteName = (window as any).activeMaintSiteName;
+
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> KAYDEDİLİYOR...';
+    btn.disabled = true;
+
+    try {
+      const { db } = await import('../firebase');
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+
+      const savePromises = matchedItems.map(async (item) => {
+        const manualReport = {
+          type: 'BAKIM',
+          reportNo: 'MAN-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100),
+          turbineSerial: item.turbineSerial,
+          turbineNo: item.turbineNo,
+          siteId: siteId,
+          siteName: siteName,
+          date: item.maintDate,
+          faultCode: item.maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 'Manuel Yağlama bakımı',
+          templateName: item.maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 'Manuel Yağlama bakımı',
+          team: 'MANUEL',
+          personnel: ['MANUEL'],
+          notes: item.notes || 'Excel ile toplu manuel bakım kaydı girildi.',
+          status: 'completed',
+          createdBy: currentUser?.email || 'Ekip Lideri',
+          createdAt: serverTimestamp()
+        };
+
+        return addDoc(collection(db, 'serviceReports'), manualReport);
+      });
+
+      await Promise.all(savePromises);
+
+      try {
+        const { serviceReportService } = await import('../services/ServiceReportService');
+        (serviceReportService as any).reportsCache = null;
+      } catch (e) {}
+
+      alert(`${matchedItems.length} adet manuel bakım kaydı başarıyla kaydedildi! Sayfa güncelleniyor.`);
+      
+      const previewModal = document.getElementById('maint-excel-preview-modal');
+      if (previewModal) previewModal.remove();
+
+      (window as any).navigate('bakim-planlama');
+    } catch (err: any) {
+      console.error(err);
+      alert('Bakım kayıtları veritabanına yazılırken bir hata oluştu: ' + err.message);
+      btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> YÜKLEMEYİ TAMAMLA';
+      btn.disabled = false;
     }
   };
 
@@ -514,7 +908,380 @@ export const MaintenancePlanningPage = async () => {
     }
   };
 
+  let maintChartInstance: any = null;
+
+  async function renderMaintChart(filteredItems: any[]) {
+    const container = document.getElementById('maint-chart-container');
+    const canvas = document.getElementById('maint-monthly-chart') as HTMLCanvasElement;
+    const detailsDiv = document.getElementById('maint-chart-details');
+    if (!container || !canvas) return;
+
+    if (filteredItems.length === 0 || (window as any).maintViewMode !== 'chart') {
+      container.style.display = 'none';
+      if (detailsDiv) detailsDiv.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    if (detailsDiv) detailsDiv.style.display = 'block';
+
+    // Calculate monthly distribution for full calendar year (Ocak - Aralık)
+    const monthCounts: Record<number, { ana: number, yag: number }> = {};
+    const monthlyGroups: Record<number, Record<string, { ana: any[], yag: any[] }>> = {};
+    for (let m = 0; m < 12; m++) {
+      monthCounts[m] = { ana: 0, yag: 0 };
+      monthlyGroups[m] = {};
+    }
+
+    const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+    
+    filteredItems.forEach((item: any) => {
+      if (item.nextDate) {
+        const d = new Date(item.nextDate);
+        const m1 = d.getMonth();
+        const m2 = (m1 + 6) % 12;
+
+        const site = item.siteName || 'Diğer';
+        const tNo = item.turbineNo || item.turbineSerial;
+        const tLabel = tNo.startsWith('T-') ? tNo : 'T-' + tNo;
+
+        // Session 1
+        monthCounts[m1][item.nextType === 'ANA BAKIM' ? 'ana' : 'yag']++;
+        if (!monthlyGroups[m1][site]) {
+          monthlyGroups[m1][site] = { ana: [], yag: [] };
+        }
+        monthlyGroups[m1][site][item.nextType === 'ANA BAKIM' ? 'ana' : 'yag'].push({
+          label: tLabel,
+          status: item.status,
+          serial: item.turbineSerial,
+          isNoData: item.lastType === 'VERİ YOK'
+        });
+
+        // Session 2 (6 months later)
+        const otherType = item.nextType === 'ANA BAKIM' ? 'YAĞLAMA BAKIMI' : 'ANA BAKIM';
+        monthCounts[m2][otherType === 'ANA BAKIM' ? 'ana' : 'yag']++;
+        if (!monthlyGroups[m2][site]) {
+          monthlyGroups[m2][site] = { ana: [], yag: [] };
+        }
+        monthlyGroups[m2][site][otherType === 'ANA BAKIM' ? 'ana' : 'yag'].push({
+          label: tLabel,
+          status: item.status,
+          serial: item.turbineSerial,
+          isNoData: item.lastType === 'VERİ YOK'
+        });
+      }
+    });
+
+    const anaData = monthNames.map((_, idx) => monthCounts[idx].ana);
+    const yagData = monthNames.map((_, idx) => monthCounts[idx].yag);
+
+    // Build Monthly breakdown cards HTML
+    if (detailsDiv) {
+      let detailsHtml = `
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:0.75rem;">
+          <i class="fa-solid fa-list-check" style="color:var(--accent-cyan); font-size:1.2rem; text-shadow:0 0 8px rgba(0,242,255,0.3);"></i>
+          <h4 style="font-family:'Rajdhani',sans-serif; font-size:1.15rem; margin:0; font-weight:800; color:#fff; letter-spacing:1px;">AYLIK PLANLI BAKIM DAĞILIM DETAYLARI</h4>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:15px;">
+      `;
+
+      let hasAnyData = false;
+      for (let m = 0; m < 12; m++) {
+        const monthSites = monthlyGroups[m];
+        const siteNames = Object.keys(monthSites);
+        if (siteNames.length === 0) continue;
+
+        hasAnyData = true;
+
+        let totalAna = 0;
+        let totalYag = 0;
+        const siteBreakdowns: string[] = [];
+
+        siteNames.sort().forEach(site => {
+          const { ana, yag } = monthSites[site];
+          totalAna += ana.length;
+          totalYag += yag.length;
+          const totalSiteMaint = ana.length + yag.length;
+          if (totalSiteMaint > 0) {
+            const cleanSiteName = site.replace(/Alize |Anemon |Dares |Mare |Doğal /g, '');
+            siteBreakdowns.push(`${cleanSiteName}: ${totalSiteMaint}`);
+          }
+        });
+        
+        const siteSummariesJoin = siteBreakdowns.join(', ');
+
+        let monthHtml = `
+          <div id="maint-card-${monthNames[m].toLowerCase()}" class="glass-panel" style="padding:1.25rem; border-radius:10px; border-left:4px solid var(--accent-cyan); background:rgba(255,255,255,0.01); display:flex; flex-direction:column; gap:10px; transition: all 0.3s ease;">
+            <div style="font-family:'Rajdhani',sans-serif; font-weight:800; color:var(--accent-cyan); font-size:1.1rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:5px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
+              <span>${monthNames[m].toUpperCase()}</span>
+              <span style="font-size:0.7rem; color:var(--text-muted); opacity:0.7;">(${siteNames.length} Saha)</span>
+            </div>
+            
+            <!-- Summary Info Block -->
+            <div style="background-color: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 6px; padding: 0.5rem; font-size: 0.72rem; color: #94A3B8; line-height: 1.4; display: flex; flex-direction: column; gap: 3px; margin-bottom: 5px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.05); padding-bottom: 4px; margin-bottom: 2px;">
+                <span style="font-weight: 600; color: #E2E8F0;"><i class="fa-solid fa-calendar-check" style="color: #60A5FA; margin-right: 0.35rem;"></i>Aylık Toplam:</span>
+                <span style="font-weight: 700; color: #FFF;">${totalAna + totalYag} Bakım</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 3px;"><span style="display:inline-block; width:6px; height:6px; background-color:#00f2ff; border-radius:50%;"></span>${totalAna} Ana</span>
+                <span style="display: inline-flex; align-items: center; gap: 3px;"><span style="display:inline-block; width:6px; height:6px; background-color:#d946ef; border-radius:50%;"></span>${totalYag} Yağlama</span>
+              </div>
+              <div style="font-size: 0.68rem; color: #64748B; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${siteSummariesJoin}">
+                <i class="fa-solid fa-map-pin" style="margin-right: 0.25rem;"></i>${siteSummariesJoin}
+              </div>
+            </div>
+        `;
+
+        const renderBadges = (list: any[], typeName: string) => {
+          if (list.length === 0) return '';
+          list.sort((a, b) => parseInt(a.label.replace(/\D/g, '') || '0') - parseInt(b.label.replace(/\D/g, '') || '0'));
+          
+          return list.map(t => {
+            const isOverdue = t.status === 'overdue' && !t.isNoData;
+            const isWarning = t.status === 'warning';
+            
+            const icon = isOverdue ? ' <i class="fa-solid fa-triangle-exclamation" style="color:#ff4d4d; font-size:0.6rem; margin-left:2px; animation: pulse 1.5s infinite;"></i>' : 
+                         (isWarning ? ' <i class="fa-solid fa-bolt" style="color:#ff9f43; font-size:0.6rem; margin-left:2px;"></i>' : '');
+            
+            let borderStyle = 'border: 1px solid rgba(255,255,255,0.08);';
+            if (isOverdue) {
+              borderStyle = 'border: 1px solid rgba(255,77,77,0.5); box-shadow: 0 0 6px rgba(255,77,77,0.25);';
+            } else if (isWarning) {
+              borderStyle = 'border: 1px solid rgba(255,159,67,0.5); box-shadow: 0 0 6px rgba(255,159,67,0.25);';
+            }
+
+            const badgeClass = typeName === 'ana' ? 'maintenance' : 'returned';
+            const typeLabel = typeName === 'ana' ? 'Ana Bakım' : 'Yağlama Bakımı';
+            const statusText = isOverdue ? 'Gecikmiş' : (isWarning ? 'Kritik Yaklaşan' : 'Planlı');
+            const titleText = `${statusText} ${typeLabel}`;
+
+            return `
+              <span class="type-badge ${badgeClass}" 
+                    onclick="window.createMaintenanceTask('${t.serial}', 'Bakım', '${typeName === 'ana' ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI'}')" 
+                    style="font-size:0.65rem; padding:3px 7px; font-weight:700; border-radius:4px; font-family:'Rajdhani',sans-serif; cursor:pointer; display:inline-flex; align-items:center; gap:3px; transition:all 0.2s; ${borderStyle}" 
+                    title="${titleText} - İş Emri Açmak İçin Tıkla">
+                ${t.label} (${typeName === 'ana' ? 'Ana' : 'Yağ'})${icon}
+              </span>
+            `;
+          }).join('');
+        };
+
+        siteNames.sort().forEach(site => {
+          const { ana, yag } = monthSites[site];
+          monthHtml += `
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.75rem; font-weight:800; color:#94A3B8; margin-bottom:5px; display:flex; align-items:center; gap:5px;">
+                <i class="fa-solid fa-charging-station" style="font-size:0.7rem; color:var(--accent-cyan);"></i> ${site}
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                ${renderBadges(ana, 'ana')}
+                ${renderBadges(yag, 'yag')}
+              </div>
+            </div>
+          `;
+        });
+
+        monthHtml += `</div>`;
+        detailsHtml += monthHtml;
+      }
+
+      if (!hasAnyData) {
+        detailsHtml += `
+          <div style="grid-column: 1/-1; padding: 2rem; text-align: center; color: var(--text-muted);">
+            Planlı bakım verisi bulunmuyor.
+          </div>
+        `;
+      }
+
+      detailsHtml += `</div>`;
+      detailsDiv.innerHTML = detailsHtml;
+    }
+
+    try {
+      const { Chart, registerables } = await import('chart.js');
+      Chart.register(...registerables);
+
+      if (maintChartInstance) {
+        maintChartInstance.destroy();
+      }
+
+      maintChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: monthNames,
+          datasets: [
+            {
+              label: 'Ana Bakım',
+              data: anaData,
+              borderColor: '#00f2ff',
+              backgroundColor: 'rgba(0, 242, 255, 0.08)',
+              fill: true,
+              tension: 0.45,
+              borderWidth: 3,
+              pointBackgroundColor: '#00f2ff',
+              pointBorderColor: '#0A0E17',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 7
+            },
+            {
+              label: 'Yağlama Bakımı',
+              data: yagData,
+              borderColor: '#9b59b6',
+              backgroundColor: 'rgba(155, 89, 182, 0.08)',
+              fill: true,
+              tension: 0.45,
+              borderWidth: 3,
+              pointBackgroundColor: '#9b59b6',
+              pointBorderColor: '#0A0E17',
+              pointBorderWidth: 2,
+              pointRadius: 4,
+              pointHoverRadius: 7
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (event, elements) => {
+            if (elements && elements.length > 0) {
+              const elementIndex = elements[0].index;
+              const monthName = monthNames[elementIndex].toLowerCase();
+              const targetCard = document.getElementById(`maint-card-${monthName}`);
+              if (targetCard) {
+                targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Glow animation
+                targetCard.style.boxShadow = '0 0 25px var(--accent-cyan)';
+                targetCard.style.borderLeftColor = '#ffffff';
+                targetCard.style.background = 'rgba(0, 242, 255, 0.04)';
+                setTimeout(() => {
+                  targetCard.style.boxShadow = 'none';
+                  targetCard.style.borderLeftColor = 'var(--accent-cyan)';
+                  targetCard.style.background = 'rgba(255, 255, 255, 0.01)';
+                }, 1200);
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#94A3B8',
+                font: {
+                  family: 'Rajdhani',
+                  weight: 'bold'
+                }
+              }
+            },
+            title: {
+              display: true,
+              text: 'Yıllık Periyodik Bakım Dağılım Grafiği (Ocak - Aralık)',
+              color: '#E2E8F0',
+              font: {
+                family: 'Rajdhani',
+                size: 14,
+                weight: 'bold'
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(255, 255, 255, 0.04)'
+              },
+              ticks: {
+                color: '#94A3B8',
+                font: {
+                  family: 'Rajdhani',
+                  weight: 'bold'
+                }
+              }
+            },
+            y: {
+              grid: {
+                color: 'rgba(255, 255, 255, 0.04)'
+              },
+              ticks: {
+                color: '#94A3B8',
+                stepSize: 1,
+                font: {
+                  family: 'Rajdhani',
+                  weight: 'bold'
+                }
+              }
+            }
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Failed to render Chart.js:', err);
+    }
+  }
+
+  (window as any).maintViewMode = 'table';
+  (window as any).setMaintViewMode = (mode: string) => {
+    (window as any).maintViewMode = mode;
+    const tableBtn = document.getElementById('maint-view-table-btn');
+    const chartBtn = document.getElementById('maint-view-chart-btn');
+    const chartContainer = document.getElementById('maint-chart-container');
+    const chartDetails = document.getElementById('maint-chart-details');
+    const tableFrame = document.querySelector('.table-frame');
+    const filterTabs = document.querySelector('.maint-filter-tabs');
+
+    if (mode === 'chart') {
+      if (tableBtn) {
+        tableBtn.style.background = 'transparent';
+        tableBtn.style.borderColor = 'transparent';
+        tableBtn.style.color = 'var(--text-muted)';
+      }
+      if (chartBtn) {
+        chartBtn.style.background = 'rgba(0, 242, 255, 0.1)';
+        chartBtn.style.borderColor = 'var(--accent-cyan)';
+        chartBtn.style.color = 'var(--accent-cyan)';
+      }
+      if (chartContainer) chartContainer.style.display = 'block';
+      if (chartDetails) chartDetails.style.display = 'block';
+      if (tableFrame) (tableFrame as HTMLElement).style.display = 'none';
+      if (filterTabs) (filterTabs as HTMLElement).style.display = 'none';
+      
+      // Update chart with current items
+      const activeItem = document.querySelector('.site-menu-item.active') as HTMLElement;
+      const site = activeItem?.getAttribute('data-site');
+      if (site && (window as any).updateMaintTable) {
+        (window as any).updateMaintTable(site);
+      }
+    } else {
+      if (tableBtn) {
+        tableBtn.style.background = 'rgba(0, 242, 255, 0.1)';
+        tableBtn.style.borderColor = 'var(--accent-cyan)';
+        tableBtn.style.color = 'var(--accent-cyan)';
+      }
+      if (chartBtn) {
+        chartBtn.style.background = 'transparent';
+        chartBtn.style.borderColor = 'transparent';
+        chartBtn.style.color = 'var(--text-muted)';
+      }
+      if (chartContainer) chartContainer.style.display = 'none';
+      if (chartDetails) chartDetails.style.display = 'none';
+      if (tableFrame) (tableFrame as HTMLElement).style.display = 'block';
+      if (filterTabs) (filterTabs as HTMLElement).style.display = 'flex';
+      
+      // Update table with current items
+      const activeItem = document.querySelector('.site-menu-item.active') as HTMLElement;
+      const site = activeItem?.getAttribute('data-site');
+      if (site && (window as any).updateMaintTable) {
+        (window as any).updateMaintTable(site);
+      }
+    }
+  };
+
   (window as any).initMaintenancePlanning = () => {
+    // Ensure we start in table mode on initialization
+    if ((window as any).setMaintViewMode) {
+      (window as any).setMaintViewMode('table');
+    }
+
     const maintData = (window as any).maintData;
     const body = document.getElementById('maint-data-body');
     const title = document.getElementById('active-site-title');
@@ -525,12 +1292,34 @@ export const MaintenancePlanningPage = async () => {
     function updateTable(siteName: string) {
       currentSite = siteName;
       sessionStorage.setItem('activeMaintSiteName', siteName);
-      const allItems = maintData[siteName] || [];
+      const allItems = siteName === 'TÜM SAHALAR' ? maintenancePlan : (maintData[siteName] || []);
       title!.textContent = siteName.toUpperCase();
       
-      const siteObj = dataService.getSites().find(s => s.name === siteName);
-      (window as any).activeMaintSiteId = siteObj?.id;
-      (window as any).activeMaintSiteName = siteName;
+      if (siteName === 'TÜM SAHALAR') {
+        (window as any).activeMaintSiteId = 'ALL';
+        (window as any).activeMaintSiteName = 'TÜM SAHALAR';
+      } else {
+        const siteObj = dataService.getSites().find(s => s.name === siteName);
+        (window as any).activeMaintSiteId = siteObj?.id;
+        (window as any).activeMaintSiteName = siteName;
+      }
+
+      // Hide or show Excel buttons depending on whether it is TÜM SAHALAR
+      const btnExcelDownload = document.querySelector('button[onclick="window.downloadMaintPlanningExcel()"]');
+      const btnExcelUpload = document.getElementById('btn-upload-maint-excel');
+      const btnManualMaint = document.querySelector('button[onclick="window.openManualMaintModal()"]');
+      const btnTemplateExcel = document.querySelector('button[onclick="window.downloadMaintTemplateExcel()"]');
+      if (siteName === 'TÜM SAHALAR') {
+        if (btnExcelDownload) (btnExcelDownload as HTMLElement).style.display = 'none';
+        if (btnExcelUpload) (btnExcelUpload as HTMLElement).style.display = 'none';
+        if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'none';
+        if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'none';
+      } else {
+        if (btnExcelDownload) (btnExcelDownload as HTMLElement).style.display = 'inline-flex';
+        if (btnExcelUpload) (btnExcelUpload as HTMLElement).style.display = 'inline-flex';
+        if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'inline-flex';
+        if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'inline-flex';
+      }
 
       // Calculate dynamic filter counts
       const overdueCount = allItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
@@ -550,6 +1339,64 @@ export const MaintenancePlanningPage = async () => {
       if (tabSafe) tabSafe.querySelector('.c')!.textContent = String(safeCount);
       if (tabNodata) tabNodata.querySelector('.c')!.textContent = String(nodataCount);
       
+      // Render quick stats cards dynamically
+      const statsContainer = document.getElementById('maint-quick-stats');
+      if (statsContainer) {
+        // Filter out control systems (RTU, FCU, SAİ) for stats cards calculations
+        const turbineOnlyItems = allItems.filter((i: any) => {
+          const tNo = String(i.turbineNo || '').toUpperCase().trim();
+          const tSerial = String(i.turbineSerial || '').toUpperCase().trim();
+          return !(
+            tNo.includes('RTU') || tNo.includes('FCU') || tNo.includes('SAİ') || tNo.includes('SAI') ||
+            tSerial.includes('RTU') || tSerial.includes('FCU') || tSerial.includes('SAİ') || tSerial.includes('SAI')
+          );
+        });
+
+        const totalTurbinesCount = turbineOnlyItems.length;
+        const overdueTurbinesCount = turbineOnlyItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
+        const warningTurbinesCount = turbineOnlyItems.filter((i: any) => i.status === 'warning').length;
+        const safeTurbinesCount = turbineOnlyItems.filter((i: any) => i.status === 'safe' && i.lastDate !== '-').length;
+
+        statsContainer.innerHTML = `
+          <div class="m-stat-card" style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 15px; display: flex; align-items: center; gap: 15px; transition: all 0.3s;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(0, 242, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: var(--accent-cyan);">
+              <i class="fa-solid fa-charging-station"></i>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">Toplam Türbin</div>
+              <div style="font-size: 1.4rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; color: #fff; margin-top: 2px;">${totalTurbinesCount} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Adet</span></div>
+            </div>
+          </div>
+          <div class="m-stat-card" style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,77,77,0.08); border-radius: 12px; padding: 15px; display: flex; align-items: center; gap: 15px; transition: all 0.3s;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255, 77, 77, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #ff4d4d;">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">Kritik Geciken</div>
+              <div style="font-size: 1.4rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; color: #ff4d4d; margin-top: 2px;">${overdueTurbinesCount} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Türbin</span></div>
+            </div>
+          </div>
+          <div class="m-stat-card" style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,159,67,0.08); border-radius: 12px; padding: 15px; display: flex; align-items: center; gap: 15px; transition: all 0.3s;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(255, 159, 67, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #ff9f43;">
+              <i class="fa-solid fa-circle-exclamation"></i>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">Yaklaşan Bakım</div>
+              <div style="font-size: 1.4rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; color: #ff9f43; margin-top: 2px;">${warningTurbinesCount} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Türbin</span></div>
+            </div>
+          </div>
+          <div class="m-stat-card" style="flex: 1; min-width: 200px; background: rgba(255,255,255,0.02); border: 1px solid rgba(30,215,96,0.08); border-radius: 12px; padding: 15px; display: flex; align-items: center; gap: 15px; transition: all 0.3s;">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(30, 215, 96, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #1ed760;">
+              <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div>
+              <div style="font-size: 0.7rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase;">Planlı & Güvenli</div>
+              <div style="font-size: 1.4rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; color: #1ed760; margin-top: 2px;">${safeTurbinesCount} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Türbin</span></div>
+            </div>
+          </div>
+        `;
+      }
+      
       // Filter items
       let items = allItems;
       if (activeMaintFilter === 'OVERDUE') {
@@ -561,6 +1408,19 @@ export const MaintenancePlanningPage = async () => {
       } else if (activeMaintFilter === 'NODATA') {
         items = allItems.filter((i: any) => i.lastDate === '-');
       }
+
+      // Filter items by search query
+      const query = ((window as any).maintTurbineSearchQuery || '').trim().toLowerCase();
+      if (query) {
+        items = items.filter((i: any) => {
+          const tNo = String(i.turbineNo || '').toLowerCase();
+          const tName = tNo.startsWith('t-') ? tNo : 't-' + tNo;
+          return tName.includes(query) || tNo.includes(query) || (i.turbineSerial || '').toLowerCase().includes(query);
+        });
+      }
+
+      // Render maintenance intensity chart
+      renderMaintChart(items);
       
       if (items.length === 0) {
         body!.innerHTML = `
@@ -581,21 +1441,27 @@ export const MaintenancePlanningPage = async () => {
         const isNoData = item.lastType === 'VERİ YOK';
         const tNo = String(item.turbineNo || '');
         const tName = tNo.startsWith('T-') ? tNo : 'T-' + tNo;
-        const daysTxt = isNoData ? '-' : (item.daysRemaining < 0 ? Math.abs(item.daysRemaining) + ' GÜN GEÇTİ' : item.daysRemaining + ' GÜN');
-        const statusTxt = isNoData ? 'KAYIT YOK' : (item.status === 'overdue' ? 'KRİTİK GECİKME' : (item.status === 'warning' ? 'YAKLAŞIYOR' : 'PLANLI'));
+        const lastMaintType = item.lastType === 'ANA BAKIM' ? 'Ana Bakım' : (item.lastType === 'YAĞLAMA BAKIMI' ? 'Yağlama Bakımı' : item.lastType);
+        const nextMaintType = item.nextType === 'ANA BAKIM' ? 'Ana Bakım' : (item.nextType === 'YAĞLAMA BAKIMI' ? 'Yağlama Bakımı' : item.nextType);
+        const daysTxt = isNoData ? '-' : (item.daysRemaining < 0 ? Math.abs(item.daysRemaining) + ' Gün Geçti' : item.daysRemaining + ' Gün');
+        const statusTxt = isNoData ? 'Kayıt Yok' : (item.status === 'overdue' ? 'Kritik Gecikme' : (item.status === 'warning' ? 'Yaklaşıyor' : 'Planlı'));
         const statusClass = isNoData ? 'none' : item.status;
         const serial = item.turbineSerial || '';
         
         const lastBadgeClass = item.lastType === 'ANA BAKIM' ? 'maintenance' : (item.lastType === 'YAĞLAMA BAKIMI' ? 'returned' : 'none');
         const nextBadgeClass = item.nextType === 'ANA BAKIM' ? 'maintenance' : (item.nextType === 'YAĞLAMA BAKIMI' ? 'returned' : 'none');
         
+        // Show site name next to turbine in "TÜM SAHALAR" mode
+        const siteSuffix = siteName === 'TÜM SAHALAR' ? ` <span style="font-size:0.72rem; color:#64748B; margin-left:5px; font-weight:600;">(${item.siteName})</span>` : '';
+        const serialSuffix = `<span style="font-size:0.72rem; color:#8A99AD; margin-left:6px; font-weight:600; font-family:'Rajdhani',sans-serif; letter-spacing:0.5px;">(SN: ${serial})</span>`;
+
         html += `<tr style="${isNoData ? 'opacity: 0.7;' : ''}">`;
-        html += `<td class="t-no"><span class="turbine-id-badge" style="font-size: 0.8rem; font-weight: 800; font-family: 'Rajdhani', sans-serif;">${tName}</span></td>`;
+        html += `<td class="t-no"><span class="turbine-id-badge" style="font-size: 0.8rem; font-weight: 800; font-family: 'Rajdhani', sans-serif;">${tName}</span>${serialSuffix}${siteSuffix}</td>`;
         html += `<td style="font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-cyan); cursor: pointer; text-decoration: underline dotted rgba(0,242,255,0.4);" onclick="window.openMaintHistoryModal('${serial}', '${tName}')" title="Bakım Geçmişini Görüntüle"><i class="fa-solid fa-clock-rotate-left" style="margin-right: 6px; font-size: 0.8rem; opacity: 0.8;"></i>${dateStr}</td>`;
-        html += `<td><span class="type-badge ${lastBadgeClass}">${item.lastType}</span></td>`;
-        html += `<td><span class="type-badge next ${nextBadgeClass}">${item.nextType}</span></td>`;
-        html += `<td class="days-val ${item.status}">${daysTxt}</td>`;
-        html += `<td>
+        html += `<td style="text-align: center;"><span class="type-badge ${lastBadgeClass}">${lastMaintType}</span></td>`;
+        html += `<td style="text-align: center;"><span class="type-badge next ${nextBadgeClass}">${nextMaintType}</span></td>`;
+        html += `<td class="days-val ${item.status}" style="text-align: center;">${daysTxt}</td>`;
+        html += `<td style="text-align: center;">
                    <span class="status-pill ${statusClass}">
                      <span class="status-dot ${isNoData ? 'gray' : (item.status === 'overdue' ? 'red' : (item.status === 'warning' ? 'orange' : 'green'))}" style="background: ${isNoData ? 'rgba(255,255,255,0.45)' : (item.status === 'overdue' ? '#ff4d4d' : (item.status === 'warning' ? '#ff9f43' : '#1ed760'))}; box-shadow: 0 0 8px ${isNoData ? 'transparent' : (item.status === 'overdue' ? '#ff4d4d' : (item.status === 'warning' ? '#ff9f43' : '#1ed760'))};"></span>
                      ${statusTxt}
@@ -603,11 +1469,11 @@ export const MaintenancePlanningPage = async () => {
                  </td>`;
         html += `<td style="text-align: right; white-space: nowrap;">`;
         if (isNoData) {
-          html += `<button class="maint-action-btn" onclick="window.createMaintenanceTask('${serial}', 'Bakım', '')"><i class="fa-solid fa-plus"></i> İŞ EMRİ AÇ</button>`;
+          html += `<button class="maint-action-btn" onclick="window.createMaintenanceTask('${serial}', 'Bakım', '')"><i class="fa-solid fa-plus"></i> İş Emri Aç</button>`;
         } else if (item.status === 'overdue' || item.status === 'warning') {
-          html += `<button class="maint-action-btn overdue" onclick="window.createMaintenanceTask('${serial}', 'Bakım', '${item.nextType}')"><i class="fa-solid fa-triangle-exclamation"></i> BAKIM YAP</button>`;
+          html += `<button class="maint-action-btn overdue" onclick="window.createMaintenanceTask('${serial}', 'Bakım', '${item.nextType}')"><i class="fa-solid fa-triangle-exclamation"></i> Bakım Yap</button>`;
         } else {
-          html += `<span style="color: rgba(255,255,255,0.25); font-size: 0.65rem; font-weight: 800; padding-right: 8px; font-family: 'Rajdhani', sans-serif;"><i class="fa-solid fa-circle-check" style="margin-right: 5px; color: #1ed760;"></i> PROGRAMLI</span>`;
+          html += `<span style="color: rgba(255,255,255,0.25); font-size: 0.65rem; font-weight: 800; padding-right: 8px; font-family: 'Rajdhani', sans-serif;"><i class="fa-solid fa-circle-check" style="margin-right: 5px; color: #1ed760;"></i> Programlı</span>`;
         }
         html += `</td>`;
         html += '</tr>';
@@ -679,6 +1545,13 @@ export const MaintenancePlanningPage = async () => {
             </div>
           </div>
           <div class="sites-list custom-scrollbar">
+            <div class="site-menu-item ${initialSite === 'TÜM SAHALAR' ? 'active' : ''}" data-site="TÜM SAHALAR">
+              <i class="fa-solid fa-globe" style="color: var(--accent-cyan); text-shadow: 0 0 5px rgba(0,242,255,0.35);"></i>
+              <span class="s-name" style="font-weight: 700;">TÜM SAHALAR</span>
+              ${maintenancePlan.filter(i => i.status === 'overdue' && i.lastDate !== '-').length > 0 
+                ? `<span class="alert-badge overdue">${maintenancePlan.filter(i => i.status === 'overdue' && i.lastDate !== '-').length}</span>` 
+                : ''}
+            </div>
             ${siteList.map((siteName, idx) => {
               const siteOverdueCount = groupedPlan[siteName].filter(i => i.status === 'overdue' && i.lastDate !== '-').length;
               const siteWarningCount = groupedPlan[siteName].filter(i => i.status === 'warning').length;
@@ -702,12 +1575,32 @@ export const MaintenancePlanningPage = async () => {
         <!-- Main Content -->
         <div class="maintenance-main-content glass-panel">
           <div class="view-header">
-            <div class="site-title-box">
+            <div class="site-title-box" style="display: flex; align-items: center; gap: 15px;">
               <i class="fa-solid fa-wind"></i>
               <h2 id="active-site-title">${initialSite.toUpperCase() || 'SAHA SEÇİN'}</h2>
+              ${isAdmin ? `
+              <div style="display: flex; gap: 4px; margin-left: 10px; background: rgba(255,255,255,0.03); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); align-items: center;">
+                <button id="maint-view-table-btn" onclick="window.setMaintViewMode('table')" style="background: rgba(0, 242, 255, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.72rem; padding: 4px 12px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+                  <i class="fa-solid fa-table"></i> TABLO GÖRÜNÜMÜ
+                </button>
+                <button id="maint-view-chart-btn" onclick="window.setMaintViewMode('chart')" style="background: transparent; border: 1px solid transparent; color: var(--text-muted); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.72rem; padding: 4px 12px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
+                  <i class="fa-solid fa-chart-bar"></i> HEDEF GRAFİK
+                </button>
+              </div>
+              ` : ''}
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
               ${isAdmin ? `
+              <button class="maint-action-btn" onclick="window.downloadMaintTemplateExcel()" style="background: rgba(255, 235, 59, 0.06); border-color: rgba(255, 235, 59, 0.25); color: #fded7e;" title="Excel Yükleme Şablonunu İndir">
+                <i class="fa-solid fa-download"></i> ŞABLON İNDİR
+              </button>
+              <button class="maint-action-btn" onclick="window.downloadMaintPlanningExcel()" style="background: rgba(0, 242, 255, 0.06); border-color: rgba(0, 242, 255, 0.25); color: var(--accent-cyan);">
+                <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
+              </button>
+              <input type="file" id="maint-excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleMaintExcelUpload(event)" />
+              <button class="maint-action-btn" id="btn-upload-maint-excel" onclick="document.getElementById('maint-excel-upload-input').click()" style="background: rgba(20, 241, 149, 0.06); border-color: rgba(20, 241, 149, 0.25); color: #14F195;">
+                <i class="fa-solid fa-upload"></i> EXCEL YÜKLE
+              </button>
               <button class="maint-action-btn" onclick="window.openManualMaintModal()" style="background: rgba(100, 255, 218, 0.06); border-color: rgba(100, 255, 218, 0.25); color: #64ffda;">
                 <i class="fa-solid fa-wrench"></i> MANUEL BAKIM EKLE
               </button>
@@ -720,22 +1613,41 @@ export const MaintenancePlanningPage = async () => {
             </div>
           </div>
 
-          <div class="maint-filter-tabs">
-            <button class="maint-tab active" id="maint-tab-all" onclick="window.filterMaintTable('ALL')">
-              <i class="fa-solid fa-layer-group"></i> HEPSİ <span class="c">-</span>
-            </button>
-            <button class="maint-tab overdue" id="maint-tab-overdue" onclick="window.filterMaintTable('OVERDUE')">
-              <i class="fa-solid fa-triangle-exclamation"></i> GECİKMİŞ <span class="c">-</span>
-            </button>
-            <button class="maint-tab warning" id="maint-tab-warning" onclick="window.filterMaintTable('WARNING')">
-              <i class="fa-solid fa-circle-exclamation"></i> YAKLAŞANLAR <span class="c">-</span>
-            </button>
-            <button class="maint-tab safe" id="maint-tab-safe" onclick="window.filterMaintTable('SAFE')">
-              <i class="fa-solid fa-circle-check"></i> PLANLI & GÜVENLİ <span class="c">-</span>
-            </button>
-            <button class="maint-tab nodata" id="maint-tab-nodata" onclick="window.filterMaintTable('NODATA')">
-              <i class="fa-solid fa-circle-question"></i> VERİ YOK <span class="c">-</span>
-            </button>
+          <!-- Quick Stats Cards Container -->
+          <div id="maint-quick-stats" style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;"></div>
+
+          <div class="maint-filter-tabs" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="maint-tab active" id="maint-tab-all" onclick="window.filterMaintTable('ALL')">
+                <i class="fa-solid fa-layer-group"></i> HEPSİ <span class="c">-</span>
+              </button>
+              <button class="maint-tab overdue" id="maint-tab-overdue" onclick="window.filterMaintTable('OVERDUE')">
+                <i class="fa-solid fa-triangle-exclamation"></i> GECİKMİŞ <span class="c">-</span>
+              </button>
+              <button class="maint-tab warning" id="maint-tab-warning" onclick="window.filterMaintTable('WARNING')">
+                <i class="fa-solid fa-circle-exclamation"></i> YAKLAŞANLAR <span class="c">-</span>
+              </button>
+              <button class="maint-tab safe" id="maint-tab-safe" onclick="window.filterMaintTable('SAFE')">
+                <i class="fa-solid fa-circle-check"></i> PLANLI & GÜVENLİ <span class="c">-</span>
+              </button>
+              <button class="maint-tab nodata" id="maint-tab-nodata" onclick="window.filterMaintTable('NODATA')">
+                <i class="fa-solid fa-circle-question"></i> VERİ YOK <span class="c">-</span>
+              </button>
+            </div>
+            <!-- Turbine Search Bar -->
+            <div class="maint-search-box" style="position: relative; width: 220px;">
+              <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4); font-size: 0.75rem;"></i>
+              <input type="text" id="maint-turbine-search" placeholder="Türbin Ara... (örn: T-01)" style="width: 100%; padding: 6px 10px 6px 30px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 0.75rem; font-family: 'Rajdhani', sans-serif; font-weight: 600; outline: none; transition: all 0.2s;" oninput="window.handleMaintTurbineSearch(this.value)" />
+            </div>
+          </div>
+
+          <!-- Monthly Maintenance Distribution Chart Container -->
+          <div id="maint-chart-container" style="background: rgba(10, 15, 25, 0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: none; height: 450px; position: relative; width: 100%;">
+            <canvas id="maint-monthly-chart" style="width: 100%; height: 100%;"></canvas>
+          </div>
+
+          <!-- Monthly Maintenance Breakdown Details -->
+          <div id="maint-chart-details" style="background: rgba(10, 15, 25, 0.4); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; display: none; width: 100%;">
           </div>
           
           <div class="table-frame custom-scrollbar">
@@ -744,10 +1656,10 @@ export const MaintenancePlanningPage = async () => {
                 <tr>
                   <th>TÜRBİN</th>
                   <th>SON BAKIM</th>
-                  <th>SON TİP</th>
-                  <th>HEDEF BAKIM</th>
-                  <th>KALAN GÜN</th>
-                  <th>DURUM</th>
+                  <th style="text-align: center;">SON TİP</th>
+                  <th style="text-align: center;">HEDEF BAKIM</th>
+                  <th style="text-align: center;">KALAN GÜN</th>
+                  <th style="text-align: center;">DURUM</th>
                   <th style="text-align: right; padding-right: 18px;">AKSİYON</th>
                 </tr>
               </thead>
@@ -913,7 +1825,7 @@ export const MaintenancePlanningPage = async () => {
         align-items: center;
         gap: 6px;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        text-transform: uppercase;
+        text-transform: none;
         letter-spacing: 0.5px;
         font-family: 'Rajdhani', sans-serif;
       }
@@ -974,6 +1886,21 @@ export const MaintenancePlanningPage = async () => {
       .type-badge.next { border: 1px solid rgba(0, 242, 255, 0.25); color: var(--accent-cyan); background: rgba(0, 242, 255, 0.05); }
       .type-badge.next.maintenance { border-color: rgba(0, 242, 255, 0.3); color: var(--accent-cyan); }
       .type-badge.next.returned { border-color: rgba(155, 89, 182, 0.3); color: #d4a0ff; }
+      
+      .maint-data-table .type-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 140px;
+        box-sizing: border-box;
+      }
+      .maint-data-table .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 120px;
+        box-sizing: border-box;
+      }
       
       .days-val { font-family: 'Rajdhani'; font-weight: 700; font-size: 0.9rem; }
       .days-val.overdue { color: #ff4d4d; }

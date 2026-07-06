@@ -1,23 +1,143 @@
+// NATIVE INDEXEDDB CACHE CLEAR (ON VERSION UPGRADE)
+if (typeof window !== 'undefined') {
+  const cacheVersion = 'v1.0.5';
+  if (localStorage.getItem('firestore_cache_ver') !== cacheVersion) {
+    try {
+      window.indexedDB.deleteDatabase('firestore/[DEFAULT]/dh-servis-rapor/main');
+      localStorage.setItem('firestore_cache_ver', cacheVersion);
+    } catch (e) {}
+  }
+}
+
 import './style.css'
 import { offlineSyncService } from './services/OfflineSyncService';
 
 // --- SERVICE WORKER AUTO-UPDATE AND CACHE RELOADER ---
+function showUpdateOverlay() {
+  if (document.getElementById('system-update-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'system-update-overlay';
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.backgroundColor = 'rgba(10, 15, 25, 0.85)';
+  overlay.style.backdropFilter = 'blur(12px)';
+  overlay.style.display = 'flex';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.zIndex = '999999';
+  overlay.style.color = 'white';
+  overlay.style.fontFamily = "'Rajdhani', sans-serif";
+  
+  overlay.innerHTML = `
+    <div style="position: relative; background: rgba(13, 18, 30, 0.85); border: 1px solid rgba(20, 241, 149, 0.25); box-shadow: 0 0 50px rgba(20, 241, 149, 0.15), inset 0 0 20px rgba(20, 241, 149, 0.05); border-radius: 24px; width: 100%; max-width: 440px; padding: 3.5rem 2.5rem; text-align: center; overflow: hidden; backdrop-filter: blur(20px);">
+      <!-- Cyber Scanlines -->
+      <div class="cyber-scanlines" style="position: absolute; inset: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); background-size: 100% 4px, 6px 100%; pointer-events: none; opacity: 0.4;"></div>
+      
+      <!-- Ambient Glow Circles inside the Card -->
+      <div style="position: absolute; top: -20%; left: -20%; width: 150px; height: 150px; background: rgba(20, 241, 149, 0.15); filter: blur(50px); border-radius: 50%; pointer-events: none;"></div>
+      <div style="position: absolute; bottom: -20%; right: -20%; width: 150px; height: 150px; background: rgba(0, 242, 254, 0.1); filter: blur(50px); border-radius: 50%; pointer-events: none;"></div>
+
+      <!-- Icon Container with Double Ring -->
+      <div style="position: relative; width: 100px; height: 100px; margin: 0 auto 2rem auto; display: flex; align-items: center; justify-content: center;">
+        <!-- Pulsing Outer Ring -->
+        <div style="position: absolute; inset: -10px; border: 2px dashed rgba(20, 241, 149, 0.3); border-radius: 50%; animation: spin-clockwise 20s linear infinite;"></div>
+        <!-- Inner Glowing Rotating Ring -->
+        <div style="position: absolute; inset: -4px; border: 3px solid transparent; border-top-color: #14F195; border-bottom-color: #14F195; border-radius: 50%; animation: spin-counter-clockwise 3s cubic-bezier(0.53, 0.21, 0.29, 0.67) infinite; filter: drop-shadow(0 0 8px rgba(20, 241, 149, 0.5));"></div>
+        
+        <!-- Glowing Check Icon -->
+        <div style="background: linear-gradient(135deg, #14f195, #00f2fe); width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0d121e; font-size: 2.2rem; box-shadow: 0 0 30px rgba(20, 241, 149, 0.6); animation: pulse-icon 2s infinite; z-index: 2;">
+          <i class="fa-solid fa-check" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));"></i>
+        </div>
+      </div>
+
+      <!-- Animated Glow Title -->
+      <h2 class="neon-title" style="font-size: 2.1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 3px; margin: 0 0 1rem 0; font-family: 'Rajdhani', sans-serif; background: linear-gradient(90deg, #14F195, #00f2fe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 15px rgba(20, 241, 149, 0.25);">
+        SİSTEM GÜNCELLEMESİ
+      </h2>
+      
+      <!-- Subtext -->
+      <p style="font-size: 1.05rem; color: #a0aec0; line-height: 1.6; margin: 0 0 2rem 0; font-family: 'Inter', sans-serif; font-weight: 500;">
+        Uygulamanın yeni bir sürümü başarıyla yüklendi.<br>
+        <span style="color: rgba(255,255,255,0.7); display: inline-flex; align-items: center; gap: 2px;">
+          Sayfa yenileniyor<span class="dot-1">.</span><span class="dot-2">.</span><span class="dot-3">.</span>
+        </span>
+      </p>
+
+      <!-- Tech Progress Bar loader -->
+      <div style="width: 100%; height: 4px; background: rgba(255, 255, 255, 0.05); border-radius: 10px; overflow: hidden; position: relative;">
+        <div style="position: absolute; top: 0; left: 0; height: 100%; width: 50%; background: linear-gradient(90deg, transparent, #14F195, #00f2fe); border-radius: 10px; animation: loading-bar-flow 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;"></div>
+      </div>
+    </div>
+    <style>
+      @keyframes spin-clockwise {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes spin-counter-clockwise {
+        to { transform: rotate(-360deg); }
+      }
+      @keyframes pulse-icon {
+        0% { transform: scale(1); box-shadow: 0 0 20px rgba(20, 241, 149, 0.5); }
+        50% { transform: scale(1.05); box-shadow: 0 0 35px rgba(20, 241, 149, 0.8), 0 0 15px rgba(0, 242, 254, 0.4); }
+        100% { transform: scale(1); box-shadow: 0 0 20px rgba(20, 241, 149, 0.5); }
+      }
+      @keyframes loading-bar-flow {
+        0% { left: -50%; }
+        100% { left: 100%; }
+      }
+      .dot-1 { animation: dot-blink 1.4s infinite; animation-delay: 0.0s; }
+      .dot-2 { animation: dot-blink 1.4s infinite; animation-delay: 0.2s; }
+      .dot-3 { animation: dot-blink 1.4s infinite; animation-delay: 0.4s; }
+      @keyframes dot-blink {
+        0% { opacity: 0.2; }
+        50% { opacity: 1; }
+        100% { opacity: 0.2; }
+      }
+    </style>
+  `;
+  document.body.appendChild(overlay);
+}
+
 if ('serviceWorker' in navigator) {
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing) return;
     refreshing = true;
     console.log("New service worker activated. Reloading page to apply updates...");
-    if (typeof (window as any).showToast === 'function') {
-      (window as any).showToast('SİSTEM GÜNCELLEMESİ', 'Uygulamanın yeni bir sürümü yüklendi. Sayfa güncelleniyor...', 'success');
+    showUpdateOverlay();
+    setTimeout(() => {
+      window.location.reload();
+    }, 2500);
+  });
+}
+
+async function checkSystemVersion() {
+  try {
+    const res = await fetch(`/version.json?t=${Date.now()}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const serverVersion = data.version;
+    const localVersion = localStorage.getItem('app_version');
+    
+    if (!localVersion) {
+      localStorage.setItem('app_version', serverVersion);
+      return;
+    }
+    
+    if (localVersion !== serverVersion) {
+      showUpdateOverlay();
+      localStorage.setItem('app_version', serverVersion);
       setTimeout(() => {
         window.location.reload();
       }, 2500);
-    } else {
-      window.location.reload();
     }
-  });
+  } catch (e) {
+    console.error("Version check error:", e);
+  }
 }
+
+// Check version on load and every 15 seconds for instant detection
+checkSystemVersion();
+setInterval(checkSystemVersion, 15000);
 
 // --- GLOBAL ERROR TRACKER ---
 (window as any).getSystemErrors = () => JSON.parse(localStorage.getItem('system_errors') || '[]');
@@ -72,7 +192,7 @@ import { authService } from './services/AuthService'
 import { taskService } from './services/TaskService'
 import { userService } from './services/UserService'
 import type { UserProfile } from './services/UserService'
-import { formatTeamName } from './utils/formatters'
+import { formatTeamName, formatDisplayName } from './utils/formatters'
 
 // Types
 type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-task' | 'login' | 'warehouses' | 'transfers' | 'users' | 'templates' | 'analytics' |
@@ -80,7 +200,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'kkd-kontrol';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals';
 
 interface AppState {
   currentPage: Page
@@ -93,7 +213,7 @@ interface AppState {
   inventorySortKey: string;
   inventorySortDirection: 'asc' | 'desc';
   inventorySearchQuery: string;
-  warehouseTab: 'inventory' | 'history';
+  warehouseTab: string;
 }
 
 const state: AppState = {
@@ -119,7 +239,7 @@ const Sidebar = () => {
   // Filter warehouses based on permissions
   const rawWarehouses = warehouses.filter(w => {
     if ((profile?.role as any) === 'ADMIN' || (profile?.role as any) === 'MALZEME_YONETIMI' || profile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') return true;
-    if ((profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') return w.id === 'W11';
+    if ((profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') return w.id === 'MTA';
     return profile?.allowedWarehouses?.includes(w.id);
   });
 
@@ -249,11 +369,11 @@ const Sidebar = () => {
           </li>
         ` : ''}
         ${isAllowed('turbines') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'turbines' ? 'active' : ''}" onclick="window.toggleSubmenu('regions')">
+          <li class="nav-item has-submenu ${state.currentPage === 'turbines' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('regions', 'turbines')">
             <i class="fa-solid fa-map-location-dot"></i> Servis Bölgeleri
-            <i class="fa-solid fa-chevron-down submenu-arrow"></i>
+            <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'turbines' ? 'rotate-180' : ''}"></i>
           </li>
-          <ul id="regions-submenu" class="sub-menu hidden">
+          <ul id="regions-submenu" class="sub-menu ${state.currentPage === 'turbines' ? '' : 'hidden'}">
             ${filteredSites.map(site => `
               <li class="sub-item ${state.selectedSiteId === site.id ? 'active' : ''}" onclick="window.selectSiteAndNavigate('${site.id}')">
                 <i class="fa-solid fa-charging-station" style="font-size: 0.6rem; opacity: 0.5;"></i> ${site.name}
@@ -262,11 +382,11 @@ const Sidebar = () => {
           </ul>
         ` : ''}
         ${isAllowed('warehouses') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'warehouses' ? 'active' : ''}" onclick="window.toggleSubmenu('warehouses')">
+          <li class="nav-item has-submenu ${state.currentPage === 'warehouses' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('warehouses', 'warehouses')">
             <i class="fa-solid fa-warehouse"></i> Servis Depoları
-            <i class="fa-solid fa-chevron-down submenu-arrow"></i>
+            <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'warehouses' ? 'rotate-180' : ''}"></i>
           </li>
-          <ul id="warehouses-submenu" class="sub-menu hidden">
+          <ul id="warehouses-submenu" class="sub-menu ${state.currentPage === 'warehouses' ? '' : 'hidden'}">
             ${filteredWarehouses.map(wh => `
               <li class="sub-item ${state.selectedWarehouseId === wh.id ? 'active' : ''}" 
                   ondragover="if(window.warehouseSidebarDragOver) window.warehouseSidebarDragOver(event)" 
@@ -276,26 +396,22 @@ const Sidebar = () => {
                 <i class="fa-solid fa-boxes-stacked" style="font-size: 0.6rem; opacity: 0.5;"></i> ${wh.name}
               </li>
             `).join('')}
-            ${profile?.team ? `
-              <li class="sub-item ${state.selectedWarehouseId === 'team_' + profile.team.replace(/\s+/g, '_') ? 'active' : ''}" 
-                  ondragover="if(window.warehouseSidebarDragOver) window.warehouseSidebarDragOver(event)" 
-                  ondragleave="if(window.warehouseSidebarDragLeave) window.warehouseSidebarDragLeave(event)" 
-                  ondrop="if(window.warehouseSidebarDrop) window.warehouseSidebarDrop(event, 'team_${profile.team.replace(/\s+/g, '_')}')"
-                  onclick="window.selectWarehouseAndNavigate('team_${profile.team.replace(/\s+/g, '_')}')" style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 0.5rem; margin-top: 0.5rem; color: #14F195; font-weight: bold;">
-                <i class="fa-solid fa-truck-ramp-box" style="font-size: 0.75rem; margin-right: 4px;"></i> Zimmetim (${profile.team})
-              </li>
-            ` : ''}
-            ${(profile?.role === 'ADMIN' || isMaterialManager) ? `
+            ${(profile?.role === 'ADMIN' || isMaterialManager || profile?.team || (profile?.allowedWarehouses || []).some(wId => wId.startsWith('team_'))) ? `
               <li style="padding: 0.5rem 1rem; font-size: 0.75rem; color: #64748B; text-transform: uppercase; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.05); margin-top: 0.5rem;">Ekiplerin Zimmeti</li>
               ${Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`).map(teamName => {
                 const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
+                const userTeamCanonical = profile?.team ? formatTeamName(profile.team) : '';
+                const isUserOwnTeam = userTeamCanonical === teamName;
+                const isAllowed = profile?.role === 'ADMIN' || isMaterialManager || isUserOwnTeam || (profile?.allowedWarehouses || []).includes(teamId);
+                if (!isAllowed) return '';
+                
                 return `
                   <li class="sub-item ${state.selectedWarehouseId === teamId ? 'active' : ''}" 
                       ondragover="if(window.warehouseSidebarDragOver) window.warehouseSidebarDragOver(event)" 
                       ondragleave="if(window.warehouseSidebarDragLeave) window.warehouseSidebarDragLeave(event)" 
                       ondrop="if(window.warehouseSidebarDrop) window.warehouseSidebarDrop(event, '${teamId}')"
-                      onclick="window.selectWarehouseAndNavigate('${teamId}')" style="color: #60A5FA;">
-                    <i class="fa-solid fa-truck-moving" style="font-size: 0.65rem; opacity: 0.7; margin-right: 4px;"></i> ${teamName} Deposu
+                      onclick="window.selectWarehouseAndNavigate('${teamId}')" style="color: ${isUserOwnTeam ? '#14F195' : '#60A5FA'};">
+                    <i class="fa-solid ${isUserOwnTeam ? 'fa-truck-ramp-box' : 'fa-truck-moving'}" style="font-size: 0.65rem; opacity: 0.7; margin-right: 4px;"></i> ${teamName} Deposu
                   </li>
                 `;
               }).join('')}
@@ -303,11 +419,11 @@ const Sidebar = () => {
           </ul>
         ` : ''}
         ${isAllowed('reports-archive') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'reports-archive' ? 'active' : ''}" onclick="window.toggleSubmenu('reports-archive')">
+          <li class="nav-item has-submenu ${state.currentPage === 'reports-archive' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('reports-archive', 'reports-archive')">
             <i class="fa-solid fa-box-archive"></i> Rapor Arşivi
-            <i class="fa-solid fa-chevron-down submenu-arrow"></i>
+            <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'reports-archive' ? 'rotate-180' : ''}"></i>
           </li>
-          <ul id="reports-archive-submenu" class="sub-menu hidden">
+          <ul id="reports-archive-submenu" class="sub-menu ${state.currentPage === 'reports-archive' ? '' : 'hidden'}">
             ${filteredSites.map(site => `
               <li class="sub-item ${state.selectedReportSiteId === site.id ? 'active' : ''}" onclick="window.selectReportSiteAndNavigate('${site.id}')">
                 <i class="fa-solid fa-file-pdf" style="font-size: 0.6rem; opacity: 0.5;"></i> Rapor_${(site.name || 'Bilinmeyen').replace('Alize ', '').replace('Anemon ', '')}
@@ -341,7 +457,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${(isAllowed('siparis') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('global-history') || isMaterialManager || isAllowed('warehouses') || isAllowed('image-pool')) ? `
+        ${(isAllowed('siparis') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) ? `
           <div class="nav-section-label">Depo Yönetimi</div>
         ` : ''}
 
@@ -380,7 +496,7 @@ const Sidebar = () => {
             <i class="fa-solid fa-clock-rotate-left"></i> Depo Hareketleri
           </li>
         ` : ''}
-        ${(isMaterialManager || profile?.role === 'ADMIN' || isAllowed('warehouses')) ? `
+        ${((isMaterialManager || profile?.role === 'ADMIN' || isAllowed('warehouses')) && profile?.role !== 'TECHNICIAN') ? `
           <li class="nav-item ${state.currentPage === 'warehouses' ? 'active' : ''}" onclick="window.navigate('warehouses')">
             <i class="fa-solid fa-warehouse"></i> Depo İzleme
           </li>
@@ -411,12 +527,29 @@ const Sidebar = () => {
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN') ? `
+          <li class="nav-item ${state.currentPage === 'overtime-approvals' ? 'active' : ''}" onclick="window.navigate('overtime-approvals')">
+            <i class="fa-solid fa-file-signature" style="color: var(--accent-cyan);"></i> Mesai & Sodexo Onayları
+          </li>
           <li class="nav-item ${state.currentPage === 'online-users' ? 'active' : ''}" onclick="window.navigate('online-users')">
             <i class="fa-solid fa-users-viewfinder" style="color: #14F195;"></i> Aktif Kullanıcılar
           </li>
-          <li class="nav-item ${state.currentPage === 'kkd-kontrol' ? 'active' : ''}" onclick="window.navigate('kkd-kontrol')">
-            <i class="fa-solid fa-helmet-safety" style="color: #f59e0b;"></i> KKD Kontrol
+          
+          <!-- 🟨 PERİYODİK KONTROLLER SUBMENU -->
+          <li class="nav-item has-submenu ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? 'active' : ''}" onclick="window.toggleSubmenu('periodic-controls')" style="color: #fbbf24; font-weight: 700;">
+            <i class="fa-solid fa-clock-rotate-left" style="color: #fbbf24;"></i> Periyodik Kontroller
+            <i class="fa-solid fa-chevron-down submenu-arrow ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? 'rotate-180' : ''}" style="color: #fbbf24; margin-left: auto;"></i>
           </li>
+          <ul id="periodic-controls-submenu" class="sub-menu ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? '' : 'hidden'}">
+            <li class="sub-item ${state.currentPage === 'kkd-kontrol' ? 'active' : ''}" onclick="window.navigate('kkd-kontrol')">
+              <i class="fa-solid fa-helmet-safety" style="font-size: 0.65rem; opacity: 0.7;"></i> KKD Kontrolü
+            </li>
+            <li class="sub-item ${state.currentPage === 'olcu-aletleri' ? 'active' : ''}" onclick="window.navigate('olcu-aletleri')">
+              <i class="fa-solid fa-gauge" style="font-size: 0.65rem; opacity: 0.7;"></i> Ölçü Aletleri Kalibrasyon
+            </li>
+            <li class="sub-item ${state.currentPage === 'tork-aletleri' ? 'active' : ''}" onclick="window.navigate('tork-aletleri')">
+              <i class="fa-solid fa-wrench" style="font-size: 0.65rem; opacity: 0.7;"></i> Tork Aletleri Kalibrasyon
+            </li>
+          </ul>
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('users')) ? `
           <li class="nav-item ${state.currentPage === 'users' ? 'active' : ''}" onclick="window.navigate('users')">
@@ -465,11 +598,13 @@ const Sidebar = () => {
           </div>
           <div style="text-align: left;">
             <div style="font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.8rem; color: var(--text-main); line-height: 1.2;">
-              ${state.userProfile?.displayName || profile?.email?.split('@')[0]?.toUpperCase() || 'YÜKLENİYOR...'}
+              ${formatDisplayName(state.userProfile?.displayName || profile?.email || '') || 'YÜKLENİYOR...'}
               <span id="session-count-badge"></span>
             </div>
             ${state.userProfile?.managedTeams && state.userProfile.managedTeams.length > 0 ? `<div style="font-size: 0.55rem; color: #f97316; font-weight: 800; letter-spacing: 1px; margin-top: 2px;">EKİP LİDERİ</div>` : ''}
-            <div style="font-size: 0.6rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">${state.userProfile?.role || '...'}</div>
+            <div style="font-size: 0.6rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; ${state.userProfile?.role === 'TECHNICIAN' ? '' : 'text-transform: uppercase;'}">
+              ${state.userProfile?.role === 'TECHNICIAN' ? 'technician' : (state.userProfile?.role || '...')}
+            </div>
           </div>
         </div>
       </div>
@@ -531,6 +666,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
         </div>
       </div>
     `;
+    return;
   }
 
   // Intercept public KKD query from QR code scans on-site
@@ -595,14 +731,34 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           authService.logout().catch(console.error);
           return;
         }
+
+        // Auto-detect and set team if missing
+        if (!profile.team) {
+          const autoTeam = formatTeamName(profile.displayName || profile.email || '');
+          if (autoTeam && autoTeam.startsWith('Team')) {
+            profile.team = autoTeam;
+            await userService.saveProfile(profile);
+            console.log(`[Auth] Auto-detected and saved team: ${autoTeam} for user ${profile.displayName}`);
+          }
+        }
+
         state.userProfile = profile;
+
+        // Run silent self-healing database audit for admins
+        if (profile.role === 'ADMIN' || profile.role === 'MALZEME_YONETIMI' || profile.email?.toLowerCase() === 'hursit.akter@demirerholding.com') {
+          import('./agents/WarehouseAgent').then(({ warehouseAgent }) => {
+            warehouseAgent.runSelfHealingAudit().catch(err => console.error("[Self-Healing] Error:", err));
+          }).catch(err => console.error("[Self-Healing] Import failed:", err));
+        }
       } else {
         console.warn("No user profile found, auto-creating default technician profile...");
+        const autoTeam = formatTeamName(user.displayName || user.email || '');
         const defaultProfile: UserProfile = {
           uid: user.uid,
           email: user.email || '',
           displayName: user.displayName || user.email?.split('@')[0] || 'Kullanıcı',
           role: 'TECHNICIAN',
+          team: autoTeam.startsWith('Team') ? autoTeam : '',
           allowedTabs: {
             dashboard: true,
             tasks: { access: true, createTask: false, deleteTask: false, completeTask: true, transferTask: false },
@@ -621,7 +777,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
 
   if (state.userProfile) {
     (window as any).currentUser = state.userProfile;
-    (window as any).currentUserTeam = state.userProfile.team || user.email?.split('@')[0].toUpperCase();
+    (window as any).currentUserTeam = state.userProfile.team || formatTeamName(state.userProfile.displayName || user.email || '');
     
     // Redirect Material Manager to Material Analytics instead of Dashboard
     const isMaterialManager = state.userProfile.role === 'MALZEME_YONETIMI' || state.userProfile.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
@@ -743,16 +899,22 @@ const render = async (options: { skipShell?: boolean } = {}) => {
                 </div>
                 
                 <div id="tab-materials" class="turbine-tab-content hidden">
-                  <h3 class="tab-section-title">Değişen Parçalar</h3>
-                  <div class="table-responsive">
-                    <table class="data-table">
-                      <thead>
-                        <tr><th>Tarih</th><th>Rapor No</th><th>Malzeme Kodu</th><th>Açıklama</th><th>Miktar</th></tr>
-                      </thead>
-                      <tbody id="modal-materials-list"></tbody>
-                    </table>
-                  </div>
-                </div>
+                   <h3 class="tab-section-title">Değişen Parçalar</h3>
+                   <div class="table-responsive" style="overflow-x: auto;">
+                     <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                       <thead>
+                         <tr style="border-bottom: 2px solid rgba(255,255,255,0.1);">
+                           <th style="padding: 0.75rem 0.5rem; text-align: left; font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Tarih</th>
+                           <th style="padding: 0.75rem 0.5rem; text-align: left; font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Rapor / MÇF No</th>
+                           <th style="padding: 0.75rem 0.5rem; text-align: left; font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Malzeme / Seri No</th>
+                           <th style="padding: 0.75rem 0.5rem; text-align: left; font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Açıklama</th>
+                           <th style="padding: 0.75rem 0.5rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: #94A3B8; text-transform: uppercase;">Miktar</th>
+                         </tr>
+                       </thead>
+                       <tbody id="modal-materials-list"></tbody>
+                     </table>
+                   </div>
+                 </div>
                 
                 <div id="tab-reports" class="turbine-tab-content hidden">
                   <div id="reports-list-container">
@@ -774,13 +936,34 @@ const render = async (options: { skipShell?: boolean } = {}) => {
                 </div>
 
                 <div id="tab-notes" class="turbine-tab-content hidden">
-                  <h3 class="tab-section-title">Notlar & To-Do</h3>
-                  <div class="note-input-group" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
-                    <input type="text" id="new-turbine-note-input" class="cyber-input" placeholder="Yeni bir not veya to-do ekle..." style="flex: 1;">
-                    <button onclick="window.addTurbineNote()" class="btn-cyber" style="min-width: 100px; font-weight: bold; letter-spacing: 1px;"><i class="fa-solid fa-plus"></i> EKLE</button>
-                  </div>
-                  <div id="modal-notes-list"></div>
-                </div>
+                   <h3 class="tab-section-title">Notlar & To-Do</h3>
+                   
+                   <!-- Note Input Group with Image Upload -->
+                   <div class="note-input-group" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px;">
+                     <div style="display: flex; gap: 0.5rem; align-items: center;">
+                       <input type="text" id="new-turbine-note-input" class="cyber-input" placeholder="Yeni bir not veya to-do ekle..." style="flex: 1;">
+                       
+                       <!-- Hidden Image File Input -->
+                       <input type="file" id="note-image-input" accept="image/*" style="display: none;" onchange="window.handleNoteImageSelect(this)">
+                       
+                       <!-- Trigger Button -->
+                       <button onclick="document.getElementById('note-image-input').click()" class="cyber-button secondary" style="padding: 0.5rem 0.85rem; height: 42px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.85rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;" title="Resim Ekle">
+                         <i class="fa-solid fa-camera" style="font-size: 1.1rem; color: var(--accent-cyan);"></i>
+                       </button>
+                       
+                       <!-- Add Button -->
+                       <button id="add-note-btn" onclick="window.addTurbineNote()" class="btn-cyber" style="min-width: 100px; height: 42px; font-weight: bold; letter-spacing: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; cursor: pointer;"><i class="fa-solid fa-plus"></i> EKLE</button>
+                     </div>
+                     
+                     <!-- Image Preview Container -->
+                     <div id="note-image-preview-container" class="hidden" style="position: relative; display: inline-block; max-width: 120px; border-radius: 8px; overflow: hidden; border: 1px solid var(--accent-cyan); box-shadow: 0 0 10px rgba(0,242,255,0.2); margin-top: 0.25rem;">
+                       <img id="note-image-preview" src="" style="width: 100%; display: block; max-height: 120px; object-fit: cover;">
+                       <button onclick="window.clearNoteImage()" style="position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); border: none; color: #ff4d4d; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.75rem;">&times;</button>
+                     </div>
+                   </div>
+                   
+                   <div id="modal-notes-list"></div>
+                 </div>
               </div>
             </div>
           </div>
@@ -999,6 +1182,28 @@ const getContent = async () => {
       }, 50);
       return await KkdControlPage();
     }
+    case 'overtime-approvals': {
+      const { OvertimeApprovalsPage } = await import('./pages/OvertimeApprovals');
+      return await OvertimeApprovalsPage();
+    }
+    case 'olcu-aletleri': {
+      const { DeviceCalibrationPage } = await import('./pages/DeviceCalibration');
+      setTimeout(() => {
+         if ((window as any).initDeviceCalibrationPage) {
+            (window as any).initDeviceCalibrationPage('OLCU');
+         }
+      }, 50);
+      return await DeviceCalibrationPage('OLCU');
+    }
+    case 'tork-aletleri': {
+      const { DeviceCalibrationPage } = await import('./pages/DeviceCalibration');
+      setTimeout(() => {
+         if ((window as any).initDeviceCalibrationPage) {
+            (window as any).initDeviceCalibrationPage('TORK');
+         }
+      }, 50);
+      return await DeviceCalibrationPage('TORK');
+    }
     case 'siparis': {
       const { SiparisPage } = await import('./pages/Siparis');
       return await SiparisPage(state.userProfile);
@@ -1083,6 +1288,14 @@ const getContent = async () => {
 };
 
 (window as any).navigate = (page: string, param?: any) => {
+  if ((window as any)._draftAuditUnsubscribe) {
+    try {
+      (window as any)._draftAuditUnsubscribe();
+    } catch (e) {
+      console.error("Failed to unsubscribe draft audit:", e);
+    }
+    (window as any)._draftAuditUnsubscribe = null;
+  }
   state.currentPage = page as Page;
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) sidebar.classList.remove('mobile-active');
@@ -1124,9 +1337,52 @@ const getContent = async () => {
   }
 };
 
-(window as any).selectWarehouseAndNavigate = (siteId: string) => {
+(window as any).toggleSubmenuAndNavigate = (id: string, page: string) => {
+  if (state.currentPage !== page) {
+    (window as any).navigate(page);
+  } else {
+    // If we are already on the page but viewing a specific item (e.g. site or warehouse), go back to general list
+    if (page === 'warehouses' && state.selectedWarehouseId) {
+      (window as any).navigate(page);
+    } else if (page === 'turbines' && state.selectedSiteId) {
+      (window as any).navigate(page);
+    } else if (page === 'reports-archive' && state.selectedReportSiteId !== 'TÜMÜ') {
+      state.selectedReportSiteId = 'TÜMÜ';
+      (window as any).navigate(page);
+    } else {
+      (window as any).toggleSubmenu(id);
+    }
+  }
+};
+
+(window as any).selectWarehouseAndNavigate = (siteId: string | null, tabName?: string) => {
+  if ((window as any)._draftAuditUnsubscribe) {
+    try {
+      (window as any)._draftAuditUnsubscribe();
+    } catch (e) {
+      console.error("Failed to unsubscribe draft audit:", e);
+    }
+    (window as any)._draftAuditUnsubscribe = null;
+  }
+  if (!siteId) {
+    state.currentPage = 'warehouses';
+    state.selectedWarehouseId = undefined;
+    state.warehouseTab = 'inventory';
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.classList.remove('mobile-active');
+    render();
+    return;
+  }
+  const isSameWarehouse = state.selectedWarehouseId === siteId;
   state.currentPage = 'warehouses';
   state.selectedWarehouseId = siteId;
+  if (tabName) {
+    state.warehouseTab = tabName;
+  } else if (isSameWarehouse && (window as any).currentWarehouseTab) {
+    state.warehouseTab = (window as any).currentWarehouseTab;
+  } else {
+    state.warehouseTab = 'inventory';
+  }
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) sidebar.classList.remove('mobile-active');
   render();

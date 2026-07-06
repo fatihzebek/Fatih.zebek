@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc, collectionGroup, limit } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc, collectionGroup, limit, runTransaction } from 'firebase/firestore';
 import { dataService } from './DataService';
 
 export interface InventoryItem {
@@ -39,6 +39,7 @@ export interface InventoryLog {
   source?: string;
   team?: string;
   note?: string;
+  serialNo?: string;
 }
 
 export interface AuditResult {
@@ -65,6 +66,8 @@ export interface AuditRecord {
   timestamp: any;
   date?: string;
   imported?: boolean;
+  startTime?: string;
+  endTime?: string;
 }
 
 class WarehouseService {
@@ -238,6 +241,33 @@ class WarehouseService {
     }
   }
 
+  async returnDefectToInventory(id: string, itemId: string, targetCondition: 'NEW' | 'REVISED', userEmail: string, customSerial?: string, recoveryNote?: string, targetSapNo?: string, targetDescription?: string) {
+    const warehouseId = this.resolveWarehouseId(id);
+    const itemDocRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
+    const itemSnap = await getDoc(itemDocRef);
+    if (!itemSnap.exists()) {
+      throw new Error("Malzeme bulunamadı");
+    }
+    const itemData = itemSnap.data();
+    const qty = Number(itemData.quantity || 0);
+    const sapNo = (targetSapNo && targetSapNo.trim()) ? targetSapNo.trim() : itemData.sapNo;
+    const desc = (targetDescription && targetDescription.trim()) ? targetDescription.trim() : (itemData.description || 'Bilinmeyen Malzeme');
+    const shelf = itemData.shelfNo || 'Tanımsız';
+    const serial = customSerial !== undefined ? customSerial.trim() : (itemData.serialNo || '');
+    
+    // 1. Delete defect item
+    await deleteDoc(itemDocRef);
+    
+    // 2. Add stock in the target condition
+    await this.updateStockBySap(warehouseId, sapNo, qty, {
+      user: userEmail,
+      reason: `Sökülen Parçanın Sağlam Olduğu Anlaşıldı - Stoğa Geri Alındı (${targetCondition === 'NEW' ? 'Sıfır' : 'Revize'})`,
+      materialName: desc
+    }, targetCondition, shelf, serial, undefined, recoveryNote);
+    
+    this.inventoryCache.delete(warehouseId);
+  }
+
   async updateMaterial(id: string, itemId: string, updates: Partial<InventoryItem>) {
     const warehouseId = this.resolveWarehouseId(id);
     const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
@@ -252,10 +282,10 @@ class WarehouseService {
       return;
     }
 
-    await updateDoc(docRef, {
+    await setDoc(docRef, {
       ...updates,
       lastUpdated: serverTimestamp()
-    });
+    }, { merge: true });
     
     // Update local cache directly to avoid query lag
     const cached = this.inventoryCache.get(warehouseId);
@@ -279,9 +309,9 @@ class WarehouseService {
     const targetWarehouseId = this.resolveWarehouseId(targetId);
 
     const sourceInventory = await this.getInventory(sourceWarehouseId);
-    const sourceItem = sourceInventory.find(i => i.id === sourceItemId);
-    if (!sourceItem) throw new Error("Kaynak malzeme bulunamadı");
-    if (sourceItem.quantity < quantity) throw new Error("Yetersiz stok");
+    const sourceItemCached = sourceInventory.find(i => i.id === sourceItemId);
+    if (!sourceItemCached) throw new Error("Kaynak malzeme bulunamadı");
+    if (sourceItemCached.quantity < quantity) throw new Error("Yetersiz stok");
 
     const getWarehouseName = (id: string): string => {
       if (id.startsWith('team_')) {
@@ -298,50 +328,137 @@ class WarehouseService {
     const sourceName = getWarehouseName(sourceWarehouseId);
     const targetName = getWarehouseName(targetWarehouseId);
 
-    const sourceUpdates: any = { quantity: sourceItem.quantity - quantity };
-    if (targetWarehouseId.startsWith('team_') && !sourceWarehouseId.startsWith('team_')) {
-      const currentReserved = sourceItem.reservedQuantity || 0;
-      const reservations = (sourceItem as any).reservations || {};
-      const currentTeamQty = reservations[targetWarehouseId] || 0;
-      
-      const newReservations = {
-        ...reservations,
-        [targetWarehouseId]: currentTeamQty + quantity
-      };
-      if (newReservations[targetWarehouseId] <= 0) {
-        delete newReservations[targetWarehouseId];
+    const targetInventory = await this.getInventory(targetWarehouseId);
+    const targetItemCached = targetInventory.find(i => i.sapNo === sourceItemCached.sapNo && (i.condition || 'NEW') === (sourceItemCached.condition || 'NEW'));
+
+    // Check reservations (outside transaction to get target warehouse & item ID)
+    let resWhId = targetWarehouseId;
+    let resItemId = targetItemCached?.id || '';
+    let hasReservation = targetItemCached && targetItemCached.reservations && (targetItemCached.reservations[sourceWarehouseId] || 0) > 0;
+
+    if (sourceWarehouseId.startsWith('team_') && !targetWarehouseId.startsWith('team_') && !hasReservation) {
+      const allWhs = dataService.getWarehouses();
+      for (const w of allWhs) {
+        if (w.id.startsWith('team_')) continue;
+        const inv = await this.getInventory(w.id);
+        const it = inv.find(i => i.sapNo === sourceItemCached.sapNo && i.condition !== 'DEFECT');
+        if (it && it.reservations && (it.reservations[sourceWarehouseId] || 0) > 0) {
+          resWhId = w.id;
+          resItemId = it.id!;
+          hasReservation = true;
+          break;
+        }
       }
-      
-      sourceUpdates.reservedQuantity = currentReserved + quantity;
-      sourceUpdates.reservations = newReservations;
     }
 
-    const sourcePromises: Promise<any>[] = [
-      this.updateMaterial(sourceWarehouseId, sourceItemId, sourceUpdates),
-      this.addLog(sourceWarehouseId, {
-        itemId: sourceItemId,
-        sapNo: sourceItem.sapNo || '',
-        materialName: (sourceItem as any).name || sourceItem.description || 'Bilinmeyen',
-        type: 'TRANSFER',
-        quantity: -quantity,
-        oldQty: sourceItem.quantity,
-        newQty: sourceItem.quantity - quantity,
-        user,
-        note: `${targetName} deposuna transfer edildi.`
-      })
-    ];
+    let finalSourceQty = 0;
+    let finalTargetQty = 0;
+    let finalTargetId = targetItemCached?.id || '';
 
-    const targetInventory = await this.getInventory(targetWarehouseId);
-    const targetItem = targetInventory.find(i => i.sapNo === sourceItem.sapNo);
+    await runTransaction(db, async (transaction) => {
+      // 1. Define all references
+      const sourceRef = doc(db, 'warehouses', sourceWarehouseId, 'inventory_v2', sourceItemId);
+      const targetRef = finalTargetId ? doc(db, 'warehouses', targetWarehouseId, 'inventory_v2', finalTargetId) : null;
+      
+      const shouldReadOther = !!(sourceWarehouseId.startsWith('team_') && !targetWarehouseId.startsWith('team_') && hasReservation && resItemId && resWhId !== targetWarehouseId);
+      const otherRef = shouldReadOther ? doc(db, 'warehouses', resWhId, 'inventory_v2', resItemId) : null;
 
-    const targetPromises: Promise<any>[] = [];
-    if (targetItem && targetItem.id) {
-      const targetUpdates: any = { quantity: targetItem.quantity + quantity };
-      if (sourceWarehouseId.startsWith('team_') && !targetWarehouseId.startsWith('team_')) {
-        const currentReserved = targetItem.reservedQuantity || 0;
-        const reservations = (targetItem as any).reservations || {};
+      // 2. Perform all READS first
+      const sourceSnap = await transaction.get(sourceRef);
+      if (!sourceSnap.exists()) throw new Error("Kaynak malzeme bulunamadı");
+      
+      let targetSnap = null;
+      if (targetRef) {
+        targetSnap = await transaction.get(targetRef);
+      }
+      
+      let otherSnap = null;
+      if (otherRef) {
+        otherSnap = await transaction.get(otherRef);
+      }
+
+      // 3. Perform all computations (Pure logic)
+      const sourceData = sourceSnap.data();
+      const freshSourceQty = sourceData.quantity || 0;
+      if (freshSourceQty < quantity) throw new Error("Yetersiz stok");
+
+      // Compute source updates
+      finalSourceQty = freshSourceQty - quantity;
+      const sourceUpdates: any = { quantity: finalSourceQty };
+      
+      if (targetWarehouseId.startsWith('team_') && !sourceWarehouseId.startsWith('team_')) {
+        const reservations = sourceData.reservations || {};
+        const currentTeamQty = Number(reservations[targetWarehouseId] || 0);
+        sourceUpdates.reservations = {
+          ...reservations,
+          [targetWarehouseId]: currentTeamQty + quantity
+        };
+        sourceUpdates.reservedQuantity = Number(sourceData.reservedQuantity || 0) + quantity;
+      }
+      
+      if (targetWarehouseId.startsWith('team_') && !sourceWarehouseId.startsWith('team_')) {
+        // Clean team name: e.g. "team_Team_05" -> "Team 05"
+        const cleanTeamName = targetWarehouseId.replace('team_', '').replace(/_/g, ' ');
+        const custodyColRef = collection(db, 'asset_custody');
+        for (let i = 0; i < quantity; i++) {
+          const newCustodyDocRef = doc(custodyColRef);
+          transaction.set(newCustodyDocRef, {
+            productCode: sourceItemCached.sapNo || '',
+            productName: (sourceItemCached as any).name || sourceItemCached.description || '',
+            description: sourceItemCached.shelfNo ? `Raf: ${sourceItemCached.shelfNo}` : 'Depodan transfer edildi',
+            category: 'Diğer',
+            assignedTo: '-',
+            assignedTeam: cleanTeamName,
+            location: 'team',
+            condition: 'saglam',
+            assignedDate: serverTimestamp(),
+            lastUpdated: serverTimestamp(),
+            createdBy: user || 'Sistem'
+          });
+        }
+      }
+
+      // Compute target updates
+      let targetUpdates: any = null;
+      let newTargetRef = null;
+
+      if (targetSnap && targetSnap.exists()) {
+        const targetData = targetSnap.data();
+        finalTargetQty = (targetData.quantity || 0) + quantity;
+        targetUpdates = { quantity: finalTargetQty };
+
+        // Handle reservation consumption on return
+        if (sourceWarehouseId.startsWith('team_') && !targetWarehouseId.startsWith('team_') && hasReservation && resItemId) {
+          if (resWhId === targetWarehouseId && resItemId === finalTargetId) {
+            const currentReserved = targetData.reservedQuantity || 0;
+            const reservations = targetData.reservations || {};
+            const currentTeamQty = reservations[sourceWarehouseId] || 0;
+            const newReservations = {
+              ...reservations,
+              [sourceWarehouseId]: Math.max(0, currentTeamQty - quantity)
+            };
+            if (newReservations[sourceWarehouseId] <= 0) {
+              delete newReservations[sourceWarehouseId];
+            }
+            targetUpdates.reservedQuantity = Math.max(0, currentReserved - quantity);
+            targetUpdates.reservations = newReservations;
+          }
+        }
+      } else {
+        // Target does not exist, create new item reference
+        const targetColRef = collection(db, 'warehouses', targetWarehouseId, 'inventory_v2');
+        newTargetRef = doc(targetColRef);
+        finalTargetId = newTargetRef.id;
+        finalTargetQty = quantity;
+      }
+
+      // Compute other (reservation) updates
+      let otherUpdates: any = null;
+      if (otherSnap && otherSnap.exists()) {
+        const otherData = otherSnap.data();
+        const currentReserved = otherData.reservedQuantity || 0;
+        const reservations = otherData.reservations || {};
         const currentTeamQty = reservations[sourceWarehouseId] || 0;
-        
         const newReservations = {
           ...reservations,
           [sourceWarehouseId]: Math.max(0, currentTeamQty - quantity)
@@ -349,39 +466,78 @@ class WarehouseService {
         if (newReservations[sourceWarehouseId] <= 0) {
           delete newReservations[sourceWarehouseId];
         }
-        
-        targetUpdates.reservedQuantity = Math.max(0, currentReserved - quantity);
-        targetUpdates.reservations = newReservations;
+        otherUpdates = {
+          reservedQuantity: Math.max(0, currentReserved - quantity),
+          reservations: newReservations
+        };
       }
-      targetPromises.push(this.updateMaterial(targetWarehouseId, targetItem.id, targetUpdates));
-      targetPromises.push(this.addLog(targetWarehouseId, {
-        itemId: targetItem.id,
-        sapNo: targetItem.sapNo || '',
-        materialName: (targetItem as any).name || targetItem.description || 'Bilinmeyen',
-        type: 'TRANSFER',
-        quantity,
-        oldQty: targetItem.quantity,
-        newQty: targetItem.quantity + quantity,
-        user,
-        note: `${sourceName} deposundan transfer edildi.`
-      }));
-    } else {
-      const { id, lastUpdated, ...itemWithoutId } = sourceItem as any;
-      const newItem = await this.addMaterial(targetWarehouseId, { ...itemWithoutId, quantity });
-      targetPromises.push(this.addLog(targetWarehouseId, {
-        itemId: newItem.id,
-        sapNo: sourceItem.sapNo || '',
-        materialName: (sourceItem as any).name || sourceItem.description || 'Bilinmeyen',
-        type: 'TRANSFER',
-        quantity,
-        oldQty: 0,
-        newQty: quantity,
-        user,
-        note: `${sourceName} deposundan transfer edildi.`
-      }));
-    }
 
-    await Promise.all([...sourcePromises, ...targetPromises]);
+      // 4. Perform all WRITES at the very end
+      // Write 1: Update or Delete Source
+      if (sourceWarehouseId.startsWith('team_') && finalSourceQty <= 0) {
+        transaction.delete(sourceRef);
+      } else {
+        transaction.update(sourceRef, { ...sourceUpdates, lastUpdated: serverTimestamp() });
+      }
+
+      // Write 2: Update or Set Target
+      if (targetRef && targetUpdates) {
+        transaction.update(targetRef, { ...targetUpdates, lastUpdated: serverTimestamp() });
+      } else if (newTargetRef) {
+        const { id, lastUpdated, reservedQuantity, reservations, ...itemWithoutId } = sourceItemCached as any;
+        transaction.set(newTargetRef, {
+          ...itemWithoutId,
+          quantity: finalTargetQty,
+          reservedQuantity: 0,
+          reservations: {},
+          lastUpdated: serverTimestamp()
+        });
+      }
+
+      // Write 3: Update Other (Reservation)
+      if (otherRef && otherUpdates) {
+        transaction.update(otherRef, { ...otherUpdates, lastUpdated: serverTimestamp() });
+      }
+    });
+
+    // 4. Write Logs (outside transaction)
+    const logPromises = [
+      this.addLog(sourceWarehouseId, {
+        itemId: sourceItemId,
+        sapNo: sourceItemCached.sapNo || '',
+        materialName: (sourceItemCached as any).name || sourceItemCached.description || 'Bilinmeyen',
+        type: 'TRANSFER',
+        quantity: -quantity,
+        oldQty: sourceItemCached.quantity,
+        newQty: finalSourceQty,
+        user,
+        note: targetWarehouseId.startsWith('team_') ? `${targetName} ekibine zimmetlendi.` : `${targetName} deposuna transfer edildi.`,
+        serialNo: sourceItemCached.serialNo || ''
+      })
+    ];
+
+    logPromises.push(
+      this.addLog(targetWarehouseId, {
+        itemId: finalTargetId,
+        sapNo: sourceItemCached.sapNo || '',
+        materialName: (sourceItemCached as any).name || sourceItemCached.description || 'Bilinmeyen',
+        type: 'TRANSFER',
+        quantity,
+        oldQty: targetItemCached ? targetItemCached.quantity : 0,
+        newQty: finalTargetQty,
+        user,
+        note: sourceWarehouseId.startsWith('team_') ? `${sourceName} ekibinden iade alındı.` : `${sourceName} deposundan transfer edildi.`,
+        serialNo: targetItemCached?.serialNo || sourceItemCached.serialNo || ''
+      })
+    );
+
+    await Promise.all(logPromises);
+
+    this.inventoryCache.delete(sourceWarehouseId);
+    this.inventoryCache.delete(targetWarehouseId);
+    if (resWhId !== targetWarehouseId) {
+      this.inventoryCache.delete(resWhId);
+    }
   }
 
   async syncMaterialImageGlobally(sapNo: string, imageUrl: string) {
@@ -412,7 +568,7 @@ class WarehouseService {
         
         const docUpdates = snap.docs.map(document => 
            updateDoc(doc(db, 'warehouses', w.id, 'inventory_v2', document.id), { imageUrl, lastUpdated: serverTimestamp() })
-        );
+         );
         
         await Promise.all(docUpdates);
         
@@ -426,6 +582,53 @@ class WarehouseService {
     
     await Promise.all(updatePromises);
     console.log(`[GlobalSync] Successfully synced image for SAP: ${sapNo} across all warehouses.`);
+  }
+
+  async syncMaterialCardGlobally(sapNo: string, updates: any) {
+    if (!sapNo) return;
+    
+    // Save to Global Pool
+    try {
+        const cleanSapNo = String(sapNo).trim();
+        const safeSapNo = cleanSapNo.replace(/\//g, '_');
+        await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { 
+            sapNo: cleanSapNo, 
+            ...updates,
+            lastUpdated: serverTimestamp() 
+        }, { merge: true });
+    } catch(err) {
+        console.warn("Failed to save to global card pool", err);
+    }
+    
+    // Get all warehouses
+    const warehouses = dataService.getWarehouses();
+    const { query, where, getDocs } = await import('firebase/firestore');
+    
+    const updatePromises = warehouses.map(async (w) => {
+      try {
+        const colRef = collection(db, 'warehouses', w.id, 'inventory_v2');
+        const q = query(colRef, where('sapNo', '==', sapNo));
+        const snap = await getDocs(q);
+        
+        const docUpdates = snap.docs.map(document => 
+           updateDoc(doc(db, 'warehouses', w.id, 'inventory_v2', document.id), { 
+             ...updates,
+             lastUpdated: serverTimestamp() 
+           })
+         );
+        
+        await Promise.all(docUpdates);
+        
+        if (snap.docs.length > 0) {
+            this.inventoryCache.delete(w.id);
+        }
+      } catch (err) {
+        console.error(`Failed to sync card fields for sap ${sapNo} in warehouse ${w.id}`, err);
+      }
+    });
+    
+    await Promise.all(updatePromises);
+    console.log(`[GlobalSync] Successfully synced card fields for SAP: ${sapNo} across all warehouses.`);
   }
 
   async getGlobalImagePool(): Promise<Map<string, string>> {
@@ -568,6 +771,8 @@ class WarehouseService {
     const auditTimestamp = serverTimestamp();
     const promises = auditData.results.map(async res => {
       const itemDocRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', res.itemId);
+      const itemSnap = await getDoc(itemDocRef);
+      const targetSerial = itemSnap.exists() ? itemSnap.data().serialNo || '' : '';
       await updateDoc(itemDocRef, {
         lastAuditDate: auditTimestamp,
         quantity: res.physicalQty, // Update system quantity to match physical reality
@@ -583,7 +788,8 @@ class WarehouseService {
            oldQty: res.systemQty,
            newQty: res.physicalQty,
            user: auditData.user,
-           note: res.note ? `Sayım Güncellemesi: ${res.note}` : 'Sayım Güncellemesi'
+           note: res.note ? `Sayım Güncellemesi: ${res.note}` : 'Sayım Güncellemesi',
+           serialNo: targetSerial
         });
       }
     });
@@ -868,58 +1074,123 @@ class WarehouseService {
     }
   }
 
-  async updateStockBySap(id: string, sapNo: string, delta: number, logInfo: { user: string, reason: string, reportNo?: string, materialName?: string }, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' = 'NEW', shelfNo?: string, serialNo?: string, note?: string) {
-    const item = await this.getStockBySapAndCondition(id, sapNo, condition);
+  async updateStockBySap(id: string, sapNo: string, delta: number, logInfo: { user: string, reason: string, reportNo?: string, materialName?: string, turbineNo?: string, turbineSerial?: string, formNo?: string }, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' = 'NEW', shelfNo?: string, serialNo?: string, note?: string, recoveryNote?: string) {
     const warehouseId = this.resolveWarehouseId(id);
     let itemId = '';
     let currentQty = 0;
     let description = logInfo.materialName || 'Bilinmeyen Malzeme';
+    let finalNewQty = 0;
 
-    if (!item || !item.id) {
-      console.warn(`Item not found for SAP: ${sapNo} with condition ${condition} in warehouse: ${id}. Creating new entry.`);
-      const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
-      const { addDoc } = await import('firebase/firestore');
-      const result = await addDoc(colRef, {
-        sapNo: sapNo,
-        description: description,
-        quantity: Math.max(0, delta), // Capped to 0 so it never goes negative
-        shelfNo: shelfNo || 'Tanımsız',
-        condition: condition,
-        serialNo: serialNo || '',
-        note: note || '',
-        lastUpdated: serverTimestamp()
-      });
-      itemId = result.id;
-      currentQty = 0;
-    } else {
+    const item = await this.getStockBySapAndCondition(id, sapNo, condition);
+    if (item && item.id) {
       itemId = item.id;
-      currentQty = item.quantity || 0;
       description = item.description || description;
-      
-      const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
-      const newQty = Math.max(0, currentQty + delta); // Capped to 0 so it never goes negative
-      
-      const updatePayload: any = {
-        quantity: newQty,
-        lastUpdated: serverTimestamp()
-      };
-      if (!item.condition) {
-        updatePayload.condition = condition;
-      }
-      if (shelfNo) {
-        updatePayload.shelfNo = shelfNo;
-      }
-      if (serialNo && (!item.serialNo || item.serialNo === '-')) {
-        updatePayload.serialNo = serialNo;
-      }
-      if (note && !item.note) {
-        updatePayload.note = note;
-      }
+    }
 
-      if (warehouseId.startsWith('team_') && newQty <= 0) {
-        await deleteDoc(docRef);
+    await runTransaction(db, async (transaction) => {
+      if (!itemId) {
+        const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
+        const newDocRef = doc(colRef);
+        itemId = newDocRef.id;
+        currentQty = 0;
+        finalNewQty = Math.max(0, delta);
+
+        transaction.set(newDocRef, {
+          sapNo: sapNo,
+          description: description,
+          quantity: finalNewQty,
+          shelfNo: shelfNo || 'Tanımsız',
+          condition: condition,
+          serialNo: serialNo || '',
+          note: note || '',
+          recoveryNote: recoveryNote || '',
+          lastUpdated: serverTimestamp()
+        });
       } else {
-        await updateDoc(docRef, updatePayload);
+        const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
+        const docSnap = await transaction.get(docRef);
+        
+        if (!docSnap.exists()) {
+          currentQty = 0;
+          finalNewQty = Math.max(0, delta);
+          transaction.set(docRef, {
+            sapNo: sapNo,
+            description: description,
+            quantity: finalNewQty,
+            shelfNo: shelfNo || 'Tanımsız',
+            condition: condition,
+            serialNo: serialNo || '',
+            note: note || '',
+            recoveryNote: recoveryNote || '',
+            lastUpdated: serverTimestamp()
+          });
+        } else {
+          const freshData = docSnap.data();
+          currentQty = freshData.quantity || 0;
+          finalNewQty = Math.max(0, currentQty + delta);
+
+          const updatePayload: any = {
+            quantity: finalNewQty,
+            lastUpdated: serverTimestamp()
+          };
+          if (!freshData.condition) {
+            updatePayload.condition = condition;
+          }
+          if (shelfNo) {
+            updatePayload.shelfNo = shelfNo;
+          }
+          if (note) {
+            updatePayload.note = note;
+          }
+          
+          if (recoveryNote) {
+            let existingNotes = freshData.recoveryNotes || [];
+            if (freshData.recoveryNote) {
+              existingNotes = [freshData.recoveryNote, ...existingNotes];
+            }
+
+            const consumeQty = Math.abs(delta);
+            let notesToRemove = consumeQty;
+
+            if (serialNo && serialNo !== '-') {
+              const cleanedSerial = serialNo.trim().toLowerCase();
+              const remainingNotes: string[] = [];
+              for (const note of existingNotes) {
+                const serialMatch = note.match(/Seri No:\s*([^,]+)/);
+                if (serialMatch && serialMatch[1].trim().toLowerCase() === cleanedSerial && notesToRemove > 0) {
+                  notesToRemove--;
+                } else {
+                  remainingNotes.push(note);
+                }
+              }
+              existingNotes = remainingNotes;
+            }
+
+            if (notesToRemove > 0 && existingNotes.length > 0) {
+              existingNotes = existingNotes.slice(0, Math.max(0, existingNotes.length - notesToRemove));
+            }
+
+            updatePayload.recoveryNotes = existingNotes;
+            updatePayload.recoveryNote = '';
+          }
+
+          if (warehouseId.startsWith('team_') && finalNewQty <= 0) {
+            transaction.delete(docRef);
+          } else {
+            transaction.update(docRef, updatePayload);
+          }
+        }
+      }
+    });
+
+    let parsedTurbineNo = logInfo.turbineNo || '';
+    let parsedTurbineSerial = logInfo.turbineSerial || '';
+    let parsedFormNo = logInfo.formNo || logInfo.reportNo || '';
+
+    if (!parsedTurbineNo && logInfo.reason) {
+      const tMatch = logInfo.reason.match(/-\s*([a-zA-Z0-9-]+)\s*\)/);
+      if (tMatch) {
+        parsedTurbineNo = tMatch[1].trim().toUpperCase();
       }
     }
 
@@ -928,12 +1199,16 @@ class WarehouseService {
       sapNo: sapNo,
       materialName: description,
       oldQty: currentQty,
-      newQty: Math.max(0, currentQty + delta),
+      newQty: finalNewQty,
       quantity: Math.abs(delta),
       type: delta > 0 ? 'ADD' : 'REMOVE',
       user: logInfo.user,
       note: logInfo.reason + (logInfo.reportNo ? ` (Rapor: ${logInfo.reportNo})` : '') + ` [Durum: ${condition}]`,
-      source: 'Sistem'
+      source: 'Sistem',
+      serialNo: serialNo || item?.serialNo || '',
+      turbineNo: parsedTurbineNo,
+      turbineSerial: parsedTurbineSerial,
+      formNo: parsedFormNo
     });
     
     this.inventoryCache.delete(warehouseId);
@@ -968,13 +1243,34 @@ class WarehouseService {
   }
 
   async decreaseReservation(warehouseId: string, sapNo: string, quantity: number, teamId: string) {
-    const inventory = await this.getInventory(warehouseId);
-    const item = inventory.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+    let targetWhId = warehouseId;
+    let inventory = await this.getInventory(targetWhId);
+    let item = inventory.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+    
+    let hasReservation = item && item.reservations && (item.reservations[teamId] || 0) > 0;
+    
+    if (!hasReservation) {
+      const allWhs = dataService.getWarehouses();
+      for (const w of allWhs) {
+        if (w.id === warehouseId || w.id.startsWith('team_')) continue;
+        const inv = await this.getInventory(w.id);
+        const it = inv.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+        if (it && it.reservations && (it.reservations[teamId] || 0) > 0) {
+          targetWhId = w.id;
+          inventory = inv;
+          item = it;
+          hasReservation = true;
+          break;
+        }
+      }
+    }
+
     if (!item || !item.id) return;
 
     const currentReserved = item.reservedQuantity || 0;
     const reservations = (item as any).reservations || {};
     const currentTeamQty = reservations[teamId] || 0;
+    if (currentTeamQty <= 0) return;
 
     const newReservations = {
       ...reservations,
@@ -984,7 +1280,7 @@ class WarehouseService {
       delete newReservations[teamId];
     }
 
-    const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', item.id);
+    const docRef = doc(db, 'warehouses', targetWhId, 'inventory_v2', item.id);
     await updateDoc(docRef, {
       reservedQuantity: Math.max(0, currentReserved - quantity),
       reservations: newReservations,
@@ -992,7 +1288,7 @@ class WarehouseService {
     });
 
     // Update local cache directly to avoid query lag
-    const cached = this.inventoryCache.get(warehouseId);
+    const cached = this.inventoryCache.get(targetWhId);
     if (cached) {
       const idx = cached.data.findIndex(i => i.id === item.id);
       if (idx !== -1) {
@@ -1085,6 +1381,25 @@ class WarehouseService {
       occupancy[shelf] = (occupancy[shelf] || 0) + 1;
     });
     return occupancy;
+  }
+
+  async getGlobalInventory(): Promise<any[]> {
+    try {
+      const q = query(collectionGroup(db, 'inventory_v2'));
+      const snap = await getDocs(q);
+      return snap.docs.map(docSnap => {
+        const data = docSnap.data();
+        const warehouseId = docSnap.ref.parent.parent?.id || '';
+        return {
+          id: docSnap.id,
+          warehouseId,
+          ...data
+        };
+      });
+    } catch (err) {
+      console.error('[WarehouseService] Error fetching global inventory:', err);
+      return [];
+    }
   }
 
   async getMaterialInfoBySapGlobally(sapNo: string) {

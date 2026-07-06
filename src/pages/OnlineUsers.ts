@@ -1,6 +1,7 @@
 import { presenceService } from '../services/PresenceService';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { formatDisplayName } from '../utils/formatters';
 
 export const OnlineUsersPage = async () => {
   return `
@@ -85,7 +86,7 @@ let unsubscribePresence: any = null;
                <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${isOnline ? '#14F195' : '#64748B'};"></div>
                
                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                  <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-main);">${user.displayName || user.email || 'Bilinmeyen Kullanıcı'}</div>
+                  <div style="font-weight: bold; font-size: 1.1rem; color: var(--text-main);">${formatDisplayName(user.displayName) || user.email || 'Bilinmeyen Kullanıcı'}</div>
                   <div style="padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; background: ${isOnline ? 'rgba(20, 241, 149, 0.1)' : 'rgba(100, 116, 139, 0.1)'}; color: ${isOnline ? '#14F195' : '#94A3B8'}; border: 1px solid ${isOnline ? 'rgba(20, 241, 149, 0.2)' : 'rgba(100, 116, 139, 0.2)'};">
                      ${isOnline ? 'AKTİF' : 'ÇEVRİMDIŞI'}
                   </div>

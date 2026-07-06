@@ -176,10 +176,12 @@ const getStatusColor = (status: string, isBg = false) => {
     selectedWhId = whId;
 };
 
+let siparisDebounceTimer: any = null;
 (window as any).handleSiparisSearch = (query: string) => {
     const resultsDiv = document.getElementById('siparis-results');
     if (!resultsDiv) return;
 
+    clearTimeout(siparisDebounceTimer);
     if (query.length < 2) {
         resultsDiv.innerHTML = `
             <div style="padding: 3rem; text-align: center; color: var(--text-dim); opacity: 0.5;">
@@ -190,28 +192,30 @@ const getStatusColor = (status: string, isBg = false) => {
         return;
     }
 
-    const results = inventoryService.searchMaterials(query);
-    if (results.length === 0) {
-        resultsDiv.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-dim);">Eşleşen malzeme bulunamadı.</div>`;
-        return;
-    }
+    siparisDebounceTimer = setTimeout(() => {
+        const results = inventoryService.searchMaterials(query);
+        if (results.length === 0) {
+            resultsDiv.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-dim);">Eşleşen malzeme bulunamadı.</div>`;
+            return;
+        }
 
-    resultsDiv.innerHTML = results.map(item => `
-        <div class="hover-row-premium" 
-             draggable="true" 
-             ondragstart="window.siparisDragStart(event, '${item.n}', '${item.d.replace(/'/g, "\\'")}')"
-             style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255,255,255,0.02); margin-bottom: 0.5rem; border-radius: 12px; transition: all 0.3s; cursor: grab;"
-             title="Sürükleyip sağdaki sepet alanına bırakarak ekleyebilirsiniz">
-            <div style="flex: 1;">
-                <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${item.d}</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-cyan); margin-top: 4px;">${item.n}</div>
+        resultsDiv.innerHTML = results.map(item => `
+            <div class="hover-row-premium" 
+                 draggable="true" 
+                 ondragstart="window.siparisDragStart(event, '${item.n}', '${item.d.replace(/'/g, "\\'")}')"
+                 style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255,255,255,0.02); margin-bottom: 0.5rem; border-radius: 12px; transition: all 0.3s; cursor: grab;"
+                 title="Sürükleyip sağdaki sepet alanına bırakarak ekleyebilirsiniz">
+                <div style="flex: 1;">
+                    <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${item.d}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-cyan); margin-top: 4px;">${item.n}</div>
+                </div>
+                <button class="btn-cyber" style="padding: 6px 12px; font-size: 0.7rem; background: rgba(0, 255, 255, 0.1); color: var(--accent-cyan); border: 1px solid rgba(0, 255, 255, 0.2);" 
+                        onclick="window.addToSiparisBasket('${item.n}', '${item.d.replace(/'/g, "\\'")}')">
+                    <i class="fa-solid fa-plus"></i> EKLE
+                </button>
             </div>
-            <button class="btn-cyber" style="padding: 6px 12px; font-size: 0.7rem; background: rgba(0, 255, 255, 0.1); color: var(--accent-cyan); border: 1px solid rgba(0, 255, 255, 0.2);" 
-                    onclick="window.addToSiparisBasket('${item.n}', '${item.d.replace(/'/g, "\\'")}')">
-                <i class="fa-solid fa-plus"></i> EKLE
-            </button>
-        </div>
-    `).join('');
+        `).join('');
+    }, 150);
 };
 
 (window as any).siparisDragStart = (event: DragEvent, sapNo: string, description: string) => {

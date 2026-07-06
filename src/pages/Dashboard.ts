@@ -14,6 +14,16 @@ export const DashboardPage = async () => {
   
   // Sadece ilgili ekibin görevlerini göster (Eğer kullanıcı TECHNICIAN ise)
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+  const isAllowedSub = (subId: string): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'ADMIN') return true;
+    const allowedTabs = currentUser.allowedTabs || {};
+    const dashPerms = allowedTabs['dashboard'];
+    if (typeof dashPerms === 'object') {
+      return !!dashPerms[subId];
+    }
+    return !!dashPerms;
+  };
   if (currentUser && currentUser.role === 'TECHNICIAN') {
     const userTeam = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
     if (userTeam) {
@@ -269,20 +279,32 @@ export const DashboardPage = async () => {
     
     try {
       const results: { siteName: string, quantity: number, description: string }[] = [];
-      const sites = dataService.getSites();
+      const sites = dataService.getAllSites();
       
       for (const site of sites) {
         const inventory = await warehouseService.getInventory(site.id);
         const item = inventory.find(i => i.sapNo === sapNo);
         if (item && item.quantity > 0) {
-          results.push({ siteName: site.name, quantity: item.quantity, description: item.description });
+          results.push({ 
+            siteName: site.name, 
+            quantity: item.quantity, 
+            description: item.description || (item as any).name || 'Bilinmeyen Malzeme' 
+          });
         }
       }
 
       if (results.length === 0) {
         resultArea!.innerHTML = '<div class="no-results">Bu SAP numarası ile hiçbir depoda stok bulunamadı.</div>';
       } else {
-        resultArea!.innerHTML = results.map(r => `
+        const totalQty = results.reduce((sum, r) => sum + r.quantity, 0);
+        const totalHtml = `
+          <div class="stock-total-badge" style="background: rgba(20, 241, 149, 0.08); border: 1px solid rgba(20, 241, 149, 0.2); padding: 0.75rem 1rem; border-radius: 12px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 15px rgba(20, 241, 149, 0.05);">
+            <span style="font-weight: 700; color: #94A3B8; font-size: 0.8rem; letter-spacing: 0.5px;">TOPLAM STOK</span>
+            <span style="font-weight: 900; color: #14F195; font-size: 1.1rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">${totalQty} Adet</span>
+          </div>
+        `;
+        
+        resultArea!.innerHTML = totalHtml + results.map(r => `
           <div class="stock-result-item">
             <div class="site-info">
               <span class="site">${r.siteName}</span>
@@ -369,6 +391,7 @@ export const DashboardPage = async () => {
 
       <!-- MAIN STATS GRID -->
       <div class="dash-stats-grid">
+        ${isAllowedSub('dash_activeTeams') ? `
         <div class="dash-stat-card primary">
           <div class="stat-icon"><i class="fa-solid fa-person-digging"></i></div>
           <div class="stat-content">
@@ -378,7 +401,9 @@ export const DashboardPage = async () => {
           </div>
           <div class="card-glow primary"></div>
         </div>
+        ` : ''}
 
+        ${isAllowedSub('dash_faultStatus') ? `
         <div class="dash-stat-card danger">
           <div class="stat-icon"><i class="fa-solid fa-bolt-lightning"></i></div>
           <div class="stat-content">
@@ -388,7 +413,9 @@ export const DashboardPage = async () => {
           </div>
           <div class="card-glow danger"></div>
         </div>
+        ` : ''}
 
+        ${isAllowedSub('dash_upcomingMaintenance') ? `
         <div class="dash-stat-card info" onclick="window.navigate('bakim-planlama')">
           <div class="stat-icon"><i class="fa-solid fa-calendar-check"></i></div>
           <div class="stat-content">
@@ -398,7 +425,9 @@ export const DashboardPage = async () => {
           </div>
           <div class="card-glow info"></div>
         </div>
+        ` : ''}
 
+        ${isAllowedSub('dash_logisticsPoint') ? `
         <div class="dash-stat-card warning">
           <div class="stat-icon"><i class="fa-solid fa-warehouse"></i></div>
           <div class="stat-content">
@@ -408,11 +437,13 @@ export const DashboardPage = async () => {
           </div>
           <div class="card-glow warning"></div>
         </div>
+        ` : ''}
       </div>
 
       <!-- AGENDA + SECONDARY GRID -->
-      <div class="dash-agenda-row">
+      <div class="dash-agenda-row" style="${!isAllowedSub('dash_agenda') ? 'display: block;' : ''}">
         <!-- 📅 AJANDA WIDGET -->
+        ${isAllowedSub('dash_agenda') ? `
         <div class="glass-panel dash-agenda-widget">
           <div class="section-header" style="margin-bottom: 0.75rem;">
             <h3><i class="fa-solid fa-calendar-days" style="color: #a78bfa;"></i> AJANDA</h3>
@@ -442,10 +473,12 @@ export const DashboardPage = async () => {
             <span class="agenda-legend-item"><span class="agenda-legend-dot" style="background: #a78bfa;"></span>Bakım</span>
           </div>
         </div>
+        ` : ''}
 
         <!-- RIGHT SIDE: Existing Sections -->
-        <div class="dash-agenda-right">
+        <div class="dash-agenda-right" style="${!isAllowedSub('dash_agenda') ? 'grid-template-columns: 1fr 350px;' : ''}">
           <!-- Live Activity Feed -->
+          ${isAllowedSub('dash_activeTaskFlow') ? `
           <div class="glass-panel dash-feed-section">
             <div class="section-header">
               <h3><i class="fa-solid fa-person-running"></i> AKTİF GÖREV AKIŞI</h3>
@@ -477,9 +510,11 @@ export const DashboardPage = async () => {
               }).join('') : '<div class="empty-feed">Şu an aktif bir görev bulunmuyor.</div>'}
             </div>
           </div>
+          ` : ''}
 
           <!-- Global Stock Search + Quick Actions -->
-          <div class="dash-sidebar-section">
+          <div class="dash-sidebar-section" style="${!isAllowedSub('dash_activeTaskFlow') ? 'grid-column: span 2;' : ''}">
+            ${isAllowedSub('dash_globalStockQuery') ? `
             <div class="glass-panel stock-search-card">
               <h3><i class="fa-solid fa-magnifying-glass-chart"></i> GLOBAL STOK SORGULAMA</h3>
               <div class="search-box">
@@ -490,19 +525,26 @@ export const DashboardPage = async () => {
                 <div class="placeholder">SAP numarası girerek tüm depolardaki stok miktarını anlık sorgulayabilirsiniz.</div>
               </div>
             </div>
-            <div class="quick-actions-grid">
+            ` : ''}
+            <div class="quick-actions-grid" style="${!isAllowedSub('dash_globalStockQuery') ? 'margin-top: 0;' : ''}">
+              ${isAllowedSub('dash_createTask') ? `
               <button class="action-btn" onclick="window.navigate('task-create')">
                 <i class="fa-solid fa-plus"></i>
                 <span>GÖREV OLUŞTUR</span>
               </button>
+              ` : ''}
+              ${isAllowedSub('dash_inventory') ? `
               <button class="action-btn" onclick="window.navigate('inventory')">
                 <i class="fa-solid fa-boxes-stacked"></i>
                 <span>ENVANTER</span>
               </button>
-              <button class="action-btn" onclick="window.scanTurbineQR()" style="grid-column: span 2; background: rgba(0, 243, 255, 0.05); border-color: rgba(0, 243, 255, 0.1); color: var(--accent-cyan);">
+              ` : ''}
+              ${isAllowedSub('dash_turbineQrScan') ? `
+              <button class="action-btn" onclick="window.scanTurbineQR()" style="${(!isAllowedSub('dash_createTask') || !isAllowedSub('dash_inventory')) ? 'grid-column: span 2;' : 'grid-column: span 2;'} background: rgba(0, 243, 255, 0.05); border-color: rgba(0, 243, 255, 0.1); color: var(--accent-cyan);">
                 <i class="fa-solid fa-qrcode"></i>
                 <span>TÜRBİN QR SİCİL OKUT</span>
               </button>
+              ` : ''}
             </div>
           </div>
         </div>

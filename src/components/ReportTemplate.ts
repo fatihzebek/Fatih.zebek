@@ -303,7 +303,7 @@ let ohsHtml = '';
   }
 
   return `
-    <div id="pdf-container" style="background: #fff; color: #000; padding: 10px 20px; width: 100%; max-width: none; box-sizing: border-box; margin: 0 auto; font-family: Arial, sans-serif;">
+    <div id="pdf-container" style="background: #fff; color: #000; padding: 10px 20px; width: 100%; min-width: 820px; max-width: none; box-sizing: border-box; margin: 0 auto; font-family: Arial, sans-serif;">
       
       <!-- CSS Isolation directly injected to guarantee it works even with caching -->
       <style>
@@ -494,7 +494,7 @@ let ohsHtml = '';
             <th style="border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-weight: 700; vertical-align: middle;">MALZEME AÇIKLAMASI</th>
             <th style="border: 1px solid #bbb; padding: 6px 2px; width: 80px; font-weight: 700; vertical-align: middle;">ADET</th>
           </tr>
-          ${report.materials.length > 0 ? report.materials.map(mat => `
+          ${(report.materials || []).length > 0 ? (report.materials || []).map(mat => `
             <tr>
               <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700;">${mat.poz}</td>
               <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700; color: ${mat.type === 'S' ? '#cc0000' : '#006633'};">${mat.type}</td>

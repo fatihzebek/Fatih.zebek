@@ -118,7 +118,7 @@ export const WorkshopDashboardPage = async () => {
 
         <div style="display: flex; flex-direction: column; gap: 1.1rem; margin-bottom: 1.5rem;">
           <div>
-            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">RAF / KONUM (W11)</label>
+            <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">RAF / KONUM (MTA)</label>
             <input type="text" id="receive-shelf-input" class="cyber-input" placeholder="Örn: Raf-B2" style="width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.4);" value="${rep.shelfNo || ''}">
           </div>
           <div>
@@ -153,14 +153,14 @@ export const WorkshopDashboardPage = async () => {
     }
 
     try {
-      (window as any).showToast('İşlem', 'Malzeme teslim alınıyor ve W11 deposuna aktarılıyor...', 'info');
+      (window as any).showToast('İşlem', 'Malzeme teslim alınıyor ve MTA deposuna aktarılıyor...', 'info');
       
       // 1. Mark repair record as UNDER_REPAIR in firestore, saving shelfNo and receiveNote
       await repairService.receiveRepair(repairId, username, shelfNo, note);
       
-      // 2. Add DEFECT stock to the repair center warehouse (W11)
+      // 2. Add DEFECT stock to the repair center warehouse (MTA)
       await warehouseService.updateStockBySap(
-        'W11',
+        'MTA',
         rep.sapNo,
         rep.quantity,
         {
@@ -174,7 +174,7 @@ export const WorkshopDashboardPage = async () => {
         note || ''
       );
       
-      (window as any).showToast('Başarılı', 'Malzeme atölyeye kabul edildi, W11 arızalı stoğuna eklendi.', 'success');
+      (window as any).showToast('Başarılı', 'Malzeme atölyeye kabul edildi, MTA arızalı stoğuna eklendi.', 'success');
       
       // Close modal
       const m = document.getElementById('receive-repair-modal');
@@ -311,12 +311,12 @@ export const WorkshopDashboardPage = async () => {
 
       await repairService.markAsRepaired(repairId, notes, username, imageUrl);
 
-      // Stock modifications for W11 (Repair Center Warehouse)
+      // Stock modifications for MTA (Repair Center Warehouse)
       const { warehouseService } = await import('../services/WarehouseService');
       
-      // 1. Deduct DEFECT stock from W11
+      // 1. Deduct DEFECT stock from MTA
       await warehouseService.updateStockBySap(
-        'W11',
+        'MTA',
         rep.sapNo,
         -rep.quantity,
         {
@@ -326,10 +326,10 @@ export const WorkshopDashboardPage = async () => {
         'DEFECT'
       );
 
-      // 2. Add REVISED stock to W11 (with R prefix if not already present)
+      // 2. Add REVISED stock to MTA (with R prefix if not already present)
       const sapNoWithR = rep.sapNo.toUpperCase().startsWith('R') ? rep.sapNo : 'R' + rep.sapNo;
       await warehouseService.updateStockBySap(
-        'W11',
+        'MTA',
         sapNoWithR,
         rep.quantity,
         {
@@ -432,7 +432,7 @@ export const WorkshopDashboardPage = async () => {
               <input type="date" id="manual-date-input" class="cyber-input" value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.4);">
             </div>
             <div>
-              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">RAF / KONUM (W11)</label>
+              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.5rem; font-weight:700;">RAF / KONUM (MTA)</label>
               <input type="text" id="manual-shelf-input" class="cyber-input" placeholder="Örn: Raf-B2" style="width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.4);">
             </div>
           </div>
@@ -576,9 +576,9 @@ export const WorkshopDashboardPage = async () => {
         createdAt: new Date()
       });
       
-      // 2. Add DEFECT stock to W11
+      // 2. Add DEFECT stock to MTA
       await warehouseService.updateStockBySap(
-        'W11',
+        'MTA',
         sapNo,
         qty,
         {
@@ -588,11 +588,11 @@ export const WorkshopDashboardPage = async () => {
         'DEFECT'
       );
       
-      // 3. Update shelfNo for the defect item in W11
-      const item = await warehouseService.getStockBySapAndCondition('W11', sapNo, 'DEFECT');
+      // 3. Update shelfNo for the defect item in MTA
+      const item = await warehouseService.getStockBySapAndCondition('MTA', sapNo, 'DEFECT');
       if (item && item.id) {
         const { doc, updateDoc } = await import('firebase/firestore');
-        const docRef = doc(db, 'warehouses', 'W11', 'inventory_v2', item.id);
+        const docRef = doc(db, 'warehouses', 'MTA', 'inventory_v2', item.id);
         await updateDoc(docRef, { shelfNo });
       }
       
@@ -975,13 +975,13 @@ export const WorkshopDashboardPage = async () => {
       (window as any).showToast('İşlem', 'Malzeme sevk ediliyor...', 'info');
       await repairService.dispatchRepair(repairId, targetSelect.value, username);
 
-      // Deduct REVISED stock from W11
+      // Deduct REVISED stock from MTA
       const rep = ((window as any)._allRepairs || []).find((r: any) => r.id === repairId);
       if (rep) {
         const { warehouseService } = await import('../services/WarehouseService');
         const sapNoWithR = rep.sapNo.toUpperCase().startsWith('R') ? rep.sapNo : 'R' + rep.sapNo;
         await warehouseService.updateStockBySap(
-          'W11',
+          'MTA',
           sapNoWithR,
           -rep.quantity,
           {

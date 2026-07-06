@@ -150,7 +150,8 @@ export const TurbinesPage = () => {
   if (!grid || !title) return;
 
   try {
-    if (!isAdmin && !(currentUser?.allowedSites || []).includes(siteId)) {
+    const activeTaskSites = (window as any).activeTaskSites || [];
+    if (!isAdmin && !(currentUser?.allowedSites || []).includes(siteId) && !activeTaskSites.includes(siteId)) {
       grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 2rem; color: #ff4444; text-align: center;">Bu sahaya erişim yetkiniz bulunmamaktadır.</div>`;
       return;
     }
@@ -228,7 +229,7 @@ export const TurbinesPage = () => {
           `;
         } else {
           iconHtml = `
-            <div class="turbine-icon-wrapper" style="color: ${color}; transform: scale(0.85);">
+            <div class="turbine-icon-wrapper no-glow" style="color: ${color}; transform: scale(0.85);">
               <div class="turbine-tower"></div>
               <div class="turbine-head">
                 <svg class="turbine-blades-svg ${isPaused ? 'paused' : ''}" viewBox="0 0 100 100">
@@ -548,19 +549,24 @@ export const TurbinesPage = () => {
         let allMaterials: any[] = [];
 
         if (reportsList) {
-          if (turbineReports.length === 0) {
+          const pdfReports = turbineReports.filter(r => !r.reportNo?.startsWith('MAN-'));
+          if (pdfReports.length === 0) {
             reportsList.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.02); border-radius: 4px;">Bu türbine ait PDF rapor bulunamadı.</div>`;
           } else {
-            reportsList.innerHTML = turbineReports.map(r => {
+            reportsList.innerHTML = pdfReports.map(r => {
               if (r.materials && Array.isArray(r.materials)) {
                 r.materials.forEach((m: any, mIndex: number) => {
-                  allMaterials.push({
-                    ...m,
-                    reportId: r.id,
-                    materialIndex: mIndex,
-                    reportDate: r.date,
-                    reportNo: r.reportNo
-                  });
+                  const usedQty = Number(m.used || 0);
+                  if (usedQty > 0) {
+                    allMaterials.push({
+                      ...m,
+                      reportId: r.id,
+                      materialIndex: mIndex,
+                      reportDate: r.date,
+                      reportNo: r.reportNo,
+                      matFormNo: r.matFormNo || '-'
+                    });
+                  }
                 });
               }
               
@@ -585,8 +591,12 @@ export const TurbinesPage = () => {
                     <div style="font-size: 0.75rem; color: var(--text-muted);">Tarih: ${r.date} | Arıza: ${r.faultDesc || r.faultCode}</div>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-                    <button onclick="window.viewTurbinePdf('${r.id}', '${r.reportNo}')" class="cyber-button primary" style="padding: 0.4rem 1rem; font-size: 0.8rem;">
-                      <i class="fa-solid fa-file-invoice"></i> RAPORU GÖSTER
+                    <button onclick="window.viewTurbinePdf('${r.id}', '${r.reportNo}')" 
+                            class="btn-cyber-outline" 
+                            style="padding: 0 10px; font-size: 0.7rem; border-radius: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 700; height: 30px; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px; border: 1px solid rgba(0, 242, 254, 0.35); background: rgba(0, 242, 254, 0.05); color: var(--accent-cyan); cursor: pointer; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(0, 242, 254, 0.15)'; this.style.borderColor='rgba(0, 242, 254, 0.65)'; this.style.boxShadow='0 0 12px rgba(0, 242, 254, 0.25)'"
+                            onmouseout="this.style.background='rgba(0, 242, 254, 0.05)'; this.style.borderColor='rgba(0, 242, 254, 0.35)'; this.style.boxShadow='none'">
+                      <i class="fa-solid fa-file-invoice" style="font-size: 0.75rem;"></i> RAPORU GÖSTER
                     </button>
                     ${reportDeleteBtn}
                   </div>
@@ -605,14 +615,22 @@ export const TurbinesPage = () => {
                             currentUser?.email === 'fatih.zebek@demirerholding.com';
 
             materialsList.innerHTML = allMaterials.map(m => `
-              <tr>
-                <td style="color: var(--text-muted);">${m.reportDate}</td>
-                <td style="color: var(--accent-cyan);">${m.reportNo}</td>
-                <td style="font-family: monospace;">${m.sapNo || '-'}</td>
-                <td>${m.description || m.type}</td>
-                <td style="text-align: center; font-weight: 700; color: var(--accent-orange); display: flex; justify-content: center; align-items: center; gap: 8px;">
-                  ${m.used || m.received || 0} Adet
-                  ${isAdmin ? `<button onclick="window.deleteMaterialFromReport('${m.reportId}', ${m.materialIndex})" style="background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); border-radius: 4px; color: var(--accent-red); cursor: pointer; padding: 2px 6px; font-size: 0.7rem; transition: all 0.2s;" title="Bu malzemeyi rapordan sil"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+              <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <td style="color: var(--text-muted); padding: 0.75rem 0.5rem; vertical-align: middle; font-size: 0.8rem; white-space: nowrap;">${m.reportDate}</td>
+                <td style="padding: 0.75rem 0.5rem; vertical-align: middle;">
+                  <div style="color: var(--accent-cyan); font-weight: 600; font-family: monospace; font-size: 0.85rem; word-break: break-all;">${m.reportNo}</div>
+                  <div style="font-size: 0.7rem; color: #F59E0B; margin-top: 2px; font-weight: bold;">MÇF: ${m.matFormNo || '-'}</div>
+                </td>
+                <td style="padding: 0.75rem 0.5rem; vertical-align: middle;">
+                  <div style="font-family: monospace; font-weight: 700; color: #fff; font-size: 0.85rem;">${m.sapNo || '-'}</div>
+                  ${(m.serialNo || m.serial) ? `<div style="font-size: 0.7rem; color: #10B981; margin-top: 2px; font-weight: bold; font-family: monospace; word-break: break-all;">S/N: ${m.serialNo || m.serial}</div>` : ''}
+                </td>
+                <td style="padding: 0.75rem 0.5rem; vertical-align: middle; font-size: 0.85rem; color: #E2E8F0; line-height: 1.4;">${m.description || m.type || '-'}</td>
+                <td style="padding: 0.75rem 0.5rem; vertical-align: middle; text-align: center;">
+                  <div style="font-weight: 700; color: var(--accent-orange); font-size: 0.85rem; display: flex; flex-direction: column; align-items: center; gap: 4px; justify-content: center;">
+                    <span>${m.used || m.received || 0} Adet</span>
+                    ${isAdmin ? `<button onclick="window.deleteMaterialFromReport('${m.reportId}', ${m.materialIndex})" style="background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); border-radius: 6px; color: var(--accent-red); cursor: pointer; padding: 3px 8px; font-size: 0.75rem; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px;" title="Bu malzemeyi rapordan sil"><i class="fa-solid fa-trash-can"></i> Sil</button>` : ''}
+                  </div>
                 </td>
               </tr>
             `).join('');
@@ -861,8 +879,12 @@ export const TurbinesPage = () => {
 
     list.innerHTML = notes.map(n => {
       const deleteBtn = isAdmin ? `
-        <button onclick="window.deleteTurbineNote('${n.id}')" class="icon-btn" style="color: rgba(255,255,255,0.15); transition: color 0.2s;" onmouseover="this.style.color='#e74c3c'" onmouseout="this.style.color='rgba(255,255,255,0.15)'">
-          <i class="fa-solid fa-trash-can"></i>
+        <button onclick="window.deleteTurbineNote('${n.id}')" 
+                style="background: none; border: none; outline: none; box-shadow: none; color: rgba(255,255,255,0.25); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; transition: all 0.2s; flex-shrink: 0;"
+                onmouseover="this.style.color='#ff4d4d'; this.style.background='rgba(255,77,77,0.1)';" 
+                onmouseout="this.style.color='rgba(255,255,255,0.25)'; this.style.background='none';"
+                title="Notu Sil">
+          <i class="fa-solid fa-trash-can" style="font-size: 0.85rem;"></i>
         </button>
       ` : '';
 
@@ -1121,21 +1143,14 @@ export const TurbinesPage = () => {
   });
 
   if (match) {
-    const pdfUrl = match.imageUrls && match.imageUrls.length > 0 ? match.imageUrls.find((url: string) => url.toLowerCase().includes('.pdf')) : null;
-    if (pdfUrl) {
-      (window as any).switchTurbineTab('reports');
-      (window as any).viewTurbinePdf(pdfUrl, match.reportNo);
-      return;
-    } else {
-      (window as any).switchTurbineTab('reports');
-      if((window as any).showToast) (window as any).showToast('BİLGİ', 'Bu raporun PDF versiyonu bulunmuyor. Arşiv sekmesinde listelenmektedir.', 'info');
-      return;
-    }
+    (window as any).switchTurbineTab('reports');
+    (window as any).viewTurbinePdf(match.id, match.reportNo);
+    return;
   }
 
   // Fallback
   (window as any).switchTurbineTab('reports');
-  if((window as any).showToast) (window as any).showToast('BİLGİ', 'Göreve ait PDF raporu Arşiv sekmesinde bulabilirsiniz.', 'info');
+  if((window as any).showToast) (window as any).showToast('BİLGİ', 'Göreve ait rapor Arşiv sekmesinde listelenmektedir.', 'info');
 };
 
 (window as any).deleteTurbineReport = async (reportId: string, reportNo: string) => {
@@ -1217,10 +1232,12 @@ export const TurbinesPage = () => {
 
 (window as any).initSitesMap = () => {
   if ((window as any).sitesMapInstance) {
-    setTimeout(() => {
-      (window as any).sitesMapInstance.invalidateSize();
-    }, 50);
-    return;
+    try {
+      (window as any).sitesMapInstance.remove();
+    } catch (e) {
+      console.error("Error removing old map instance:", e);
+    }
+    (window as any).sitesMapInstance = null;
   }
 
   const L = (window as any).L;
@@ -1245,9 +1262,10 @@ export const TurbinesPage = () => {
   const allSites = dataService.getSites() || [];
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+  const activeTaskSites = (window as any).activeTaskSites || [];
   const allowedSites = isAdmin 
     ? allSites 
-    : allSites.filter(s => (currentUser?.allowedSites || []).includes(s.id));
+    : allSites.filter(s => (currentUser?.allowedSites || []).includes(s.id) || activeTaskSites.includes(s.id));
 
   const siteTasks = (window as any).latestTurbineTasks || [];
 
@@ -1381,31 +1399,33 @@ export const TurbinesPage = () => {
     return;
   }
 
-  // Initialize map if not yet done
-  if (!(window as any).siteMapInstance) {
-    const map = L.map('site-turbines-map', {
-      zoomControl: true,
-      attributionControl: false
-    });
-    (window as any).siteMapInstance = map;
-
-    // Use Google Satellite Hybrid as default for detailed map
-    L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-      maxZoom: 20
-    }).addTo(map);
-  } else {
-    // Reset to default active switcher button state when map renders/reopens
-    const btnDark = document.getElementById('site-map-layer-dark');
-    const btnSat = document.getElementById('site-map-layer-satellite');
-    if (btnDark && btnSat) {
-      btnDark.classList.remove('active');
-      btnSat.classList.add('active');
-      // Force reload layer to satellite
-      (window as any).switchMapLayer('satellite');
+  // Initialize map
+  if ((window as any).siteMapInstance) {
+    try {
+      (window as any).siteMapInstance.remove();
+    } catch (e) {
+      console.error("Error removing old site map instance:", e);
     }
+    (window as any).siteMapInstance = null;
   }
 
-  const map = (window as any).siteMapInstance;
+  const map = L.map('site-turbines-map', {
+    zoomControl: true,
+    attributionControl: false
+  });
+  (window as any).siteMapInstance = map;
+
+  // Use Google Satellite Hybrid as default for detailed map
+  L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    maxZoom: 20
+  }).addTo(map);
+
+  const btnDark = document.getElementById('site-map-layer-dark');
+  const btnSat = document.getElementById('site-map-layer-satellite');
+  if (btnDark && btnSat) {
+    btnDark.classList.remove('active');
+    btnSat.classList.add('active');
+  }
   
   // Clear existing markers/layers
   if ((window as any).siteMapMarkersGroup) {

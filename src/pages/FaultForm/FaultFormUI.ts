@@ -1,5 +1,4 @@
 import { formatTeamName } from '../../utils/formatters';
-import personnelList from '../../data/personnel.json';
 import { statusService } from '../../services/StatusService';
 
 export const FaultFormUI = {
@@ -211,7 +210,7 @@ export const FaultFormUI = {
                         </div>
 
                         <!-- NORMAL ADAM-SAAT -->
-                        <div class="glass-panel" style="padding: 0.6rem; border: 1px solid rgba(0, 230, 118, 0.15); background: rgba(0, 230, 118, 0.02); border-radius: 6px; text-align: center;">
+                        <div class="glass-panel" style="display: none; padding: 0.6rem; border: 1px solid rgba(0, 230, 118, 0.15); background: rgba(0, 230, 118, 0.02); border-radius: 6px; text-align: center;">
                           <div style="display: flex; align-items: center; justify-content: center; gap: 0.3rem; font-size: 0.55rem; color: var(--accent-green); font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">
                             <i class="fa-solid fa-user-clock"></i> NORMAL ADAM-SAAT
                           </div>
@@ -220,7 +219,7 @@ export const FaultFormUI = {
                         </div>
 
                         <!-- MESAİ ADAM-SAAT -->
-                        <div class="glass-panel" style="padding: 0.6rem; border: 1px solid rgba(255, 51, 102, 0.15); background: rgba(255, 51, 102, 0.02); border-radius: 6px; text-align: center;">
+                        <div class="glass-panel" style="display: none; padding: 0.6rem; border: 1px solid rgba(255, 51, 102, 0.15); background: rgba(255, 51, 102, 0.02); border-radius: 6px; text-align: center;">
                           <div style="display: flex; align-items: center; justify-content: center; gap: 0.3rem; font-size: 0.55rem; color: var(--accent-red); font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;">
                             <i class="fa-solid fa-fire"></i> MESAİ ADAM-SAAT
                           </div>
@@ -329,9 +328,9 @@ export const FaultFormUI = {
             <td style="padding: 0.25rem 0.35rem;"><input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; text-align: center; font-family: monospace; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.sapNo || ''}" oninput="window.handleSapLookup(this)"></td>
             <td style="padding: 0.25rem 0.35rem;"><input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.serialNo || ''}"></td>
             <td style="padding: 0.25rem 0.35rem;">
-                <div style="position: relative; display: flex; align-items: center; width: 100%;">
-                    <input type="text" class="cyber-input" style="width: 100%; height: 26px !important; padding: 2px 165px 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.description || ''}">
-                    ${type === 'T' ? `<span class="stock-badge" style="display: none; position: absolute; right: 4px; padding: 0.1rem 0.3rem; font-size: 0.65rem; border-radius: 4px; font-weight: 800; font-family: monospace; white-space: nowrap; pointer-events: none; z-index: 2;"></span>` : ''}
+                <div style="display: flex; align-items: center; width: 100%; gap: 6px;">
+                    <input type="text" class="cyber-input" style="flex: 1; min-width: 0; height: 26px !important; padding: 2px 6px !important; font-size: 0.8rem; box-sizing: border-box; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${data?.description || ''}">
+                    ${type === 'T' ? `<span class="stock-badge" style="display: none; padding: 0.15rem 0.4rem; font-size: 0.65rem; border-radius: 4px; font-weight: 800; font-family: monospace; white-space: nowrap; pointer-events: none; flex-shrink: 0;"></span>` : ''}
                 </div>
             </td>
             <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 80px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${type === 'S' ? (data?.defectCount || 0) : (data?.used || 0)}"></td>

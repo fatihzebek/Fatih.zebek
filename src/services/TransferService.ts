@@ -15,6 +15,7 @@ export interface Transfer {
   approvedBy?: string;
   approvedAt?: any;
   rejectionReason?: string;
+  type?: 'SEVK' | 'GERI_ODE' | 'SATIS' | 'HIBE';
 }
 
 class TransferService {
@@ -68,7 +69,41 @@ class TransferService {
         }
       );
 
-      // 3. Update transfer status
+      // 3. Handle Reservations
+      // If transferring from stationary to team: create reservation on source warehouse
+      if (transfer.toSiteId.startsWith('team_') && !transfer.fromSiteId.startsWith('team_')) {
+        const sourceInventory = await warehouseService.getInventory(transfer.fromSiteId);
+        const sourceItem = sourceInventory.find(i => i.sapNo === transfer.materialCode && i.condition !== 'DEFECT');
+        if (sourceItem && sourceItem.id) {
+          const currentReserved = sourceItem.reservedQuantity || 0;
+          const reservations = (sourceItem as any).reservations || {};
+          const currentTeamQty = reservations[transfer.toSiteId] || 0;
+          
+          const newReservations = {
+            ...reservations,
+            [transfer.toSiteId]: currentTeamQty + transfer.quantity
+          };
+          
+          await updateDoc(doc(db, 'warehouses', transfer.fromSiteId, 'inventory_v2', sourceItem.id), {
+            reservedQuantity: currentReserved + transfer.quantity,
+            reservations: newReservations,
+            lastUpdated: serverTimestamp()
+          });
+          // Invalidate cache
+          (warehouseService as any).inventoryCache.delete(transfer.fromSiteId);
+        }
+      }
+
+      // If transferring from team to stationary: decrease reservation
+      if (transfer.fromSiteId.startsWith('team_') && !transfer.toSiteId.startsWith('team_')) {
+        try {
+          await warehouseService.decreaseReservation(transfer.toSiteId, transfer.materialCode, transfer.quantity, transfer.fromSiteId);
+        } catch (e) {
+          console.warn("Failed to decrease reservation during transfer approval:", e);
+        }
+      }
+
+      // 4. Update transfer status
       const docRef = doc(db, 'transfers', transfer.id);
       await updateDoc(docRef, {
         status: 'COMPLETED',

@@ -1,26 +1,194 @@
 [
   {
     "name": "Fatih ZEBEK",
-    "expertise": ["Elektriksel", "Yazılım"],
+    "company": "Demirer Holding",
     "hourlyRate": 150,
     "baseSiteId": "2688"
   },
   {
     "name": "Furkan YILDIRIM",
-    "expertise": ["Mekanik"],
+    "company": "Demirer Holding",
     "hourlyRate": 120,
     "baseSiteId": "2688"
   },
   {
-    "name": "Ahmet ALAN",
-    "expertise": ["Mekanik", "Genel"],
-    "hourlyRate": 110,
-    "baseSiteId": "1001"
+    "name": "Cemalettin KAYA",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Sercan MUTLU",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Batuhan KÖKEN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
   },
   {
     "name": "Ali ÇETİNKAYA",
-    "expertise": ["Elektriksel"],
+    "company": "Demirer Enerji",
     "hourlyRate": 140,
-    "baseSiteId": "2002"
+    "baseSiteId": "2688"
+  },
+  {
+    "name": "Recep ERTAN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Ali BODUR",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Süleyman AŞKIN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Adem ARASLI",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Zafer DURMAZ",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Mehmet GÜNAY",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Emre ACAR",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Berkant SAV",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Ahmetcan GÜLAÇ",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Berkay KESKİN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "İbrahim ÖZKARA",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Özgür DEMİRAY",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Ahmet DÜNDAR",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Mehmet KÖKEN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Eray ÖNLÜ",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Kadir DEMİRÖZ",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Ahmet ALAN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 110,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Halil İbrahim ÇETİN",
+    "company": "Demirer Enerji",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Gökmen KÖKSAL",
+    "company": "Har Film Yapım",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Gürkan VARDAR",
+    "company": "Har Film Yapım",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Arif ARIKAN",
+    "company": "Har Film Yapım",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Ahmet Oğuz ÖZMUTLU",
+    "company": "Har Film Yapım",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Volkan VARDAR",
+    "company": "YEK",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Niyazi KARADAYI",
+    "company": "YEK",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Harun DALKIRAN",
+    "company": "YEK",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
+  },
+  {
+    "name": "Onur ÇELİK",
+    "company": "YEK",
+    "hourlyRate": 100,
+    "baseSiteId": "GENEL"
   }
 ]

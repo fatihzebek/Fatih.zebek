@@ -519,17 +519,28 @@ const resetTelemetryCards = () => {
     const optText = opt.text.toUpperCase();
     const optVal = opt.value;
     
+    // Skip 4-year templates as requested by the user
+    if (/4\s*YIL|4\.YIL|4-YIL/.test(optText)) {
+      continue;
+    }
+    
     if (optText.includes(tModel) && (searchType === 'YAĞ' ? (optText.includes('YAĞ') || optText.includes('YAG')) : optText.includes('ANA'))) {
       matchedOptionValue = optVal;
       break;
     }
   }
   
-  // Fallback: match model only
+  // Fallback: match model only (still skipping 4-year templates)
   if (!matchedOptionValue) {
     for (let i = 0; i < selectEl.options.length; i++) {
       const opt = selectEl.options[i];
-      if (opt.text.toUpperCase().includes(tModel)) {
+      const optText = opt.text.toUpperCase();
+      
+      if (/4\s*YIL|4\.YIL|4-YIL/.test(optText)) {
+        continue;
+      }
+      
+      if (optText.includes(tModel)) {
         matchedOptionValue = opt.value;
         break;
       }

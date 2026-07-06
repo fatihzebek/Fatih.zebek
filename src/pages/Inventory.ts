@@ -68,63 +68,67 @@ export const InventoryPage = () => `
   </div>
 `;
 
+let inventoryDebounceTimer: any = null;
 (window as any).handleInventorySearch = (query: string) => {
   const tbody = document.getElementById('inventory-tbody');
   if (!tbody) return;
 
+  clearTimeout(inventoryDebounceTimer);
   if (query.length < 2) {
     tbody.innerHTML = `
       <tr>
         <td colspan="5" style="padding: 6rem 3rem; text-align: center; color: var(--text-dim); opacity: 0.3;">
             <i class="fa-solid fa-keyboard" style="font-size: 3rem; margin-bottom: 1.5rem; display: block;"></i>
             <p style="font-size: 1rem; font-weight: 600;">Arama Yapmak İçin Yazmaya Başlayın</p>
+            <p style="font-size: 0.8rem; margin-top: 0.5rem;">SAP No veya isim ile anlık filtreleme yapabilirsiniz</p>
         </td>
       </tr>
     `;
     return;
   }
 
-  const results = inventoryService.searchMaterials(query);
-  
-  if (results.length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="5" style="padding: 6rem 3rem; text-align: center; color: var(--text-dim); opacity: 0.3;">
-          <i class="fa-solid fa-ghost" style="font-size: 3rem; margin-bottom: 1.5rem; display: block;"></i>
-          <p style="font-size: 1rem; font-weight: 600;">Eşleşen Kayıt Bulunamadı</p>
+  inventoryDebounceTimer = setTimeout(() => {
+    const results = inventoryService.searchMaterials(query);
+    
+    if (results.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="padding: 6rem 3rem; text-align: center; color: var(--text-dim); opacity: 0.3;">
+            <i class="fa-solid fa-ghost" style="font-size: 3rem; margin-bottom: 1.5rem; display: block;"></i>
+            <p style="font-size: 1rem; font-weight: 600;">Eşleşen Kayıt Bulunamadı</p>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = results.map(item => `
+      <tr class="hover-row-premium" style="background: rgba(255,255,255,0.02); border-radius: 12px; transition: all 0.3s;">
+        <td style="padding: 1.2rem 1.5rem; border-top-left-radius: 12px; border-bottom-left-radius: 12px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-orange); font-weight: 800; font-size: 0.9rem; background: rgba(255, 165, 0, 0.05); padding: 4px 10px; border-radius: 6px;">${item.n}</span>
+              <button class="action-icon-btn" style="width: 24px; height: 24px; font-size: 0.6rem; border: none; background: none;" onclick="window.copyToClipboard('${item.n}')"><i class="fa-solid fa-copy"></i></button>
+          </div>
+        </td>
+        <td style="padding: 1.2rem 1.5rem;">
+          <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">${item.d}</div>
+          <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;">TEKNİK MALZEME KODU: ${item.n}</div>
+        </td>
+        <td style="padding: 1.2rem 1.5rem;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-warehouse" style="font-size: 0.7rem; color: var(--text-dim);"></i>
+              <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-dim);">MERKEZ KATALOG</span>
+          </div>
+        </td>
+        <td style="padding: 1.2rem 1.5rem; text-align: center;">
+           <span style="padding: 4px 12px; border-radius: 20px; font-size: 0.6rem; font-weight: 900; background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); border: 1px solid rgba(100, 255, 218, 0.2);">AKTİF</span>
+        </td>
+        <td style="padding: 1.2rem 1.5rem; text-align: right; border-top-right-radius: 12px; border-bottom-right-radius: 12px;">
+          <button class="cyber-button" style="padding: 0.5rem 1rem; font-size: 0.7rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+              <i class="fa-solid fa-circle-info"></i> DETAY
+          </button>
         </td>
       </tr>
-    `;
-    return;
-  }
-
-  tbody.innerHTML = results.map(item => `
-    <tr class="hover-row-premium" style="background: rgba(255,255,255,0.02); border-radius: 12px; transition: all 0.3s;">
-      <td style="padding: 1.2rem 1.5rem; border-top-left-radius: 12px; border-bottom-left-radius: 12px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-family: 'JetBrains Mono', monospace; color: var(--accent-orange); font-weight: 800; font-size: 0.9rem; background: rgba(255, 165, 0, 0.05); padding: 4px 10px; border-radius: 6px;">${item.n}</span>
-            <button class="action-icon-btn" style="width: 24px; height: 24px; font-size: 0.6rem; border: none; background: none;" onclick="window.copyToClipboard('${item.n}')"><i class="fa-solid fa-copy"></i></button>
-        </div>
-      </td>
-      <td style="padding: 1.2rem 1.5rem;">
-        <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-main);">${item.d}</div>
-        <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;">TEKNİK MALZEME KODU: ${item.n}</div>
-      </td>
-      <td style="padding: 1.2rem 1.5rem;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-warehouse" style="font-size: 0.7rem; color: var(--text-dim);"></i>
-            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-dim);">MERKEZ KATALOG</span>
-        </div>
-      </td>
-      <td style="padding: 1.2rem 1.5rem; text-align: center;">
-         <span style="padding: 4px 12px; border-radius: 20px; font-size: 0.6rem; font-weight: 900; background: rgba(100, 255, 218, 0.1); color: var(--accent-blue); border: 1px solid rgba(100, 255, 218, 0.2);">AKTİF</span>
-      </td>
-      <td style="padding: 1.2rem 1.5rem; text-align: right; border-top-right-radius: 12px; border-bottom-right-radius: 12px;">
-        <button class="cyber-button" style="padding: 0.5rem 1rem; font-size: 0.7rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
-            <i class="fa-solid fa-circle-info"></i> DETAY
-        </button>
-      </td>
-    </tr>
-  `).join('');
+    `).join('');
+  }, 150);
 };
-

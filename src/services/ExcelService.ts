@@ -4,8 +4,32 @@ import { inventoryService } from './InventoryService';
 
 class ExcelService {
   async exportToExcel(inventory: InventoryItem[], logs: InventoryLog[], fileName: string) {
+    // Sort inventory by shelf number (Raf No) first (natural numeric sorting), then SAP No, then description
+    const sortedInventory = [...inventory].sort((a, b) => {
+       const locA = String(a.shelfNo || '').trim().toUpperCase();
+       const locB = String(b.shelfNo || '').trim().toUpperCase();
+       
+       // Put items with empty location at the bottom
+       if (!locA && locB) return 1;
+       if (locA && !locB) return -1;
+       
+       let locCmp = 0;
+       if (locA && locB) {
+           locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+       }
+       if (locCmp !== 0) return locCmp;
+       
+       const sapA = String(a.sapNo || '').trim();
+       const sapB = String(b.sapNo || '').trim();
+       if (sapA && sapB) {
+           const sapCmp = sapA.localeCompare(sapB, undefined, { numeric: true });
+           if (sapCmp !== 0) return sapCmp;
+       }
+       return String(a.description || '').localeCompare(String(b.description || ''));
+    });
+
     // Sheet 1: Inventory
-    const invData = inventory.map(item => ({
+    const invData = sortedInventory.map(item => ({
       'SAP NO': item.sapNo,
       'AÇIKLAMA': item.description,
       'ADET': item.quantity,
@@ -150,6 +174,8 @@ class ExcelService {
         'TARİH': new Date(item.date).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' }),
         'RAPOR NO': item.reportId,
         'MÇF / FORM NO': item.matFormNo,
+        'ARIZA KODU': item.faultCode || '-',
+        'ARIZA TANIMI': item.faultDesc || '-',
         'SAP NO': item.sapNo,
         'SERİ NO': item.serialNo || '-',
         'MALZEME': item.description,
@@ -173,6 +199,8 @@ class ExcelService {
         { wch: 15 }, // Tarih
         { wch: 15 }, // Rapor No
         { wch: 20 }, // MCF
+        { wch: 25 }, // Arıza Kodu
+        { wch: 40 }, // Arıza Tanımı
         { wch: 15 }, // SAP
         { wch: 20 }, // Seri No
         { wch: 40 }, // Malzeme
@@ -197,8 +225,55 @@ class ExcelService {
     XLSX.writeFile(workbook, `Turbin_Analizi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
   }
 
-  exportSingleAuditToExcel(audit: AuditRecord, warehouseName: string, inventory: InventoryItem[] = []) {
+  exportSingleAuditToExcel(
+    audit: AuditRecord, 
+    warehouseName: string, 
+    inventory: InventoryItem[] = [], 
+    allAudits: AuditRecord[] = [],
+    logs: InventoryLog[] = []
+  ) {
     const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : (audit.date || '');
+    
+    // Sort allAudits descending by date/timestamp to find the previous audit
+    const sortedAudits = [...allAudits].sort((a: any, b: any) => {
+      const timeA = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : new Date(a.date || 0).getTime();
+      const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.date || 0).getTime();
+      return timeB - timeA;
+    });
+
+    const currentAuditIndex = sortedAudits.findIndex((a: any) => a.id === audit.id);
+    let previousAudit: any = null;
+    if (currentAuditIndex !== -1 && currentAuditIndex < sortedAudits.length - 1) {
+      previousAudit = sortedAudits[currentAuditIndex + 1];
+    }
+
+    const currentAuditTime = audit.timestamp?.seconds ? audit.timestamp.seconds * 1000 : (audit.endTime ? new Date(audit.endTime).getTime() : new Date().getTime());
+    const previousAuditTime = previousAudit 
+      ? (previousAudit.timestamp?.seconds ? previousAudit.timestamp.seconds * 1000 : (previousAudit.endTime ? new Date(previousAudit.endTime).getTime() : 0))
+      : 0;
+
+    // Filter logs between previousAuditTime and currentAuditTime
+    // Include REMOVE logs (consumption) and ADD logs representing sökülen defect parts
+    const consumptionLogs = logs.filter((l: any) => {
+      const logTime = l.timestamp?.seconds ? l.timestamp.seconds * 1000 : (l.timestamp?.toDate ? l.timestamp.toDate().getTime() : 0);
+      const isInRange = logTime > previousAuditTime && logTime <= currentAuditTime;
+      if (!isInRange) return false;
+      
+      const isRemove = l.type === 'REMOVE';
+      const isDefectAdd = l.type === 'ADD' && (l.note || '').includes('[Durum: DEFECT]');
+      if (!isRemove && !isDefectAdd) return false;
+
+      // Fallback: Parse turbineNo from note if not explicitly set
+      if (!l.turbineNo) {
+        const text = l.note || l.reason || '';
+        const match = text.match(/-\s*([a-zA-Z0-9-]+)\s*\)/);
+        if (match) {
+          l.turbineNo = match[1].trim().toUpperCase();
+        }
+      }
+      return !!l.turbineNo;
+    });
+
     const data = audit.results.map((r: any) => {
       let shelfNo = r.shelfNo || '';
       if (!shelfNo && inventory.length > 0) {
@@ -210,38 +285,155 @@ class ExcelService {
       return {
         'SAP NO': r.sapNo || '---',
         'MALZEME TANIMI': r.description,
-        'RAF KONUMU': shelfNo || '---',
         'SİSTEM STOĞU': r.systemQty,
         'FİZİKSEL SAYIM': r.physicalQty,
         'FARK': r.diff,
+        'RAF NO': shelfNo || '---',
         'AÇIKLAMA': r.note || ''
       };
     });
 
+    // Sort data by RAF NO (natural alphanumeric sorting), then SAP NO
+    const sortedData = data.sort((a: any, b: any) => {
+       const locA = String(a['RAF NO'] || '').trim().toUpperCase();
+       const locB = String(b['RAF NO'] || '').trim().toUpperCase();
+       
+       // Put empty/undefined/Tanımsız/Girilmemiş locations at the bottom
+       const isEmptyA = !locA || locA === '---' || locA === 'TANIMSIZ' || locA === 'GİRİLMEMİŞ';
+       const isEmptyB = !locB || locB === '---' || locB === 'TANIMSIZ' || locB === 'GİRİLMEMİŞ';
+       
+       if (isEmptyA && !isEmptyB) return 1;
+       if (!isEmptyA && isEmptyB) return -1;
+       
+       let locCmp = 0;
+       if (!isEmptyA && !isEmptyB) {
+           locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+       }
+       if (locCmp !== 0) return locCmp;
+       
+       const sapA = String(a['SAP NO'] || '').trim();
+       const sapB = String(b['SAP NO'] || '').trim();
+       return sapA.localeCompare(sapB, undefined, { numeric: true });
+    });
+
+    // Create Sheet 1: Sayım Detayları
     const worksheet = XLSX.utils.aoa_to_sheet([
       [`DEMİRER HOLDİNG - DETAYLI DEPO SAYIM RAPORU`],
       ['Depo:', warehouseName],
       ['Sayım Tarihi:', date],
       ['Sayımı Yapan:', audit.user || 'Bilinmeyen Kullanıcı'],
+      ['Sayıma Başlama Saati:', audit.startTime ? new Date(audit.startTime).toLocaleString('tr-TR') : '---'],
+      ['Sayım Bitiş Saati:', audit.endTime ? new Date(audit.endTime).toLocaleString('tr-TR') : '---'],
       ['Toplam Kalem:', audit.totalItems, 'Toplam Fark:', audit.totalDiff],
       [] // Boş satır
     ]);
 
-    XLSX.utils.sheet_add_json(worksheet, data, { origin: 'A7' });
+    XLSX.utils.sheet_add_json(worksheet, sortedData, { origin: 'A9' });
 
     worksheet['!cols'] = [
       { wch: 15 }, // SAP
       { wch: 50 }, // Tanım
-      { wch: 15 }, // Raf Konumu
       { wch: 15 }, // Sistem
       { wch: 15 }, // Sayılan
       { wch: 10 }, // Fark
+      { wch: 15 }, // Raf No
       { wch: 25 }  // Açıklama
     ];
 
     const workbook = XLSX.utils.book_new();
-    const cleanDate = date.replace(/[\s\.\:\/]/g, '_');
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sayım Detayları');
+
+    // Create Sheet 2: 2 Sayım Arası Tüketim
+    const consumptionData = consumptionLogs.map((l: any) => {
+      let sapNo = l.sapNo || '';
+      if (!sapNo && inventory.length > 0) {
+        const invItem = inventory.find((i: any) => i.description === l.materialName);
+        if (invItem) sapNo = invItem.sapNo;
+      }
+      
+      const noteText = l.note || l.reason || '';
+      
+      // Extract full report code (e.g. AN_IN06072026919) from note text
+      let fullReportNo = '---';
+      const mcfMatch = noteText.match(/Rapor:\s*([a-zA-Z0-9_-]+)/);
+      if (mcfMatch) {
+        fullReportNo = mcfMatch[1];
+      }
+
+      // Extract MÇF No (the suffix, e.g. 919) from the full report code
+      let mcfNo = '---';
+      if (fullReportNo !== '---') {
+        const suffixMatch = fullReportNo.match(/\d{8}(\d+)$/);
+        if (suffixMatch) {
+          mcfNo = suffixMatch[1];
+        } else {
+          const endDigits = fullReportNo.match(/(\d+)$/);
+          if (endDigits) {
+            mcfNo = endDigits[1];
+          }
+        }
+      }
+
+      // Form No should display the full report code (e.g. AN_IN06072026919)
+      const formNo = fullReportNo;
+
+      // Action Type
+      let actionType = 'Kullanılan (Yeni)';
+      if (noteText.includes('[Durum: DEFECT]')) {
+        actionType = l.type === 'ADD' ? 'Sökülen (Arızalı)' : 'Hurda / Sevk (Arızalı)';
+      } else if (noteText.includes('[Durum: REVISED]')) {
+        actionType = 'Kullanılan (Revize)';
+      }
+
+      // Format User to clean team name (e.g. dh-tm15@demirerholding.com -> team15)
+      let formattedUser = l.user || '---';
+      if (formattedUser.includes('@')) {
+        formattedUser = formattedUser.split('@')[0];
+      }
+      if (formattedUser.startsWith('dh-tm')) {
+        formattedUser = formattedUser.replace('dh-tm', 'team');
+      }
+
+      return {
+        'TARİH': l.timestamp?.seconds ? new Date(l.timestamp.seconds * 1000).toLocaleString('tr-TR') : (l.timestamp?.toDate ? l.timestamp.toDate().toLocaleString('tr-TR') : ''),
+        'TÜRBİN NO': l.turbineNo || '---',
+        'SAP NO': sapNo || '---',
+        'SERİ NO': l.turbineSerial || '---',
+        'MALZEME AÇIKLAMASI': l.materialName,
+        'ADET': l.quantity,
+        'MÇF NO': mcfNo,
+        'FORM NO': formNo,
+        'İŞLEM': actionType,
+        'KULLANAN EKİP': formattedUser
+      };
+    });
+
+    const worksheet2 = XLSX.utils.aoa_to_sheet([
+      [`DEMİRER HOLDİNG - İKİ SAYIM ARASI TÜRBİN TÜKETİM DETAYLARI`],
+      ['Depo:', warehouseName],
+      ['Periyot Başlangıcı:', previousAudit ? new Date(previousAuditTime).toLocaleString('tr-TR') : 'İlk Sayım'],
+      ['Periyot Bitişi (Bu Sayım):', new Date(currentAuditTime).toLocaleString('tr-TR')],
+      ['Toplam Tüketim İşlemi:', consumptionData.length],
+      [] // Boş satır
+    ]);
+
+    XLSX.utils.sheet_add_json(worksheet2, consumptionData, { origin: 'A7' });
+    worksheet2['!cols'] = [
+      { wch: 18 }, // Tarih
+      { wch: 12 }, // Türbin No
+      { wch: 12 }, // SAP No
+      { wch: 15 }, // Seri No
+      { wch: 45 }, // Malzeme Açıklaması
+      { wch: 10 }, // Adet
+      { wch: 20 }, // MCF No
+      { wch: 15 }, // Form No
+      { wch: 18 }, // İşlem
+      { wch: 20 }  // Kullanan Ekip
+    ];
+
+    XLSX.utils.book_append_sheet(workbook, worksheet2, 'Tüketim Detayları');
+
+    const cleanDate = date.replace(/[\s\.\:\/]/g, '_');
     XLSX.writeFile(workbook, `Sayim_Raporu_${warehouseName.replace(/\s+/g, '_')}_${cleanDate}.xlsx`);
   }
 
@@ -317,6 +509,160 @@ class ExcelService {
 
     const safeDate = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `Toplu_Sayim_Gecmisi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
+  }
+
+  exportOvertimeToExcel(data: any[], fileName: string) {
+    // Helper to get short sheet names (max 31 chars)
+    const getShortCompanyName = (fullName: string): string => {
+      if (!fullName) return 'Diğer';
+      const lower = fullName.toLocaleLowerCase('tr-TR');
+      if (lower.includes('har film') || lower.includes('harfilm')) return 'Har Film';
+      if (lower.includes('yek')) return 'YEK';
+      if (lower.includes('demirer')) return 'Demirer';
+      return fullName.substring(0, 15).trim();
+    };
+
+    // Helper to convert decimal hours (e.g. 1.25) to time string (e.g. 01:15)
+    const decimalToTimeStr = (decimal: number): string => {
+      if (isNaN(decimal) || decimal <= 0) return '00:00';
+      const totalMinutes = Math.round(decimal * 60);
+      const hrs = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+
+    // Helper to format date from YYYY-MM-DD to DD.MM.YYYY
+    const formatDateToTurkish = (dateStr: string): string => {
+      if (!dateStr) return '';
+      const trimmed = dateStr.trim();
+      if (trimmed.includes('-')) {
+        const [y, m, d] = trimmed.split('-');
+        return `${d}.${m}.${y}`;
+      }
+      return trimmed;
+    };
+
+    // Helper to build details data array
+    const buildDetailsData = (rows: any[]) => {
+      return rows.map(row => ({
+        'ŞİRKET': row.company || 'Bilinmiyor',
+        'PERSONEL': row.personnel,
+        'TARİH': formatDateToTurkish(row.date),
+        'SAHA': row.siteName,
+        'TÜRBİN NO': row.turbineNo || '---',
+        'SERİ NO': row.turbineSerial || '---',
+        'ARIZA KODU': row.faultCode || '---',
+        'ARIZA/BAKIM RAPOR NO': row.reportNo,
+        'BAŞLANGIÇ': row.startTime,
+        'BİTİŞ': row.endTime,
+        'SÜRE': row.duration,
+        'ONAYLANAN MESAİ': decimalToTimeStr(row.approvedHours),
+        'SODEXO YEMEK': row.sodexo ? '1 ADET YEMEK' : '---',
+        'DIŞ GÖREV HARCIRAHI': row.harcirah ? '1 GÜN HARCIRAH' : '---',
+        'DURUM': row.status === 'approved' ? 'ONAYLANDI' : row.status === 'rejected' ? 'REDDEDİLDİ' : 'ONAY BEKLİYOR'
+      }));
+    };
+
+    // Helper to build summary data array
+    const buildSummaryData = (rows: any[]) => {
+      const aggregated = rows.reduce((acc: { [name: string]: { company: string, hours: number, sodexo: number, harcirah: number } }, curr: any) => {
+        const name = curr.personnel;
+        if (!acc[name]) {
+          acc[name] = { 
+            company: curr.company || 'Bilinmiyor',
+            hours: 0,
+            sodexo: 0,
+            harcirah: 0
+          };
+        }
+        if (curr.status === 'approved') {
+          acc[name].hours += curr.approvedHours || 0;
+          if (curr.sodexo) acc[name].sodexo += 1;
+          if (curr.harcirah) acc[name].harcirah += 1;
+        }
+        return acc;
+      }, {});
+
+      return Object.keys(aggregated).map(name => {
+        const item = aggregated[name];
+        return {
+          'ŞİRKET': item.company,
+          'PERSONEL': name,
+          'TOPLAM ONAYLANAN MESAİ': decimalToTimeStr(item.hours),
+          'TOPLAM SODEXO YEMEK (ADET)': item.sodexo,
+          'TOPLAM DIŞ GÖREV HARCIRAHI (GÜN)': item.harcirah
+        };
+      });
+    };
+
+    const wb = XLSX.utils.book_new();
+
+    // Column widths definition for details worksheets
+    const detailsCols = [
+      { wch: 25 }, // Şirket
+      { wch: 25 }, // Personel
+      { wch: 12 }, // Tarih
+      { wch: 20 }, // Saha
+      { wch: 12 }, // Türbin No
+      { wch: 15 }, // Seri No
+      { wch: 15 }, // Arıza Kodu
+      { wch: 25 }, // Rapor No
+      { wch: 10 }, // Başlangıç
+      { wch: 10 }, // Bitiş
+      { wch: 12 }, // Süre
+      { wch: 25 }, // Onaylanan Mesai
+      { wch: 18 }, // Sodexo
+      { wch: 22 }, // Harcırah
+      { wch: 15 }  // Durum
+    ];
+
+    // 1. Grand totals (All companies)
+    const grandSummary = buildSummaryData(data);
+    const grandDetails = buildDetailsData(data);
+
+    const wsGrandSummary = XLSX.utils.json_to_sheet(grandSummary);
+    XLSX.utils.book_append_sheet(wb, wsGrandSummary, 'Tüm Şirketler Özet');
+    wsGrandSummary['!cols'] = [
+      { wch: 25 }, // Şirket
+      { wch: 25 }, // Personel
+      { wch: 30 }, // Toplam Mesai
+      { wch: 30 }, // Toplam Sodexo
+      { wch: 35 }  // Toplam Harcırah
+    ];
+
+    const wsGrandDetails = XLSX.utils.json_to_sheet(grandDetails);
+    XLSX.utils.book_append_sheet(wb, wsGrandDetails, 'Tüm Şirketler Detay');
+    wsGrandDetails['!cols'] = detailsCols;
+
+    // 2. Separate sheets for each company present in data
+    const companies = Array.from(new Set(data.map(r => r.company || 'Bilinmiyor')));
+
+    companies.forEach(company => {
+      const companyRows = data.filter(r => (r.company || 'Bilinmiyor') === company);
+      if (companyRows.length === 0) return;
+
+      const compSummary = buildSummaryData(companyRows);
+      const compDetails = buildDetailsData(companyRows);
+      const shortName = getShortCompanyName(company);
+
+      // Create company summary sheet
+      const wsCompSummary = XLSX.utils.json_to_sheet(compSummary);
+      XLSX.utils.book_append_sheet(wb, wsCompSummary, `${shortName} Özet`.substring(0, 31));
+      wsCompSummary['!cols'] = [
+        { wch: 25 }, // Şirket
+        { wch: 25 }, // Personel
+        { wch: 30 }, // Toplam Mesai
+        { wch: 30 }, // Toplam Sodexo
+        { wch: 35 }  // Toplam Harcırah
+      ];
+
+      // Create company details sheet
+      const wsCompDetails = XLSX.utils.json_to_sheet(compDetails);
+      XLSX.utils.book_append_sheet(wb, wsCompDetails, `${shortName} Detay`.substring(0, 31));
+      wsCompDetails['!cols'] = detailsCols;
+    });
+
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
   }
 }
 

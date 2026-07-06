@@ -705,10 +705,6 @@ export const KkdControlPage = async () => {
           <div id="stat-reject" class="kkd-stat-value" style="color: var(--accent-red);">0</div>
           <div class="kkd-stat-label">Reddedilen</div>
         </div>
-        <div class="kkd-stat-card retired" onclick="window.filterKkdByCard('retired')" title="Emekli/Hurda Olanları Filtrele">
-          <div id="stat-retired" class="kkd-stat-value" style="color: #94A3B8;">0</div>
-          <div class="kkd-stat-label">Emekli/Hurda</div>
-        </div>
       </div>
 
       <!-- Filters & Searching -->
@@ -731,7 +727,6 @@ export const KkdControlPage = async () => {
             <option value="PENDING">Kontrol Bekleyenler</option>
             <option value="OK">Kullanıma Uygun (OK)</option>
             <option value="REJECT">Uygun Değil (RED)</option>
-            <option value="RETIRED">Hurda / Emekli</option>
           </select>
 
           <select id="kkd-time-filter" class="kkd-filter-select" onchange="window.filterKkdTable()">
@@ -742,6 +737,11 @@ export const KkdControlPage = async () => {
             <option value="OK_TIME">Kontrolü Sorunsuzlar</option>
           </select>
         </div>
+        <div id="kkd-bulk-actions" style="display: none; align-items: center; gap: 8px;">
+          <button type="button" class="kkd-btn" onclick="window.printSelectedKkdReports()" style="background: linear-gradient(135deg, #10B981, #059669); color: white; border: none; padding: 0.5rem 1.25rem; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);">
+            <i class="fa-solid fa-file-pdf"></i> Seçilenleri Toplu Yazdır
+          </button>
+        </div>
       </div>
 
       <!-- Data Table -->
@@ -749,11 +749,11 @@ export const KkdControlPage = async () => {
         <table class="kkd-table" id="kkd-main-table">
           <thead>
             <tr>
+              <th style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-kkd" onchange="window.toggleSelectAllKkd(this)"></th>
               <th>Personel / Saha</th>
               <th>Seri Numarası</th>
               <th>Tip</th>
               <th>Marka / Model</th>
-              <th>Kullanım Ömrü (10 Yıl)</th>
               <th>Son Kontrol</th>
               <th>Sonraki Kontrol</th>
               <th>Durum</th>
@@ -888,7 +888,6 @@ export const KkdControlPage = async () => {
                 <select id="inspect-input-status" class="form-select" required onchange="window.handleInspectionStatusChange(this.value)">
                   <option value="OK">Kullanıma Uygun (OK)</option>
                   <option value="REJECT">Kullanılamaz - Reddedildi (RED)</option>
-                  <option value="RETIRED">Kullanım Dışı / Hurda (RETIRED)</option>
                 </select>
               </div>
               <div class="form-group">
@@ -965,6 +964,47 @@ export const KkdControlPage = async () => {
       </div>
     </div>
 
+    <!-- MODAL 5: VIEW LIFESPAN INFO -->
+    <div id="modal-kkd-lifespan" class="kkd-modal">
+      <div class="kkd-modal-content" style="max-width: 450px; border: 1px solid rgba(0, 242, 254, 0.25); background: linear-gradient(145deg, #0b1329, #0f1c3f);">
+        <div class="kkd-modal-header">
+          <h3 class="kkd-modal-title" style="color: white; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-circle-info" style="color: var(--accent-cyan);"></i> Kullanım Ömrü Detayı</h3>
+          <button class="kkd-modal-close" onclick="window.closeKkdModal('modal-kkd-lifespan')">&times;</button>
+        </div>
+        <div class="kkd-modal-body" style="color: #cbd5e1;">
+          <div style="display: flex; flex-direction: column; gap: 14px; font-size: 0.9rem;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Ekipman Tipi:</span>
+              <strong id="lifespan-info-name" style="color: white;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Marka / Model:</span>
+              <strong id="lifespan-info-brand" style="color: white; text-align: right; max-width: 60%; word-break: break-word;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Seri Numarası:</span>
+              <strong id="lifespan-info-sn" style="color: var(--accent-cyan); font-family: monospace; font-size: 1rem;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Üretim Tarihi:</span>
+              <strong id="lifespan-info-mfg" style="color: white;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Kullanım Ömrü Limiti:</span>
+              <strong id="lifespan-info-limit" style="color: white;">-</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+              <span style="color: var(--text-muted);">Kalan Süre:</span>
+              <strong id="lifespan-info-remaining">-</strong>
+            </div>
+          </div>
+        </div>
+        <div class="kkd-modal-footer">
+          <button class="kkd-btn kkd-btn-outline" onclick="window.closeKkdModal('modal-kkd-lifespan')">Kapat</button>
+        </div>
+      </div>
+    </div>
+
     <!-- MODAL 4: BULK QR PRINT -->
     <div id="modal-kkd-bulk-qr" class="kkd-modal">
       <div class="kkd-modal-content" style="max-width: 450px;">
@@ -1019,7 +1059,17 @@ let unsubscribeKkd: any = null;
 
   // Subscribe to live Firestore inventory updates
   unsubscribeKkd = kkdService.subscribeInventory((items) => {
-    kkdItemsList = items;
+    // Sort items alphabetically by assigned person (Turkish locale support) and sub-sort by equipment type
+    kkdItemsList = [...items].sort((a, b) => {
+      const nameA = (a.assignedPerson || '').trim();
+      const nameB = (b.assignedPerson || '').trim();
+      const cmp = nameA.localeCompare(nameB, 'tr', { sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+      
+      const typeA = (a.name || '').trim();
+      const typeB = (b.name || '').trim();
+      return typeA.localeCompare(typeB, 'tr', { sensitivity: 'base' });
+    });
     (window as any).filterKkdTable();
     (window as any).updateKkdStats();
   });
@@ -1155,24 +1205,41 @@ let currentInspectImages: string[] = [];
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+    const tempId = `loading-thumb-${Date.now()}-${i}`;
+    
+    // Render immediate loading state
+    const loadingThumb = document.createElement('div');
+    loadingThumb.className = 'inspect-img-thumb';
+    loadingThumb.id = tempId;
+    loadingThumb.style.cssText = 'position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(0, 242, 254, 0.3); display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4);';
+    loadingThumb.innerHTML = `
+      <div style="text-align: center; color: var(--accent-cyan);">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.25rem; margin-bottom: 4px;"></i>
+        <div style="font-size: 0.55rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Yükleniyor</div>
+      </div>
+    `;
+    previewContainer.appendChild(loadingThumb);
+
     try {
-      const base64Url = await fileService.uploadImage(file, '');
-      currentInspectImages.push(base64Url);
+      // Perform Storage upload
+      const downloadUrl = await fileService.uploadImage(file, '');
+      currentInspectImages.push(downloadUrl);
       
       const imgIdx = currentInspectImages.length - 1;
-      const thumb = document.createElement('div');
-      thumb.className = 'inspect-img-thumb';
-      thumb.id = `inspect-img-thumb-${imgIdx}`;
-      thumb.style.cssText = 'position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);';
-      thumb.innerHTML = `
-        <img src="${base64Url}" style="width: 100%; height: 100%; object-fit: cover;">
+      
+      // Replace placeholder with final thumbnail
+      loadingThumb.id = `inspect-img-thumb-${imgIdx}`;
+      loadingThumb.style.cssText = 'position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15);';
+      loadingThumb.innerHTML = `
+        <img src="${downloadUrl}" style="width: 100%; height: 100%; object-fit: cover;">
         <button type="button" onclick="window.removeInspectImage(${imgIdx})" style="position: absolute; top: 2px; right: 2px; background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 0.65rem; display: flex; align-items: center; justify-content: center; cursor: pointer;">
           <i class="fa-solid fa-xmark"></i>
         </button>
       `;
-      previewContainer.appendChild(thumb);
     } catch (err) {
       console.error('Fotoğraf yükleme hatası:', err);
+      loadingThumb.remove(); // Clean up placeholder on failure
+      (window as any).showToast?.('Fotoğraf yüklenirken hata oluştu.', 'danger');
     }
   }
   event.target.value = '';
@@ -1186,14 +1253,26 @@ let currentInspectImages: string[] = [];
 
 (window as any).handleInspectionStatusChange = (status: string) => {
   const nextEl = document.getElementById('inspect-input-next') as HTMLInputElement;
-  if (status !== 'OK' && nextEl) {
-    nextEl.value = ''; // No next inspection date if rejected or retired
-    nextEl.disabled = true;
-    nextEl.required = false;
-  } else if (nextEl) {
-    nextEl.disabled = false;
-    nextEl.required = true;
-    (window as any).calculateInspectNextDate();
+  const checkboxes = document.querySelectorAll('#inspect-checklist-items-container input[type="checkbox"]');
+  
+  if (status !== 'OK') {
+    if (nextEl) {
+      nextEl.value = ''; // No next inspection date if rejected or retired
+      nextEl.disabled = true;
+      nextEl.required = false;
+    }
+    checkboxes.forEach((cb: any) => {
+      cb.required = false;
+    });
+  } else {
+    if (nextEl) {
+      nextEl.disabled = false;
+      nextEl.required = true;
+      (window as any).calculateInspectNextDate();
+    }
+    checkboxes.forEach((cb: any) => {
+      cb.required = true;
+    });
   }
 };
 
@@ -1243,6 +1322,11 @@ let currentInspectImages: string[] = [];
 
 // Filters & Renders table body
 (window as any).filterKkdTable = (highlightedId?: string) => {
+  const selectAll = document.getElementById('select-all-kkd') as HTMLInputElement;
+  if (selectAll) selectAll.checked = false;
+  const bulkBar = document.getElementById('kkd-bulk-actions');
+  if (bulkBar) bulkBar.style.display = 'none';
+
   const searchInput = (document.getElementById('kkd-search-input') as HTMLInputElement)?.value.toLowerCase() || '';
   const typeFilter = (document.getElementById('kkd-type-filter') as HTMLSelectElement)?.value || 'ALL';
   const statusFilter = (document.getElementById('kkd-status-filter') as HTMLSelectElement)?.value || 'ALL';
@@ -1267,7 +1351,11 @@ let currentInspectImages: string[] = [];
 
     // 3. Status Filter
     const itemStatus = !item.lastInspectionDate ? 'PENDING' : item.status;
-    if (statusFilter !== 'ALL' && itemStatus !== statusFilter) return false;
+    if (statusFilter === 'ALL') {
+      if (itemStatus === 'REJECT' || itemStatus === 'RETIRED') return false;
+    } else {
+      if (itemStatus !== statusFilter) return false;
+    }
 
     // 4. Time/Lifespan Warning Filter
     const isOverdue = itemStatus === 'OK' && item.nextInspectionDate && item.nextInspectionDate <= todayStr;
@@ -1348,27 +1436,20 @@ let currentInspectImages: string[] = [];
     const isHighlighted = highlightedId === item.id ? 'class="highlighted"' : '';
 
     return `
-      <tr id="kkd-row-${item.id}" ${isHighlighted} draggable="true" ondragstart="window.handleKkdDragStart(event)" ondragover="window.handleKkdDragOver(event)" ondragleave="window.handleKkdDragLeave(event)" ondrop="window.handleKkdDrop(event)" ondragend="window.handleKkdDragEnd(event)" data-id="${item.id}" style="cursor: grab;">
+      <tr id="kkd-row-${item.id}" ${isHighlighted} data-id="${item.id}">
+        <td style="text-align: center; vertical-align: middle;"><input type="checkbox" class="kkd-select-checkbox" value="${item.id}" onchange="window.handleKkdCheckboxChange()" onclick="event.stopPropagation()"></td>
         <td style="font-weight: 700; color: white;">${item.assignedPerson || '-'}</td>
         <td style="font-family: monospace; font-weight: bold; color: var(--accent-cyan); font-size: 0.95rem;">
           ${item.serialNumber}
+          <span onclick="event.stopPropagation(); window.showLifespanDetails('${item.id}')" style="cursor: pointer; color: #94a3b8; margin-left: 6px; font-size: 0.85rem;" title="Kullanım Ömrü Bilgisi">
+            <i class="fa-solid fa-circle-info"></i>
+          </span>
         </td>
         <td style="font-weight: 700; color: white;">
           <i class="fa-solid ${typeIcon}" style="margin-right: 6px; color: var(--accent-cyan);"></i> ${item.name}
         </td>
         <td>
           <div style="font-weight: 600; color: white;">${item.brandModel}</div>
-        </td>
-        <td>
-          ${lifeInfo.expired 
-            ? `<span class="${lifeInfo.class}"><i class="fa-solid fa-ban"></i> ${lifeInfo.text}</span>`
-            : `
-              <div class="${lifeInfo.class}" style="font-size: 0.8rem; font-weight: 600;">${lifeInfo.text}</div>
-              <div class="lifespan-bar-container">
-                <div class="lifespan-bar" style="width: ${lifeInfo.percent}%; background: var(--bar-color);"></div>
-              </div>
-            `
-          }
         </td>
         <td style="font-size: 0.85rem;">${item.lastInspectionDate ? formatDisplayDate(item.lastInspectionDate) : 'Hiç Yapılmadı'}</td>
         <td style="font-size: 0.85rem;">
@@ -1507,6 +1588,21 @@ let currentInspectImages: string[] = [];
 
   const id = (document.getElementById('kkd-edit-id') as HTMLInputElement).value;
   
+  const serialNumberVal = (document.getElementById('kkd-input-sn') as HTMLInputElement).value.trim();
+
+  // Duplicate Check
+  if (serialNumberVal) {
+    const duplicate = (kkdItemsList || []).find(i => 
+      i.serialNumber.toLowerCase() === serialNumberVal.toLowerCase() && 
+      i.id !== id
+    );
+    if (duplicate) {
+      const personName = duplicate.assignedPerson ? `"${duplicate.assignedPerson}"` : 'bir başkasına';
+      alert(`⚠️ Bu seri numaralı (${serialNumberVal}) ürün zaten ${personName} adına kayıtlıdır! Lütfen farklı bir seri numarası girin.`);
+      return;
+    }
+  }
+  
   // Calculate order index
   let orderVal: number;
   if (id) {
@@ -1576,75 +1672,6 @@ let currentInspectImages: string[] = [];
   }
 };
 
-let kkdDragSrcEl: HTMLElement | null = null;
-
-(window as any).handleKkdDragStart = (e: DragEvent) => {
-  const row = (e.target as HTMLElement).closest('tr') as HTMLElement;
-  if (!row) return;
-  kkdDragSrcEl = row;
-  e.dataTransfer!.effectAllowed = 'move';
-  e.dataTransfer!.setData('text/plain', row.getAttribute('data-id') || '');
-  row.classList.add('dragging');
-};
-
-(window as any).handleKkdDragOver = (e: DragEvent) => {
-  e.preventDefault();
-  const row = (e.target as HTMLElement).closest('tr') as HTMLElement;
-  if (!row || row === kkdDragSrcEl) return;
-  row.classList.add('drag-over');
-};
-
-(window as any).handleKkdDragLeave = (e: DragEvent) => {
-  const row = (e.target as HTMLElement).closest('tr') as HTMLElement;
-  if (row) row.classList.remove('drag-over');
-};
-
-(window as any).handleKkdDragEnd = (e: DragEvent) => {
-  if (kkdDragSrcEl) {
-    kkdDragSrcEl.classList.remove('dragging');
-  }
-  document.querySelectorAll('#kkd-table-body tr').forEach(row => {
-    row.classList.remove('drag-over');
-    row.classList.remove('dragging');
-  });
-};
-
-(window as any).handleKkdDrop = async (e: DragEvent) => {
-  e.preventDefault();
-  const targetRow = (e.target as HTMLElement).closest('tr') as HTMLElement;
-  if (!targetRow) return;
-  
-  targetRow.classList.remove('drag-over');
-  if (kkdDragSrcEl) kkdDragSrcEl.classList.remove('dragging');
-
-  const draggedId = e.dataTransfer!.getData('text/plain');
-  const targetId = targetRow.getAttribute('data-id');
-  if (!draggedId || !targetId || draggedId === targetId) return;
-
-  // Reorder items in kkdItemsList
-  const draggedIdx = kkdItemsList.findIndex(item => item.id === draggedId);
-  const targetIdx = kkdItemsList.findIndex(item => item.id === targetId);
-  if (draggedIdx === -1 || targetIdx === -1) return;
-
-  const [removed] = kkdItemsList.splice(draggedIdx, 1);
-  kkdItemsList.splice(targetIdx, 0, removed);
-
-  // Update order in firestore in a batch
-  const batchUpdates: Promise<void>[] = [];
-  kkdItemsList.forEach((item, index) => {
-    item.order = index; // Update local state immediately
-    batchUpdates.push(kkdService.updateKkdItemOrder(item.id, index));
-  });
-
-  try {
-    (window as any).showToast?.('Sıralama güncelleniyor...', 'info');
-    await Promise.all(batchUpdates);
-    (window as any).showToast?.('Yeni sıralama kaydedildi.', 'success');
-  } catch (err: any) {
-    console.error("Sorting save error:", err);
-    (window as any).showToast?.('Sıralama kaydedilemedi.', 'error');
-  }
-};
 
 // Render checklist depending on equipment type
 function renderInspectionChecklist(type: string) {
@@ -1676,7 +1703,7 @@ function renderInspectionChecklist(type: string) {
         <span><strong>Etiket Durumu:</strong> Üretici etiketi ve seri numarası okunabiliyor.</span>
       </label>
     `;
-  } else if (type === 'Lanyard' || type === 'Runner') {
+  } else if (type === 'Lanyard') {
     checklistHtml = `
       <label class="checklist-item">
         <input type="checkbox" id="check-rope" required>
@@ -1697,6 +1724,29 @@ function renderInspectionChecklist(type: string) {
       <label class="checklist-item">
         <input type="checkbox" id="check-labels" required>
         <span><strong>Etiket Durumu:</strong> Seri numarası ve norm bilgileri okunabiliyor.</span>
+      </label>
+    `;
+  } else if (type === 'Runner') {
+    checklistHtml = `
+      <label class="checklist-item">
+        <input type="checkbox" id="check-runner-body" required>
+        <span><strong>Gövde Kontrolü:</strong> Cihaz gövdesinde deformasyon, çatlak, korozyon ve derin ezik yok.</span>
+      </label>
+      <label class="checklist-item">
+        <input type="checkbox" id="check-runner-cam" required>
+        <span><strong>Kam / Kilitleme Çenesi:</strong> Yay gücü yeterli, çeneler engelsiz hareket ediyor, kabloyu/rayı tam kilitliyor.</span>
+      </label>
+      <label class="checklist-item">
+        <input type="checkbox" id="check-runner-wheels" required>
+        <span><strong>Tekerlekler ve Makaralar:</strong> Makaralar/tekerlekler serbestçe dönüyor, aşınma, deformasyon ve eksenel boşluk yok.</span>
+      </label>
+      <label class="checklist-item">
+        <input type="checkbox" id="check-runner-carabiner" required>
+        <span><strong>Bağlantı Karabinası:</strong> Karabina yaylı kapısı kendiliğinden tam kapanıp kilitleniyor, aşınma ve çatlak yok.</span>
+      </label>
+      <label class="checklist-item">
+        <input type="checkbox" id="check-runner-labels" required>
+        <span><strong>Etiket Durumu:</strong> Üretici etiketi, seri numarası ve norm bilgileri okunabiliyor.</span>
       </label>
     `;
   } else if (type === 'Kurtarma Kiti') {
@@ -1906,6 +1956,43 @@ function renderInspectionChecklist(type: string) {
     console.error(err);
     alert('Kontrol kaydı girilirken hata oluştu: ' + err.message);
   }
+};
+
+// VIEW LIFESPAN DETAILS Modal trigger
+(window as any).showLifespanDetails = (itemId: string) => {
+  const item = kkdItemsList.find(i => i.id === itemId);
+  if (!item) return;
+
+  const lifeInfo = getLifespanInfo(item.manufactureDate, item.lifespanYears);
+  
+  const formatDateString = (dateStr: string) => {
+    if (!dateStr) return '-';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+    if (parts.length === 2) return `${parts[1]}.${parts[0]}`;
+    return dateStr;
+  };
+
+  const nameEl = document.getElementById('lifespan-info-name');
+  const brandEl = document.getElementById('lifespan-info-brand');
+  const snEl = document.getElementById('lifespan-info-sn');
+  const mfgEl = document.getElementById('lifespan-info-mfg');
+  const limitEl = document.getElementById('lifespan-info-limit');
+  const remainingEl = document.getElementById('lifespan-info-remaining');
+
+  if (nameEl) nameEl.textContent = item.name;
+  if (brandEl) brandEl.textContent = item.brandModel || '-';
+  if (snEl) snEl.textContent = item.serialNumber;
+  if (mfgEl) mfgEl.textContent = formatDateString(item.manufactureDate);
+  if (limitEl) limitEl.textContent = `${item.lifespanYears || 10} Yıl`;
+  
+  if (remainingEl) {
+    remainingEl.textContent = lifeInfo.text;
+    remainingEl.className = `status-badge ${lifeInfo.class}`;
+    remainingEl.style.cssText = 'padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.85rem; color: white; display: inline-block;';
+  }
+
+  (window as any).openKkdModal('modal-kkd-lifespan');
 };
 
 // VIEW HISTORY Modal trigger
@@ -2174,6 +2261,11 @@ const CHECKLIST_LABELS: Record<string, string> = {
   'check-baret-chinstrap': 'Çene Bağı Mukavemeti ve Tokası',
   'check-baret-ratchet': 'Boyut Ayar Mekanizması (Çark Ayarı)',
   'check-baret-labels': 'Baret Üretim Tarihi ve Etiketi',
+  'check-runner-body': 'Runner Gövde Hasar Kontrolü',
+  'check-runner-cam': 'Kam ve Yaylı Kilitleme Mekanizması',
+  'check-runner-wheels': 'Tekerleklerin ve Makaraların Dönüşü',
+  'check-runner-carabiner': 'Karabina Kapısı ve Yay Mukavemeti',
+  'check-runner-labels': 'Etiket ve Seri No Okunabilirliği',
   'check-general-webbing': 'Genel Taşıyıcı Kolon Kontrolü',
   'check-general-stitching': 'Genel Dikiş Mukavemeti',
   'check-general-metals': 'Genel Metal/Plastik Parçalar',
@@ -3174,6 +3266,324 @@ const normalizeExcelDate = (val: any): string => {
     </html>
   `);
   printWindow.document.close();
+};
+
+(window as any).toggleSelectAllKkd = (headerCheckbox: HTMLInputElement) => {
+  const checkboxes = document.querySelectorAll('.kkd-select-checkbox') as NodeListOf<HTMLInputElement>;
+  checkboxes.forEach(cb => {
+    cb.checked = headerCheckbox.checked;
+  });
+  (window as any).handleKkdCheckboxChange();
+};
+
+(window as any).handleKkdCheckboxChange = () => {
+  const checkedBoxes = document.querySelectorAll('.kkd-select-checkbox:checked') as NodeListOf<HTMLInputElement>;
+  const bulkBar = document.getElementById('kkd-bulk-actions');
+  const selectAll = document.getElementById('select-all-kkd') as HTMLInputElement;
+  const totalBoxes = document.querySelectorAll('.kkd-select-checkbox') as NodeListOf<HTMLInputElement>;
+  
+  if (selectAll && totalBoxes.length > 0) {
+    selectAll.checked = checkedBoxes.length === totalBoxes.length;
+  }
+  
+  if (bulkBar) {
+    if (checkedBoxes.length > 0) {
+      bulkBar.style.display = 'flex';
+    } else {
+      bulkBar.style.display = 'none';
+    }
+  }
+};
+
+(window as any).printSelectedKkdReports = async () => {
+  const checkedBoxes = document.querySelectorAll('.kkd-select-checkbox:checked') as NodeListOf<HTMLInputElement>;
+  if (checkedBoxes.length === 0) {
+    alert("Lütfen en az bir ekipman seçin.");
+    return;
+  }
+
+  (window as any).showToast?.('Hazırlanıyor', 'Seçilen raporlar indiriliyor...', 'info');
+
+  const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+  const reportsData: { item: any, log: any }[] = [];
+
+  try {
+    for (const id of selectedIds) {
+      const item = kkdItemsList.find(i => i.id === id);
+      if (!item) continue;
+
+      const logs = await kkdService.getInspectionHistory(id);
+      if (logs.length > 0) {
+        reportsData.push({ item, log: logs[0] });
+      }
+    }
+
+    if (reportsData.length === 0) {
+      alert("Seçilen ekipmanlara ait periyodik muayene kaydı bulunamadı.");
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Açılır pencere engellendi. Lütfen izin verin.');
+      return;
+    }
+
+    let reportsHtml = '';
+
+    for (let index = 0; index < reportsData.length; index++) {
+      const { item, log } = reportsData[index];
+      const lifeInfo = getLifespanInfo(item.manufactureDate, item.lifespanYears);
+      const isFatih = log.inspector.toLowerCase().includes('fatih') || 
+                      log.inspector.toLowerCase().includes('zebek') || 
+                      log.inspector.toLowerCase().includes('yetkili');
+      const inspectorSubtitle = isFatih 
+        ? `Skylotec Yetkili KKD Denetçisi<br>Sertifika (Skylotec ID): 233582 (EN 365)`
+        : `Denetçi / Admin`;
+      const inspectorNameToShow = isFatih ? 'Fatih ZEBEK' : log.inspector;
+
+      // Build checklist rows
+      let checklistRows = '';
+      if (log.checklist && Object.keys(log.checklist).length > 0) {
+        checklistRows = Object.entries(log.checklist).map(([key, value]) => {
+          const label = CHECKLIST_LABELS[key] || key;
+          const statusText = value ? 'UYGUN' : 'UYGUN DEĞİL';
+          const statusColor = value ? '#008000' : '#FF0000';
+          return `
+            <tr>
+              <td style="padding: 5px 8px; border: 1px solid #cbd5e1; font-size: 8.5pt; text-align: left;">${label}</td>
+              <td style="padding: 5px 8px; border: 1px solid #cbd5e1; font-size: 8.5pt; text-align: center; font-weight: bold; color: ${statusColor};">
+                ${statusText}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } else {
+        checklistRows = `
+          <tr>
+            <td colspan="2" style="padding: 8px; border: 1px solid #cbd5e1; font-size: 8.5pt; text-align: center; color: #64748b;">
+              Genel fiziksel muayene yapılmıştır.
+            </td>
+          </tr>
+        `;
+      }
+
+      const formatPrintDate = (val: string | undefined) => {
+        if (!val) return '---';
+        if (val.length === 7) {
+          const [y, m] = val.split('-');
+          return `${m}.${y}`;
+        }
+        const dateObj = new Date(val);
+        if (isNaN(dateObj.getTime())) return val;
+        return dateObj.toLocaleDateString('tr-TR');
+      };
+
+      const mfgDateText = formatPrintDate(item.manufactureDate);
+      const expiryText = formatPrintDate(lifeInfo.expiryDate);
+      const lastInspText = formatPrintDate(log.inspectionDate);
+      const nextInspText = log.status === 'OK' && item.nextInspectionDate ? formatPrintDate(item.nextInspectionDate) : '---';
+
+      let resultText = '';
+      let resultColor = '';
+      let resultBg = '';
+      if (log.status === 'OK') {
+        resultText = 'KULLANIMA UYGUNDUR (OK)';
+        resultColor = '#15803d';
+        resultBg = '#f0fdf4';
+      } else if (log.status === 'REJECT') {
+        resultText = 'KULLANIMA UYGUN DEĞİLDİR (RED)';
+        resultColor = '#b91c1c';
+        resultBg = '#fef2f2';
+      } else if (log.status === 'RETIRED') {
+        resultText = 'HURDA / EMEKLİ EDİLMİŞTİR (RETIRED)';
+        resultColor = '#475569';
+        resultBg = '#f8fafc';
+      }
+
+      const pageBreakStyle = index < reportsData.length - 1 ? 'page-break-after: always;' : '';
+
+      reportsHtml += `
+        <div class="report-container" style="${pageBreakStyle} margin-bottom: 20px; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); background: white;">
+          <table class="header-table" style="width: 100%; border-collapse: collapse; margin-bottom: 12px; border-bottom: 3px solid #002d6b; padding-bottom: 10px;">
+            <tr>
+              <td style="vertical-align: middle; text-align: left; padding: 0;">
+                <table style="border-collapse: collapse; border: none; margin: 0; padding: 0;">
+                  <tr>
+                    <td style="width: 48px; border: none; padding: 0; vertical-align: middle; background: transparent;">
+                      <svg width="48" height="48" viewBox="0 0 50 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
+                        <rect width="50" height="50" rx="8" fill="#002D6B"/>
+                        <text x="25" y="36" fill="#FFFFFF" font-family="Arial, sans-serif" font-weight="900" font-size="34" text-anchor="middle" letter-spacing="-2">dh</text>
+                      </svg>
+                    </td>
+                    <td style="border: none; padding: 0 0 0 12px; vertical-align: middle; text-align: left; background: transparent;">
+                      <h1 style="font-size: 1.3rem; margin: 0 0 2px 0; font-weight: 900; letter-spacing: 0.5px; color: #002d6b; font-family: sans-serif; line-height: 1.1;">DEMİRER HOLDİNG</h1>
+                      <div style="font-size: 0.85rem; color: #475569; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">KİŞİSEL KORUYUCU DONANIM (KKD) PERİYODİK KONTROL RAPORU</div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+              <td style="text-align: right; font-size: 8pt; color: #64748b; line-height: 1.4; width: 200px; vertical-align: middle; padding: 0;">
+                <strong style="color: #c00000; font-size: 8.5pt;">Rapor No: DH-KKD-${new Date(log.inspectionDate).getFullYear()}-${log.id.substring(0, 5).toUpperCase()}</strong><br>
+                <strong>Muayene Tarihi:</strong> ${lastInspText}<br>
+                <strong>Baskı Tarihi:</strong> ${new Date().toLocaleDateString('tr-TR')}
+              </td>
+            </tr>
+          </table>
+
+          <div class="section-title" style="font-size: 9pt; font-weight: bold; background: #f1f5f9; padding: 4px 8px; margin-top: 10px; margin-bottom: 6px; border-left: 4px solid #1e3a8a; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.5px;">1. Ekipman Künye Bilgileri</div>
+          <table class="info-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+            <tr>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Ekipman Tipi</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;"><strong>${item.name}</strong></td>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Seri Numarası (S/N)</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;"><strong style="font-family: monospace; font-size: 9.5pt; color: #1e3a8a;">${item.serialNumber}</strong></td>
+            </tr>
+            <tr>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Marka / Model</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${item.brandModel}</td>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Atanan Personel / Saha</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${item.assignedPerson || '---'}</td>
+            </tr>
+            <tr>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Üretim Tarihi</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${mfgDateText}</td>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Kullanım Ömrü Bitiş</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${expiryText} (${item.lifespanYears || 10} Yıl Ömür Sınırı)</td>
+            </tr>
+            <tr>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Son Kontrol Tarihi</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${lastInspText}</td>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Bir Sonraki Kontrol Tarihi</td>
+              <td style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;"><strong style="color: #1e3a8a;">${nextInspText}</strong></td>
+            </tr>
+            <tr>
+              <td class="label" style="font-weight: bold; background: #f8fafc; width: 25%; color: #475569; padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">Kalan Kullanım Ömrü</td>
+              <td colspan="3" style="padding: 5px 8px; border: 1px solid #e2e8f0; font-size: 8.5pt;">${lifeInfo.expired ? '<span style="color: red; font-weight: bold;">KULLANIM ÖMRÜ DOLMUŞTUR</span>' : lifeInfo.text}</td>
+            </tr>
+          </table>
+
+          <div class="section-title" style="font-size: 9pt; font-weight: bold; background: #f1f5f9; padding: 4px 8px; margin-top: 10px; margin-bottom: 6px; border-left: 4px solid #1e3a8a; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.5px;">2. Muayene Bulguları ve Değerlendirme Listesi</div>
+          <table class="checklist-table" style="width: 100%; border-collapse: collapse; margin-bottom: 10px;">
+            <thead>
+              <tr>
+                <th style="width: 70%; background: #f8fafc; padding: 6px 8px; font-weight: bold; border: 1px solid #cbd5e1; text-align: left; font-size: 8.5pt; color: #475569;">Kontrol Edilen Yapısal/Fiziksel Parametreler</th>
+                <th style="width: 30%; background: #f8fafc; padding: 6px 8px; font-weight: bold; border: 1px solid #cbd5e1; text-align: center; font-size: 8.5pt; color: #475569;">Muayene Durumu</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${checklistRows}
+            </tbody>
+          </table>
+
+          <div class="section-title" style="font-size: 9pt; font-weight: bold; background: #f1f5f9; padding: 4px 8px; margin-top: 10px; margin-bottom: 6px; border-left: 4px solid #1e3a8a; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.5px;">3. Denetçi Notları ve İnceleme Bulguları</div>
+          <div style="border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 4px; font-size: 8.5pt; min-height: 25px; line-height: 1.35; background: #f8fafc; margin-bottom: 10px;">
+            ${log.notes || 'Herhangi bir hasar veya yıpranma izine rastlanmamıştır.'}
+          </div>
+
+          <div class="verdict-box" style="border: 2px solid ${resultColor}; background: ${resultBg}; padding: 10px 15px; border-radius: 6px; text-align: center; margin-top: 10px; page-break-inside: avoid;">
+            <div style="font-size: 8pt; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; font-weight: bold; margin-bottom: 2px;">Muayene ve Test Kararı</div>
+            <div class="verdict-title" style="font-size: 11pt; font-weight: 800; color: ${resultColor};">${resultText}</div>
+            <div style="font-size: 8pt; color: #475569; margin-top: 4px;">
+              ${log.status === 'OK' 
+                ? `İşbu donanım, yapılan periyodik fiziksel muayene kriterlerini tam olarak karşılamış olup, bir sonraki kontrol tarihi olan <strong>${nextInspText}</strong> tarihine kadar iş güvenliği kurallarına uygun olarak sahada kullanılması uygundur.` 
+                : `İşbu donanım, yapılan kontroller sonucunda tespit edilen yapısal kusurlar veya kullanım ömrü aşımı nedeniyle <strong>İŞ GÜVENLİĞİ AÇISINDAN TEHLİKELİDİR</strong>. Kesinlikle kullanılamaz ve imha edilmelidir.`}
+            </div>
+          </div>
+
+          ${log.images && log.images.length > 0
+            ? `
+              <div class="section-title" style="font-size: 9pt; font-weight: bold; background: #f1f5f9; padding: 4px 8px; margin-top: 10px; margin-bottom: 6px; border-left: 4px solid #1e3a8a; text-transform: uppercase; color: #1e3a8a; letter-spacing: 0.5px; page-break-inside: avoid;">4. Muayene Görselleri / Hasar & Kusur Fotoğrafları</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; margin-bottom: 10px; page-break-inside: avoid;">
+                ${log.images.map((img: any) => `
+                  <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px; background: #fff; width: 95px; height: 95px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                    <img src="${img}" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                  </div>
+                `).join('')}
+              </div>
+            `
+            : ''
+          }
+
+          <table class="signature-section" style="width: 100%; margin-top: 15px; border-collapse: collapse; page-break-inside: avoid;">
+            <tr>
+              <td style="text-align: center; vertical-align: top; width: 33%; font-size: 8pt; padding-top: 10px; color: #334155;">
+                <strong>KONTROLÜ YAPAN YETKİLİ</strong><br>
+                <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px; line-height: 1.3;">(${inspectorSubtitle})</div>
+                <div style="height: 30px;"></div>
+                <div style="width: 150px; border-top: 1px solid #333; margin: 0 auto 5px auto;"></div>
+                <strong>${inspectorNameToShow}</strong>
+              </td>
+              <td style="text-align: center; vertical-align: top; width: 33%; font-size: 8pt; padding-top: 10px; color: #334155;">
+                <strong>TESLİM ALAN PERSONEL</strong><br>
+                <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px;">(Ekipman Kullanıcısı)</div>
+                <div style="height: 30px;"></div>
+                <div style="width: 150px; border-top: 1px solid #333; margin: 0 auto 5px auto;"></div>
+                <strong>${item.assignedPerson || '................................'}</strong>
+              </td>
+              <td style="text-align: center; vertical-align: top; width: 33%; font-size: 8pt; padding-top: 10px; color: #334155;">
+                <strong>İŞ SAĞLIĞI VE GÜVENLİĞİ</strong><br>
+                <div style="font-size: 7.5pt; color: #64748b; margin-top: 2px;">(İSG Temsilcisi)</div>
+                <div style="height: 30px;"></div>
+                <div style="width: 150px; border-top: 1px solid #333; margin: 0 auto 5px auto;"></div>
+                <strong>Sercan YETKİN</strong><br>
+                <span style="font-size: 8pt; color: #475569;">Çevre ve İş Güvenliği Uzmanı</span>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Toplu KKD Muayene Raporu</title>
+          <style>
+            @media print {
+              body { background: white; color: black; padding: 0px; font-size: 9pt; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+              .no-print { display: none; }
+              @page { size: A4; margin: 10mm; }
+              .report-container { border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; margin-bottom: 0 !important; }
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; color: #1e293b; background: #f1f5f9; line-height: 1.4; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          </style>
+        </head>
+        <body>
+          ${reportsHtml}
+          <script>
+            window.onload = () => {
+              const images = Array.from(document.querySelectorAll('img'));
+              if (images.length === 0) {
+                setTimeout(() => window.print(), 300);
+                return;
+              }
+              let loadedCount = 0;
+              const onImageLoad = () => {
+                loadedCount++;
+                if (loadedCount === images.length) {
+                  setTimeout(() => window.print(), 500);
+                }
+              };
+              images.forEach(img => {
+                if (img.complete) {
+                  onImageLoad();
+                } else {
+                  img.addEventListener('load', onImageLoad);
+                  img.addEventListener('error', onImageLoad);
+                }
+              });
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+
+  } catch (err: any) {
+    console.error(err);
+    alert('Toplu rapor hazırlanırken hata oluştu: ' + err.message);
+  }
 };
 
 

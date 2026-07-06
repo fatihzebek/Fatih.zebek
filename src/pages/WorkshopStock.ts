@@ -78,13 +78,13 @@ export const WorkshopStockPage = async () => {
       (window as any).showToast('İşlem', 'Malzeme sevk ediliyor...', 'info');
       await repairService.dispatchRepair(repairId, targetSelect.value, username);
 
-      // Deduct REVISED stock from W11
+      // Deduct REVISED stock from MTA
       const rep = repairedStockItems.find(r => r.id === repairId);
       if (rep) {
         const { warehouseService } = await import('../services/WarehouseService');
         const sapNoWithR = rep.sapNo.toUpperCase().startsWith('R') ? rep.sapNo : 'R' + rep.sapNo;
         await warehouseService.updateStockBySap(
-          'W11',
+          'MTA',
           sapNoWithR,
           -rep.quantity,
           {

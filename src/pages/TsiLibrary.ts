@@ -67,9 +67,12 @@ export const TsiLibraryPage = async () => {
             </div>
           </div>
 
-          <div id="tsi-documents-list" style="display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; padding-bottom: 2rem; flex: 1;">
+          <div id="tsi-documents-list" style="display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; padding-bottom: 1rem; flex: 1;">
             <!-- Documents will be rendered here -->
           </div>
+          
+          <!-- Pagination Container -->
+          <div id="tsi-pagination-container" style="display: flex; justify-content: center; align-items: center; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.05); gap: 0.5rem; flex-shrink: 0;"></div>
         </div>
 
         <!-- Right Sidebar: AI Agent Chat -->
@@ -134,8 +137,8 @@ export const TsiLibraryPage = async () => {
           </div>
 
           <div class="form-group" style="margin-bottom: 1.5rem;">
-            <label class="permission-label">PDF DOSYALARI (Çoklu seçebilirsiniz)</label>
-            <input type="file" id="tsi-upload-file" accept=".pdf" multiple class="cyber-input" style="padding: 8px;">
+            <label class="permission-label">DOSYALAR (PDF, ZIP, RAR, Excel vb. - Çoklu seçebilirsiniz)</label>
+            <input type="file" id="tsi-upload-file" accept=".pdf,.zip,.rar,.7z,.xlsx,.xls,.docx,.doc,.txt,.png,.jpg,.jpeg" multiple class="cyber-input" style="padding: 8px;">
           </div>
           
           <div id="tsi-upload-progress" class="hidden" style="margin-bottom: 1rem;">
@@ -197,25 +200,25 @@ export const TsiLibraryPage = async () => {
         color: var(--accent-cyan);
       }
       .tsi-doc-row {
-        background: rgba(255,255,255,0.015);
-        border: 1px solid rgba(255,255,255,0.04);
-        border-left: 3px solid transparent;
+        background: rgba(15, 22, 36, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-left: 4px solid rgba(255, 255, 255, 0.05);
         border-radius: 10px;
-        padding: 0.85rem 1.25rem;
+        padding: 0.75rem 1.25rem;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 1.5rem;
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(8px);
       }
       .tsi-doc-row:hover {
-        border-left-color: var(--accent-cyan);
-        border-top-color: rgba(0, 243, 255, 0.15);
-        border-right-color: rgba(0, 243, 255, 0.15);
-        border-bottom-color: rgba(0, 243, 255, 0.15);
-        background: rgba(0, 243, 255, 0.02);
-        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3), inset 0 0 10px rgba(0, 243, 255, 0.05);
+        border-left-color: var(--row-accent-color, var(--accent-cyan));
+        border-top-color: rgba(255, 255, 255, 0.08);
+        border-right-color: rgba(255, 255, 255, 0.08);
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+        background: rgba(15, 22, 36, 0.55);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 0 12px rgba(255, 255, 255, 0.02);
         transform: translateY(-2px);
       }
       .tsi-doc-row.dragging {
@@ -233,8 +236,6 @@ export const TsiLibraryPage = async () => {
       .doc-icon-container {
         width: 38px;
         height: 38px;
-        background: rgba(255, 77, 77, 0.1);
-        color: #ff4d4d;
         border-radius: 8px;
         display: flex;
         align-items: center;
@@ -278,6 +279,121 @@ export const TsiLibraryPage = async () => {
           box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
         }
       }
+      
+      /* Premium Button Styles */
+      .tsi-btn-action {
+        padding: 4px 12px;
+        font-size: 0.72rem;
+        min-height: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-family: 'Rajdhani', sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid transparent;
+      }
+      
+      .tsi-btn-goster {
+        background: rgba(0, 114, 255, 0.15);
+        border-color: rgba(0, 114, 255, 0.4);
+        color: #38b6ff;
+      }
+      .tsi-btn-goster:hover {
+        background: rgba(0, 114, 255, 0.35);
+        border-color: rgba(0, 198, 255, 0.7);
+        box-shadow: 0 0 12px rgba(0, 114, 255, 0.4);
+        color: #fff;
+        transform: translateY(-1px);
+      }
+      
+      .tsi-btn-ajan {
+        background: rgba(155, 89, 182, 0.15);
+        border-color: rgba(155, 89, 182, 0.4);
+        color: #d4a0ff;
+      }
+      .tsi-btn-ajan:hover {
+        background: rgba(155, 89, 182, 0.3);
+        border-color: rgba(155, 89, 182, 0.75);
+        box-shadow: 0 0 12px rgba(155, 89, 182, 0.4);
+        color: #fff;
+        transform: translateY(-1px);
+      }
+      
+      .tsi-btn-icon {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .tsi-btn-icon:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.25);
+        color: var(--text-main);
+        transform: translateY(-1px);
+      }
+      .tsi-btn-icon.red:hover {
+        background: rgba(255, 77, 77, 0.08);
+        border-color: rgba(255, 77, 77, 0.4);
+        color: #ff4d4d;
+        box-shadow: 0 0 10px rgba(255, 77, 77, 0.2);
+        transform: translateY(-1px);
+      }
+      
+      /* Pagination Styles */
+      .tsi-page-btn {
+        min-width: 32px;
+        height: 32px;
+        padding: 0 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        color: var(--text-muted);
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .tsi-page-btn:hover:not(:disabled) {
+        background: rgba(0, 243, 255, 0.05);
+        border-color: rgba(0, 243, 255, 0.3);
+        color: var(--accent-cyan);
+        transform: translateY(-1px);
+      }
+      .tsi-page-btn.active {
+        background: rgba(0, 243, 255, 0.12) !important;
+        border-color: rgba(0, 243, 255, 0.6) !important;
+        color: var(--accent-cyan) !important;
+        box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+      }
+      .tsi-page-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+      .tsi-page-info {
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-left: auto;
+      }
     </style>
   `;
 };
@@ -309,6 +425,8 @@ let allTsiDocuments: TsiDocument[] = [];
 let activeCategoryId: string | null = null;
 let unsubCategories: (() => void) | null = null;
 let unsubDocuments: (() => void) | null = null;
+let currentPage = 1;
+const ITEMS_PER_PAGE = 15;
 
 export const initTsiLibrary = () => {
   const currentUser = (window as any).currentUser;
@@ -336,7 +454,10 @@ export const initTsiLibrary = () => {
   setTimeout(() => {
     const searchInput = document.getElementById('tsi-search-input');
     if (searchInput) {
-      searchInput.addEventListener('input', () => renderDocuments());
+      searchInput.addEventListener('input', () => {
+        currentPage = 1;
+        renderDocuments();
+      });
     }
   }, 100);
 };
@@ -389,6 +510,7 @@ const renderCategories = () => {
 
 (window as any).selectTsiCategory = (id: string) => {
   activeCategoryId = id;
+  currentPage = 1;
   const cat = allTsiCategories.find(c => c.id === id);
   
   const titleEl = document.getElementById('tsi-active-category-title');
@@ -409,7 +531,7 @@ const uploadDroppedFiles = async (files: FileList | File[], categoryId: string) 
   let successCount = 0;
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const docTitle = file.name.replace('.pdf', '');
+    const docTitle = file.name.replace(/\.[^/.]+$/, "");
     try {
       await tsiService.uploadDocument(file, docTitle, categoryId, uploadedBy);
       successCount++;
@@ -460,9 +582,13 @@ const uploadDroppedFiles = async (files: FileList | File[], categoryId: string) 
   e.preventDefault();
   (window as any).handleTsiDragLeave(e);
   if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    const allowedExtensions = ['.pdf', '.zip', '.rar', '.7z', '.xlsx', '.xls', '.docx', '.doc', '.png', '.jpg', '.jpeg', '.txt'];
+    const files = Array.from(e.dataTransfer.files).filter(f => {
+      const name = f.name.toLowerCase();
+      return allowedExtensions.some(ext => name.endsWith(ext));
+    });
     if (files.length === 0) {
-      (window as any).showToast('Hata', 'Yalnızca PDF dosyaları sürüklenebilir.', 'error');
+      (window as any).showToast('Hata', 'Desteklenen bir dosya formatı sürükleyin (PDF, ZIP, RAR, Excel vb.).', 'error');
       return;
     }
     await uploadDroppedFiles(files, categoryId);
@@ -496,6 +622,12 @@ const renderDocuments = () => {
     return timeB - timeA;
   });
 
+  // Clear pagination container by default
+  const paginationContainer = document.getElementById('tsi-pagination-container');
+  if (paginationContainer) {
+    paginationContainer.innerHTML = '';
+  }
+
   if (categoryDocs.length === 0) {
     if (isAdmin) {
       list.innerHTML = `
@@ -505,9 +637,9 @@ const renderDocuments = () => {
           </div>
           <div>
             <h4 style="margin: 0 0 8px 0; font-family: 'Rajdhani', sans-serif; font-size: 1.3rem; font-weight: 800; color: #fff; letter-spacing: 0.5px; text-transform: uppercase;">DOSYALARI BURAYA SÜRÜKLE VEYA SEÇ</h4>
-            <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Bu kategoriye ait PDF dokümanlarını buraya bırakarak hızlıca yükleyebilirsiniz.</p>
+            <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Bu kategoriye ait dokümanları (PDF, ZIP, Excel vb.) buraya bırakarak hızlıca yükleyebilirsiniz.</p>
           </div>
-          <input type="file" id="tsi-drag-file-input" accept=".pdf" multiple style="display: none;" onchange="window.handleTsiDragFileInputChange('${activeCategoryId}')">
+          <input type="file" id="tsi-drag-file-input" accept=".pdf,.zip,.rar,.7z,.xlsx,.xls,.docx,.doc,.txt,.png,.jpg,.jpeg" multiple style="display: none;" onchange="window.handleTsiDragFileInputChange('${activeCategoryId}')">
         </div>
       `;
     } else {
@@ -536,27 +668,44 @@ const renderDocuments = () => {
     return;
   }
 
-  list.innerHTML = docs.map(doc => {
+  // Pagination calculations
+  const totalDocs = docs.length;
+  const totalPages = Math.ceil(totalDocs / ITEMS_PER_PAGE);
+  if (currentPage > totalPages) {
+    currentPage = totalPages;
+  }
+  if (currentPage < 1) {
+    currentPage = 1;
+  }
+
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalDocs);
+  const pageDocs = docs.slice(startIndex, endIndex);
+
+  list.innerHTML = pageDocs.map(doc => {
     const dateStr = doc.createdAt?.toDate ? doc.createdAt.toDate().toLocaleDateString('tr-TR') : 'Yeni';
     const sizeStr = formatBytes(doc.fileSize || 0);
     const uploadedByStr = doc.uploadedBy ? `<span><i class="fa-regular fa-user" style="margin-right: 4px;"></i>${doc.uploadedBy}</span>` : '';
     
+    // Determine dynamic icon and color styling based on file extension
+    const fileInfo = getFileInfo(doc.title, doc.fileName);
+
     return `
-      <div class="tsi-doc-row" ${isAdmin ? `draggable="true" ondragstart="window.handleDocDragStart(event)" ondragover="window.handleDocDragOver(event)" ondragleave="window.handleDocDragLeave(event)" ondrop="window.handleDocDrop(event)" ondragend="window.handleDocDragEnd(event)" data-id="${doc.id}" style="cursor: grab;"` : ''}>
+      <div class="tsi-doc-row" ${isAdmin ? `draggable="true" ondragstart="window.handleDocDragStart(event)" ondragover="window.handleDocDragOver(event)" ondragleave="window.handleDocDragLeave(event)" ondrop="window.handleDocDrop(event)" ondragend="window.handleDocDragEnd(event)" data-id="${doc.id}"` : ''} style="--row-accent-color: ${fileInfo.color}; cursor: ${isAdmin ? 'grab' : 'pointer'};">
         <div style="display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 0;">
           ${isAdmin ? `
             <div class="drag-handle" style="color: var(--text-dim); cursor: grab; padding-right: 4px; font-size: 0.95rem; display: flex; align-items: center;" title="Sürükle ve Sırala">
               <i class="fa-solid fa-grip-vertical"></i>
             </div>
           ` : ''}
-          <div class="doc-icon-container">
-            <i class="fa-solid fa-file-pdf"></i>
+          <div class="doc-icon-container" style="background: ${fileInfo.bg}; color: ${fileInfo.color}; border: 1px solid ${fileInfo.border};">
+            <i class="${fileInfo.icon}"></i>
           </div>
           <div style="flex: 1; min-width: 0;">
             <h4 style="margin: 0 0 4px 0; color: white; font-size: 0.95rem; font-weight: 600; line-height: 1.4; word-break: break-word; overflow-wrap: anywhere;">
               ${doc.title}
             </h4>
-            <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; gap: 12px; flex-wrap: wrap;">
+            <div style="font-size: 0.72rem; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap;">
               <span><i class="fa-regular fa-calendar" style="margin-right: 4px;"></i>${dateStr}</span>
               <span><i class="fa-solid fa-weight-hanging" style="margin-right: 4px;"></i>${sizeStr}</span>
               ${uploadedByStr}
@@ -565,19 +714,19 @@ const renderDocuments = () => {
         </div>
         
         <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-          <button class="btn-cyber" style="padding: 6px 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px;" onclick="window.openTsiDoc('${doc.id}')">
+          <button class="tsi-btn-action tsi-btn-goster" onclick="window.openTsiDoc('${doc.id}')">
             <i class="fa-solid fa-eye"></i> GÖSTER
           </button>
           ${hasAiPermission ? `
-            <button class="btn-cyber-outline" style="padding: 6px 12px; font-size: 0.75rem; display: flex; align-items: center; gap: 6px; background: rgba(0, 243, 255, 0.03); border-color: rgba(0, 243, 255, 0.2); color: var(--accent-cyan);" onclick="window.openTsiAiAgent('${doc.id}')">
+            <button class="tsi-btn-action tsi-btn-ajan" onclick="window.openTsiAiAgent('${doc.id}')">
               <i class="fa-solid fa-robot"></i> AJAN'A SOR
             </button>
           ` : ''}
-          <button class="btn-cyber-outline" style="padding: 6px 10px;" onclick="window.downloadTsiDoc('${doc.id}')" title="İndir">
+          <button class="tsi-btn-icon" onclick="window.downloadTsiDoc('${doc.id}')" title="İndir">
             <i class="fa-solid fa-download"></i>
           </button>
           ${isAdmin ? `
-            <button class="action-icon-btn red" style="padding: 6px 10px;" onclick="window.deleteTsiDocument('${doc.id}')" title="Sil">
+            <button class="tsi-btn-icon red" onclick="window.deleteTsiDocument('${doc.id}')" title="Sil">
               <i class="fa-solid fa-trash-can"></i>
             </button>
           ` : ''}
@@ -585,6 +734,110 @@ const renderDocuments = () => {
       </div>
     `;
   }).join('');
+
+  // Render pagination buttons if we have more than 1 page
+  if (totalPages > 1 && paginationContainer) {
+    let paginationHtml = `
+      <button class="tsi-page-btn" onclick="window.changeTsiPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} title="Önceki Sayfa">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+    `;
+
+    // Page buttons
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)) {
+        paginationHtml += `
+          <button class="tsi-page-btn ${currentPage === p ? 'active' : ''}" onclick="window.changeTsiPage(${p})">${p}</button>
+        `;
+      } else if (p === currentPage - 3 || p === currentPage + 3) {
+        paginationHtml += `<span style="color: var(--text-muted); padding: 0 4px; display: flex; align-items: center;">...</span>`;
+      }
+    }
+
+    paginationHtml += `
+      <button class="tsi-page-btn" onclick="window.changeTsiPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} title="Sonraki Sayfa">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+      <span class="tsi-page-info">Toplam: ${totalDocs} döküman | Sayfa ${currentPage}/${totalPages}</span>
+    `;
+
+    paginationContainer.innerHTML = paginationHtml;
+  }
+};
+
+(window as any).changeTsiPage = (page: number) => {
+  currentPage = page;
+  renderDocuments();
+  const list = document.getElementById('tsi-documents-list');
+  if (list) {
+    list.scrollTop = 0;
+  }
+};
+
+const getFileInfo = (title: string, fileName?: string) => {
+  const name = (fileName || title || '').trim().toLowerCase();
+  
+  if (name.endsWith('.pdf')) {
+    return {
+      icon: 'fa-solid fa-file-pdf',
+      bg: 'rgba(255, 77, 77, 0.1)',
+      color: '#ff4d4d',
+      border: 'rgba(255, 77, 77, 0.2)'
+    };
+  }
+  
+  if (name.endsWith('.zip') || name.endsWith('.rar') || name.endsWith('.7z') || name.endsWith('.tar') || name.endsWith('.gz')) {
+    return {
+      icon: 'fa-solid fa-file-zipper',
+      bg: 'rgba(230, 126, 34, 0.1)',
+      color: '#e67e22',
+      border: 'rgba(230, 126, 34, 0.2)'
+    };
+  }
+  
+  if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
+    return {
+      icon: 'fa-solid fa-file-excel',
+      bg: 'rgba(46, 204, 113, 0.1)',
+      color: '#2ecc71',
+      border: 'rgba(46, 204, 113, 0.2)'
+    };
+  }
+  
+  if (name.endsWith('.docx') || name.endsWith('.doc')) {
+    return {
+      icon: 'fa-solid fa-file-word',
+      bg: 'rgba(52, 152, 219, 0.1)',
+      color: '#3498db',
+      border: 'rgba(52, 152, 219, 0.2)'
+    };
+  }
+  
+  if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.gif') || name.endsWith('.webp')) {
+    return {
+      icon: 'fa-solid fa-file-image',
+      bg: 'rgba(155, 89, 182, 0.1)',
+      color: '#9b59b6',
+      border: 'rgba(155, 89, 182, 0.2)'
+    };
+  }
+  
+  if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.json')) {
+    return {
+      icon: 'fa-solid fa-file-lines',
+      bg: 'rgba(149, 165, 166, 0.1)',
+      color: '#95a5a6',
+      border: 'rgba(149, 165, 166, 0.2)'
+    };
+  }
+  
+  // Default fallback
+  return {
+    icon: 'fa-solid fa-file',
+    bg: 'rgba(0, 243, 255, 0.1)',
+    color: 'var(--accent-cyan)',
+    border: 'rgba(0, 243, 255, 0.2)'
+  };
 };
 
 (window as any).openTsiDoc = async (docId: string) => {
@@ -775,7 +1028,7 @@ const updateUploadCategorySelect = () => {
     
     let docTitle = manualTitle;
     if (!docTitle) {
-      docTitle = file.name.replace('.pdf', '');
+      docTitle = file.name.replace(/\.[^/.]+$/, "");
     } else if (files.length > 1) {
       docTitle = `${manualTitle} - ${i + 1}`;
     }

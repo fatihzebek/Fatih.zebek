@@ -134,11 +134,11 @@ class AuthService {
         };
         
         if (email.includes('tm13')) {
-          matchedUser = { uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2", email: "dh-tm13@demirerholding.com", displayName: "TM13 Bakım Teknisyeni", isAnonymous: false };
+          matchedUser = { uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2", email: "dh-tm13@demirerholding.com", displayName: "Team13", isAnonymous: false };
         } else if (email.includes('tm15')) {
-          matchedUser = { uid: "UNclj0NKXdTVkET9Tp566rouMvh2", email: "dh-tm15@demirerholding.com", displayName: "TM15 Bakım Teknisyeni", isAnonymous: false };
+          matchedUser = { uid: "UNclj0NKXdTVkET9Tp566rouMvh2", email: "dh-tm15@demirerholding.com", displayName: "Team15", isAnonymous: false };
         } else if (email.includes('tm04')) {
-          matchedUser = { uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2", email: "dh-tm04@demirerholding.com", displayName: "TM04 Bakım Teknisyeni", isAnonymous: false };
+          matchedUser = { uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2", email: "dh-tm04@demirerholding.com", displayName: "Team04", isAnonymous: false };
         }
 
         this.isFallbackMode = true;

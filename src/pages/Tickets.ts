@@ -12,6 +12,11 @@ export const TicketsPage = async () => {
   const currentUser = (window as any).currentUser;
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
 
+  const allowedSites = currentUser?.allowedSites || [];
+  const filteredSites = isAdmin 
+    ? dataService.getSites() 
+    : dataService.getSites().filter(site => allowedSites.includes(site.id));
+
   // Setup UI structure
   const html = `
     <div class="tickets-container fade-in-up">
@@ -69,7 +74,7 @@ export const TicketsPage = async () => {
             <div class="empty-info-card-purple" style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: left; transition: all 0.3s;">
               <div style="color: #a78bfa; font-size: 1.5rem; margin-bottom: 0.75rem;"><i class="fa-solid fa-comments"></i></div>
               <h4 style="margin: 0 0 0.5rem 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">CANLI İLETİŞİM</h4>
-              <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">Mühendis ve teknisyenler ile mesajlaşın, sahada çektiğiniz fotoğrafları doğrudan paylaşın.</p>
+              <p style="margin: 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.4;">dh_Teknik ile mesajlaşın, sahada çektiğiniz fotoğrafları doğrudan paylaşın.</p>
             </div>
 
             <div class="empty-info-card-orange" style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 1.5rem 1.25rem; text-align: left; transition: all 0.3s;">
@@ -101,9 +106,9 @@ export const TicketsPage = async () => {
             <label class="input-label">İLGİLİ TÜRBİN</label>
             <select id="nt-turbine" class="cyber-input" style="width: 100%;">
               <option value="">Seçiniz...</option>
-              ${dataService.getSites().map(site => `
+              ${filteredSites.map(site => `
                 <optgroup label="${site.name}">
-                  ${dataService.getTurbinesBySite(site.id).map(t => `<option value="${t.id}">${t.label || t.id}</option>`).join('')}
+                  ${dataService.getTurbinesBySite(site.id).map(t => `<option value="${t.id}">${t.label || `T-${t.no.toString().padStart(2, '0')}`} (${t.id})</option>`).join('')}
                 </optgroup>
               `).join('')}
             </select>

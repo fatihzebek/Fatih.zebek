@@ -6,11 +6,90 @@ import { userService } from '../../services/UserService';
 import { auditService } from '../../services/AuditService';
 import { FaultFormUI } from './FaultFormUI';
 import * as DateTimeUtils from '../../utils/DateTimeUtils';
-import personnelList from '../../data/personnel.json';
+import { personnelService } from '../../services/PersonnelService';
 import { warehouseService } from '../../services/WarehouseService';
 import { maintenanceService } from '../../services/MaintenanceService';
 import { formatTeamName } from '../../utils/formatters';
 import { ImageCompressor } from '../../utils/imageCompressor';
+
+function getCanonicalTeamWarehouseId(siteId: string): string {
+    const w = window as any;
+    const currentTask = w.currentTaskContext;
+    let rawTeamStr = '';
+
+    // 1. Check logged in user's profile team
+    let userProfile = w.appState?.userProfile;
+    if (!userProfile) {
+        try {
+            const storedFallback = localStorage.getItem('dh_auth_fallback');
+            if (storedFallback) {
+                const authData = JSON.parse(storedFallback);
+                const uid = authData?.user?.uid;
+                if (uid) {
+                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
+                    if (cachedProfile) {
+                        userProfile = JSON.parse(cachedProfile);
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+    if (userProfile?.team) {
+        rawTeamStr = userProfile.team;
+    }
+
+    // 2. Check task's personnel field (must be a string team name, not array of person names)
+    if (!rawTeamStr && currentTask && typeof currentTask.personnel === 'string' && currentTask.personnel !== 'Atanmadı') {
+        rawTeamStr = currentTask.personnel;
+    }
+
+    // 3. Check report's team field (when editing/viewing, currentTask is the report)
+    if (!rawTeamStr && currentTask && typeof currentTask.team === 'string') {
+        rawTeamStr = currentTask.team;
+    }
+
+    // 4. Fallback: window.currentUserTeam
+    if (!rawTeamStr && w.currentUserTeam) {
+        rawTeamStr = w.currentUserTeam;
+    }
+
+    // 5. Try to resolve team from selected personnel list
+    if (!rawTeamStr && Array.isArray(w.teamPersonnel) && w.teamPersonnel.length > 0 && w.dbUsersCache) {
+        for (const name of w.teamPersonnel) {
+            if (name) {
+                const normName = name.trim().toLowerCase();
+                const matchedUser = w.dbUsersCache.find((u: any) => 
+                    (u.displayName && u.displayName.trim().toLowerCase() === normName) ||
+                    (u.email && u.email.split('@')[0].trim().toLowerCase() === normName)
+                );
+                if (matchedUser?.team) {
+                    rawTeamStr = matchedUser.team;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Standardize to team_Team_XX format
+    if (rawTeamStr) {
+        if (rawTeamStr.startsWith('team_Team_') && rawTeamStr.length === 12) {
+            return rawTeamStr;
+        }
+        const formatted = formatTeamName(rawTeamStr);
+        const teamMatch = formatted.match(/Team\s*(\d+)/i);
+        if (teamMatch) {
+            const num = parseInt(teamMatch[1]).toString().padStart(2, '0');
+            return `team_Team_${num}`;
+        }
+    }
+
+    // Fallback to site warehouse
+    if (siteId) {
+        return warehouseService.resolveWarehouseId(siteId) || siteId;
+    }
+
+    return '';
+}
 
 export class FaultFormController {
     static init(initialData?: any) {
@@ -106,31 +185,8 @@ export class FaultFormController {
                         siteId = w.currentTaskContext.task.siteId;
                     }
 
-                    let userProfile = (window as any).appState?.userProfile;
-                    if (!userProfile) {
-                        try {
-                            const storedFallback = localStorage.getItem('dh_auth_fallback');
-                            if (storedFallback) {
-                                const authData = JSON.parse(storedFallback);
-                                const uid = authData?.user?.uid;
-                                if (uid) {
-                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
-                                    if (cachedProfile) {
-                                        userProfile = JSON.parse(cachedProfile);
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    let teamName = userProfile?.team || '';
-                    if (!teamName && w.currentTaskContext?.personnel && w.currentTaskContext?.personnel !== 'Atanmadı') {
-                        teamName = w.currentTaskContext.personnel;
-                    }
-                    if (teamName) {
-                        siteId = `team_${teamName.replace(/\s+/g, '_')}`;
-                    } else if (siteId) {
-                        siteId = warehouseService.resolveWarehouseId(siteId);
-                    }
+                    // Resolve the team's canonical mobile warehouse ID (e.g. team_Team_03)
+                    siteId = getCanonicalTeamWarehouseId(siteId);
 
                     let stockQty = 0;
                     let scanResults: { id: string; name: string; qty: number; description?: string }[] = [];
@@ -152,21 +208,23 @@ export class FaultFormController {
                         }
                         
                         // Add active team if any
-                        if (teamName) {
-                            const activeTeamId = `team_${teamName.replace(/\s+/g, '_')}`;
-                            candidateWarehouses.set(activeTeamId, `${teamName} Deposu`);
+                        if (siteId.startsWith('team_')) {
+                            const cleanName = siteId.replace('team_', '').replace(/_/g, ' ');
+                            candidateWarehouses.set(siteId, `${cleanName} Deposu`);
                         }
 
-                        // Query all candidate warehouses in parallel
+                        // Query all candidate warehouses in parallel for usable (NEW + REVISED) stock
                         const scanPromises = Array.from(candidateWarehouses.entries()).map(async ([whId, whName]) => {
                             try {
-                                const stockItem = await warehouseService.getStockBySap(whId, sapNo);
-                                if (stockItem && (stockItem.quantity || 0) > 0) {
+                                const stockItemNew = await warehouseService.getStockBySapAndCondition(whId, sapNo, 'NEW');
+                                const stockItemRev = await warehouseService.getStockBySapAndCondition(whId, sapNo, 'REVISED');
+                                const totalQty = (stockItemNew?.quantity || 0) + (stockItemRev?.quantity || 0);
+                                if (totalQty > 0) {
                                     return {
                                         id: whId,
                                         name: whName,
-                                        qty: stockItem.quantity || 0,
-                                        description: stockItem.description || ''
+                                        qty: totalQty,
+                                        description: stockItemNew?.description || stockItemRev?.description || ''
                                     };
                                 }
                             } catch (e) {
@@ -180,7 +238,7 @@ export class FaultFormController {
                         
                         if (input.getAttribute('data-lookup-id') !== lookupId) return;
 
-                        if (siteId) {
+                        if (siteId && siteId.startsWith('team_')) {
                             const myStockResult = scanResults.find(r => r.id === siteId);
                             if (myStockResult) {
                                 stockQty = myStockResult.qty;
@@ -188,6 +246,8 @@ export class FaultFormController {
                             } else {
                                 badge.setAttribute('data-debug', 'null_item');
                             }
+                        } else {
+                            badge.setAttribute('data-debug', 'stationary_warehouse_ignored');
                         }
 
                         // Update description input with description if empty
@@ -220,7 +280,12 @@ export class FaultFormController {
                         };
 
                         let badgeText = '';
-                        const otherStocks = scanResults.filter(r => r.id !== siteId);
+                        const otherStocks = scanResults.filter(r => {
+                            if (siteId && siteId.startsWith('team_')) {
+                                return r.id !== siteId;
+                            }
+                            return true;
+                        });
                         otherStocks.sort((a, b) => b.qty - a.qty);
 
                         if (stockQty > 0) {
@@ -760,7 +825,7 @@ export class FaultFormController {
             const dbNames = dbUsers.map(u => u.displayName?.toUpperCase() || u.email?.split('@')[0].toUpperCase());
             
             const combinedList = Array.from(new Set([
-                ...personnelList.map(name => name.toUpperCase()),
+                ...personnelService.getPersonnelList().map(name => name.toUpperCase()),
                 ...dbNames
             ]));
 
@@ -804,7 +869,7 @@ export class FaultFormController {
                 return;
             }
 
-            const matches = (personnelList as string[]).filter(name => name.toLocaleLowerCase('tr-TR').includes(lowerQuery));
+            const matches = personnelService.getPersonnelList().filter(name => name.toLocaleLowerCase('tr-TR').includes(lowerQuery));
 
             if (matches.length === 0) {
                 container.style.display = 'none';
@@ -1142,7 +1207,7 @@ export class FaultFormController {
                 
                 const masterList = Array.from(new Set([
                     ...(w.teamPersonnel || []),
-                    ...personnelList
+                    ...personnelService.getPersonnelList()
                 ])).sort();
                 
                 const defaultTech = masterList[0] || "Fatih ZEBEK";
@@ -1566,45 +1631,30 @@ export class FaultFormController {
                 if (hasDeduction && !matFormNo) throw new Error("Malzeme sarfiyatı mevcut (Takılan > 0). Lütfen MÇF NO (Malzeme Çıkış Form No) giriniz.");
 
                 if (!isEditMode && hasDeduction) {
-                    let userProfile = (window as any).appState?.userProfile;
-                    if (!userProfile) {
-                        try {
-                            const storedFallback = localStorage.getItem('dh_auth_fallback');
-                            if (storedFallback) {
-                                const authData = JSON.parse(storedFallback);
-                                const uid = authData?.user?.uid;
-                                if (uid) {
-                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
-                                    if (cachedProfile) {
-                                        userProfile = JSON.parse(cachedProfile);
-                                    }
-                                }
-                            }
-                        } catch (e) {}
+                    const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
+                    
+                    if (!usedWarehouseId || !usedWarehouseId.startsWith('team_')) {
+                        throw new Error("HATA: Malzeme düşümü (Takılan > 0) yapabilmek için önce malzemeyi kendi üzerinize (ekip deposuna) transfer etmeniz gerekmektedir.\nDirekt santral veya sabit depodan malzeme düşüşü yapılamaz.");
                     }
 
-                    let teamName = userProfile?.team || '';
-                    if (!teamName && currentTask?.personnel && currentTask?.personnel !== 'Atanmadı') {
-                        teamName = currentTask.personnel;
-                    }
-                    let usedWarehouseId = '';
-                    if (teamName) {
-                        usedWarehouseId = `team_${teamName.replace(/\s+/g, '_')}`;
-                    } else {
-                        const resolvedSiteWh = warehouseService.resolveWarehouseId(siteId);
-                        usedWarehouseId = resolvedSiteWh || siteId;
+                    let teamName = '';
+                    if (usedWarehouseId.startsWith('team_Team_')) {
+                        const teamNum = usedWarehouseId.replace('team_Team_', '');
+                        teamName = `Team ${teamNum}`;
+                    } else if (usedWarehouseId.startsWith('team_')) {
+                        teamName = usedWarehouseId.replace('team_', '').replace(/_/g, ' ');
                     }
 
-                    if (usedWarehouseId) {
-                        for (const mat of materials) {
-                            const typeUpper = mat.type?.toUpperCase();
-                            const isTakilan = !mat.type || typeUpper === 'T';
-                            if (mat.sapNo && mat.used > 0 && isTakilan) {
-                                const stockItem = await warehouseService.getStockBySap(usedWarehouseId, mat.sapNo);
-                                const availableQty = stockItem ? (stockItem.quantity || 0) : 0;
-                                if (availableQty < mat.used) {
-                                    throw new Error(`Zimmetinizde (${teamName || 'Ekip Deposu'}) yeterli stok bulunmamaktadır.\nMalzeme: ${mat.sapNo} - ${mat.description}\nMevcut Stok: ${availableQty}\nGereken: ${mat.used}\nLütfen önce depodan üzerinize transfer edin.`);
-                                }
+                    for (const mat of materials) {
+                        const typeUpper = mat.type?.toUpperCase();
+                        const isTakilan = !mat.type || typeUpper === 'T';
+                        if (mat.sapNo && mat.used > 0 && isTakilan) {
+                            const stockItemNew = await warehouseService.getStockBySapAndCondition(usedWarehouseId, mat.sapNo, 'NEW');
+                            const stockItemRev = await warehouseService.getStockBySapAndCondition(usedWarehouseId, mat.sapNo, 'REVISED');
+                            const availableQty = (stockItemNew?.quantity || 0) + (stockItemRev?.quantity || 0);
+                            
+                            if (availableQty < mat.used) {
+                                throw new Error(`Zimmetinizde (${teamName || 'Ekip Deposu'}) yeterli kullanılabilir stok bulunmamaktadır.\nMalzeme: ${mat.sapNo} - ${mat.description}\nMevcut Kullanılabilir Stok: ${availableQty}\nGereken: ${mat.used}\nLütfen önce depodan üzerinize transfer edin.`);
                             }
                         }
                     }
@@ -1754,15 +1804,69 @@ export class FaultFormController {
                     };
                 }
 
+                // Generate or preserve report number
+                let generatedReportNo = '';
+                const originalReportNo = w.currentEditReportNo;
+                if (isEditMode && originalReportNo) {
+                    generatedReportNo = originalReportNo;
+                } else {
+                    const sitePrefix = (() => {
+                        switch (siteId) {
+                            case '2688': return 'AN_IN';
+                            case '2678': return 'MR_MN';
+                            case '0752': return 'AL_GR';
+                            case '3245': return 'AL_KL';
+                            case '3213': return 'DR_DT';
+                            case '2990': return 'DG_SY';
+                            case '3793': return 'AL_KY';
+                            case '3243': return 'AL_ÇM';
+                            case '3439': return 'AL_SR';
+                            case '3892': return 'AL_ÇT';
+                            default: return isMaintenance || isDeficiency ? 'BK' : 'AR';
+                        }
+                    })();
+
+                    const dateStr = (document.getElementById('form-date') as HTMLInputElement).value; // YYYY-MM-DD
+                    const parts = dateStr.split('-');
+                    const formattedDate = parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : '';
+
+                    const cleanMcf = matFormNo.replace(/\D/g, '');
+
+                    if (cleanMcf) {
+                        generatedReportNo = `${sitePrefix}${formattedDate}${cleanMcf}`;
+                    } else {
+                        // Find the sequence number by counting same-day reports for this site
+                        try {
+                            const siteReports = await serviceReportService.getReportsBySite(siteId);
+                            const sameDayReports = siteReports.filter(r => r.date === dateStr);
+                            const seq = sameDayReports.length + 1;
+                            const seqStr = seq.toString().padStart(3, '0');
+                            generatedReportNo = `${sitePrefix}${formattedDate}${seqStr}`;
+                        } catch (err) {
+                            console.error(err);
+                            // Fallback to random suffix if database fetch fails
+                            const randStr = Math.floor(100 + Math.random() * 900).toString();
+                            generatedReportNo = `${sitePrefix}${formattedDate}${randStr}`;
+                        }
+                    }
+                }
+
                 const reportData: any = {
                     type: isMaintenance || isDeficiency ? 'BAKIM' : 'ARIZA',
-                    reportNo: (isMaintenance || isDeficiency ? 'BK-' : 'AR-') + Date.now().toString().slice(-6),
+                    reportNo: generatedReportNo,
                     turbineSerial: turbineSerial,
                     turbineNo: (document.getElementById('turbin-no') as HTMLInputElement).value,
                     siteId: siteId,
                     siteName: siteName,
                     date: (document.getElementById('form-date') as HTMLInputElement).value,
-                    team: currentUser?.displayName || currentUser?.email || 'SİSTEM',
+                    team: (() => {
+                        const canonWhId = getCanonicalTeamWarehouseId(siteId);
+                        if (canonWhId.startsWith('team_Team_')) {
+                            const teamNum = parseInt(canonWhId.replace('team_Team_', ''));
+                            return `TEAM ${teamNum}`;
+                        }
+                        return currentUser?.displayName || currentUser?.email || 'SİSTEM';
+                    })(),
                     templateName: currentTask?.secilenSablon || currentTask?.templateName || '',
                     faultCode: faultCode || currentTask?.rawFaultCode || currentTask?.secilenSablon || '---',
                     faultDesc: faultDesc || currentTask?.secilenSablon || 'Genel Görev',
@@ -1791,43 +1895,7 @@ export class FaultFormController {
                     await serviceReportService.saveReport(reportData, files);
                     
                     // Stock update
-                    let userProfile = (window as any).appState?.userProfile;
-                    if (!userProfile) {
-                        try {
-                            const storedFallback = localStorage.getItem('dh_auth_fallback');
-                            if (storedFallback) {
-                                const authData = JSON.parse(storedFallback);
-                                const uid = authData?.user?.uid;
-                                if (uid) {
-                                    const cachedProfile = localStorage.getItem(`currentUserProfile_${uid}`);
-                                    if (cachedProfile) {
-                                        userProfile = JSON.parse(cachedProfile);
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    
-                    let teamName = userProfile?.team || '';
-                    if (!teamName && currentTask?.personnel && currentTask?.personnel !== 'Atanmadı') {
-                        teamName = currentTask.personnel;
-                    }
-                    if (!teamName && reportData.personnel) {
-                        const parsedTeam = formatTeamName(reportData.personnel);
-                        if (parsedTeam.startsWith('TEAM ')) {
-                            const teamNum = parsedTeam.replace('TEAM ', '').padStart(2, '0');
-                            teamName = `Team ${teamNum}`;
-                        }
-                    }
-                    
-                    let usedWarehouseId = '';
-                    if (teamName) {
-                        usedWarehouseId = `team_${teamName.replace(/\s+/g, '_')}`;
-                    } else {
-                        const resolvedSiteWh = warehouseService.resolveWarehouseId(siteId);
-                        usedWarehouseId = resolvedSiteWh || siteId;
-                    }
-
+                    const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
                     const siteWarehouseId = warehouseService.resolveWarehouseId(siteId) || siteId;
 
                     if (reportData.materials && reportData.materials.length > 0) {
@@ -1838,12 +1906,46 @@ export class FaultFormController {
                             
                             // 1. Takılan malzeme: Teknisyenin kendi zimmet deposundan (usedWarehouseId) düşülür
                             if (mat.sapNo && mat.used > 0 && isTakilan && usedWarehouseId) {
-                                await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -mat.used, {
-                                    user: currentUser?.email || 'Sistem',
-                                    reason: 'Saha Raporu ile Malzeme Kullanımı',
-                                    reportNo: reportData.reportNo,
-                                    materialName: mat.description
-                                }, 'NEW');
+                                // Smart stock deduction: NEW first, then REVISED remainder
+                                const stockItemNew = await warehouseService.getStockBySapAndCondition(usedWarehouseId, mat.sapNo, 'NEW');
+                                const qtyNew = stockItemNew?.quantity || 0;
+                                
+                                const detailedNote = `(Rapor: ${reportData.reportNo}, Arıza Kodu: ${reportData.faultCode || 'Bakım'}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
+
+                                if (qtyNew >= mat.used) {
+                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -mat.used, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Saha Raporu ile Malzeme Kullanımı ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: mat.description,
+                                        turbineNo: reportData.turbineNo,
+                                        turbineSerial: reportData.turbineSerial,
+                                        formNo: reportData.matFormNo
+                                    }, 'NEW');
+                                } else {
+                                    if (qtyNew > 0) {
+                                        await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -qtyNew, {
+                                            user: currentUser?.email || 'Sistem',
+                                            reason: 'Saha Raporu ile Malzeme Kullanımı (Kısmi NEW) ' + detailedNote,
+                                            reportNo: reportData.reportNo,
+                                            materialName: mat.description,
+                                            turbineNo: reportData.turbineNo,
+                                            turbineSerial: reportData.turbineSerial,
+                                            formNo: reportData.matFormNo
+                                        }, 'NEW');
+                                    }
+                                    const remainder = mat.used - qtyNew;
+                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -remainder, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Saha Raporu ile Malzeme Kullanımı (Kısmi REVİZE) ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: mat.description,
+                                        turbineNo: reportData.turbineNo,
+                                        turbineSerial: reportData.turbineSerial,
+                                        formNo: reportData.matFormNo
+                                    }, 'REVISED');
+                                }
+
                                 if (usedWarehouseId.startsWith('team_') && siteWarehouseId) {
                                     try {
                                         await warehouseService.decreaseReservation(siteWarehouseId, mat.sapNo, mat.used, usedWarehouseId);
@@ -1856,10 +1958,12 @@ export class FaultFormController {
                             
                             // 2. Defect (Arızalı) malzeme: hem sahanın kendi ana deposuna hem de team zimmet deposuna defect olarak eklenir
                             if (mat.sapNo && mat.defectCount > 0) {
+                                const detailedNote = `(Rapor: ${reportData.reportNo}, Arıza Kodu: ${reportData.faultCode || 'Bakım'}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
+                                
                                 if (siteWarehouseId) {
                                     await warehouseService.updateStockBySap(siteWarehouseId, mat.sapNo, mat.defectCount, {
                                         user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporunda Sökülen Arızalı Parça',
+                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
                                         reportNo: reportData.reportNo,
                                         materialName: mat.description
                                     }, 'DEFECT');
@@ -1867,7 +1971,7 @@ export class FaultFormController {
                                 if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
                                     await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
                                         user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporunda Sökülen Arızalı Parça',
+                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
                                         reportNo: reportData.reportNo,
                                         materialName: mat.description
                                     }, 'DEFECT');
@@ -1930,16 +2034,25 @@ export class FaultFormController {
         }, 100);
     }
 
-    static async initializeForm(initialData: any) {
+     static async initializeForm(initialData: any) {
         console.log("Initializing Fault Form Data Hydration...");
         const w = window as any;
         w.auditTracking = {
             formOpenedTime: Date.now(),
             clicks: []
         };
+        
+        // Load and cache all users for synchronous lookup later
+        try {
+            const { userService } = await import('../../services/UserService');
+            userService.getAllUsers().then(users => {
+                w.dbUsersCache = users;
+            }).catch(() => {});
+        } catch(e) {}
         const { maintenanceService } = await import('../../services/MaintenanceService');
         const isSmartEditor = localStorage.getItem('currentEditingTemplateId') !== null;
         const isEditMode = initialData?.isEditMode;
+        w.currentEditReportNo = isEditMode ? initialData.reportNo : null;
 
         if (isSmartEditor) {
             const templateId = localStorage.getItem('currentEditingTemplateId');

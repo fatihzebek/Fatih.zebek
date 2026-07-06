@@ -1,6 +1,13 @@
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, updateDoc, where } from 'firebase/firestore';
 
+export interface PurchaseDelivery {
+  invoiceNo: string;       // Fatura / İrsaliye No (örn: 54304811)
+  deliveryDate: string;    // Teslimat Tarihi (örn: 2026-02-10)
+  invoiceDate: string;     // Fatura Tarihi (örn: 2026-02-17)
+  quantity: number;        // Bu teslimatta gelen adet
+}
+
 export interface PurchaseRequest {
   id?: string;
   sapNo: string;
@@ -8,7 +15,7 @@ export interface PurchaseRequest {
   requestedQty: number;
   warehouseId: string;
   warehouseName: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ORDERED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ORDERED' | 'DELIVERED' | 'INVOICED' | 'COMPLETED';
   requestedBy: string; 
   requestedAt: any;
   approvedBy?: string;
@@ -16,6 +23,34 @@ export interface PurchaseRequest {
   notes?: string;
   estimatedCost?: number;
   currency?: string;
+  orderedAt?: any;
+  deliveryNoteNo?: string;
+  deliveredAt?: any;
+  invoiceNo?: string;
+  invoicedAt?: any;
+  completedAt?: any;
+  urgency?: 'Düşük' | 'Orta' | 'Yüksek' | 'Kritik';
+  unit?: string;
+  targetDeliveryDate?: string;
+  costCenter?: string;
+  suggestedSupplier?: string;
+  attachments?: { name: string; size: number; type: string; base64: string; }[];
+  
+  // Excel Tracking Fields
+  plantCode?: string;
+  orderDate?: string;
+  orderNo?: string;
+  plantAbbreviation?: string;
+  realOwner?: string;
+  arrivedQty?: number;
+  unitPriceQuote?: number;
+  totalPriceQuote?: number;
+  unitPriceInvoice?: number;
+  totalPriceInvoice?: number;
+  logisticCost?: number;
+  arrivedProductsTotal?: number;
+  openOrderTotal?: number;
+  deliveries?: PurchaseDelivery[];
 }
 
 class PurchaseService {
@@ -70,6 +105,40 @@ class PurchaseService {
     await updateDoc(docRef, {
       status: 'ORDERED',
       orderedAt: serverTimestamp()
+    });
+  }
+
+  async markAsDelivered(id: string, deliveryNoteNo: string) {
+    const docRef = doc(db, 'purchase_requests', id);
+    await updateDoc(docRef, {
+      status: 'DELIVERED',
+      deliveryNoteNo,
+      deliveredAt: serverTimestamp()
+    });
+  }
+
+  async markAsInvoiced(id: string, invoiceNo: string) {
+    const docRef = doc(db, 'purchase_requests', id);
+    await updateDoc(docRef, {
+      status: 'INVOICED',
+      invoiceNo,
+      invoicedAt: serverTimestamp()
+    });
+  }
+
+  async markAsCompleted(id: string) {
+    const docRef = doc(db, 'purchase_requests', id);
+    await updateDoc(docRef, {
+      status: 'COMPLETED',
+      completedAt: serverTimestamp()
+    });
+  }
+
+  async updatePurchaseRequestDetails(id: string, data: Partial<PurchaseRequest>) {
+    const docRef = doc(db, 'purchase_requests', id);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: serverTimestamp()
     });
   }
 }

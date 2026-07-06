@@ -1,7 +1,6 @@
 import type { ServiceReport } from './ServiceReportService';
 import type { Task } from './TaskService';
-import personnelDetails from '../data/personnel_details.json';
-import personnelList from '../data/personnel.json';
+import { personnelService } from './PersonnelService';
 import faultCategories from '../data/fault_categories.json';
 import { dataService } from './DataService';
 import * as DateTimeUtils from '../utils/DateTimeUtils';
@@ -58,20 +57,23 @@ export interface AnalyticsSummary {
 
 const getCanonicalName = (name: string) => {
   const upper = name.trim().toUpperCase();
-  const found = personnelList.find(p => p.toUpperCase() === upper);
+  const found = personnelService.getPersonnelList().find(p => p.toUpperCase() === upper);
   return found || name;
 };
 
 class AnalyticsService {
-  private personnel = personnelList.map(name => {
-    const detail = personnelDetails.find(d => d.name === name);
-    return {
-      name,
-      expertise: name === "Fatih ZEBEK" ? [""] : ["Servis Bakım"],
-      hourlyRate: detail?.hourlyRate || 100,
-      baseSiteId: detail?.baseSiteId || "GENEL"
-    };
-  });
+  get personnel() {
+    const details = personnelService.getPersonnelDetailsList();
+    return personnelService.getPersonnelList().map(name => {
+      const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
+      return {
+        name,
+        expertise: name === "Fatih ZEBEK" ? [""] : ["Servis Bakım"],
+        hourlyRate: 100,
+        baseSiteId: detail?.baseSites?.[0] || "GENEL"
+      };
+    });
+  }
   private categories = faultCategories;
 
   // 1. ADAM-SAAT VE MESAİ HESAPLAMA

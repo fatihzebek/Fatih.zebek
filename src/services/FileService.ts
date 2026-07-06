@@ -1,14 +1,14 @@
 import { ImageCompressor } from '../utils/imageCompressor';
 
 class FileService {
-  async uploadImage(file: File, _path: string): Promise<string> {
+  async uploadImage(file: File, _path: string, maxW: number = 800, maxH: number = 800, quality: number = 0.7): Promise<string> {
     let fileToUpload = file;
 
-    // Auto-compress image if it's an image file and larger than 200KB
-    if (file.type.startsWith('image/') && file.size > 200 * 1024) {
+    // Auto-compress image if it's an image file
+    if (file.type.startsWith('image/')) {
       try {
-        console.log(`[FileService] Compressing large image: ${file.name} (${Math.round(file.size / 1024)} KB)`);
-        fileToUpload = await ImageCompressor.compressImage(file, 1600, 1600, 0.85);
+        console.log(`[FileService] Compressing image: ${file.name} (${Math.round(file.size / 1024)} KB)`);
+        fileToUpload = await ImageCompressor.compressImage(file, maxW, maxH, quality);
         console.log(`[FileService] Compressed to: ${fileToUpload.name} (${Math.round(fileToUpload.size / 1024)} KB)`);
       } catch (err) {
         console.warn('Image compression failed, using original file:', err);

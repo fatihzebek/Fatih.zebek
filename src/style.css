@@ -1488,6 +1488,10 @@ select.cyber-input:focus {
   animation: pulseGlow 2s infinite alternate;
   z-index: -1;
 }
+.turbine-icon-wrapper.no-glow::after {
+  display: none !important;
+  content: none !important;
+}
 
 @keyframes pulseGlow {
   0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
@@ -2896,4 +2900,11 @@ body.light-mode .btn-cyber-outline:hover {
   0% { stroke-dashoffset: 80; }
   50% { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: -80; }
+}
+
+/* Turbine Modal PDF Zoom Out for scanned eye inspection */
+#pdf-iframe #pdf-container {
+  zoom: 0.65;
+  transform-origin: top center;
+  margin: 0 auto;
 }

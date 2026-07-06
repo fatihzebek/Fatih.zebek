@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, clearIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
@@ -32,6 +32,20 @@ if (typeof window !== 'undefined' && !import.meta.env.DEV) {
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
+
+if (typeof window !== 'undefined') {
+  const cacheVersion = 'v1.0.2';
+  if (localStorage.getItem('firestore_cache_ver') !== cacheVersion) {
+    clearIndexedDbPersistence(db)
+      .then(() => {
+        localStorage.setItem('firestore_cache_ver', cacheVersion);
+        console.log("Firestore IndexedDB cache cleared successfully.");
+      })
+      .catch((err) => {
+        console.warn("Could not clear Firestore cache:", err);
+      });
+  }
+}
 
 export const auth = getAuth(app);
 export const storage = getStorage(app);

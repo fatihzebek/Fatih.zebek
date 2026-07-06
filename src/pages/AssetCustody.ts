@@ -10,8 +10,22 @@ let searchQuery = '';
 
 export const AssetCustodyPage = async () => {
   allItems = await assetCustodyService.getAll();
-  const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || currentUser?.role?.toUpperCase() === 'MALZEME_YONETIMI';
+
+  const storedFilterTeam = localStorage.getItem('custody_filter_team');
+  if (storedFilterTeam) {
+    filterTeam = storedFilterTeam;
+  } else if (currentUser?.team && !isAdmin) {
+    let cleanTeam = currentUser.team.trim();
+    const match = cleanTeam.match(/^Team\s*0?(\d+)$/i);
+    if (match) {
+      cleanTeam = `Team ${String(match[1]).padStart(2, '0')}`;
+    }
+    filterTeam = cleanTeam;
+  } else {
+    filterTeam = 'all';
+  }
 
   setTimeout(() => {
     (window as any).filterCustodyItems?.();
@@ -67,8 +81,11 @@ export const AssetCustodyPage = async () => {
             oninput="window.filterCustodyItems()">
         </div>
         <select id="custody-filter-team" onchange="window.filterCustodyItems()" style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; outline: none;">
-          <option value="all">Tüm Ekipler</option>
-          ${Array.from({length: 15}, (_, i) => `<option value="Team ${String(i+1).padStart(2,'0')}">Team ${String(i+1).padStart(2,'0')}</option>`).join('')}
+          <option value="all" ${filterTeam === 'all' ? 'selected' : ''}>Tüm Ekipler</option>
+          ${Array.from({length: 15}, (_, i) => {
+            const teamName = `Team ${String(i+1).padStart(2,'0')}`;
+            return `<option value="${teamName}" ${filterTeam === teamName ? 'selected' : ''}>${teamName}</option>`;
+          }).join('')}
         </select>
         <select id="custody-filter-condition" onchange="window.filterCustodyItems()" style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; outline: none;">
           <option value="all">Tüm Durumlar</option>
@@ -355,6 +372,7 @@ function renderRow(item: CustodyItem, isAdmin: boolean): string {
 (window as any).filterCustodyItems = () => {
   searchQuery = ((document.getElementById('custody-search') as HTMLInputElement)?.value || '').toLowerCase();
   filterTeam = (document.getElementById('custody-filter-team') as HTMLSelectElement)?.value || 'all';
+  localStorage.setItem('custody_filter_team', filterTeam);
   filterCondition = (document.getElementById('custody-filter-condition') as HTMLSelectElement)?.value || 'all';
   filterLocation = (document.getElementById('custody-filter-location') as HTMLSelectElement)?.value || 'all';
 

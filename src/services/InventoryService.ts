@@ -7,14 +7,30 @@ export interface Material {
 
 class InventoryService {
   private materials: Material[] = materialsData as Material[];
+  private searchIndex: { n: string; d: string; nLower: string; dLower: string }[] = [];
+
+  constructor() {
+    this.searchIndex = this.materials.map(m => ({
+      n: m.n || '',
+      d: m.d || '',
+      nLower: String(m.n || '').toLowerCase(),
+      dLower: String(m.d || '').toLowerCase()
+    }));
+  }
 
   searchMaterials(query: string): Material[] {
     if (!query || query.length < 2) return [];
     const lowerQuery = query.toLowerCase();
-    return this.materials.filter(m => 
-      m.n.toLowerCase().includes(lowerQuery) || 
-      m.d.toLowerCase().includes(lowerQuery)
-    ).slice(0, 100);
+    const results: Material[] = [];
+    const len = this.searchIndex.length;
+    for (let i = 0; i < len; i++) {
+      const item = this.searchIndex[i];
+      if (item.nLower.includes(lowerQuery) || item.dLower.includes(lowerQuery)) {
+        results.push({ n: item.n, d: item.d });
+        if (results.length >= 100) break;
+      }
+    }
+    return results;
   }
 
   getMaterialBySap(sap: string): Material | undefined {
