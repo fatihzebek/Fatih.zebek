@@ -26,6 +26,21 @@ export const AssetCustodyPage = async () => {
   };
 
   const allowedTeams = dataService.getAllowedTeams();
+  const allowedSiteIds = dataService.getSites().map(s => s.id);
+  const allowedWarehouses = dataService.getWarehouses().filter(w => {
+    if (isAdmin) return true;
+    const siteId = dataService.getSiteIdByWarehouseId(w.id);
+    return siteId && allowedSiteIds.includes(siteId);
+  });
+
+  let allowedPersonnelNames = personnelService.getPersonnelList();
+  if (!isAdmin) {
+    const details = personnelService.getPersonnelDetailsList();
+    allowedPersonnelNames = allowedPersonnelNames.filter(name => {
+      const d = details.find(det => det.name === name);
+      return !d || !d.team || allowedTeams.includes(d.team);
+    });
+  }
   const showXray = hasCustodyPermission('viewCustodyXray');
   if (!showXray) {
     activeTab = 'list';
@@ -432,7 +447,7 @@ export const AssetCustodyPage = async () => {
 
     <!-- DATALISTS FOR AUTOCOMPLETE -->
     <datalist id="personnel-datalist">
-      ${personnelService.getPersonnelList().map(name => `<option value="${name}">`).join('')}
+      ${allowedPersonnelNames.map(name => `<option value="${name}">`).join('')}
     </datalist>
 
     <!-- ADD/EDIT MODAL -->
@@ -493,7 +508,7 @@ export const AssetCustodyPage = async () => {
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ EKİP</label>
               <select id="custody-team" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
                 <option value="">Seçiniz</option>
-                ${Array.from({length: 15}, (_, i) => `<option value="Team ${String(i+1).padStart(2,'0')}">Team ${String(i+1).padStart(2,'0')}</option>`).join('')}
+                ${allowedTeams.map(teamName => `<option value="${teamName}">${teamName}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -511,7 +526,7 @@ export const AssetCustodyPage = async () => {
             <div id="custody-warehouse-group" style="flex: 1; min-width: 130px; display: none;">
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">DEPO LOKASYONU</label>
               <select id="custody-warehouse" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
-                ${dataService.getWarehouses().map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
+                ${allowedWarehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
               </select>
             </div>
             <div id="custody-condition-group" style="flex: 1; min-width: 130px;">
