@@ -365,6 +365,11 @@ export const TaskCreationForm = async (templateId: string) => {
   };
 
   (window as any).finalizeTask = async (force: boolean = false) => {
+    if (!wizardData.assignedTeam) {
+      (window as any).showToast('Ekip atanmadan görev başlatılamaz! Lütfen geri dönüp ekip seçin.', 'error');
+      return;
+    }
+
     const btn = document.querySelector('button[onclick="window.finalizeTask()"]') as HTMLButtonElement;
     if (btn) {
       btn.disabled = true;
