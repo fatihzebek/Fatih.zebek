@@ -38,7 +38,14 @@ export const AssetCustodyPage = async () => {
     const details = personnelService.getPersonnelDetailsList();
     allowedPersonnelNames = allowedPersonnelNames.filter(name => {
       const d = details.find(det => det.name === name);
-      return !d || !d.team || allowedTeams.includes(d.team);
+      if (!d) return false;
+      if (d.team) {
+        return allowedTeams.includes(d.team);
+      }
+      if (d.baseSites && d.baseSites.length > 0) {
+        return d.baseSites.some(siteId => allowedSiteIds.includes(siteId));
+      }
+      return false;
     });
   }
   const showXray = hasCustodyPermission('viewCustodyXray');
@@ -742,6 +749,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   const user = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
   const isAdminUser = user?.role?.toUpperCase() === 'ADMIN' || user?.role?.toUpperCase() === 'MALZEME_YONETIMI';
   const regionalTeams = dataService.getAllowedTeams();
+  const allowedSiteIds = dataService.getSites().map(s => s.id);
 
   if (selectedTeam) {
     filtered = filtered.filter(name => {
@@ -752,7 +760,14 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     if (!isAdminUser) {
       filtered = filtered.filter(name => {
         const d = details.find(det => det.name === name);
-        return !d || !d.team || regionalTeams.includes(d.team);
+        if (!d) return false;
+        if (d.team) {
+          return regionalTeams.includes(d.team);
+        }
+        if (d.baseSites && d.baseSites.length > 0) {
+          return d.baseSites.some(siteId => allowedSiteIds.includes(siteId));
+        }
+        return false;
       });
     }
   }
