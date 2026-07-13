@@ -134,6 +134,13 @@ class AssetCustodyService {
     const promises = snapshot.docs.map(d => deleteDoc(doc(db, this.collectionName, d.id)));
     await Promise.all(promises);
   }
+
+  async removeHistoryOfItem(itemId: string): Promise<void> {
+    const q = query(collection(db, 'asset_custody_history'), where('itemId', '==', itemId));
+    const snapshot = await getDocs(q);
+    const promises = snapshot.docs.map(d => deleteDoc(doc(db, 'asset_custody_history', d.id)));
+    await Promise.all(promises);
+  }
 }
 
 export const assetCustodyService = new AssetCustodyService();

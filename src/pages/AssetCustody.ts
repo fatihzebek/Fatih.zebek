@@ -1026,19 +1026,8 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     }
 
     if (item) {
-      // Write deletion history log
-      await assetCustodyService.addHistoryLog({
-        itemId: id,
-        productCode: item.productCode || '',
-        productName: item.productName,
-        serialNo: item.serialNo || '',
-        action: 'Silindi',
-        oldAssignee: item.assignedTo,
-        oldTeam: item.assignedTeam,
-        oldCondition: item.condition,
-        note: 'Zimmet kaydı sistemden kalıcı olarak silindi.',
-        by: (window as any).currentUser?.displayName || 'Admin'
-      });
+      // Remove all history logs of this item so it doesn't affect team scorecard metrics
+      await assetCustodyService.removeHistoryOfItem(id);
     }
 
     await assetCustodyService.remove(id);
