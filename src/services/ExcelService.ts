@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import type { InventoryItem, InventoryLog, AuditRecord } from './WarehouseService';
 import { inventoryService } from './InventoryService';
 
@@ -87,6 +87,78 @@ class ExcelService {
     XLSX.utils.book_append_sheet(workbook, invSheet, 'Mevcut Stok');
     XLSX.utils.book_append_sheet(workbook, logSheet, 'Son Hareketler');
 
+    XLSX.writeFile(workbook, `${fileName}.xlsx`);
+  }
+
+  async exportTransfersToExcel(transfers: any[], fileName: string) {
+    const data = transfers.map(t => {
+      const itemsStr = Array.isArray(t.items)
+        ? t.items.map((it: any) => `${it.materialCode} (${it.materialName}): ${it.quantity} Adet`).join('\n')
+        : `${t.materialCode} (${t.materialName}): ${t.quantity} Adet`;
+
+      const fromName = (window as any)._warehousesMap[t.fromSiteId] || t.fromSiteId;
+      const toName = (window as any)._warehousesMap[t.toSiteId] || t.toSiteId;
+      
+      const s = t.status || 'YOLDA';
+      const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+
+      let statusText = 'YOLDA';
+      if (normStatus === 'TAMAMLANDI') {
+        if (Array.isArray(t.receivedItemsDetails) && t.receivedItemsDetails.length > 0) {
+          statusText = t.receivedItemsDetails.map((it: any) => `${it.shelfNo || 'Belirtilmedi'}`).join(', ');
+        } else {
+          statusText = 'KABUL EDİLDİ';
+        }
+      } else if (normStatus === 'IPTAL_EDILDI') {
+        statusText = 'İPTAL EDİLDİ';
+      }
+      
+      const createdDateStr = t.createdAt?.toDate 
+        ? t.createdAt.toDate().toLocaleString('tr-TR') 
+        : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString('tr-TR') : '---');
+        
+      const resolvedDateStr = t.resolvedAt?.toDate 
+        ? t.resolvedAt.toDate().toLocaleString('tr-TR') 
+        : (t.resolvedAt?.seconds ? new Date(t.resolvedAt.seconds * 1000).toLocaleString('tr-TR') : (normStatus === 'TAMAMLANDI' || normStatus === 'IPTAL_EDILDI' ? '---' : 'Yolda'));
+
+      return {
+        'GÖNDERİM TARİHİ': createdDateStr,
+        'MSF NO': t.msfNo || `TRF-${t.id?.substring(0, 8).toUpperCase()}`,
+        'MALZEMELER': itemsStr,
+        'GÖNDEREN DEPO': fromName,
+        'ALICI DEPO': toName,
+        'SEVK İŞLEMİNİ GERÇEKLEŞTİREN': t.requestedBy || '',
+        'SEVK YÖNTEMİ': t.deliveryMethod === 'PERSON' ? 'Kurye / Personel' : t.deliveryMethod === 'CARGO' ? 'Kargo' : 'Klasik Transfer',
+        'TAŞIYICI BİLGİSİ': t.deliveryMethod === 'PERSON' ? (t.shippedBy || '') : t.deliveryMethod === 'CARGO' ? `${t.cargoCarrier || ''} (${t.cargoTrackingNo || ''})` : '---',
+        'TESLİM ALMA TARİHİ': resolvedDateStr,
+        'İPTAL / RED GEREKÇESİ': t.rejectionReason || '',
+        'DURUM': statusText
+      };
+    });
+
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ['DEMİRER HOLDİNG - DEPO TRANSFER VE SEVK HAREKETLERİ RAPORU'],
+      ['Oluşturulma Tarihi:', new Date().toLocaleString('tr-TR')],
+      []
+    ]);
+    XLSX.utils.sheet_add_json(sheet, data, { origin: 'A4' });
+
+    sheet['!cols'] = [
+      { wch: 20 }, // GÖNDERİM TARİHİ
+      { wch: 18 }, // MSF NO
+      { wch: 50 }, // MALZEMELER
+      { wch: 25 }, // GÖNDEREN
+      { wch: 25 }, // ALICI
+      { wch: 25 }, // SEVK İŞLEMİNİ GERÇEKLEŞTİREN
+      { wch: 18 }, // YÖNTEM
+      { wch: 30 }, // TAŞIYICI
+      { wch: 22 }, // TESLİM ALMA TARİHİ
+      { wch: 30 }, // GEREKÇE
+      { wch: 15 }  // DURUM (RAF NO)
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Transfer Hareketleri');
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
   }
 
@@ -511,6 +583,77 @@ class ExcelService {
     XLSX.writeFile(workbook, `Toplu_Sayim_Gecmisi_${warehouseName.replace(/\s+/g, '_')}_${safeDate}.xlsx`);
   }
 
+  private styleWorksheet(ws: any, isSummary = false) {
+    if (!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) continue;
+        
+        const cell = ws[cellRef];
+        
+        const font: any = { name: "Arial", size: 10 };
+        const alignment: any = { vertical: "center" };
+        const border: any = {
+          top: { style: "thin", color: { rgb: "CBD5E1" } },
+          bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+          left: { style: "thin", color: { rgb: "CBD5E1" } },
+          right: { style: "thin", color: { rgb: "CBD5E1" } }
+        };
+        let fill: any = null;
+        
+        if (r === 0) {
+          fill = { fgColor: { rgb: "1F2937" } }; // Slate-800 background
+          font.color = { rgb: "FFFFFF" };
+          font.bold = true;
+          alignment.horizontal = "center";
+          border.bottom = { style: "medium", color: { rgb: "0F172A" } };
+        } else {
+          if (r % 2 === 0) {
+            fill = { fgColor: { rgb: "F8FAFC" } }; // Slate-50 background
+          }
+          
+          if (!isSummary && c === 14) { // DURUM (index 14)
+            const statusVal = String(cell.v).toUpperCase();
+            if (statusVal.includes('ONAYLANDI')) {
+              fill = { fgColor: { rgb: "DCFCE7" } }; // light green
+              font.color = { rgb: "15803D" }; // dark green
+              font.bold = true;
+            } else if (statusVal.includes('BEKLİYOR')) {
+              fill = { fgColor: { rgb: "FEF3C7" } }; // light yellow
+              font.color = { rgb: "B45309" }; // dark yellow
+              font.bold = true;
+            } else if (statusVal.includes('REDDEDİLDİ')) {
+              fill = { fgColor: { rgb: "FEE2E2" } }; // light red
+              font.color = { rgb: "B91C1C" }; // dark red
+              font.bold = true;
+            }
+            alignment.horizontal = "center";
+          }
+          
+          if (isSummary) {
+            if (c >= 2) {
+              alignment.horizontal = "center";
+            } else {
+              alignment.horizontal = "left";
+            }
+          } else {
+            if ([2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14].includes(c)) {
+              alignment.horizontal = "center";
+            } else {
+              alignment.horizontal = "left";
+            }
+          }
+        }
+        
+        cell.s = { font, alignment, border };
+        if (fill) cell.s.fill = fill;
+      }
+    }
+  }
+
   exportOvertimeToExcel(data: any[], fileName: string) {
     // Helper to get short sheet names (max 31 chars)
     const getShortCompanyName = (fullName: string): string => {
@@ -575,11 +718,9 @@ class ExcelService {
             harcirah: 0
           };
         }
-        if (curr.status === 'approved') {
-          acc[name].hours += curr.approvedHours || 0;
-          if (curr.sodexo) acc[name].sodexo += 1;
-          if (curr.harcirah) acc[name].harcirah += 1;
-        }
+        acc[name].hours += curr.approvedHours || 0;
+        if (curr.sodexo) acc[name].sodexo += 1;
+        if (curr.harcirah) acc[name].harcirah += 1;
         return acc;
       }, {});
 
@@ -588,7 +729,7 @@ class ExcelService {
         return {
           'ŞİRKET': item.company,
           'PERSONEL': name,
-          'TOPLAM ONAYLANAN MESAİ': decimalToTimeStr(item.hours),
+          'TOPLAM MESAİ': decimalToTimeStr(item.hours),
           'TOPLAM SODEXO YEMEK (ADET)': item.sodexo,
           'TOPLAM DIŞ GÖREV HARCIRAHI (GÜN)': item.harcirah
         };
@@ -621,6 +762,7 @@ class ExcelService {
     const grandDetails = buildDetailsData(data);
 
     const wsGrandSummary = XLSX.utils.json_to_sheet(grandSummary);
+    this.styleWorksheet(wsGrandSummary, true);
     XLSX.utils.book_append_sheet(wb, wsGrandSummary, 'Tüm Şirketler Özet');
     wsGrandSummary['!cols'] = [
       { wch: 25 }, // Şirket
@@ -631,6 +773,7 @@ class ExcelService {
     ];
 
     const wsGrandDetails = XLSX.utils.json_to_sheet(grandDetails);
+    this.styleWorksheet(wsGrandDetails, false);
     XLSX.utils.book_append_sheet(wb, wsGrandDetails, 'Tüm Şirketler Detay');
     wsGrandDetails['!cols'] = detailsCols;
 
@@ -647,6 +790,7 @@ class ExcelService {
 
       // Create company summary sheet
       const wsCompSummary = XLSX.utils.json_to_sheet(compSummary);
+      this.styleWorksheet(wsCompSummary, true);
       XLSX.utils.book_append_sheet(wb, wsCompSummary, `${shortName} Özet`.substring(0, 31));
       wsCompSummary['!cols'] = [
         { wch: 25 }, // Şirket
@@ -658,6 +802,7 @@ class ExcelService {
 
       // Create company details sheet
       const wsCompDetails = XLSX.utils.json_to_sheet(compDetails);
+      this.styleWorksheet(wsCompDetails, false);
       XLSX.utils.book_append_sheet(wb, wsCompDetails, `${shortName} Detay`.substring(0, 31));
       wsCompDetails['!cols'] = detailsCols;
     });

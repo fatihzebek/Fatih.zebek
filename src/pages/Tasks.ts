@@ -39,7 +39,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
     
     // Normalize siteId to ID if it's a name
     if (sId !== 'Bilinmiyor' && isNaN(Number(sId))) {
-      const siteObj = dataService.getSites().find(s => s.name === sId || s.name.includes(sId));
+      const siteObj = dataService.getAllSites().find(s => s.name === sId || s.name.includes(sId));
       if (siteObj) sId = siteObj.id;
     }
 
@@ -49,8 +49,8 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
   }, {} as Record<string, Task[]>);
 
   const siteNames = Object.keys(grouped).sort((a, b) => {
-    const siteA = dataService.getSites().find(s => s.id === a);
-    const siteB = dataService.getSites().find(s => s.id === b);
+    const siteA = dataService.getAllSites().find(s => s.id === a);
+    const siteB = dataService.getAllSites().find(s => s.id === b);
     const nameA = siteA ? siteA.name : a;
     const nameB = siteB ? siteB.name : b;
     const indexA = DataService.customOrder.findIndex(o => o.toLowerCase() === nameA.toLowerCase());
@@ -81,7 +81,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
              </div>
 
              ${siteNames.map(id => {
-                const site = dataService.getSites().find(s => s.id === id);
+                const site = dataService.getAllSites().find(s => s.id === id);
                 const displayName = site ? site.name : id;
                 return `
                 <div class="task-filter-item ${activeSiteFilter === id ? 'active' : ''}" 
@@ -114,9 +114,9 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             gap: 8px !important;
           }
           .task-filter-item {
-            background: rgba(255, 255, 255, 0.03) !important;
-            border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            color: rgba(255, 255, 255, 0.6) !important;
+            background: var(--glass-bg) !important;
+            border: 1px solid var(--glass-border) !important;
+            color: var(--text-muted) !important;
             border-radius: 20px !important;
             padding: 8px 16px !important;
             font-size: 0.8rem !important;
@@ -127,15 +127,15 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             gap: 8px;
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
             border-left: none !important;
           }
           .task-filter-item:hover {
             background: rgba(255, 255, 255, 0.07) !important;
-            border-color: rgba(255, 255, 255, 0.15) !important;
-            color: #fff !important;
+            border-color: var(--glass-border) !important;
+            color: var(--text-main) !important;
             transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
           }
           .task-filter-item.active { 
             background: linear-gradient(135deg, rgba(20, 241, 149, 0.15), rgba(0, 243, 255, 0.1)) !important;
@@ -149,12 +149,12 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
           .task-filter-item span:last-child {
             font-size: 0.7rem !important;
-            background: rgba(0, 0, 0, 0.25) !important;
+            background: rgba(0, 0, 0, 0.1) !important;
             padding: 2px 8px !important;
             border-radius: 20px !important;
-            color: rgba(255, 255, 255, 0.5) !important;
+            color: var(--text-muted) !important;
             transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
           }
           .task-filter-item.active span:last-child {
             background: rgba(20, 241, 149, 0.2) !important;
@@ -164,12 +164,12 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           
           /* Tasks table premium styling */
           .tasks-table-panel {
-            background: rgba(10, 14, 23, 0.45) !important;
+            background: var(--glass-bg) !important;
             backdrop-filter: blur(20px) !important;
-            border: 1px solid rgba(255,255,255,0.06) !important;
+            border: 1px solid var(--glass-border) !important;
             border-radius: 16px !important;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), inset 0 1px 0 var(--glass-border);
           }
           .tasks-table-panel table {
             width: 100%;
@@ -178,13 +178,13 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             font-size: 0.85rem;
           }
           .tasks-table-panel thead tr {
-            background: linear-gradient(90deg, rgba(20, 241, 149, 0.05), rgba(0, 243, 255, 0.05)) !important;
+            background: linear-gradient(90deg, rgba(20, 241, 149, 0.02), rgba(0, 243, 255, 0.02)) !important;
           }
           .tasks-table-panel th {
             padding: 14px 18px !important;
             font-weight: 800;
-            color: rgba(255,255,255,0.4);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--glass-border) !important;
             vertical-align: middle !important;
             text-transform: uppercase;
             font-size: 0.68rem;
@@ -201,7 +201,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           .tasks-table-panel td {
             padding: 14px 18px !important;
             vertical-align: middle !important;
-            border-bottom: 1px solid rgba(255,255,255,0.02) !important;
+            border-bottom: 1px solid var(--glass-border) !important;
             transition: all 0.3s ease;
           }
           .tasks-table-panel tr:last-child td {
@@ -326,15 +326,18 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
 
           /* Custom task type badge */
           .task-type-badge {
-            display: flex !important;
-            flex-direction: column;
-            justify-content: center;
-            padding: 8px 12px !important;
+            display: inline-flex !important;
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 6px 12px !important;
             border-radius: 8px !important;
             box-sizing: border-box;
             transition: all 0.3s ease;
             background: rgba(255, 255, 255, 0.01) !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            max-width: 650px;
+            white-space: nowrap;
           }
           .task-type-badge.maintenance {
             background: linear-gradient(135deg, rgba(0, 243, 255, 0.04), rgba(0, 243, 255, 0.01)) !important;
@@ -506,7 +509,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             font-size: 0.65rem; color: #64ffda;
           }
           .task-date-text {
-            font-weight: 700; color: rgba(255,255,255,0.55); font-size: 0.76rem;
+            font-weight: 700; color: var(--text-main); opacity: 0.85; font-size: 0.76rem;
             font-variant-numeric: tabular-nums;
           }
 
@@ -537,10 +540,10 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
               <i class="fa-solid fa-clipboard-list" style="color: #64ffda; font-size: 1rem;"></i>
             </div>
             <div>
-              <h2 style="margin: 0; font-size: 1.15rem; color: #fff; font-weight: 800; letter-spacing: 0.3px;">
-                ${activeSiteFilter === 'TÜMÜ' ? 'Tüm İş Emirleri' : (dataService.getSites().find(s => s.id === activeSiteFilter)?.name || activeSiteFilter)}
+              <h2 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800; letter-spacing: 0.3px;">
+                ${activeSiteFilter === 'TÜMÜ' ? 'Tüm İş Emirleri' : (dataService.getAllSites().find(s => s.id === activeSiteFilter)?.name || activeSiteFilter)}
               </h2>
-              <p style="margin: 2px 0 0 0; font-size: 0.7rem; color: rgba(255,255,255,0.35); font-weight: 600; letter-spacing: 0.5px;">AKTİF GÖREVLER & İŞ EMİRLERİ</p>
+              <p style="margin: 2px 0 0 0; font-size: 0.7rem; color: var(--text-muted); opacity: 0.8; font-weight: 600; letter-spacing: 0.5px;">AKTİF GÖREVLER & İŞ EMİRLERİ</p>
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: #64ffda; font-weight: 800; background: rgba(100, 255, 218, 0.06); padding: 8px 16px; border-radius: 12px; border: 1px solid rgba(100, 255, 218, 0.12); letter-spacing: 0.5px;">
@@ -554,19 +557,37 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             <table>
               <thead>
                 <tr>
-                  <th><i class="fa-regular fa-calendar"></i> TARİH</th>
-                  <th><i class="fa-solid fa-wind"></i> SAHA / TÜRBİN</th>
-                  <th><i class="fa-solid fa-users"></i> EKİP</th>
+                  <th style="width: 140px;"><i class="fa-regular fa-calendar"></i> TARİH</th>
+                  <th style="width: 160px;"><i class="fa-solid fa-wind"></i> SAHA / TÜRBİN</th>
+                  <th style="width: 120px;"><i class="fa-solid fa-users"></i> EKİP</th>
                   <th><i class="fa-solid fa-wrench"></i> GÖREV TÜRÜ</th>
-                  <th><i class="fa-solid fa-signal"></i> DURUM</th>
-                  <th style="text-align: right;"><i class="fa-solid fa-bolt"></i> AKSİYON</th>
+                  <th style="width: 180px;"><i class="fa-solid fa-signal"></i> DURUM</th>
+                  <th style="width: 140px; text-align: right;"><i class="fa-solid fa-bolt"></i> AKSİYON</th>
                 </tr>
                           ${filteredTasks.map(task => {
                   const isReturned = (task as any).isReturnedReport;
                   const isHoldWeather = task.status === 'HOLD_WEATHER';
                   const isFault = (task.rawFaultCode && task.rawFaultCode !== '---');
                   const statusClass = isReturned ? 'returned-badge' : (task.status === 'Görev Teslim Edildi' ? 'delivered' : isHoldWeather ? 'hold-weather-badge' : (task.status === 'Tamamlandı' ? 'completed' : 'created'));
-                  const isTransferable = task.status !== 'Tamamlandı' && !isReturned && hasTransferTaskPerm;
+                  const isTransferable = task.status !== 'Tamamlandı' && hasTransferTaskPerm;
+                  
+                  let displayDate = '...';
+                  if (task.createdAt) {
+                    if (task.createdAt.toDate) {
+                      displayDate = task.createdAt.toDate().toLocaleDateString('tr-TR');
+                    } else if (typeof task.createdAt === 'string') {
+                      if (task.createdAt.includes('-')) {
+                        const parts = task.createdAt.split('T')[0].split('-');
+                        if (parts.length === 3 && parts[0].length === 4) {
+                          displayDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                        } else {
+                          displayDate = task.createdAt;
+                        }
+                      } else {
+                        displayDate = task.createdAt;
+                      }
+                    }
+                  }
                   
                   return `
                   <tr style="${isReturned ? 'background: rgba(155, 89, 182, 0.03);' : ''} ${isTransferable ? 'cursor: grab;' : ''}"
@@ -574,14 +595,16 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                     <td>
                       <div class="task-date-cell">
                         <div class="task-date-icon"><i class="fa-regular fa-calendar-check"></i></div>
-                        <span class="task-date-text">${task.createdAt?.toDate ? task.createdAt.toDate().toLocaleDateString('tr-TR') : (task.createdAt || '...')}</span>
+                        <span class="task-date-text">${displayDate}</span>
                       </div>
                     </td>
                     <td>
-                       <div style="font-weight: 700; color: rgba(255,255,255,0.35); font-size: 0.65rem; line-height: 1.2; margin-bottom: 4px; letter-spacing: 0.5px; text-transform: uppercase;">
-                         ${dataService.getSites().find(s => s.id === task.siteId)?.name || task.siteId}
+                       <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                         <span style="font-weight: 700; color: var(--text-main); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.3px;">
+                           ${dataService.getAllSites().find(s => s.id === task.siteId)?.name || task.siteId}
+                         </span>
+                         <span class="turbine-id-badge" style="margin: 0; font-size: 0.72rem; padding: 1px 6px;">${task.turbineId}</span>
                        </div>
-                       <span class="turbine-id-badge">${task.turbineId}</span>
                     </td>
                     <td>
                       <span class="team-badge">
@@ -592,26 +615,25 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                     <td>
                         <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : 'maintenance')}">
                           ${isFault ? `
-                            <div style="display: flex; align-items: flex-start; gap: 8px;">
-                              <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.85rem; margin-top: 2px; text-shadow: 0 0 8px rgba(255,77,77,0.4);"></i>
-                              <div>
-                                <div style="font-weight: 900; font-size: 0.78rem; line-height: 1.2; color: #ff6b6b; margin-bottom: 3px; letter-spacing: 0.3px;">${task.rawFaultCode}</div>
-                                <div style="font-weight: 700; font-size: 0.73rem; color: rgba(255,255,255,0.7); line-height: 1.3; white-space: normal;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</div>
-                              </div>
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                              <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
+                              <span style="font-weight: 900; font-size: 0.76rem; color: #ff6b6b; letter-spacing: 0.3px; flex-shrink: 0;">${task.rawFaultCode}</span>
+                              <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                              <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
                             </div>
                           ` : isReturned ? `
-                            <div style="display: flex; align-items: flex-start; gap: 8px;">
-                              <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.85rem; margin-top: 2px; text-shadow: 0 0 8px rgba(179,127,235,0.4);"></i>
-                              <div>
-                                <div style="font-weight: 800; font-size: 0.78rem; line-height: 1.2; color: #b37feb;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</div>
-                              </div>
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                              <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.82rem; text-shadow: 0 0 8px rgba(179,127,235,0.4); flex-shrink: 0;"></i>
+                              <span style="font-weight: 800; font-size: 0.76rem; color: #b37feb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
                             </div>
                           ` : `
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                              <i class="fa-solid fa-gears" style="color: #00f3ff; font-size: 0.85rem; text-shadow: 0 0 8px rgba(0,243,255,0.4);"></i>
-                              <div>
-                                <div style="font-weight: 800; font-size: 0.78rem; line-height: 1.2; color: #00f3ff;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</div>
-                              </div>
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                              <i class="fa-solid ${task.secilenSablon.includes('Planlı') ? 'fa-calendar-days' : 'fa-gears'}" style="color: #0891b2; font-size: 0.82rem; text-shadow: 0 0 8px rgba(8,145,178,0.3); flex-shrink: 0;"></i>
+                              <span style="font-weight: 800; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
+                              ${task.yoneticiNotu && task.secilenSablon.includes('Planlı') ? `
+                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
+                              ` : ''}
                             </div>
                           `}
                         </div>
@@ -817,31 +839,52 @@ export const TasksPage = async () => {
     if (!confirmed) return;
 
     try {
-      const updates: any = { 
-        'assignment.assignedTeam': targetTeam,
-        personnel: targetTeam 
-      };
-
-      if (task.maintenanceData) {
-        const mData = { ...task.maintenanceData };
-        if (mData.workSessions && Array.isArray(mData.workSessions)) {
-          mData.workSessions = mData.workSessions.map((ws: any) => {
-            const prevTeam = mData.teamPersonnel && mData.teamPersonnel.length > 0 ? mData.teamPersonnel : [];
-            return {
-              ...ws,
-              personnel: ws.personnel && ws.personnel.length > 0 ? ws.personnel : prevTeam,
-              locked: true
-            };
-          });
+      if (task.isReturnedReport) {
+        // Returned reports are in the 'reports' collection
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('../firebase');
+        const reportRef = doc(db, 'reports', task.id);
+        
+        let reportTeam = targetTeam;
+        if (targetTeam.toLowerCase().startsWith('team')) {
+          const num = parseInt(targetTeam.replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(num)) {
+            reportTeam = `TEAM ${num}`;
+          }
         }
-        mData.teamPersonnel = [];
-        updates.maintenanceData = mData;
-      }
 
-      const { taskService } = await import('../services/TaskService');
-      await taskService.updateTask(task.id, updates);
-      
-      (window as any).showToast?.('BAŞARILI', `İş emri ${targetTeam} ekibine devredildi.`, 'success');
+        await updateDoc(reportRef, {
+          team: reportTeam
+        });
+        
+        (window as any).showToast?.('BAŞARILI', `Rapor ${targetTeam} ekibine devredildi.`, 'success');
+      } else {
+        const updates: any = { 
+          'assignment.assignedTeam': targetTeam,
+          personnel: targetTeam 
+        };
+
+        if (task.maintenanceData) {
+          const mData = { ...task.maintenanceData };
+          if (mData.workSessions && Array.isArray(mData.workSessions)) {
+            mData.workSessions = mData.workSessions.map((ws: any) => {
+              const prevTeam = mData.teamPersonnel && mData.teamPersonnel.length > 0 ? mData.teamPersonnel : [];
+              return {
+                ...ws,
+                personnel: ws.personnel && ws.personnel.length > 0 ? ws.personnel : prevTeam,
+                locked: true
+              };
+            });
+          }
+          mData.teamPersonnel = [];
+          updates.maintenanceData = mData;
+        }
+
+        const { taskService } = await import('../services/TaskService');
+        await taskService.updateTask(task.id, updates);
+        
+        (window as any).showToast?.('BAŞARILI', `İş emri ${targetTeam} ekibine devredildi.`, 'success');
+      }
     } catch (error: any) {
       console.error("Transfer hatası:", error);
       alert("Görev transfer edilirken bir hata oluştu: " + error.message);
@@ -870,8 +913,14 @@ export const TasksPage = async () => {
       const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
       const userNum = searchTeam.replace(/[^0-9]/g, '');
 
+      const isDaresShared = taskNum && userNum && (
+        (parseInt(taskNum) === 5 && parseInt(userNum) === 10) ||
+        (parseInt(taskNum) === 10 && parseInt(userNum) === 5)
+      );
+
       // Kendi ekibi veya yönettiği ekiplerden biri mi?
       const isMyTeamTask = (taskNum && userNum && parseInt(taskNum) === parseInt(userNum)) || 
+                           isDaresShared ||
                            taskPersonnel.includes(searchTeam) || 
                            searchTeam.includes(taskPersonnel) || 
                            managedTeams.some((mt: string) => taskPersonnel.includes(mt)) ||
@@ -924,7 +973,7 @@ export const TasksPage = async () => {
       allTasks = newTasks.filter(t => t.status !== 'Tamamlandı').map(t => {
         let sId = t.siteId;
         if (sId && isNaN(Number(sId))) {
-          const siteObj = dataService.getSites().find(s => s.name === sId || s.name.includes(sId));
+          const siteObj = dataService.getAllSites().find(s => s.name === sId || s.name.includes(sId));
           if (siteObj) sId = siteObj.id;
         }
         return { ...t, siteId: sId };
@@ -932,46 +981,61 @@ export const TasksPage = async () => {
       updateDisplay();
     });
 
-    (window as any).returnedReportsUnsubscribe = serviceReportService.subscribeReturnedReports((reports) => {
-      try {
-        const mappedReports: any[] = [];
-        for (const r of reports) {
-          try {
-            let sId = r.siteId;
-            if (sId && isNaN(Number(sId))) {
-                const siteObj = dataService.getSites().find(s => s.name === sId || s.name.includes(sId));
-                if (siteObj) sId = siteObj.id;
+    (window as any).refreshReturnedReports = () => {
+      serviceReportService.subscribeReturnedReports((reports) => {
+        try {
+          const mappedReports: any[] = [];
+          for (const r of reports) {
+            try {
+              let sId = r.siteId;
+              if (sId && isNaN(Number(sId))) {
+                  const siteObj = dataService.getAllSites().find(s => s.name === sId || s.name.includes(sId));
+                  if (siteObj) sId = siteObj.id;
+              }
+
+              let teamStr = r.team;
+              if (Array.isArray(teamStr)) teamStr = teamStr[0] || 'SİSTEM';
+              teamStr = teamStr || 'SİSTEM';
+
+              const fCode = r.faultCode || '';
+              const fDesc = r.faultDesc || '';
+              const combinedFaultCode = fCode && fDesc ? `${fCode} - ${fDesc}` : (fCode || fDesc || '');
+
+              mappedReports.push({
+                id: r.id,
+                siteId: sId || 'Bilinmiyor',
+                turbineId: r.turbineNo || (r as any).turbineId || 'Bilinmiyor',
+                turbinSeriNo: r.turbineSerial || '',
+                personnel: formatTeamName(teamStr),
+                faultCode: combinedFaultCode,
+                rawFaultCode: fCode,
+                status: 'Geri Gönderildi',
+                createdAt: r.date || new Date().toISOString(),
+                secilenSablon: r.templateName || r.type || 'Bilinmiyor',
+                isMaintenance: r.type === 'BAKIM',
+                isReturnedReport: true,
+                originalReportNo: r.reportNo || '',
+                type: r.type || 'ARIZA',
+                faultDesc: fDesc
+              });
+            } catch (err: any) {
+              console.error("Single report map error:", err, r);
             }
-
-            let teamStr = r.team;
-            if (Array.isArray(teamStr)) teamStr = teamStr[0] || 'SİSTEM';
-            teamStr = teamStr || 'SİSTEM';
-
-            mappedReports.push({
-              id: r.id,
-              siteId: sId || 'Bilinmiyor',
-              turbineId: r.turbineNo || (r as any).turbineId || 'Bilinmiyor',
-              turbinSeriNo: r.turbineSerial || '',
-              personnel: formatTeamName(teamStr),
-              faultCode: r.faultCode || '',
-              rawFaultCode: r.faultCode || '',
-              status: 'Geri Gönderildi',
-              createdAt: r.date || new Date().toISOString(),
-              secilenSablon: r.templateName || r.type || 'Bilinmiyor',
-              isMaintenance: r.type === 'BAKIM',
-              isReturnedReport: true,
-              originalReportNo: r.reportNo || ''
-            });
-          } catch (err: any) {
-            console.error("Single report map error:", err, r);
           }
+          returnedReports = mappedReports;
+        } catch (err: any) {
+          console.error("Mapping error in returnedReports:", err);
         }
-        returnedReports = mappedReports;
-      } catch (err: any) {
-        console.error("Mapping error in returnedReports:", err);
-      }
-      updateDisplay();
-    });
+        updateDisplay();
+      });
+    };
+
+    (window as any).returnedReportsUnsubscribe = () => {
+      // Dummy cleanup as subscribeReturnedReports returns a dummy
+    };
+
+    // Run initial fetch
+    (window as any).refreshReturnedReports();
   }, 100);
 
   return `
@@ -1366,6 +1430,11 @@ export const TasksPage = async () => {
   try {
     const { serviceReportService } = await import('../services/ServiceReportService');
     await serviceReportService.deleteReport(reportId);
+    
+    // Refresh the list immediately!
+    if (typeof (window as any).refreshReturnedReports === 'function') {
+      (window as any).refreshReturnedReports();
+    }
   } catch (error) {
     console.error("Rapor silme hatası:", error);
     alert('Rapor silinirken bir hata oluştu.');

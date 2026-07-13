@@ -181,9 +181,32 @@ export const AnalyticsPage = async () => {
     const allArizaReports = allReports.filter(r => r.type === 'ARIZA');
     const filteredArizaReports = reports.filter(r => r.type === 'ARIZA');
     
-    const faultAverages: Record<string, { totalHrs: number, count: number, avg: number }> = {};
+    const getReportPersonnelNames = (r: any): string[] => {
+      const names = new Set<string>();
+      if (r.workSessions && Array.isArray(r.workSessions)) {
+        r.workSessions.forEach((ws: any) => {
+          if (ws.personnel && Array.isArray(ws.personnel)) {
+            ws.personnel.forEach((p: any) => {
+              if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
+                names.add(p.trim());
+              }
+            });
+          }
+        });
+      }
+      if (r.personnel && Array.isArray(r.personnel)) {
+        r.personnel.forEach((p: any) => {
+          if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
+            names.add(p.trim());
+          }
+        });
+      }
+      return Array.from(names);
+    };
+
+    const faultAverages: Record<string, { totalHrs: number, count: number, avg: number, desc?: string }> = {};
     allArizaReports.forEach(r => {
-        const code = r.faultCode || r.faultDesc;
+        const code = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '---');
         if (!code) return;
         
         let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
@@ -199,17 +222,20 @@ export const AnalyticsPage = async () => {
         
         if (isNaN(hrs) || hrs <= 0) return;
         
-        if (!faultAverages[code]) faultAverages[code] = { totalHrs: 0, count: 0, avg: 0 };
+        if (!faultAverages[code]) {
+            faultAverages[code] = { 
+                totalHrs: 0, 
+                count: 0, 
+                avg: 0,
+                desc: (r.faultCode && r.faultCode !== '---' && r.faultDesc && r.faultDesc !== 'Genel Görev') ? r.faultDesc : undefined
+            };
+        }
         faultAverages[code].totalHrs += hrs;
         faultAverages[code].count++;
     });
     
     Object.keys(faultAverages).forEach(k => {
-        if (faultAverages[k].count > 1) {
-            faultAverages[k].avg = faultAverages[k].totalHrs / faultAverages[k].count;
-        } else {
-            delete faultAverages[k];
-        }
+        faultAverages[k].avg = faultAverages[k].totalHrs / faultAverages[k].count;
     });
 
     const formatHHMM = (decimalHours: number) => {
@@ -222,7 +248,7 @@ export const AnalyticsPage = async () => {
 
     const speedRows: any[] = [];
     filteredArizaReports.forEach(r => {
-        const code = r.faultCode || r.faultDesc;
+        const code = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '---');
         if (!code || !faultAverages[code]) return;
         
         const avg = faultAverages[code].avg;
@@ -240,10 +266,11 @@ export const AnalyticsPage = async () => {
         }
         
         if (!isNaN(reportHrs) && reportHrs > 0) {
+            const pNames = getReportPersonnelNames(r);
             speedRows.push({
                 date: r.date,
-                personnel: (r.personnel || []).join(', '),
-                siteAndTurbine: (r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial),
+                personnel: pNames.length > 0 ? pNames.join(', ') : 'Belirtilmedi',
+                siteAndTurbine: (r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || 'Bilinmeyen'),
                 faultCode: code,
                 reportId: r.id,
                 hrs: reportHrs,
@@ -264,12 +291,15 @@ export const AnalyticsPage = async () => {
     const faultHtml = Object.keys(groupedByFault).length > 0 ? Object.values(groupedByFault).sort((a,b) => b.totalMudahale - a.totalMudahale).map(fault => {
        fault.reports.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+       const avgData = faultAverages[fault.code];
+       const descSuffix = (avgData && avgData.desc) ? ` - ${avgData.desc}` : '';
+
        return `
         <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 1rem; overflow: hidden; transition: all 0.3s ease;">
            <h4 onclick="const content = this.nextElementSibling; const icon = this.querySelector('.chevron-icon'); if(content.style.display === 'none'){content.style.display = 'block'; icon.style.transform = 'rotate(180deg)'; this.style.background = 'rgba(0, 242, 254, 0.05)';}else{content.style.display = 'none'; icon.style.transform = 'rotate(0deg)'; this.style.background = 'transparent';}" style="color: var(--accent-cyan); margin: 0; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; transition: background 0.3s ease;">
               <span style="display: flex; align-items: center; gap: 0.75rem;">
                 <i class="fa-solid fa-chevron-down chevron-icon" style="font-size: 0.9rem; transition: transform 0.3s ease; color: var(--text-muted);"></i>
-                <i class="fa-solid fa-wrench"></i> ARIZA KODU: ${fault.code}
+                <i class="fa-solid fa-wrench"></i> ARIZA KODU: ${fault.code}${descSuffix}
               </span>
               <span style="font-size: 0.85rem; color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 4px 12px; border-radius: 12px;">Genel Ortalama: <strong style="color: var(--accent-orange);">${formatHHMM(fault.avg)}</strong> (${fault.totalMudahale} Kayıt)</span>
            </h4>
@@ -381,10 +411,34 @@ export const AnalyticsPage = async () => {
     const existing = document.getElementById('personnel-details-modal');
     if (existing) existing.remove();
 
+    const getReportPersonnelNames = (r: any): string[] => {
+      const names = new Set<string>();
+      if (r.workSessions && Array.isArray(r.workSessions)) {
+        r.workSessions.forEach((ws: any) => {
+          if (ws.personnel && Array.isArray(ws.personnel)) {
+            ws.personnel.forEach((p: any) => {
+              if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
+                names.add(p.trim());
+              }
+            });
+          }
+        });
+      }
+      if (r.personnel && Array.isArray(r.personnel)) {
+        r.personnel.forEach((p: any) => {
+          if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
+            names.add(p.trim());
+          }
+        });
+      }
+      return Array.from(names);
+    };
+
     const upperName = personnelName.toUpperCase();
-    let pReports = reports.filter(r => 
-        r.personnel && r.personnel.some((name: string) => name.toUpperCase() === upperName)
-    );
+    let pReports = reports.filter(r => {
+        const pNames = getReportPersonnelNames(r);
+        return pNames.some((name: string) => name.toUpperCase() === upperName);
+    });
 
     if (startStr && endStr) {
         const start = new Date(startStr); start.setHours(0,0,0,0);

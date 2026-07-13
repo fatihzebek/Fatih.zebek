@@ -16,7 +16,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const OPC_URL = 'http://172.17.75.50:6010';
+const OPC_URL = 'http://172.17.78.42:6010';
 
 async function testConnection() {
     console.log(`\n--- OPC XML-DA Baglanti Testi Baslatiliyor ---`);

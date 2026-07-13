@@ -17,7 +17,12 @@ export async function FaultFormPage(initialData?: any) {
                 const localDraft = JSON.parse(localDraftStr);
                 if (localDraft && localDraft.id === initialData.id) {
                     console.log("Using activeTaskContext draft from localStorage for task:", initialData.id);
-                    finalData = localDraft;
+                    finalData = {
+                        ...localDraft,
+                        isEditMode: initialData.isEditMode,
+                        reportNo: initialData.reportNo,
+                        id: initialData.id
+                    };
                     isRestored = true;
                 }
             }

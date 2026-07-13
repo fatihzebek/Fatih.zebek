@@ -6,7 +6,7 @@ import personnelDetails from '../data/personnel_details.json';
 class PersonnelService {
   private personnel: string[] = personnelData;
   private ids: { [name: string]: string } = {};
-  private details: { id: string, name: string, company?: string, baseSites?: string[] }[] = [];
+  private details: { id: string, name: string, company?: string, baseSites?: string[], team?: string }[] = [];
 
   constructor() {
     this.initListener();
@@ -29,7 +29,8 @@ class PersonnelService {
               id: docSnap.id,
               name: data.name,
               company: data.company || '',
-              baseSites: data.baseSites || []
+              baseSites: data.baseSites || [],
+              team: data.team || ''
             });
           }
         });
@@ -45,6 +46,9 @@ class PersonnelService {
         // Trigger dynamic UI re-render if active in the Admin page
         if (typeof (window as any).renderPersonnelManagementList === 'function') {
           (window as any).renderPersonnelManagementList();
+        }
+        if (typeof (window as any).updateDashboardUserBadge === 'function') {
+          (window as any).updateDashboardUserBadge();
         }
       }, (err) => {
         console.debug("Personnel real-time listener failed:", err);
@@ -67,8 +71,14 @@ class PersonnelService {
     return list.map(name => {
       // Find loaded firestore details first
       const loaded = this.details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
-      if (loaded && (loaded.company || (loaded.baseSites && loaded.baseSites.length > 0))) {
-        return loaded;
+      if (loaded && (loaded.company || (loaded.baseSites && loaded.baseSites.length > 0) || loaded.team)) {
+        return {
+          id: loaded.id,
+          name: loaded.name,
+          company: loaded.company || '',
+          baseSites: loaded.baseSites || [],
+          team: loaded.team || ''
+        };
       }
       // Fallback to static JSON file details
       const match = personnelDetails.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
@@ -76,7 +86,8 @@ class PersonnelService {
         id: this.ids[name] || '',
         name,
         company: match?.company || '',
-        baseSites: match?.baseSiteId && match.baseSiteId !== 'GENEL' ? [match.baseSiteId] : []
+        baseSites: match?.baseSiteId && match.baseSiteId !== 'GENEL' ? [match.baseSiteId] : [],
+        team: ''
       };
     });
   }
@@ -104,14 +115,15 @@ class PersonnelService {
     });
   }
 
-  async updatePersonnelDetails(name: string, company: string, baseSites: string[]): Promise<void> {
+  async updatePersonnelDetails(name: string, company: string, baseSites: string[], team: string): Promise<void> {
     const id = this.ids[name];
     if (!id) {
-      // Create new document in firestore with name, company, baseSites
+      // Create new document in firestore with name, company, baseSites, team
       await addDoc(collection(db, 'personnel'), {
         name,
         company,
         baseSites,
+        team,
         createdAt: new Date().toISOString()
       });
     } else {
@@ -119,7 +131,8 @@ class PersonnelService {
       const docRef = doc(db, 'personnel', id);
       await updateDoc(docRef, {
         company,
-        baseSites
+        baseSites,
+        team
       });
     }
   }

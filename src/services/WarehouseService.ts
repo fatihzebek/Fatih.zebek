@@ -10,6 +10,7 @@ export interface InventoryItem {
   reservedQuantity?: number;
   shelfNo: string;
   criticalLimit?: number;
+  minStock?: number;
   imageUrl?: string;
   lastUpdated?: any;
   lastAuditDate?: any;
@@ -108,7 +109,17 @@ class WarehouseService {
     const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     const q = query(colRef, orderBy('sapNo', 'asc'));
     const snapshot = await getDocs(q);
-    let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
+    let data = snapshot.docs.map(doc => {
+      const d = doc.data();
+      const rawLimit = d.criticalLimit !== undefined ? d.criticalLimit : d.minStock;
+      const val = rawLimit !== undefined ? Number(rawLimit) : 0;
+      return {
+        id: doc.id,
+        ...d,
+        criticalLimit: val,
+        minStock: val
+      } as any as InventoryItem;
+    });
     
     // Auto-sync missing images from GlobalMaterialImages
     try {
@@ -176,19 +187,27 @@ class WarehouseService {
         }
     }
 
-    const result = await addDoc(colRef, {
+    const rawLimit = item.criticalLimit !== undefined ? item.criticalLimit : (item as any).minStock;
+    const val = rawLimit !== undefined ? Number(rawLimit) : 0;
+    const normalizedItem = {
       ...item,
+      criticalLimit: val,
+      minStock: val
+    };
+
+    const result = await addDoc(colRef, {
+      ...normalizedItem,
       lastUpdated: serverTimestamp()
     });
     
     // Update local cache directly to avoid query lag
     const cached = this.inventoryCache.get(warehouseId);
     if (cached) {
-      cached.data.push({ id: result.id, ...item, lastUpdated: new Date() } as InventoryItem);
+      cached.data.push({ id: result.id, ...normalizedItem, lastUpdated: new Date() } as InventoryItem);
       cached.timestamp = Date.now();
     }
     
-    this.checkCriticalStock(warehouseId, { id: result.id, ...item });
+    this.checkCriticalStock(warehouseId, { id: result.id, ...normalizedItem });
     return result;
   }
 
@@ -280,6 +299,13 @@ class WarehouseService {
         cached.timestamp = Date.now();
       }
       return;
+    }
+
+    const rawLimit = updates.criticalLimit !== undefined ? updates.criticalLimit : (updates as any).minStock;
+    if (rawLimit !== undefined) {
+      const val = Number(rawLimit);
+      updates.criticalLimit = val;
+      (updates as any).minStock = val;
     }
 
     await setDoc(docRef, {
@@ -893,7 +919,11 @@ class WarehouseService {
     try {
       const warehouseId = this.resolveWarehouseId(id);
       const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
-      const cleanSap = sapNo.toString().trim();
+      let normalizedSap = sapNo.toString().trim();
+      if (condition === 'REVISED') {
+        normalizedSap = normalizedSap.toUpperCase().startsWith('R') ? normalizedSap : 'R' + normalizedSap;
+      }
+      const cleanSap = normalizedSap;
       const numSap = Number(cleanSap);
       const strippedSap = cleanSap.replace(/^0+/, '');
 
@@ -1078,10 +1108,17 @@ class WarehouseService {
     const warehouseId = this.resolveWarehouseId(id);
     let itemId = '';
     let currentQty = 0;
+    
+    let normalizedSap = sapNo.toString().trim();
+    if (condition === 'REVISED') {
+      normalizedSap = normalizedSap.toUpperCase().startsWith('R') ? normalizedSap : 'R' + normalizedSap;
+    }
+    
     let description = logInfo.materialName || 'Bilinmeyen Malzeme';
     let finalNewQty = 0;
 
-    const item = await this.getStockBySapAndCondition(id, sapNo, condition);
+    const searchSerial = (condition === 'DEFECT' || condition === 'SCRAP') ? serialNo : undefined;
+    const item = await this.getStockBySapAndCondition(id, normalizedSap, condition, searchSerial);
     if (item && item.id) {
       itemId = item.id;
       description = item.description || description;
@@ -1096,7 +1133,7 @@ class WarehouseService {
         finalNewQty = Math.max(0, delta);
 
         transaction.set(newDocRef, {
-          sapNo: sapNo,
+          sapNo: normalizedSap,
           description: description,
           quantity: finalNewQty,
           shelfNo: shelfNo || 'Tanımsız',
@@ -1114,7 +1151,7 @@ class WarehouseService {
           currentQty = 0;
           finalNewQty = Math.max(0, delta);
           transaction.set(docRef, {
-            sapNo: sapNo,
+            sapNo: normalizedSap,
             description: description,
             quantity: finalNewQty,
             shelfNo: shelfNo || 'Tanımsız',
@@ -1245,7 +1282,7 @@ class WarehouseService {
   async decreaseReservation(warehouseId: string, sapNo: string, quantity: number, teamId: string) {
     let targetWhId = warehouseId;
     let inventory = await this.getInventory(targetWhId);
-    let item = inventory.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+    let item = inventory.find(i => String(i.sapNo).trim() === String(sapNo).trim() && i.condition !== 'DEFECT');
     
     let hasReservation = item && item.reservations && (item.reservations[teamId] || 0) > 0;
     
@@ -1254,7 +1291,7 @@ class WarehouseService {
       for (const w of allWhs) {
         if (w.id === warehouseId || w.id.startsWith('team_')) continue;
         const inv = await this.getInventory(w.id);
-        const it = inv.find(i => i.sapNo === sapNo && i.condition !== 'DEFECT');
+        const it = inv.find(i => String(i.sapNo).trim() === String(sapNo).trim() && i.condition !== 'DEFECT');
         if (it && it.reservations && (it.reservations[teamId] || 0) > 0) {
           targetWhId = w.id;
           inventory = inv;

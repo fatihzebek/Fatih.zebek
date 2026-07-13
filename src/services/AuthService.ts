@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { presenceService } from './PresenceService';
 
@@ -132,13 +132,46 @@ class AuthService {
           displayName: "Fatih Zebek (Dev Bypass)",
           isAnonymous: false
         };
-        
-        if (email.includes('tm13')) {
-          matchedUser = { uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2", email: "dh-tm13@demirerholding.com", displayName: "Team13", isAnonymous: false };
-        } else if (email.includes('tm15')) {
-          matchedUser = { uid: "UNclj0NKXdTVkET9Tp566rouMvh2", email: "dh-tm15@demirerholding.com", displayName: "Team15", isAnonymous: false };
-        } else if (email.includes('tm04')) {
-          matchedUser = { uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2", email: "dh-tm04@demirerholding.com", displayName: "Team04", isAnonymous: false };
+
+        try {
+          // Dynamic lookup in Firestore
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('email', '==', email.trim()));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            const userDoc = querySnapshot.docs[0];
+            const userData = userDoc.data();
+            matchedUser = {
+              uid: userDoc.id,
+              email: userData.email || email,
+              displayName: userData.displayName || userData.name || email.split('@')[0],
+              isAnonymous: false
+            };
+            console.log("[Auth] Dev bypass matched user dynamically from Firestore:", matchedUser.email);
+          } else {
+            // Fallback rules if exact email is not in DB but matches prefixes
+            if (email.includes('tm13')) {
+              matchedUser = { uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2", email: "dh-tm13@demirerholding.com", displayName: "Team13", isAnonymous: false };
+            } else if (email.includes('tm15')) {
+              matchedUser = { uid: "UNclj0NKXdTVkET9Tp566rouMvh2", email: "dh-tm15@demirerholding.com", displayName: "Team15", isAnonymous: false };
+            } else if (email.includes('tm04')) {
+              matchedUser = { uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2", email: "dh-tm04@demirerholding.com", displayName: "Team04", isAnonymous: false };
+            } else if (email.includes('hursit') || email.includes('malzeme') || email.includes('yonetimi') || email.includes('mng')) {
+              matchedUser = { uid: "Gj8kTbZXBQbaWc92DZT6Qoybzo33", email: "hursit.akter@demirerholding.com", displayName: "Hurşit Akter", isAnonymous: false };
+            }
+          }
+        } catch (dbErr) {
+          console.warn("[Auth] Dynamic user lookup failed:", dbErr);
+          // Hardcoded fallback checks
+          if (email.includes('tm13')) {
+            matchedUser = { uid: "6zUvK7g204Z9qBWKhk3ThTSQ0iR2", email: "dh-tm13@demirerholding.com", displayName: "Team13", isAnonymous: false };
+          } else if (email.includes('tm15')) {
+            matchedUser = { uid: "UNclj0NKXdTVkET9Tp566rouMvh2", email: "dh-tm15@demirerholding.com", displayName: "Team15", isAnonymous: false };
+          } else if (email.includes('tm04')) {
+            matchedUser = { uid: "VELpZxAedmh0WLuL8JpZBSUxgCp2", email: "dh-tm04@demirerholding.com", displayName: "Team04", isAnonymous: false };
+          } else if (email.includes('hursit') || email.includes('malzeme') || email.includes('yonetimi') || email.includes('mng')) {
+            matchedUser = { uid: "Gj8kTbZXBQbaWc92DZT6Qoybzo33", email: "hursit.akter@demirerholding.com", displayName: "Hurşit Akter", isAnonymous: false };
+          }
         }
 
         this.isFallbackMode = true;
@@ -159,10 +192,25 @@ class AuthService {
       // 1. Try real Firebase Auth first
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+        
+        // Ensure that if the user document in Firestore has a different password, we reject the login
+        const userDocRef = doc(db, 'users', userCredential.user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          if (userData.password && String(userData.password) !== pass) {
+            await signOut(auth);
+            throw new Error("Outdated password");
+          }
+        }
+
         this.isFallbackMode = false;
         localStorage.removeItem('dh_auth_fallback'); // Clear any fallback sessions
         return userCredential.user;
       } catch (authError: any) {
+        if (authError.message === "Outdated password") {
+          throw new Error("Girdiğiniz şifre eski veya geçersizdir. Lütfen yöneticinizin belirlediği yeni şifreyi giriniz.");
+        }
         console.warn("Firebase Auth failed, attempting fallback login with gateway account...");
         
         let gatewaySigned = false;

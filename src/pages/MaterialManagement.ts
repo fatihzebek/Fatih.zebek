@@ -30,7 +30,8 @@ const formatTimestamp = (ts: any) => {
 };
 
 
-export const MaterialManagementPage = async (userProfile: any, activeTab: string = 'requests') => {
+export const MaterialManagementPage = async (userProfile: any, activeTabOverride: string = '') => {
+  const activeTab = activeTabOverride || (window as any).appState?.materialManagementTab || localStorage.getItem('material_management_active_tab') || 'warehouses';
   const requests = await orderService.getRequests();
   const currentUserEmail = userProfile?.email || '';
   const isAdmin = userProfile?.role?.toUpperCase() === 'ADMIN';
@@ -593,14 +594,6 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
   const pendingTransfersCount = transfers.filter(t => t.status === 'PENDING').length;
 
   // --- NEW MULTI-TAB CALCULATIONS ---
-  const orderSubViews = [
-    'requests', 'purchase-open', 'purchase-ordered', 'purchase-delivery', 
-    'purchase-invoice', 'purchase-stock', 'transfers-out', 'transfers-in', 
-    'entry-invoice', 'entry-transfer', 'entry-sale', 'entry-repair', 
-    'entry-nonstock', 'research-search', 'research-name', 'research-photo', 
-    'research-drawing', 'research-suppliers', 'research-price', 'mcf'
-  ];
-  const currentActiveTab = orderSubViews.includes(activeTab) ? 'orders' : activeTab;
 
   // 1. Group global inventory by warehouse
   const whStats = new Map<string, { totalItems: number, totalQty: number, totalDefect: number }>();
@@ -857,6 +850,61 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
       }
       .sci-action-btn.approve:hover { background: #28a745; color: white; border-color: #28a745; }
       .sci-action-btn.reject:hover { background: #dc3545; color: white; border-color: #dc3545; }
+      .side-tab-btn {
+        width: 100%;
+        padding: 8px 12px;
+        background: transparent;
+        border: none;
+        color: #94A3B8;
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        position: relative;
+      }
+      .side-tab-btn i {
+        font-size: 0.9rem;
+        opacity: 0.7;
+        width: 16px;
+        text-align: center;
+      }
+      .side-tab-btn:hover {
+        color: #FFF;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .side-tab-btn.active {
+        background: rgba(20, 241, 149, 0.08);
+        color: #14F195;
+        border-left: 3px solid #14F195;
+        padding-left: 9px;
+      }
+      .side-badge {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        padding: 2px 6px;
+        border-radius: 20px;
+        font-size: 0.65rem;
+        font-weight: bold;
+        font-family: monospace;
+      }
+      .side-badge.danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #EF4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+      }
+      .side-badge.warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: #F59E0B;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
     </style>
 
     <div class="cyber-deck">
@@ -880,26 +928,156 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
         </div>
       </div>
 
-      <!-- 🚀 Futuristic Cyber-glassmorphic Tab Bar -->
-      <div class="sci-tab-bar no-print" style="margin-bottom: 1rem;">
-         <button onclick="window.switchMaterialTab('warehouses')" class="sci-tab-btn ${currentActiveTab === 'warehouses' ? 'active' : ''}">
-            <i class="fa-solid fa-warehouse"></i> SERVİS DEPOLARI
-         </button>
-         <button onclick="window.switchMaterialTab('defects')" class="sci-tab-btn ${currentActiveTab === 'defects' ? 'active' : ''}">
-            <i class="fa-solid fa-triangle-exclamation"></i> ARIZALILAR (DEFECT)
-         </button>
-         <button onclick="window.switchMaterialTab('audits')" class="sci-tab-btn ${currentActiveTab === 'audits' ? 'active' : ''}">
-            <i class="fa-solid fa-clipboard-check"></i> DEPO SAYIMLARI
-         </button>
-         <button onclick="window.switchMaterialTab('orders')" class="sci-tab-btn ${currentActiveTab === 'orders' ? 'active' : ''}">
-            <i class="fa-solid fa-cart-shopping"></i> SİPARİŞ TAKİBİ
-         </button>
+      <!-- 🚀 Futuristic Cyber-glassmorphic Summary Bar -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem;" class="no-print">
+         <div style="background: rgba(13, 18, 30, 0.45); border: 1px solid rgba(20, 241, 149, 0.15); border-radius: 12px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-warehouse" style="color: #14F195; font-size: 1.5rem; opacity: 0.8;"></i>
+            <div>
+               <div style="font-size: 0.65rem; color: #94A3B8; font-weight: bold; letter-spacing: 0.5px;">TOPLAM SERVİS DEPOSU</div>
+               <div style="font-size: 1.2rem; font-weight: 900; color: white;">${warehouses.length}</div>
+            </div>
+         </div>
+         <div style="background: rgba(13, 18, 30, 0.45); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 12px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-triangle-exclamation" style="color: #EF4444; font-size: 1.5rem; opacity: 0.8;"></i>
+            <div>
+               <div style="font-size: 0.65rem; color: #94A3B8; font-weight: bold; letter-spacing: 0.5px;">ARIZALI ÜRÜN STOĞU</div>
+               <div style="font-size: 1.2rem; font-weight: 900; color: white;">${defectItems.reduce((acc, item) => acc + (item.quantity || 0), 0)}</div>
+            </div>
+         </div>
+         <div style="background: rgba(13, 18, 30, 0.45); border: 1px solid rgba(245, 158, 11, 0.15); border-radius: 12px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-clipboard-question" style="color: #F59E0B; font-size: 1.5rem; opacity: 0.8;"></i>
+            <div>
+               <div style="font-size: 0.65rem; color: #94A3B8; font-weight: bold; letter-spacing: 0.5px;">BEKLEYEN MALZEME TALEBİ</div>
+               <div style="font-size: 1.2rem; font-weight: 900; color: white;">${pendingPRCount}</div>
+            </div>
+         </div>
+         <div style="background: rgba(13, 18, 30, 0.45); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 12px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 12px;">
+            <i class="fa-solid fa-truck-ramp-box" style="color: #00F2FE; font-size: 1.5rem; opacity: 0.8;"></i>
+            <div>
+               <div style="font-size: 0.65rem; color: #94A3B8; font-weight: bold; letter-spacing: 0.5px;">ONAY BEKLEYEN SEVKLER</div>
+               <div style="font-size: 1.2rem; font-weight: 900; color: white;">${pendingTransfersCount}</div>
+            </div>
+         </div>
       </div>
 
-      <!-- Content Panels -->
-      <div class="glass-deck-panel">
-         <!-- 🏢 Tab 1: Servis Depoları -->
-         <div id="warehouses-tab-view" style="${currentActiveTab === 'warehouses' ? '' : 'display: none;'}">
+      <!-- Main Layout with Left Sidebar and Right Viewport -->
+      <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+         
+         <!-- Sleek Cyber Sidebar Navigation -->
+         <div class="no-print" style="width: 260px; flex-shrink: 0; background: rgba(8, 12, 21, 0.65); border: 1px solid rgba(255,255,255,0.05); border-radius: 16px; padding: 1.25rem 0.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 1.25rem;">
+            
+            <!-- Sector 1 -->
+            <div>
+               <div style="font-size: 0.62rem; color: #94A3B8; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 0.5rem; padding-left: 0.75rem; text-transform: uppercase;">
+                  <i class="fa-solid fa-layer-group" style="color: #00F2FE;"></i> 1. Envanter & Stok İzleme
+               </div>
+               <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <button onclick="window.switchMaterialSubTab('warehouses')" class="side-tab-btn ${activeTab === 'warehouses' ? 'active' : ''}">
+                     <i class="fa-solid fa-warehouse"></i> Servis Depoları
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('defects')" class="side-tab-btn ${activeTab === 'defects' ? 'active' : ''}">
+                     <i class="fa-solid fa-triangle-exclamation"></i> Arızalı Stok (Defect)
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('audits')" class="side-tab-btn ${activeTab === 'audits' ? 'active' : ''}">
+                     <i class="fa-solid fa-clipboard-check"></i> Depo Sayımları
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('mcf')" class="side-tab-btn ${activeTab === 'mcf' ? 'active' : ''}">
+                     <i class="fa-solid fa-file-invoice"></i> MÇF Tüketim Raporu
+                  </button>
+               </div>
+            </div>
+
+            <!-- Sector 2 -->
+            <div>
+               <div style="font-size: 0.62rem; color: #94A3B8; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 0.5rem; padding-left: 0.75rem; text-transform: uppercase;">
+                  <i class="fa-solid fa-cart-shopping" style="color: #FBBF24;"></i> 2. Satın Alma & Talep
+               </div>
+               <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <button onclick="window.switchMaterialSubTab('requests')" class="side-tab-btn ${activeTab === 'requests' ? 'active' : ''}">
+                     <i class="fa-solid fa-clipboard-question"></i> Talep Değerlendirme ${pendingPRCount > 0 ? `<span class="side-badge danger">${pendingPRCount}</span>` : ''}
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('purchase-open')" class="side-tab-btn ${activeTab === 'purchase-open' ? 'active' : ''}">
+                     <i class="fa-solid fa-cart-plus"></i> Sipariş Açılışı
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('purchase-ordered')" class="side-tab-btn ${activeTab === 'purchase-ordered' ? 'active' : ''}">
+                     <i class="fa-solid fa-truck-loading"></i> Sipariş Edilenler
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('purchase-delivery')" class="side-tab-btn ${activeTab === 'purchase-delivery' ? 'active' : ''}">
+                     <i class="fa-solid fa-truck-plane"></i> Teslimat Takibi
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('purchase-invoice')" class="side-tab-btn ${activeTab === 'purchase-invoice' ? 'active' : ''}">
+                     <i class="fa-solid fa-file-invoice-dollar"></i> Fatura & Onay
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('purchase-stock')" class="side-tab-btn ${activeTab === 'purchase-stock' ? 'active' : ''}">
+                     <i class="fa-solid fa-boxes-packing"></i> Stoklama İşlemi
+                  </button>
+               </div>
+            </div>
+
+            <!-- Sector 3 -->
+            <div>
+               <div style="font-size: 0.62rem; color: #94A3B8; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 0.5rem; padding-left: 0.75rem; text-transform: uppercase;">
+                  <i class="fa-solid fa-arrow-right-arrow-left" style="color: #14F195;"></i> 3. Malzeme Giriş / Çıkış
+               </div>
+               <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <button onclick="window.switchMaterialSubTab('entry-invoice')" class="side-tab-btn ${activeTab === 'entry-invoice' ? 'active' : ''}">
+                     <i class="fa-solid fa-file-signature"></i> Fatura Girişi (Alış)
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('entry-transfer')" class="side-tab-btn ${activeTab === 'entry-transfer' ? 'active' : ''}">
+                     <i class="fa-solid fa-truck-ramp-box"></i> Transfer Girişi
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('entry-sale')" class="side-tab-btn ${activeTab === 'entry-sale' ? 'active' : ''}">
+                     <i class="fa-solid fa-hand-holding-dollar"></i> Satış Çıkışı
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('entry-repair')" class="side-tab-btn ${activeTab === 'entry-repair' ? 'active' : ''}">
+                     <i class="fa-solid fa-wrench"></i> Atölye / Tamir Girişi
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('entry-nonstock')" class="side-tab-btn ${activeTab === 'entry-nonstock' ? 'active' : ''}">
+                     <i class="fa-solid fa-receipt"></i> Stoksuz Giriş
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('transfers-out')" class="side-tab-btn ${activeTab === 'transfers-out' ? 'active' : ''}">
+                     <i class="fa-solid fa-arrow-right-from-bracket"></i> Giden Sevkler (Çıkış)
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('transfers-in')" class="side-tab-btn ${activeTab === 'transfers-in' ? 'active' : ''}">
+                     <i class="fa-solid fa-arrow-down-z-a"></i> Gelen Sevkler (Giriş) ${pendingTransfersCount > 0 ? `<span class="side-badge warning">${pendingTransfersCount}</span>` : ''}
+                  </button>
+               </div>
+            </div>
+
+            <!-- Sector 4 -->
+            <div>
+               <div style="font-size: 0.62rem; color: #94A3B8; font-weight: 800; letter-spacing: 1.5px; margin-bottom: 0.5rem; padding-left: 0.75rem; text-transform: uppercase;">
+                  <i class="fa-solid fa-book" style="color: #A855F7;"></i> 4. Katalog & Veri Tabanı
+               </div>
+               <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <button onclick="window.switchMaterialSubTab('research-search')" class="side-tab-btn ${activeTab === 'research-search' ? 'active' : ''}">
+                     <i class="fa-solid fa-magnifying-glass"></i> Akıllı Arama
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('research-name')" class="side-tab-btn ${activeTab === 'research-name' ? 'active' : ''}">
+                     <i class="fa-solid fa-signature"></i> İsim Güncelleme
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('research-photo')" class="side-tab-btn ${activeTab === 'research-photo' ? 'active' : ''}">
+                     <i class="fa-solid fa-image"></i> Fotoğraf Arşivi
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('research-drawing')" class="side-tab-btn ${activeTab === 'research-drawing' ? 'active' : ''}">
+                     <i class="fa-solid fa-drafting-compass"></i> Teknik Çizimler
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('research-suppliers')" class="side-tab-btn ${activeTab === 'research-suppliers' ? 'active' : ''}">
+                     <i class="fa-solid fa-address-book"></i> Tedarikçi Bilgisi
+                  </button>
+                  <button onclick="window.switchMaterialSubTab('research-price')" class="side-tab-btn ${activeTab === 'research-price' ? 'active' : ''}">
+                     <i class="fa-solid fa-tag"></i> Fiyat & Döviz Kartı
+                  </button>
+               </div>
+            </div>
+
+         </div>
+
+         <!-- Right Column: Content Viewport -->
+         <div style="flex-grow: 1; min-width: 0;">
+            <div class="glass-deck-panel">
+               <!-- 🏢 Tab 1: Servis Depoları -->
+               <div id="warehouses-tab-view" style="${activeTab === 'warehouses' ? '' : 'display: none;'}">
             <h3 style="margin: 0 0 1rem 0; color: white; font-size: 1.1rem;"><i class="fa-solid fa-warehouse" style="color: var(--accent-cyan); margin-right: 6px;"></i> FAALİYETTEKİ SERVİS DEPOLARI</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                ${warehousesGridHtml}
@@ -907,7 +1085,7 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
          </div>
          
          <!-- ⚠️ Tab 2: Arızalılar (Defect) -->
-         <div id="defects-tab-view" style="${currentActiveTab === 'defects' ? '' : 'display: none;'}">
+         <div id="defects-tab-view" style="${activeTab === 'defects' ? '' : 'display: none;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
                <h3 style="margin: 0; color: white; font-size: 1.1rem;"><i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; margin-right: 6px;"></i> ARIZALI (DEFECT) MALZEMELER</h3>
                <div style="position: relative; width: 320px;" class="no-print">
@@ -972,7 +1150,7 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
          </div>
          
          <!-- 📋 Tab 3: Depo Sayımları -->
-         <div id="audits-tab-view" style="${currentActiveTab === 'audits' ? '' : 'display: none;'}">
+         <div id="audits-tab-view" style="${activeTab === 'audits' ? '' : 'display: none;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
                <h3 style="margin: 0; color: white; font-size: 1.1rem;"><i class="fa-solid fa-clipboard-check" style="color: var(--accent-cyan); margin-right: 6px;"></i> KONSOLİDE DEPO SAYIMLARI</h3>
                <div style="position: relative; width: 320px;" class="no-print">
@@ -1046,10 +1224,8 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
             </div>
          </div>
 
-         <!-- 📦 Tab 4: Sipariş Takibi -->
-         <div id="orders-tab-view" style="${currentActiveTab === 'orders' ? '' : 'display: none;'}">
-            <!-- 📋 Tab 1: Requests View (Talep Değerlendirme) -->
-            <div id="requests-view" style="${activeTab === 'requests' ? '' : 'display: none;'}">
+         <!-- 📋 Tab 4: Requests View (Talep Değerlendirme) -->
+         <div id="requests-view" style="${activeTab === 'requests' ? '' : 'display: none;'}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                <h3 style="margin: 0; color: white; font-size: 1.1rem;"><i class="fa-solid fa-clipboard-check" style="color: var(--accent-cyan); margin-right: 6px;"></i> GELEN MALZEME TALEPLERİ (TALEP DEĞERLENDİRME)</h3>
                <div style="position: relative; width: 280px;" class="no-print">
@@ -2318,9 +2494,10 @@ export const MaterialManagementPage = async (userProfile: any, activeTab: string
                <div id="mcf-pagination"></div>
              </div>
           </div>
-          </div> <!-- End of orders-tab-view -->
-       </div>
-     </div>
+            </div> <!-- End of glass-deck-panel -->
+         </div> <!-- End of Right Column Viewport -->
+      </div> <!-- End of Main Flex Layout -->
+   </div> <!-- End of cyber-deck -->
    `;
 
 
@@ -5078,12 +5255,14 @@ setTimeout(() => {
    }
 }, 100);
 
-(window as any).switchMaterialTab = (tab: string) => {
+(window as any).switchMaterialSubTab = (tab: string) => {
    if ((window as any).appState) {
       (window as any).appState.materialManagementTab = tab;
    }
+   localStorage.setItem('material_management_active_tab', tab);
    (window as any).render({ skipShell: true });
 };
+(window as any).switchMaterialTab = (window as any).switchMaterialSubTab;
 
 (window as any).filterDefectTable = () => {
    const searchInput = document.getElementById('defect-search') as HTMLInputElement;

@@ -1,6 +1,12 @@
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, updateDoc, runTransaction, getDoc } from 'firebase/firestore';
 import { warehouseService } from './WarehouseService';
+
+const MSF_INITIAL_SEEDS: Record<string, number> = {
+  '2688': 197, // Anemon
+  '3243': 25,  // Çamseki
+  '3439': 19   // Sarıkaya
+};
 
 export interface Transfer {
   id?: string;
@@ -16,6 +22,30 @@ export interface Transfer {
   approvedAt?: any;
   rejectionReason?: string;
   type?: 'SEVK' | 'GERI_ODE' | 'SATIS' | 'HIBE';
+}
+
+export interface TransferItem {
+  materialCode: string; // SAP No
+  materialName: string;
+  quantity: number;
+}
+
+export interface TransferV2 {
+  id?: string;
+  msfNo: string;            // Sevk Numarası (Örn: MSF-20260709-001)
+  fromSiteId: string;       // Çıkış Deposu ID
+  toSiteId: string;         // Varış Deposu ID
+  items: TransferItem[];    // Sevk edilen malzemelerin listesi
+  deliveryMethod: 'PERSON' | 'CARGO'; // Gönderim Türü
+  shippedBy?: string;       // Teslim Eden Personel (Gönderim PERSON ise)
+  cargoCarrier?: string;    // Kargo Firması (Gönderim CARGO ise)
+  cargoTrackingNo?: string; // Kargo Takip No (Gönderim CARGO ise)
+  status: 'YOLDA' | 'TAMAMLANDI' | 'IPTAL_EDILDI'; // Sevk Durumu
+  requestedBy: string;      // Talebi Oluşturan Kullanıcı E-postası
+  createdAt: any;           // Oluşturulma Zamanı
+  resolvedAt?: any;         // Onaylanma / İptal Zamanı
+  resolvedBy?: any;         // Onaylayan / İptal Eden Kişi
+  rejectionReason?: string; // İptal / Red Gerekçesi
 }
 
 class TransferService {
@@ -34,13 +64,118 @@ class TransferService {
     }
   }
 
+  async previewNextSequenceNumber(warehouseId: string): Promise<number> {
+    try {
+      const counterDocRef = doc(db, 'msf_counters', warehouseId);
+      const snap = await getDoc(counterDocRef);
+      if (!snap.exists()) {
+        return MSF_INITIAL_SEEDS[warehouseId] || 1;
+      }
+      return snap.data().currentSeq || 1;
+    } catch (e) {
+      console.error("Error previewing sequence: ", e);
+      return MSF_INITIAL_SEEDS[warehouseId] || 1;
+    }
+  }
+
+  async createMultiItemTransfer(transferData: Omit<TransferV2, 'id' | 'createdAt' | 'msfNo'>): Promise<{ id: string, msfNo: string }> {
+    try {
+      const counterDocRef = doc(db, 'msf_counters', transferData.fromSiteId);
+      const newTransferDocRef = doc(collection(db, 'transfers'));
+
+      // 1. Transactionally increment counter and write transfer doc
+      const result = await runTransaction(db, async (transaction) => {
+        const counterSnapshot = await transaction.get(counterDocRef);
+        let nextSeq = 1;
+        const warehouseId = transferData.fromSiteId;
+
+        if (!counterSnapshot.exists()) {
+          nextSeq = MSF_INITIAL_SEEDS[warehouseId] || 1;
+          transaction.set(counterDocRef, { currentSeq: nextSeq + 1 });
+        } else {
+          const data = counterSnapshot.data();
+          nextSeq = data.currentSeq || 1;
+          transaction.update(counterDocRef, { currentSeq: nextSeq + 1 });
+        }
+
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        const dateStr = `${day}${month}${year}`;
+        const msfNo = `MSF-${dateStr}-${nextSeq}`;
+
+        transaction.set(newTransferDocRef, {
+          ...transferData,
+          msfNo,
+          createdAt: serverTimestamp()
+        });
+
+        return { id: newTransferDocRef.id, msfNo };
+      });
+
+      // 2. Decrease stocks in source warehouse immediately with the actual MSF No
+      const successfulDecreases: Array<{ sapNo: string, quantity: number }> = [];
+      try {
+        for (const item of transferData.items) {
+          await warehouseService.updateStockBySap(
+            transferData.fromSiteId,
+            item.materialCode,
+            -item.quantity,
+            {
+              user: transferData.requestedBy,
+              reason: `MSF Sevk Çıkışı (MSF No: ${result.msfNo})`,
+              materialName: item.materialName
+            }
+          );
+          successfulDecreases.push({ sapNo: item.materialCode, quantity: item.quantity });
+        }
+      } catch (stockError: any) {
+        console.error('[TransferService] Stock decrease failed, rolling back...', stockError);
+        // Rollback successful decreases
+        for (const dec of successfulDecreases) {
+          try {
+            await warehouseService.updateStockBySap(
+              transferData.fromSiteId,
+              dec.sapNo,
+              dec.quantity,
+              {
+                user: 'SİSTEM',
+                reason: `MSF Hata Geri Yükleme (MSF No: ${result.msfNo})`
+              }
+            );
+          } catch (rollbackError) {
+            console.error('[TransferService] Rollback failed for:', dec.sapNo, rollbackError);
+          }
+        }
+        // Mark transfer doc as error/cancelled
+        try {
+          await updateDoc(newTransferDocRef, {
+            status: 'REJECTED',
+            rejectionReason: `Stok düşümü başarısız oldu (Hata: ${stockError.message || stockError})`,
+            rejectedBy: 'SİSTEM',
+            rejectedAt: serverTimestamp()
+          });
+        } catch (dbError) {
+          console.error('[TransferService] Failed to mark transfer doc as rejected:', dbError);
+        }
+        throw stockError;
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Error creating multi item transfer: ", error);
+      throw error;
+    }
+  }
+
   async getTransfers() {
     const q = query(this.collectionRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    })) as Transfer[];
+    })) as any[];
   }
 
   async approveTransfer(transfer: Transfer, adminEmail: string) {
@@ -54,7 +189,8 @@ class TransferService {
         -transfer.quantity, 
         { 
           user: adminEmail, 
-          reason: `Transfer Çıkışı (${transfer.toSiteId} deposuna)` 
+          reason: `Transfer Çıkışı (${transfer.toSiteId} deposuna)`,
+          materialName: transfer.materialName 
         }
       );
 
@@ -65,12 +201,12 @@ class TransferService {
         transfer.quantity, 
         { 
           user: adminEmail, 
-          reason: `Transfer Girişi (${transfer.fromSiteId} deposundan)` 
+          reason: `Transfer Girişi (${transfer.fromSiteId} deposundan)`,
+          materialName: transfer.materialName
         }
       );
 
       // 3. Handle Reservations
-      // If transferring from stationary to team: create reservation on source warehouse
       if (transfer.toSiteId.startsWith('team_') && !transfer.fromSiteId.startsWith('team_')) {
         const sourceInventory = await warehouseService.getInventory(transfer.fromSiteId);
         const sourceItem = sourceInventory.find(i => i.sapNo === transfer.materialCode && i.condition !== 'DEFECT');
@@ -89,12 +225,10 @@ class TransferService {
             reservations: newReservations,
             lastUpdated: serverTimestamp()
           });
-          // Invalidate cache
           (warehouseService as any).inventoryCache.delete(transfer.fromSiteId);
         }
       }
 
-      // If transferring from team to stationary: decrease reservation
       if (transfer.fromSiteId.startsWith('team_') && !transfer.toSiteId.startsWith('team_')) {
         try {
           await warehouseService.decreaseReservation(transfer.toSiteId, transfer.materialCode, transfer.quantity, transfer.fromSiteId);
@@ -117,6 +251,56 @@ class TransferService {
     }
   }
 
+  async approveMultiItemTransfer(
+    transferId: string, 
+    adminEmail: string, 
+    itemDetails?: Array<{ 
+      materialCode: string; 
+      shelfNo: string; 
+      condition: 'NEW' | 'DEFECT' | 'REVISED' | 'SCRAP' 
+    }>
+  ) {
+    try {
+      const { getDoc } = await import('firebase/firestore');
+      const docRef = doc(db, 'transfers', transferId);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) throw new Error("Transfer bulunamadı");
+      
+      const transfer = docSnap.data() as TransferV2;
+
+      // 1. Add stocks to target warehouse
+      for (const item of transfer.items) {
+        const detail = itemDetails?.find(d => d.materialCode === item.materialCode);
+        const targetShelf = detail ? detail.shelfNo : undefined;
+        const targetCondition = detail ? detail.condition : 'NEW';
+
+        await warehouseService.updateStockBySap(
+          transfer.toSiteId,
+          item.materialCode,
+          item.quantity,
+          {
+            user: adminEmail,
+            reason: `MSF Sevk Girişi (MSF No: ${transfer.msfNo})`,
+            materialName: item.materialName
+          },
+          targetCondition,
+          targetShelf
+        );
+      }
+
+      // 2. Update transfer status
+      await updateDoc(docRef, {
+        status: 'TAMAMLANDI',
+        resolvedBy: adminEmail,
+        resolvedAt: serverTimestamp(),
+        receivedItemsDetails: itemDetails || null
+      });
+    } catch (error) {
+      console.error("Error approving multi item transfer: ", error);
+      throw error;
+    }
+  }
+
   async rejectTransfer(transferId: string, adminEmail: string, reason: string) {
     try {
       const docRef = doc(db, 'transfers', transferId);
@@ -128,6 +312,42 @@ class TransferService {
       });
     } catch (error) {
       console.error("Error rejecting transfer: ", error);
+      throw error;
+    }
+  }
+
+  async rejectMultiItemTransfer(transferId: string, adminEmail: string, reason: string) {
+    try {
+      const { getDoc } = await import('firebase/firestore');
+      const docRef = doc(db, 'transfers', transferId);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) throw new Error("Transfer bulunamadı");
+      
+      const transfer = docSnap.data() as TransferV2;
+
+      // 1. Revert stocks to source warehouse
+      for (const item of transfer.items) {
+        await warehouseService.updateStockBySap(
+          transfer.fromSiteId,
+          item.materialCode,
+          item.quantity,
+          {
+            user: adminEmail,
+            reason: `MSF İptal İadesi (MSF No: ${transfer.msfNo})`,
+            materialName: item.materialName
+          }
+        );
+      }
+
+      // 2. Update transfer status
+      await updateDoc(docRef, {
+        status: 'IPTAL_EDILDI',
+        rejectionReason: reason,
+        resolvedBy: adminEmail,
+        resolvedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error rejecting multi item transfer: ", error);
       throw error;
     }
   }

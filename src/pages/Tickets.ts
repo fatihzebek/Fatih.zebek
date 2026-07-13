@@ -85,8 +85,30 @@ export const TicketsPage = async () => {
 
           </div>
 
-          <button onclick="window.openNewTicketModal()" class="cyber-button primary" style="padding: 0.8rem 2rem; font-family:'Rajdhani'; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:10px;">
-            <i class="fa-solid fa-plus" style="font-size: 1rem;"></i> YENİ DESTEK TALEBİ OLUŞTUR
+          <button onclick="window.openNewTicketModal()" class="btn-cyber" style="
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, #00a8ff 100%);
+            color: #000;
+            border: none;
+            outline: none;
+            box-shadow: 0 4px 20px rgba(0, 242, 254, 0.25);
+            padding: 0.85rem 2.25rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 800;
+            font-size: 0.95rem;
+            letter-spacing: 1.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin: 0.5rem auto 0 auto;
+          "
+          onmouseover="this.style.transform='scale(1.03)'; this.style.boxShadow='0 0 30px rgba(0, 242, 254, 0.45)';"
+          onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 20px rgba(0, 242, 254, 0.25)';"
+          >
+            <i class="fa-solid fa-plus" style="font-size: 1rem; -webkit-text-stroke: 1px #000;"></i> YENİ DESTEK TALEBİ OLUŞTUR
           </button>
           
         </div>

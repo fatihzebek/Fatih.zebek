@@ -2,6 +2,28 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // PWA / Service Worker önbellek çakışmalarını otomatik çözmek için global hata dinleyici
+      window.addEventListener('error', function(e) {
+        var msg = e.message || '';
+        if (msg.indexOf('Unexpected token') > -1 || msg.indexOf('Failed to fetch') > -1 || msg.indexOf('ChunkLoadError') > -1) {
+          console.warn('Önbellek çakışması tespit edildi, temizlenip yenileniyor...');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(r) { r.unregister(); });
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              keys.forEach(function(k) { caches.delete(k); });
+            });
+          }
+          setTimeout(function() {
+            window.location.reload(true);
+          }, 800);
+        }
+      }, true);
+    </script>
     <link rel="icon" type="image/svg+xml" href="/dh-favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

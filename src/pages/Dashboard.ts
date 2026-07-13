@@ -3,6 +3,8 @@ import { taskService } from '../services/TaskService';
 import { agentHealthService } from '../services/AgentHealthService';
 import { warehouseService } from '../services/WarehouseService';
 import { serviceReportService } from '../services/ServiceReportService';
+import { turbineReminderService } from '../services/TurbineReminderService';
+import { personnelService } from '../services/PersonnelService';
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '').replace(/\s*[Tt]alimat[ıi]\s*/g, '').trim().toUpperCase();
@@ -12,8 +14,122 @@ const isGenericFault = (code: string) => !code || code.includes('---') || code.t
 export const DashboardPage = async () => {
   let tasks = await taskService.getTasks();
   
+  // Fetch pending reminders
+  const reminders = await turbineReminderService.getPendingReminders();
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayTime = new Date(todayStr).getTime();
+  
+  // Filter for reminders whose date is today or earlier
+  const dueReminders = reminders.filter(r => {
+    const rTime = new Date(r.reminderDate).getTime();
+    return rTime <= todayTime;
+  });
+
+  // Sort: CRITICAL -> MEDIUM -> LOW
+  const priorityOrder = { CRITICAL: 0, MEDIUM: 1, LOW: 2 };
+  dueReminders.sort((a, b) => {
+    const orderA = priorityOrder[a.priority || 'LOW'];
+    const orderB = priorityOrder[b.priority || 'LOW'];
+    if (orderA !== orderB) return orderA - orderB;
+    return a.reminderDate.localeCompare(b.reminderDate);
+  });
+  
   // Sadece ilgili ekibin görevlerini göster (Eğer kullanıcı TECHNICIAN ise)
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+
+  // Welcome Text & Slogan Logic
+  const getGreetingPrefixHTML = () => {
+    const h = new Date().getHours();
+    let greetingPrefix = '';
+    let icon = '';
+    
+    if (h < 6) {
+      icon = '<i class="fa-solid fa-moon" style="color: #a29bfe; margin-right: 10px;"></i>';
+      greetingPrefix = 'İYİ GECELER';
+    } else if (h < 12) {
+      icon = '<i class="fa-solid fa-sun" style="color: #ffd93d; margin-right: 10px;"></i>';
+      greetingPrefix = 'GÜNAYDINN';
+    } else if (h < 18) {
+      icon = '<i class="fa-solid fa-cloud-sun" style="color: #ff9f43; margin-right: 10px;"></i>';
+      greetingPrefix = 'İYİ GÜNLER';
+    } else {
+      icon = '<i class="fa-solid fa-star" style="color: #a29bfe; margin-right: 10px;"></i>';
+      greetingPrefix = 'İYİ AKŞAMLAR';
+    }
+
+    return `${icon} ${greetingPrefix}`;
+  };
+
+  const getUserBadgeHTML = () => {
+    if (!currentUser) return '';
+
+    if (currentUser.role === 'ADMIN') {
+      return `
+        <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">YÖNETİCİ</span>
+        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-main); margin-top: 2px; text-align: center; width: 100%;">Fatih ZEBEK</span>
+      `;
+    }
+
+    const rawTeam = ((window as any).currentUserTeam || currentUser.team || currentUser.displayName || '').trim();
+    const normalizedRawTeam = rawTeam.toUpperCase().replace(/\s+/g, '');
+
+    // Query team personnel dynamically from Firestore
+    const allPersonnel = personnelService.getPersonnelDetailsList();
+    const teamPersonnelNames = allPersonnel
+      .filter(p => {
+        const pTeam = (p.team || '').toUpperCase().replace(/\s+/g, '');
+        return pTeam && pTeam === normalizedRawTeam;
+      })
+      .map(p => p.name);
+
+    // Apply custom order from Fatih's spreadsheet hierarchy
+    const customOrderList = [
+      'Niyazi KARADAYI', 'Gürkan VARDAR',
+      'Gökmen KÖKSAL', 'Cemalettin KAYA',
+      'Volkan VARDAR', 'Sercan MUTLU',
+      'Harun DALKIRAN', 'Ahmet Oğuz ÖZMUTLU',
+      'ONUR Çelik', 'Onur ÇELİK', 'Ali BODUR',
+      'Arif ARIKAN', 'Batuhan KÖKEN',
+      'Ali ÇETİNKAYA', 'RECEP ERTAN', 'Recep ERTAN',
+      'Süleyman AŞKIN', 'Adem ARASLI',
+      'Mehmet GÜNAY', 'Zafer DURMAZ',
+      'Emre ACAR', 'Berkay keskin', 'Berkay KESKİN',
+      'Berkant SAV', 'Ahmet can GÜLAÇ', 'Ahmet Can GÜLAÇ',
+      'İbrahim ÖZKARA', 'Ahmet ALAN',
+      'Eray ÖNLÜ', 'Kadir DEMİRÖZ',
+      'Ahmet DÜNDAR', 'Halil ibrahim Çetin', 'Halil İbrahim ÇETİN',
+      'Mehmet KÖKEN', 'Özgür DEMİRAY'
+    ].map(n => n.toUpperCase().trim());
+
+    teamPersonnelNames.sort((a, b) => {
+      const idxA = customOrderList.indexOf(a.toUpperCase().trim());
+      const idxB = customOrderList.indexOf(b.toUpperCase().trim());
+      if (idxA === -1 && idxB === -1) return a.localeCompare(b, 'tr-TR');
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+
+    if (teamPersonnelNames.length > 0) {
+      return `
+        <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">${rawTeam.toUpperCase()}</span>
+        <span style="font-size: 0.7rem; font-weight: 600; color: var(--text-muted); margin-top: 2px; text-align: center; width: 100%;">${teamPersonnelNames.join(' & ')}</span>
+      `;
+    }
+
+    return `
+      <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">${rawTeam.toUpperCase() || 'EKİP ÜYESİ'}</span>
+    `;
+  };
+
+  // Allow real-time badge updates from database callbacks
+  (window as any).updateDashboardUserBadge = () => {
+    const badge = document.querySelector('.user-profile-badge');
+    if (badge) {
+      badge.innerHTML = getUserBadgeHTML();
+    }
+  };
+
   const isAllowedSub = (subId: string): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'ADMIN') return true;
@@ -37,7 +153,13 @@ export const DashboardPage = async () => {
         const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
         const userNum = searchTeam.replace(/[^0-9]/g, '');
         
-        if (taskNum && userNum && parseInt(taskNum) === parseInt(userNum)) return true;
+        if (taskNum && userNum) {
+          const tN = parseInt(taskNum);
+          const uN = parseInt(userNum);
+          if (tN === uN) return true;
+          // Özel Dares İstisnası: Team 5 ve Team 10 aynı ekip görevlerini görebilmeli!
+          if ((tN === 5 && uN === 10) || (tN === 10 && uN === 5)) return true;
+        }
         
         return taskPersonnel.includes(searchTeam) || searchTeam.includes(taskPersonnel);
       });
@@ -377,17 +499,70 @@ export const DashboardPage = async () => {
   return `
     <div class="fade-in-up dashboard-container">
       <!-- HEADER & WELCOME -->
-      <div class="dash-header">
-        <div class="welcome-text">
-          <h1>${(() => { const h = new Date().getHours(); return h < 6 ? '<i class="fa-solid fa-moon" style="color: #a29bfe; margin-right: 10px;"></i> İYİ GECELER' : h < 12 ? '<i class="fa-solid fa-sun" style="color: #ffd93d; margin-right: 10px;"></i> GÜNAYDINN' : h < 18 ? '<i class="fa-solid fa-cloud-sun" style="color: #ff9f43; margin-right: 10px;"></i> İYİ GÜNLER' : '<i class="fa-solid fa-star" style="color: #a29bfe; margin-right: 10px;"></i> İYİ AKŞAMLAR'; })()} <span class="v-tag">V3.4</span></h1>
+      <div class="dash-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; width: 100%;">
+        <div class="welcome-text" style="flex: 1; min-width: 250px;">
+          <h1>${getGreetingPrefixHTML()} ${currentUser?.role === 'ADMIN' ? '<span class="v-tag">V3.4</span>' : ''}</h1>
           <p>Sistem genel durumu, bakım planı ve global stok verileri.</p>
         </div>
-        ${(window as any).currentUser?.role === 'ADMIN' ? `
-        <div id="dash-agent-grid" class="agent-summary-strip">
-          <!-- Agents injected here -->
+        <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+          ${(window as any).currentUser?.role === 'ADMIN' ? `
+          <div id="dash-agent-grid" class="agent-summary-strip" style="margin: 0;">
+            <!-- Agents injected here -->
+          </div>
+          ` : ''}
+          <div class="user-profile-badge" style="display: flex; flex-direction: column; align-items: center; text-align: center; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 255, 0.08); padding: 0.4rem 0.85rem; border-radius: 8px; backdrop-filter: blur(5px);">
+            ${getUserBadgeHTML()}
+          </div>
         </div>
-        ` : ''}
       </div>
+
+      ${dueReminders.length > 0 ? `
+      <!-- DUE REMINDERS PANEL -->
+      <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #ef4444; background: rgba(239, 68, 68, 0.03); box-shadow: 0 0 20px rgba(239, 68, 68, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <h3 style="font-size: 0.85rem; color: #ef4444; margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+          <i class="fa-solid fa-bell fa-shake"></i> ZAMANI GELEN TÜRBİN HATIRLATICILARI (${dueReminders.length})
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+          ${dueReminders.map(r => {
+            const dateText = new Date(r.reminderDate).toLocaleDateString('tr-TR');
+            const turbine = dataService.findTurbineBySerial(r.turbineId);
+            const clickAction = turbine ? `onclick="window.showTurbineDetails('${r.turbineId}', '${turbine.turbineNo}', '${r.siteId}', '${r.siteName.replace(/'/g, "\\'")}')" style="cursor: pointer;"` : '';
+            
+            const priority = r.priority || 'LOW';
+            let priorityBadge = '';
+            let itemBorderColor = 'rgba(255, 255, 255, 0.05)';
+            let itemGlowStyle = '';
+            
+            if (priority === 'CRITICAL') {
+              priorityBadge = `<span style="font-size: 0.65rem; font-weight: 800; color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; animation: pulse 2s infinite;"><i class="fa-solid fa-triangle-exclamation"></i> KRİTİK</span>`;
+              itemBorderColor = 'rgba(239, 68, 68, 0.3)';
+              itemGlowStyle = 'box-shadow: 0 0 10px rgba(239, 68, 68, 0.08);';
+            } else if (priority === 'MEDIUM') {
+              priorityBadge = `<span style="font-size: 0.65rem; font-weight: 800; color: #f59e0b; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">ORTA</span>`;
+              itemBorderColor = 'rgba(245, 158, 11, 0.2)';
+            } else {
+              priorityBadge = `<span style="font-size: 0.65rem; font-weight: 800; color: var(--accent-cyan); background: rgba(0, 243, 255, 0.08); border: 1px solid rgba(0, 243, 255, 0.2); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">DÜŞÜK</span>`;
+            }
+
+            return `
+              <div ${clickAction} class="reminder-alert-item" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid ${itemBorderColor}; border-radius: 8px; transition: all 0.2s; ${itemGlowStyle}" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span style="font-weight: 700; color: #fff; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
+                    ${r.siteName} — ${turbine ? turbine.turbineNo : r.turbineId}
+                    ${priorityBadge}
+                  </span>
+                  <span style="font-size: 0.8rem; color: var(--text-muted);">${r.content}</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 0.7rem; font-weight: 700; color: #ef4444; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 3px 8px; border-radius: 4px;">${dateText}</span>
+                  <i class="fa-solid fa-chevron-right" style="color: rgba(255,255,255,0.2); font-size: 0.8rem;"></i>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
 
       <!-- MAIN STATS GRID -->
       <div class="dash-stats-grid">
@@ -507,7 +682,13 @@ export const DashboardPage = async () => {
                     </div>
                   </div>
                 `;
-              }).join('') : '<div class="empty-feed">Şu an aktif bir görev bulunmuyor.</div>'}
+              }).join('') : `
+                <div class="empty-feed">
+                  <i class="fa-solid fa-circle-check"></i>
+                  <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; margin-top: 4px;">TÜM GÖREVLER TAMAMLANDI</div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); max-width: 250px; line-height: 1.4; margin-top: 2px;">Şu an aktif olarak takip edilen bir saha görevi bulunmamaktadır.</div>
+                </div>
+              `}
             </div>
           </div>
           ` : ''}
@@ -630,6 +811,32 @@ export const DashboardPage = async () => {
       @media (max-width: 1200px) { .dash-agenda-row { grid-template-columns: 1fr; } }
       .dash-agenda-right { display: grid; grid-template-columns: 1fr 350px; gap: 1.5rem; }
       @media (max-width: 1024px) { .dash-agenda-right { grid-template-columns: 1fr; } }
+
+      .dash-feed-section { padding: 1.5rem; display: flex; flex-direction: column; }
+      .empty-feed {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 3.5rem 1.5rem;
+        color: var(--text-dim);
+        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.01);
+        border: 1px dashed rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        gap: 0.75rem;
+      }
+      .empty-feed i {
+        font-size: 2rem;
+        color: var(--accent-cyan);
+        opacity: 0.4;
+        animation: pulseSlow 3s infinite ease-in-out;
+      }
+      @keyframes pulseSlow {
+        0%, 100% { opacity: 0.4; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.08); }
+      }
 
       .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
       .section-header h3 { font-family: 'Rajdhani', sans-serif; font-size: 1rem; color: var(--text-main); letter-spacing: 1px; margin: 0; }

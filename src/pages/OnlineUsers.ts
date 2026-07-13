@@ -36,11 +36,30 @@ let unsubscribePresence: any = null;
    }
 
    unsubscribePresence = presenceService.subscribeToPresence(async (users) => {
-      // Sort users: online first, then by last active
+      const getSortKey = (u: any) => {
+         if (u.email?.toLowerCase() === 'fatih.zebek@demirerholding.com') {
+            return -2;
+         }
+         const name = (formatDisplayName(u.displayName) || u.email || '');
+         const match = name.match(/Team\s*(\d+)/i);
+         if (match) {
+            return parseInt(match[1]);
+         }
+         return 999;
+      };
+
+      // Sort users: Fatih Zebek first, then by Team 01-15, then others alphabetically
       const sortedUsers = users.sort((a, b) => {
-         if (a.status === 'online' && b.status !== 'online') return -1;
-         if (a.status !== 'online' && b.status === 'online') return 1;
-         return (b.last_active || 0) - (a.last_active || 0);
+         const keyA = getSortKey(a);
+         const keyB = getSortKey(b);
+         
+         if (keyA !== keyB) {
+            return keyA - keyB;
+         }
+         
+         const nameA = (formatDisplayName(a.displayName) || a.email || '').toLowerCase();
+         const nameB = (formatDisplayName(b.displayName) || b.email || '').toLowerCase();
+         return nameA.localeCompare(nameB, 'tr-TR');
       });
 
       let html = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;">`;

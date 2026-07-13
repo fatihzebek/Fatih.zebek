@@ -65,7 +65,7 @@ const renderWarehouseDashboardHTML = (allowedMain: any[], allowedTeams: any[]) =
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        height: 120px;
+        min-height: 120px;
         box-sizing: border-box;
       }
       
@@ -291,6 +291,52 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   const userProfile = getUserProfile();
   const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.role === 'TAMİR' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
 
+  const getTeamResponsibleSites = (whId: string): string[] => {
+    const teamName = whId.startsWith('team_') 
+      ? whId.replace('team_', '').replace(/_/g, ' ').trim() 
+      : whId;
+      
+    const teamMapping: Record<string, string[]> = {
+      'Team 01': ['2678', '0752'],
+      'Team 02': ['2678', '0752'],
+      'Team 12': ['2678', '0752'],
+      'Team 03': ['2688', '3439', '3243'],
+      'Team 04': ['2688', '3439', '3243'],
+      'Team 13': ['2688', '3439', '3243'],
+      'Team 15': ['2688', '3439', '3243'],
+      'Team 06': ['2990', '3793'],
+      'Team 08': ['2990', '3793'],
+      'Team 09': ['2990', '3793'],
+      'Team 14': ['2990', '3793'],
+      'Team 05': ['3213'],
+      'Team 10': ['3213'],
+      'Team 07': ['3245', '3892'],
+      'Team 11': ['3245', '3892']
+    };
+    
+    const siteIds = teamMapping[teamName] || [];
+    const allSites = dataService.getSites();
+    return siteIds.map(id => {
+      const site = allSites.find(s => s.id === id);
+      return site ? site.name : id;
+    });
+  };
+
+  const getWarehouseSite = (warehouse: any): string => {
+    if (warehouse.id.startsWith('team_')) {
+      const sites = getTeamResponsibleSites(warehouse.id);
+      return `<strong>Sorumlu Olduğu Sahalar (${sites.length}):</strong> ${sites.join(', ')}`;
+    } else {
+      const allSites = dataService.getSites();
+      const whNameBase = warehouse.name.toLowerCase().replace('depo', '').trim();
+      const site = allSites.find(s => {
+        const siteNameBase = s.name.toLowerCase().trim();
+        return whNameBase.includes(siteNameBase) || siteNameBase.includes(whNameBase);
+      });
+      return `<strong>Bağlı Olduğu Saha:</strong> ${site ? site.name : warehouse.name}`;
+    }
+  };
+
   if (!warehouseId) {
     const allowedMainWarehouses = userProfile?.role === 'ADMIN' || isMaterialManager
       ? allWarehouses
@@ -402,16 +448,40 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   } else if (userProfile?.team) {
     const teamName = userProfile.team;
     const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
+    
+    // Determine allowed team warehouses from userProfile.allowedWarehouses
+    const allowedTeamWhs: { id: string, name: string }[] = [];
+    if (userProfile.allowedWarehouses && Array.isArray(userProfile.allowedWarehouses)) {
+      userProfile.allowedWarehouses.forEach((whId: string) => {
+        if (whId.startsWith('team_') && whId !== currentWarehouse.id) {
+          const displayLabel = whId.replace('team_', '').replace('_', ' ') + ' Deposu';
+          allowedTeamWhs.push({ id: whId, name: displayLabel });
+        }
+      });
+    }
+
     if (currentWarehouse.id.startsWith('team_')) {
       // Ekip kendi zimmet sayfasındaysa, malzemeyi iade edebileceği ana depoları listele
       allWarehouses.forEach(w => {
         targetOptions.push({ id: w.id, name: w.name });
       });
+      // Ayrıca yetkisi olan diğer ekipleri de listele
+      allowedTeamWhs.forEach(opt => {
+        if (opt.id !== currentWarehouse.id) {
+          targetOptions.push(opt);
+        }
+      });
     } else {
-      // Ekip ana depodaysa, sadece kendi zimmetine çekebilir
+      // Ekip ana depodaysa, kendi zimmetine çekebilir
       if (teamId !== currentWarehouse.id) {
         targetOptions.push({ id: teamId, name: `Zimmetim (${teamName})` });
       }
+      // Ayrıca yetkisi olan diğer ekipleri de listele
+      allowedTeamWhs.forEach(opt => {
+        if (opt.id !== teamId) {
+          targetOptions.push(opt);
+        }
+      });
     }
   }
 
@@ -467,14 +537,21 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       reports.forEach(report => {
          if (!report.materials || report.materials.length === 0) return;
          
-         const reportSiteBase = (report.siteName || '').toLowerCase().trim();
+         const isMobileWarehouse = currentWarehouse.id.startsWith('team_');
+         let isMatch = false;
+         if (isMobileWarehouse) {
+           const whTeam = formatTeamName(currentWarehouse.id);
+           const reportCreatorTeam = report.createdBy ? formatTeamName(report.createdBy.split('@')[0]) : '';
+           const reportPersonnelStr = Array.isArray(report.personnel) ? report.personnel.join(', ') : (report.personnel || '');
+           const reportPersonnelTeam = reportPersonnelStr ? formatTeamName(reportPersonnelStr) : '';
+           const reportTeamField = report.team ? formatTeamName(report.team) : '';
+           isMatch = (whTeam === reportCreatorTeam || whTeam === reportPersonnelTeam || whTeam === reportTeamField);
+         } else {
+           const reportSiteBase = (report.siteName || '').toLowerCase().trim();
+           isMatch = whNameBase.includes(reportSiteBase) || reportSiteBase.includes(whNameBase) || whNameBase === 'merkez';
+         }
          
-         // Sadece bu depoya (sahaya) ait olanları al.
-         // Eger depo genel depo ise (örn. Merkez) veya filtrelemek istemiyorsanız bu if blogunu kaldirabilirsiniz,
-         // ancak her depo kendi sahasının verisini görsün istiyorsak eşleştirme yapıyoruz.
-         const isMatch = whNameBase.includes(reportSiteBase) || reportSiteBase.includes(whNameBase) || whNameBase === 'merkez';
-         
-         if (!isMatch && reportSiteBase !== '') return;
+         if (!isMatch) return;
          
          const turbineId = (report.siteName ? report.siteName + ' ' : '') + (report.turbineNo || report.turbineSerial || 'Bilinmeyen');
          const searchSAP = (localStorage.getItem('warehouse_analytics_sap') || '').toLowerCase().trim();
@@ -550,7 +627,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             description: mat.description,
             defect: mat.defectCount || 0,
             faultCode: report.faultCode || '-',
-            faultDesc: report.faultDesc || '-'
+            faultDesc: report.faultDesc || '-',
+            siteName: report.siteName || '-'
           });
         }
       });
@@ -617,6 +695,100 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   
   // Attach logic to window so it runs when rendered
   (window as any).initNewWarehouseLogic = () => {
+    (window as any).toggleDefectGroupCollapse = (groupKey: string) => {
+      const headerRow = document.getElementById(`group-header-${groupKey}`);
+      const rows = document.querySelectorAll(`.group-row-${groupKey}`);
+      if (!headerRow) return;
+      const icon = headerRow.querySelector('.toggle-icon') as HTMLElement;
+      const textSpan = headerRow.querySelector('.expand-text');
+      
+      const isCollapsed = rows[0] ? (rows[0] as HTMLElement).style.display === 'none' : true;
+      
+      rows.forEach((row: any) => {
+        row.style.display = isCollapsed ? '' : 'none';
+      });
+      
+      if (icon) {
+        if (isCollapsed) {
+          icon.style.transform = 'rotate(90deg)';
+          if (textSpan) textSpan.innerHTML = '<i class="fa-solid fa-compress"></i> Gizle';
+        } else {
+          icon.style.transform = 'rotate(0deg)';
+          if (textSpan) textSpan.innerHTML = '<i class="fa-solid fa-expand"></i> Göster';
+        }
+      }
+    };
+
+    (window as any).toggleDefectGroup = (groupCheckbox: HTMLInputElement, groupKey: string) => {
+      const checkboxes = document.querySelectorAll(`.group-checkbox-${groupKey}`);
+      checkboxes.forEach((cb: any) => {
+        cb.checked = groupCheckbox.checked;
+      });
+    };
+
+    (window as any).filterDefectListBySite = (button: HTMLElement, siteName: string) => {
+      const buttons = document.querySelectorAll('.site-filter-btn');
+      buttons.forEach((btn: any) => {
+        btn.classList.remove('active');
+        btn.style.background = 'rgba(255,255,255,0.03)';
+        btn.style.color = '#94A3B8';
+        btn.style.borderColor = 'rgba(255,255,255,0.1)';
+      });
+      
+      button.classList.add('active');
+      button.style.background = 'rgba(20, 241, 149, 0.2)';
+      button.style.color = '#14F195';
+      button.style.borderColor = 'rgba(20, 241, 149, 0.4)';
+      
+      const headerRows = document.querySelectorAll('tr[id^="group-header-"]');
+      
+      headerRows.forEach((header: any) => {
+        const groupKey = header.id.replace('group-header-', '');
+        const childRows = document.querySelectorAll(`.group-row-${groupKey}`);
+        
+        let hasMatch = false;
+        if (siteName === 'all') {
+          hasMatch = true;
+        } else {
+          childRows.forEach((child: any) => {
+            const childSite = child.getAttribute('data-site');
+            if (childSite === siteName) {
+              hasMatch = true;
+            }
+          });
+        }
+        
+        if (hasMatch) {
+          header.style.display = '';
+          childRows.forEach((child: any) => {
+            if (siteName === 'all') {
+              child.style.display = 'none';
+            } else {
+              const childSite = child.getAttribute('data-site');
+              child.style.display = (childSite === siteName) ? '' : 'none';
+            }
+          });
+          
+          const icon = header.querySelector('.toggle-icon') as HTMLElement;
+          const textSpan = header.querySelector('.expand-text');
+          if (icon) {
+            if (siteName === 'all') {
+              icon.style.transform = 'rotate(0deg)';
+              if (textSpan) textSpan.innerHTML = '<i class="fa-solid fa-expand"></i> Göster';
+            } else {
+              icon.style.transform = 'rotate(90deg)';
+              if (textSpan) textSpan.innerHTML = '<i class="fa-solid fa-compress"></i> Gizle';
+            }
+          }
+        } else {
+          header.style.display = 'none';
+          childRows.forEach((child: any) => {
+            child.style.display = 'none';
+          });
+        }
+      });
+    };
+
     // Inventory Drag & Drop Sidebar handlers
     (window as any).warehouseInventoryDragStart = async (event: DragEvent, itemId: string) => {
       event.dataTransfer?.setData('text/plain', itemId);
@@ -3749,6 +3921,142 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        `;
      };
 
+    (window as any).loadDepoHareketleriLogs = async () => {
+         const container = document.getElementById('depo-hareketleri-container');
+         if (container) {
+           container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
+           try {
+             const { warehouseService } = await import('../services/WarehouseService');
+             const activeWhId = (window as any).currentWarehouseId || 'MTA';
+             const logs = await warehouseService.getLogs(activeWhId);
+             (window as any).__cachedDepoLogs = logs;
+             if (typeof (window as any).renderDepoHareketleriLogs === 'function') {
+               (window as any).renderDepoHareketleriLogs();
+             }
+           } catch (err: any) {
+             console.error(err);
+             container.innerHTML = `<div style="text-align:center; padding: 2rem; color: #EF4444;">Yüklenirken hata oluştu: ${err.message}</div>`;
+           }
+         }
+     };
+
+    (window as any).toggleAuditDetails = (auditId: string) => {
+      const el = document.getElementById(`audit-details-${auditId}`);
+      const icon = document.getElementById(`audit-toggle-icon-${auditId}`);
+      if (el) {
+        if (el.style.display === 'none') {
+          el.style.display = 'block';
+          if (icon) {
+            icon.className = 'fa-solid fa-chevron-up';
+          }
+        } else {
+          el.style.display = 'none';
+          if (icon) {
+            icon.className = 'fa-solid fa-chevron-down';
+          }
+        }
+      }
+    };
+
+    (window as any).loadSayimGecmisi = async () => {
+           const container = document.getElementById('audit-history-container');
+           if (container) {
+             container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
+             try {
+               const { warehouseService } = await import('../services/WarehouseService');
+               const activeWhId = (window as any).currentWarehouseId || 'MTA';
+               const audits = await warehouseService.getAuditHistory(activeWhId);
+               (window as any).__cachedAudits = audits;
+               if (audits.length === 0) {
+                 container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
+               } else {
+                 container.innerHTML = audits.map(audit => {
+                   const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : audit.date;
+                   const diffColor = audit.totalDiff < 0 ? '#EF4444' : (audit.totalDiff > 0 ? '#F59E0B' : '#14F195');
+                   const totalDiffText = audit.totalDiff > 0 ? '+' + audit.totalDiff : audit.totalDiff;
+                   
+                   const sortedResults = [...audit.results].map(r => {
+                      let shelfNo = r.shelfNo || '';
+                      if (!shelfNo && (window as any).currentInventoryData) {
+                        const invItem = (window as any).currentInventoryData.find((i: any) => i.sapNo === r.sapNo || (i.sapNo === '' && i.name === r.description));
+                        if (invItem) shelfNo = invItem.shelfNo || '';
+                      }
+                      return { ...r, calculatedShelfNo: shelfNo };
+                   }).sort((a, b) => {
+                      const locA = String(a.calculatedShelfNo || '').trim().toUpperCase();
+                      const locB = String(b.calculatedShelfNo || '').trim().toUpperCase();
+                      if (!locA && locB) return 1;
+                      if (locA && !locB) return -1;
+                      let locCmp = 0;
+                      if (locA && locB) {
+                          locCmp = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+                      }
+                      if (locCmp !== 0) return locCmp;
+                      return String(a.sapNo || '').localeCompare(String(b.sapNo || ''));
+                   });
+
+                   return `
+                     <div class="audit-history-card" style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                       <div style="display: flex; justify-content: space-between; align-items: center;">
+                         <div onclick="window.toggleAuditDetails('${audit.id}')" style="cursor: pointer; flex-grow: 1; display: flex; align-items: center; gap: 10px;">
+                           <i id="audit-toggle-icon-${audit.id}" class="fa-solid fa-chevron-down" style="color: #64748B; font-size: 0.85rem; transition: transform 0.2s;"></i>
+                           <div>
+                             <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem;">${date}</div>
+                             <div style="font-size: 0.8rem; color: #64748B;">Sayan: ${audit.user || 'Bilinmeyen'} | Toplam Kalem: ${audit.results?.length || 0}</div>
+                           </div>
+                         </div>
+                         <div style="display: flex; align-items: center; gap: 0.75rem;">
+                           <div style="font-family: monospace; font-size: 0.95rem; font-weight: 700; color: ${diffColor}; padding: 0.25rem 0.5rem; background: rgba(255,255,255,0.02); border-radius: 4px;">Fark: ${totalDiffText}</div>
+                           <button onclick="window.downloadSingleAuditExcel('${audit.id}')" style="background: transparent; border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)'" onmouseout="this.style.background='transparent'">
+                             <i class="fa-solid fa-file-excel"></i> Excel
+                           </button>
+                         </div>
+                       </div>
+                       
+                       <div id="audit-details-${audit.id}" style="overflow-x: auto; max-height: 350px; overflow-y: auto; display: none; margin-top: 1rem; border-top: 1px solid #1E293B; padding-top: 1rem;">
+                         <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem; text-align: left;">
+                           <thead>
+                             <tr style="border-bottom: 1px solid #1E293B; color: #64748B;">
+                               <th style="padding: 0.5rem;">Konum</th>
+                               <th style="padding: 0.5rem;">SAP No</th>
+                               <th style="padding: 0.5rem;">Tanım</th>
+                               <th style="padding: 0.5rem; text-align: right;">Sistem</th>
+                               <th style="padding: 0.5rem; text-align: right;">Fiziksel</th>
+                               <th style="padding: 0.5rem; text-align: right;">Fark</th>
+                               <th style="padding: 0.5rem;">Açıklama</th>
+                             </tr>
+                           </thead>
+                           <tbody>
+                             ${sortedResults.map(r => {
+                               const diff = r.diff;
+                               const diffText = diff > 0 ? '+' + diff : diff;
+                               const diffCl = diff < 0 ? '#EF4444' : (diff > 0 ? '#F59E0B' : '#14F195');
+                               return `
+                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.02);">
+                                   <td style="padding: 0.4rem 0.5rem; color: #94A3B8;">${r.calculatedShelfNo || '-'}</td>
+                                   <td style="padding: 0.4rem 0.5rem; font-family: monospace; color: #FFF;">${r.sapNo}</td>
+                                   <td style="padding: 0.4rem 0.5rem; color: #E2E8F0; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.description}">${r.description}</td>
+                                   <td style="padding: 0.4rem 0.5rem; text-align: right; color: #FFF;">${r.systemQty}</td>
+                                   <td style="padding: 0.4rem 0.5rem; text-align: right; color: #FFF;">${r.physicalQty}</td>
+                                   <td style="padding: 0.4rem 0.5rem; text-align: right; font-weight: 700; color: ${diffCl};">${diffText}</td>
+                                   <td style="padding: 0.4rem 0.5rem; color: #94A3B8; font-size: 0.75rem;">${r.note || ''}</td>
+                                 </tr>
+                                `;
+                             }).join('')}
+                           </tbody>
+                         </table>
+                       </div>
+                     </div>
+                   `;
+                 }).join('');
+               }
+             } catch (err: any) {
+               console.error(err);
+               container.innerHTML = `<div style="text-align:center; padding: 2rem; color: #EF4444;">Yüklenirken hata oluştu: ${err.message}</div>`;
+             }
+           }
+     };
+
      (window as any).deleteDepoLog = async (logId: string) => {
         if (!confirm("Bu hareket kaydını silmek istediğinize emin misiniz?")) {
           return;
@@ -3798,9 +4106,829 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
        (window as any).renderDepoHareketleriLogs(filtered);
      };
 
-    (window as any).switchTab = async (tabName: string, id: string) => {
-      const tabs = ['tab-ENVANTER', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI', 'tab-DEFECT'];
-      const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI', 'view-DEFECT'];
+    let warehouseTransfersFilter = 'HEPSİ';
+    let warehouseTransfersDirection = 'ALL';
+    let warehouseTransfersSearchQuery = '';
+    let cachedWarehouseTransfers: any[] = [];
+    let warehouseTransfersPage = 1;
+    const warehouseTransfersPageSize = 20;
+
+     (window as any).filterWarehouseTransfers = (status: string) => {
+       warehouseTransfersFilter = status;
+       warehouseTransfersPage = 1;
+       (window as any).renderWarehouseTransfersList();
+     };
+
+     (window as any).changeWarehouseTransfersPage = (direction: number) => {
+       warehouseTransfersPage += direction;
+       (window as any).renderWarehouseTransfersList();
+     };
+
+     (window as any).setTransferDirection = (direction: string) => {
+       warehouseTransfersDirection = direction;
+       warehouseTransfersPage = 1;
+       
+       const dirs = { 'ALL': 'all', 'INCOMING': 'in', 'OUTGOING': 'out' };
+       Object.entries(dirs).forEach(([dir, suffix]) => {
+         const btn = document.getElementById('btn-dir-' + suffix);
+         if (btn) {
+           if (dir === direction) {
+             btn.style.background = 'rgba(20,241,149,0.15)';
+             btn.style.color = '#14F195';
+           } else {
+             btn.style.background = 'transparent';
+             btn.style.color = '#94A3B8';
+           }
+         }
+       });
+
+       (window as any).renderWarehouseTransfersList();
+     };
+
+     (window as any).onTransferSearchInput = () => {
+       const input = document.getElementById('transfer-search-input') as HTMLInputElement;
+       warehouseTransfersSearchQuery = input ? input.value.trim().toLowerCase() : '';
+       warehouseTransfersPage = 1;
+       (window as any).renderWarehouseTransfersList();
+     };
+
+     (window as any).getFilteredTransfersList = () => {
+       const currentWarehouseId = currentWarehouse.id;
+       const now = new Date();
+
+       let filtered = cachedWarehouseTransfers;
+
+       // 1. Status Filter
+       if (warehouseTransfersFilter === 'GELEN_YOLDA') {
+         filtered = filtered.filter(t => {
+           const s = t.status || 'YOLDA';
+           const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+           return normStatus === 'YOLDA' && t.toSiteId === currentWarehouseId;
+         });
+       } else if (warehouseTransfersFilter === 'GIDEN_YOLDA') {
+         filtered = filtered.filter(t => {
+           const s = t.status || 'YOLDA';
+           const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+           return normStatus === 'YOLDA' && t.toSiteId !== currentWarehouseId;
+         });
+       } else if (warehouseTransfersFilter === 'GECIKEN') {
+         filtered = filtered.filter(t => {
+           const s = t.status || 'YOLDA';
+           const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+           if (normStatus !== 'YOLDA') return false;
+           if (t.createdAt?.seconds) {
+             const createdDate = new Date(t.createdAt.seconds * 1000);
+             const diffHours = Math.abs(now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+             return diffHours > 48;
+           }
+           return false;
+         });
+       } else if (warehouseTransfersFilter === 'TAMAMLANDI') {
+         filtered = filtered.filter(t => {
+           const s = t.status || 'YOLDA';
+           const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+           return normStatus === 'TAMAMLANDI';
+         });
+       } else if (warehouseTransfersFilter === 'IPTAL_EDILDI') {
+         filtered = filtered.filter(t => {
+           const s = t.status || 'YOLDA';
+           const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+           return normStatus === 'IPTAL_EDILDI';
+         });
+       }
+
+       // 2. Direction Filter (Incoming vs Outgoing)
+       if (warehouseTransfersDirection === 'INCOMING') {
+         filtered = filtered.filter(t => t.toSiteId === currentWarehouseId);
+       } else if (warehouseTransfersDirection === 'OUTGOING') {
+         filtered = filtered.filter(t => t.fromSiteId === currentWarehouseId);
+       }
+
+       // 3. Search Query Filter (SAP, Material Name, MSF, MÇF/MFÇ, Site Names)
+       if (warehouseTransfersSearchQuery) {
+         const q = warehouseTransfersSearchQuery;
+         filtered = filtered.filter(t => {
+           const msfNo = (t.msfNo || '').toLowerCase();
+           const mcfNo = (t.mcfNo || t.formNo || '').toLowerCase();
+           const docId = (t.id || '').toLowerCase();
+           const fromName = ((window as any)._warehousesMap[t.fromSiteId] || t.fromSiteId).toLowerCase();
+           const toName = ((window as any)._warehousesMap[t.toSiteId] || t.toSiteId).toLowerCase();
+           const reqBy = (t.requestedBy || '').toLowerCase();
+           const hasSiteMatch = fromName.includes(q) || toName.includes(q) || msfNo.includes(q) || mcfNo.includes(q) || docId.includes(q) || reqBy.includes(q);
+
+           if (hasSiteMatch) return true;
+
+           if (Array.isArray(t.items)) {
+             return t.items.some((it: any) => 
+               (it.materialCode || '').toLowerCase().includes(q) || 
+               (it.materialName || '').toLowerCase().includes(q)
+             );
+           } else {
+             return (t.materialCode || '').toLowerCase().includes(q) || 
+                    (t.materialName || '').toLowerCase().includes(q);
+           }
+         });
+       }
+
+       return filtered;
+     };
+
+     (window as any).exportTransfersListToExcel = async () => {
+       try {
+         const { excelService } = await import('../services/ExcelService');
+         const filteredForExport = (window as any).getFilteredTransfersList();
+         if (filteredForExport.length === 0) {
+           alert("İndirilecek transfer kaydı bulunamadı!");
+           return;
+         }
+         const fileName = `${currentWarehouse.name.replace(/\s+/g, '_')}_Sevk_Raporu`;
+         await excelService.exportTransfersToExcel(filteredForExport, fileName);
+       } catch (err: any) {
+         alert("Excel indirilirken hata oluştu: " + err.message);
+       }
+     };
+
+     (window as any).renderWarehouseTransfersList = () => {
+       const listContainer = document.getElementById('warehouse-transfers-cards-list');
+       if (!listContainer) return;
+
+       const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+       const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'MALZEME_YONETIMI' || currentUser?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+       const currentWarehouseId = currentWarehouse.id;
+
+       // Compute tracker stats
+       const stats = {
+         all: cachedWarehouseTransfers.length,
+         incomingPending: 0,
+         outgoingPending: 0,
+         delayed: 0,
+         completed: 0,
+         cancelled: 0
+       };
+
+       const now = new Date();
+
+       cachedWarehouseTransfers.forEach((t: any) => {
+         const s = t.status || 'YOLDA';
+         const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+         const isIncoming = t.toSiteId === currentWarehouseId;
+
+         if (normStatus === 'YOLDA') {
+           let isDelayed = false;
+           if (t.createdAt?.seconds) {
+             const createdDate = new Date(t.createdAt.seconds * 1000);
+             const diffHours = Math.abs(now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+             if (diffHours > 48) {
+               isDelayed = true;
+               stats.delayed++;
+             }
+           }
+           if (isIncoming) stats.incomingPending++;
+           else stats.outgoingPending++;
+         } else if (normStatus === 'TAMAMLANDI') {
+           stats.completed++;
+         } else if (normStatus === 'IPTAL_EDILDI') {
+           stats.cancelled++;
+         }
+       });
+
+       const agendaContainer = document.getElementById('transfer-tracker-agenda');
+       if (agendaContainer) {
+         let assistantNote = '';
+         let assistantStatus = 'NORMAL';
+         
+         if (stats.delayed > 0) {
+           assistantStatus = 'CRITICAL';
+           assistantNote = `⚠️ <strong>KRİTİK GECİKME UYARISI:</strong> Deponuzla ilişkili <strong>${stats.delayed} sevk</strong> 48 saattir yolda görünüyor. Lütfen kargo takip bilgilerini veya taşıyıcı personeli kontrol ediniz.`;
+         } else if (stats.incomingPending > 0) {
+           assistantStatus = 'INFO';
+           assistantNote = `🔔 <strong>ASİSTAN NOTU:</strong> Deponuza doğru gelmekte olan <strong>${stats.incomingPending} sevk</strong> bulunuyor. Malzemeler ulaştığında <strong>"Teslim Al"</strong> butonu ile stoğa işleyebilirsiniz.`;
+         } else {
+           assistantNote = `✅ <strong>SİSTEM DURUMU:</strong> Şu an için depoya bağlı tüm transfer ve sevk hareketleri güncel ve planlandığı şekilde ilerliyor.`;
+         }
+
+         let assistantGlowColor = 'rgba(20, 241, 149, 0.15)';
+         let assistantBorderColor = '#14F195';
+         if (assistantStatus === 'CRITICAL') {
+           assistantGlowColor = 'rgba(239, 68, 68, 0.15)';
+           assistantBorderColor = '#EF4444';
+         } else if (assistantStatus === 'INFO') {
+           assistantGlowColor = 'rgba(59, 130, 246, 0.15)';
+           assistantBorderColor = '#3b82f6';
+         }
+
+         agendaContainer.innerHTML = `
+           <div class="glass-panel" style="background: rgba(10,20,30,0.4); padding: 1.25rem; border-radius: 12px; border: 1px solid ${assistantBorderColor}; box-shadow: 0 4px 30px ${assistantGlowColor}; transition: all 0.3s; margin-bottom: 1.25rem;">
+             
+             <!-- Title -->
+             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 0.5rem;">
+               <div style="display: flex; align-items: center; gap: 8px; font-family: 'Rajdhani', sans-serif; font-size: 1rem; font-weight: 800; color: var(--accent-cyan); letter-spacing: 0.5px;">
+                 <i class="fa-solid fa-calendar-check" style="animation: pulse 2s infinite;"></i> SEVK TAKİP AJANDASI & ASİSTAN
+               </div>
+               <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: bold; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
+                 <span style="width: 6px; height: 6px; border-radius: 50%; background: #14F195; display: inline-block;"></span> SİSTEM TAKİBİ ETKİN
+               </span>
+             </div>
+
+             <!-- Metrics Grid -->
+             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 1rem;">
+               
+               <!-- TÜMÜ -->
+               <div onclick="window.filterWarehouseTransfers('HEPSİ')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'HEPSİ' ? 'rgba(20,241,149,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'HEPSİ' ? '#14F195' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'HEPSİ' ? '0 0 10px rgba(20,241,149,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'HEPSİ' ? '#14F195' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">Tüm Sevkler</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif;">${stats.all}</span>
+               </div>
+
+               <!-- GELEN (YOLDA) -->
+               <div onclick="window.filterWarehouseTransfers('GELEN_YOLDA')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'GELEN_YOLDA' ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'GELEN_YOLDA' ? '#3b82f6' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'GELEN_YOLDA' ? '0 0 10px rgba(59,130,246,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'GELEN_YOLDA' ? '#3b82f6' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">Gelen (Yolda)</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: #3b82f6; font-family: 'Rajdhani', sans-serif;">${stats.incomingPending}</span>
+               </div>
+
+               <!-- GİDEN (YOLDA) -->
+               <div onclick="window.filterWarehouseTransfers('GIDEN_YOLDA')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'GIDEN_YOLDA' ? 'rgba(168,85,247,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'GIDEN_YOLDA' ? '#a855f7' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'GIDEN_YOLDA' ? '0 0 10px rgba(168,85,247,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'GIDEN_YOLDA' ? '#a855f7' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">Giden (Yolda)</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: #a855f7; font-family: 'Rajdhani', sans-serif;">${stats.outgoingPending}</span>
+               </div>
+
+               <!-- GECİKEN SEVK -->
+               <div onclick="window.filterWarehouseTransfers('GECIKEN')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'GECIKEN' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'GECIKEN' ? '#EF4444' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'GECIKEN' ? '0 0 10px rgba(239,68,68,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'GECIKEN' ? '#EF4444' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">Geciken Sevk</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: ${stats.delayed > 0 ? '#EF4444' : '#FFF'}; font-family: 'Rajdhani', sans-serif;">${stats.delayed}</span>
+               </div>
+
+               <!-- TAMAMLANANLAR -->
+               <div onclick="window.filterWarehouseTransfers('TAMAMLANDI')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'TAMAMLANDI' ? 'rgba(20,241,149,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'TAMAMLANDI' ? '#14F195' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'TAMAMLANDI' ? '0 0 10px rgba(20,241,149,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'TAMAMLANDI' ? '#14F195' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">Tamamlanan</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: #14F195; font-family: 'Rajdhani', sans-serif;">${stats.completed}</span>
+               </div>
+
+               <!-- İPTAL EDİLENLER -->
+               <div onclick="window.filterWarehouseTransfers('IPTAL_EDILDI')" style="cursor: pointer; background: ${warehouseTransfersFilter === 'IPTAL_EDILDI' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.02)'}; border: 1px solid ${warehouseTransfersFilter === 'IPTAL_EDILDI' ? '#EF4444' : 'rgba(255,255,255,0.05)'}; border-radius: 8px; padding: 8px 10px; text-align: center; transition: all 0.2s; box-shadow: ${warehouseTransfersFilter === 'IPTAL_EDILDI' ? '0 0 10px rgba(239,68,68,0.15)' : 'none'};" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='${warehouseTransfersFilter === 'IPTAL_EDILDI' ? '#EF4444' : 'rgba(255,255,255,0.05)'}'">
+                 <span style="font-size: 0.58rem; color: #94A3B8; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px;">İptal Edilenler</span>
+                 <span style="font-size: 1.4rem; font-weight: 800; color: #EF4444; font-family: 'Rajdhani', sans-serif;">${stats.cancelled}</span>
+               </div>
+
+             </div>
+
+             <!-- Assistant Note -->
+             <div style="background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.02); padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; color: #E2E8F0; line-height: 1.45;">
+               ${assistantNote}
+             </div>
+
+           </div>
+         `;
+       }
+
+       const filtered = (window as any).getFilteredTransfersList();
+
+       if (filtered.length === 0) {
+         listContainer.innerHTML = `
+           <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.01); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.05); margin-top: 1rem;">
+             <i class="fa-solid fa-clock-rotate-left" style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.15; color: var(--accent-cyan);"></i>
+             <p style="font-size: 0.85rem; margin: 0;">Bu filtreye uygun sevk/transfer kaydı bulunamadı.</p>
+           </div>
+         `;
+         return;
+       }
+
+       // Pagination calculations
+       const totalCount = filtered.length;
+       const totalPages = Math.ceil(totalCount / warehouseTransfersPageSize) || 1;
+       if (warehouseTransfersPage > totalPages) warehouseTransfersPage = totalPages;
+       if (warehouseTransfersPage < 1) warehouseTransfersPage = 1;
+
+       const startIndex = (warehouseTransfersPage - 1) * warehouseTransfersPageSize;
+       const endIndex = startIndex + warehouseTransfersPageSize;
+       const paginated = filtered.slice(startIndex, endIndex);
+
+       const cardsHtml = paginated.map((t: any) => {
+         const isV2 = Array.isArray(t.items);
+         const msfNo = t.msfNo || `TRF-${t.id?.substring(0, 8).toUpperCase()}`;
+         
+         const fromName = (window as any)._warehousesMap[t.fromSiteId] || t.fromSiteId;
+         const toName = (window as any)._warehousesMap[t.toSiteId] || t.toSiteId;
+         
+         const s = t.status || 'YOLDA';
+         const normStatus = s === 'PENDING' ? 'YOLDA' : s === 'COMPLETED' ? 'TAMAMLANDI' : s === 'REJECTED' ? 'IPTAL_EDILDI' : s;
+         
+         let statusStyle = '';
+         let statusText = '';
+         let cardBorderColor = 'rgba(255,255,255,0.05)';
+         let statusGlow = 'rgba(0,0,0,0)';
+         
+         if (normStatus === 'YOLDA') {
+           statusStyle = 'background: rgba(245, 158, 11, 0.08); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.25);';
+           statusText = '<i class="fa-solid fa-circle-nodes fa-pulse" style="margin-right: 4px;"></i> YOLDA';
+           cardBorderColor = '#F59E0B';
+           statusGlow = 'rgba(245, 158, 11, 0.1)';
+         } else if (normStatus === 'TAMAMLANDI') {
+           let shelfInfo = '';
+           if (Array.isArray(t.receivedItemsDetails) && t.receivedItemsDetails.length > 0) {
+             shelfInfo = ` (${t.receivedItemsDetails.map((it: any) => it.shelfNo || 'Raf Belirtilmedi').join(', ')})`;
+           }
+           statusStyle = 'background: rgba(16, 185, 129, 0.08); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25);';
+           statusText = `<i class="fa-solid fa-circle-check" style="margin-right: 4px;"></i> TESLİM EDİLDİ${shelfInfo}`;
+           cardBorderColor = '#10B981';
+           statusGlow = 'rgba(16, 185, 129, 0.1)';
+         } else {
+           statusStyle = 'background: rgba(239, 68, 68, 0.08); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.25);';
+           statusText = '<i class="fa-solid fa-ban" style="margin-right: 4px;"></i> İPTAL EDİLDİ';
+           cardBorderColor = '#EF4444';
+           statusGlow = 'rgba(239, 68, 68, 0.1)';
+         }
+
+         const isIncoming = t.toSiteId === currentWarehouseId;
+         const directionBadge = isIncoming 
+           ? `<span style="background: rgba(59, 130, 246, 0.12); color: #3b82f6; border: 1px solid rgba(59,130,246,0.25); font-size: 0.6rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-arrow-down-left"></i> GELEN</span>`
+           : `<span style="background: rgba(168, 85, 247, 0.12); color: #a855f7; border: 1px solid rgba(168,85,247,0.25); font-size: 0.6rem; font-weight: 800; padding: 3px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-arrow-up-right"></i> GİDEN</span>`;
+
+         let deliveryMethodStr = 'Klasik Transfer';
+         let deliveryDetailStr = 'Bilinmiyor';
+         if (t.deliveryMethod === 'PERSON') {
+           deliveryMethodStr = '<i class="fa-solid fa-user-tie"></i> Personel';
+           deliveryDetailStr = t.shippedBy || 'Belirtilmedi';
+         } else if (t.deliveryMethod === 'CARGO') {
+           deliveryMethodStr = '<i class="fa-solid fa-truck-fast"></i> Kargo';
+           deliveryDetailStr = `${t.cargoCarrier || 'Kargo'} (${t.cargoTrackingNo || 'Belirtilmedi'})`;
+         }
+
+         let itemsMarkup = '';
+         if (isV2) {
+           itemsMarkup = t.items.map((item: any) => `
+             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.03); padding: 5px 0;">
+               <span style="color: var(--text-main); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; font-size: 0.76rem;">
+                 <span style="font-family: monospace; font-size: 0.7rem; color: #00f3ff; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.15); padding: 2px 6px; border-radius: 4px; box-shadow: 0 0 6px rgba(0,243,255,0.05);">${item.materialCode}</span>
+                 <span>${item.materialName}</span>
+               </span>
+               <span style="color: #14F195; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; background: rgba(20, 241, 149, 0.05); border: 1px solid rgba(20, 241, 149, 0.15); padding: 1px 8px; border-radius: 20px; box-shadow: 0 0 8px rgba(20,241,149,0.05);">${item.quantity} Adet</span>
+             </div>
+           `).join('');
+         } else {
+           itemsMarkup = `
+             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(255,255,255,0.03); padding: 5px 0;">
+               <span style="color: var(--text-main); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; font-size: 0.76rem;">
+                 <span style="font-family: monospace; font-size: 0.7rem; color: #00f3ff; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.15); padding: 2px 6px; border-radius: 4px; box-shadow: 0 0 6px rgba(0,243,255,0.05);">${t.materialCode}</span>
+                 <span>${t.materialName}</span>
+               </span>
+               <span style="color: #14F195; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; background: rgba(20, 241, 149, 0.05); border: 1px solid rgba(20, 241, 149, 0.15); padding: 1px 8px; border-radius: 20px; box-shadow: 0 0 8px rgba(20,241,149,0.05);">${t.quantity} Adet</span>
+             </div>
+           `;
+         }
+
+         const isReceiver = t.toSiteId === currentWarehouseId && (currentUser?.allowedWarehouses?.includes(t.toSiteId) || isAdmin);
+         const showActions = normStatus === 'YOLDA' && isReceiver;
+
+         const createdDateStr = t.createdAt?.toDate 
+           ? t.createdAt.toDate().toLocaleString('tr-TR') 
+           : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString('tr-TR') : 'Bugün');
+           
+         const resolvedDateStrHTML = t.resolvedAt?.toDate 
+           ? t.resolvedAt.toDate().toLocaleString('tr-TR') 
+           : (t.resolvedAt?.seconds ? new Date(t.resolvedAt.seconds * 1000).toLocaleString('tr-TR') : (normStatus === 'YOLDA' ? '<span style="color: #F59E0B; font-weight:bold;">Yolda</span>' : '---'));
+
+         return `
+           <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1rem; background: rgba(15, 23, 42, 0.4); border-radius: 12px; transition: all 0.3s ease; border: 1px solid rgba(255, 255, 255, 0.04); border-left: 4px solid ${cardBorderColor}; box-shadow: 0 4px 20px rgba(0,0,0,0.15);" onmouseover="this.style.background='rgba(15, 23, 42, 0.55)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.background='rgba(15, 23, 42, 0.4)'; this.style.transform='none';">
+             
+             <!-- Header -->
+             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 0.6rem; margin-bottom: 0.6rem;">
+               <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                 <span style="font-family: monospace; font-size: 1rem; font-weight: 800; color: var(--accent-cyan); letter-spacing: 0.5px;">${msfNo}</span>
+                 ${directionBadge}
+                 <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 700; color: var(--text-main); background: rgba(0, 0, 0, 0.2); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.04);">
+                   <i class="fa-solid fa-warehouse" style="color: #64748B;"></i>
+                   <span>${fromName}</span>
+                   <i class="fa-solid fa-arrow-right-long" style="color: var(--accent-cyan); font-size: 0.75rem;"></i>
+                   <i class="fa-solid fa-location-dot" style="color: #EF4444;"></i>
+                   <span>${toName}</span>
+                 </div>
+               </div>
+               
+               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                 <button onclick="window.printWarehouseMsfVoucher('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: var(--text-main); border-color: rgba(255,255,255,0.15); background: transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.color='var(--text-main)'">
+                   <i class="fa-solid fa-print"></i> Yazdır
+                 </button>
+                 
+                 ${showActions ? `
+                   <button onclick="window.rejectWarehouseMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+                     <i class="fa-solid fa-ban"></i> Reddet
+                   </button>
+                   <button onclick="window.approveWarehouseMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: 700; transition: all 0.2s; box-shadow: 0 0 10px rgba(16,185,129,0.05);" onmouseover="this.style.background='rgba(16,185,129,0.18)'; this.style.borderColor='#10B981'; this.style.boxShadow='0 0 15px rgba(16,185,129,0.15)';" onmouseout="this.style.background='rgba(16,185,129,0.08)'; this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.boxShadow='0 0 10px rgba(16,185,129,0.05)'">
+                     <i class="fa-solid fa-circle-check"></i> Teslim Al
+                   </button>
+                 ` : ''}
+
+                 <span style="${statusStyle} font-size: 0.68rem; font-weight: 800; padding: 4px 12px; border-radius: 30px; letter-spacing: 0.5px; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 8px ${statusGlow};">
+                   ${statusText}
+                 </span>
+               </div>
+             </div>
+
+             <!-- Shipping & Metadata Grid -->
+             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; margin-bottom: 0.75rem;">
+               <div>
+                 <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-user-circle"></i> TALEBİ OLUŞTURAN</span>
+                 <span style="color: var(--text-main); font-weight: 600; font-family: monospace; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${t.requestedBy}">${t.requestedBy}</span>
+               </div>
+               <div>
+                 <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-paper-plane"></i> SEVK YÖNTEMİ</span>
+                 <span style="color: var(--text-main); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">${deliveryMethodStr}</span>
+               </div>
+               <div>
+                 <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-info"></i> TAŞIYICI DETAYI</span>
+                 <span style="color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${deliveryDetailStr}">${deliveryDetailStr}</span>
+               </div>
+               <div>
+                 <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-clock"></i> GÖNDERİM TARİHİ</span>
+                 <span style="color: var(--text-main); font-weight: 600;">${createdDateStr}</span>
+               </div>
+               <div>
+                 <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-check"></i> TESLİM TARİHİ</span>
+                 <span style="color: var(--text-main); font-weight: 600;">${resolvedDateStrHTML}</span>
+               </div>
+             </div>
+
+             <!-- Materials Section -->
+             <div style="background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.02); border-radius: 8px; padding: 8px 12px;">
+               <span style="font-size: 0.6rem; color: #64748B; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;"><i class="fa-solid fa-box-open"></i> Sevk Edilen Malzemeler</span>
+               <div style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 3px;">
+                 ${itemsMarkup}
+               </div>
+             </div>
+
+             ${t.rejectionReason ? `
+               <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; color: #ef4444; margin-top: 0.6rem; display: flex; align-items: start; gap: 8px;">
+                 <i class="fa-solid fa-circle-info" style="margin-top: 2px; font-size: 0.85rem;"></i>
+                 <div>
+                   <strong>Red/İptal Gerekçesi:</strong> ${t.rejectionReason}
+                 </div>
+               </div>
+             ` : ''}
+
+           </div>
+         `;
+       }).join('');
+
+       // pagination controls markup
+       const paginationMarkup = `
+         <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.03);">
+           <button onclick="window.changeWarehouseTransfersPage(-1)" class="btn-cyber-mini" ${warehouseTransfersPage === 1 ? 'disabled style="opacity: 0.5; pointer-events: none;"' : 'style="cursor: pointer;"'}>
+             <i class="fa-solid fa-chevron-left" style="margin-right: 4px;"></i> Önceki
+           </button>
+           <span style="font-family: 'Rajdhani', sans-serif; font-weight: bold; font-size: 0.82rem; color: #FFF; background: rgba(0,0,0,0.2); padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.02);">
+             Sayfa ${warehouseTransfersPage} / ${totalPages} <span style="color: var(--text-muted); font-size: 0.72rem; margin-left: 5px;">(Toplam: ${totalCount})</span>
+           </span>
+           <button onclick="window.changeWarehouseTransfersPage(1)" class="btn-cyber-mini" ${warehouseTransfersPage === totalPages ? 'disabled style="opacity: 0.5; pointer-events: none;"' : 'style="cursor: pointer;"'}>
+             Sonraki <i class="fa-solid fa-chevron-right" style="margin-left: 4px;"></i>
+           </button>
+         </div>
+       `;
+
+       listContainer.innerHTML = cardsHtml + paginationMarkup;
+     };
+
+     (window as any).loadWarehouseTransfers = () => {
+       const container = document.getElementById('warehouse-transfers-container');
+       if (!container) return;
+
+       const dirStyle = (dir: string) => {
+         return warehouseTransfersDirection === dir 
+           ? 'background: rgba(20, 241, 149, 0.15); color: #14F195;' 
+           : 'background: transparent; color: #94A3B8;';
+       };
+
+       container.innerHTML = `
+          <!-- Controls Panel (Search, Direction, Excel) -->
+          <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 10px 12px; border-radius: 8px;">
+            
+            <!-- Search Input -->
+            <div style="flex: 1; min-width: 220px; position: relative;">
+              <input type="text" id="transfer-search-input" oninput="window.onTransferSearchInput()" value="${warehouseTransfersSearchQuery}" placeholder="SAP No, Malzeme, Depo veya MSF No Ara..." style="width: 100%; box-sizing: border-box; padding: 6px 10px 6px 30px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: #0A0E17; color: #FFF; font-size: 0.78rem;">
+              <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.8rem;"></i>
+            </div>
+
+            <!-- Direction Selector -->
+            <div style="display: flex; background: #0A0E17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 2px;">
+              <button onclick="window.setTransferDirection('ALL')" id="btn-dir-all" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('ALL')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Tümü</button>
+              <button onclick="window.setTransferDirection('INCOMING')" id="btn-dir-in" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('INCOMING')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Gelenler</button>
+              <button onclick="window.setTransferDirection('OUTGOING')" id="btn-dir-out" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('OUTGOING')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Gidenler</button>
+            </div>
+
+            <!-- Excel Export Button -->
+            <button onclick="window.exportTransfersListToExcel()" class="btn-cyber-mini" style="font-size: 0.75rem; padding: 6px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: bold; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-file-excel"></i> Excel İndir
+            </button>
+
+          </div>
+
+          <div id="warehouse-transfers-cards-list">
+            <div style="color: var(--accent-cyan); text-align: center; padding: 2rem;"><i class="fa-solid fa-spinner fa-spin"></i> Transferler Listeleniyor...</div>
+          </div>
+       `;
+
+       if (!(window as any)._warehousesMap) {
+         (window as any)._warehousesMap = {};
+         const allWh = dataService.getWarehouses();
+         allWh.forEach((w: any) => { (window as any)._warehousesMap[w.id] = w.name; });
+         for (let i = 1; i <= 15; i++) {
+           const tName = `Team \${String(i).padStart(2, '0')}`;
+           const tId = `team_\${tName.replace(/\\s+/g, '_')}`;
+           (window as any)._warehousesMap[tId] = `\${tName} Deposu`;
+         }
+       }
+
+       import('../firebase').then(({ db }) => {
+          import('firebase/firestore').then(({ collection, query, orderBy, onSnapshot }) => {
+             const q = query(collection(db, 'transfers'), orderBy('createdAt', 'desc'));
+             
+             if ((window as any)._warehouseTransfersUnsubscribe) {
+               (window as any)._warehouseTransfersUnsubscribe();
+             }
+
+             (window as any)._warehouseTransfersUnsubscribe = onSnapshot(q, (snapshot) => {
+               const allTransfers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+               cachedWarehouseTransfers = allTransfers.filter((t: any) => 
+                 t.fromSiteId === currentWarehouse.id || t.toSiteId === currentWarehouse.id
+               );
+               (window as any).renderWarehouseTransfersList();
+             });
+          });
+       });
+     };
+
+
+     (window as any).approveWarehouseMsfTransfer = async (transferId: string) => {
+       const adminEmail = ((window as any).currentUser || (window as any).appState?.userProfile)?.email || 'Admin';
+       
+       try {
+         const { db } = await import('../firebase');
+         const { doc, getDoc } = await import('firebase/firestore');
+         const { transferService } = await import('../services/TransferService');
+         
+         const docRef = doc(db, 'transfers', transferId);
+         const docSnap = await getDoc(docRef);
+         if (!docSnap.exists()) {
+           alert("Transfer kaydı bulunamadı!");
+           return;
+         }
+         
+         const transfer = docSnap.data();
+         const items = Array.isArray(transfer.items) 
+           ? transfer.items 
+           : [{ materialCode: transfer.materialCode, materialName: transfer.materialName, quantity: transfer.quantity }];
+
+         // Create the modal element
+         const modal = document.createElement('div');
+         modal.id = 'approve-transfer-modal';
+         modal.style.position = 'fixed';
+         modal.style.inset = '0';
+         modal.style.backgroundColor = 'rgba(0,0,0,0.6)';
+         modal.style.backdropFilter = 'blur(4px)';
+         modal.style.display = 'flex';
+         modal.style.alignItems = 'center';
+         modal.style.justifyContent = 'center';
+         modal.style.zIndex = '10000';
+         modal.style.fontFamily = "'Rajdhani', sans-serif";
+
+         // Build items rows
+         const currentInventory = (window as any).currentInventoryData || [];
+         const itemsHtml = items.map((item: any) => {
+           const invItem = currentInventory.find((i: any) => i.sapNo === item.materialCode);
+           const existingShelf = invItem ? (invItem.shelfNo || 'Tanımsız') : 'Tanımsız';
+           
+           return `
+             <div style="background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+               <div style="display: flex; justify-content: space-between; align-items: start;">
+                 <span style="color: #FFF; font-weight: 700; font-size: 0.8rem;">
+                   ${item.materialName}
+                   <span style="font-family: monospace; font-size: 0.7rem; color: #60A5FA; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); padding: 1px 4px; border-radius: 3px; margin-left: 4px;">${item.materialCode}</span>
+                 </span>
+                 <span style="color: var(--accent-cyan); font-weight: 800; font-family: monospace; font-size: 0.8rem;">${item.quantity} Adet</span>
+               </div>
+               
+               <div style="display: flex; gap: 10px; align-items: center;">
+                 <div style="flex: 1;">
+                   <label style="font-size: 0.65rem; color: #94A3B8; display: block; font-weight: bold; margin-bottom: 2px;">RAF SEÇİMİ</label>
+                   <input type="text" id="modal-shelf-${item.materialCode}" value="${existingShelf}" placeholder="Örn: B-1, D-2" style="width: 100%; box-sizing: border-box; padding: 5px 8px; border-radius: 4px; border: 1px solid #1E293B; background: #0A0E17; color: #FFF; font-family: monospace; font-size: 0.75rem;">
+                 </div>
+                 <div style="flex: 1;">
+                   <label style="font-size: 0.65rem; color: #94A3B8; display: block; font-weight: bold; margin-bottom: 2px;">MALZEME DURUMU</label>
+                   <select id="modal-cond-${item.materialCode}" style="width: 100%; box-sizing: border-box; padding: 5px 8px; border-radius: 4px; border: 1px solid #1E293B; background: #0A0E17; color: #FFF; font-size: 0.75rem; font-weight: bold; cursor: pointer;">
+                     <option value="NEW" selected>Kusursuz (Yeni)</option>
+                     <option value="DEFECT">Hasarlı / Defect</option>
+                     <option value="REVISED">Revize Edilmiş</option>
+                     <option value="SCRAP">Hurda (Scrap)</option>
+                   </select>
+                 </div>
+               </div>
+             </div>
+           `;
+         }).join('');
+
+         modal.innerHTML = `
+           <div class="glass-panel" style="background: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 480px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+             
+             <!-- Header -->
+             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem;">
+               <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; font-weight: 800; color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
+                 <i class="fa-solid fa-circle-check"></i> MALZEME TESLİM KABULÜ
+               </div>
+               <button id="modal-close-btn" style="background: transparent; border: none; color: #64748B; cursor: pointer; font-size: 1.1rem; transition: color 0.2s;" onmouseover="this.style.color='#FFF'" onmouseout="this.style.color='#64748B'">&times;</button>
+             </div>
+
+             <!-- Description -->
+             <p style="font-size: 0.78rem; color: #94A3B8; margin-top: 0; margin-bottom: 1rem; line-height: 1.45;">
+               Malzemeleri depoya kabul etmek için lütfen raflarını ve kondisyon durumlarını seçin. Kusursuz gelenler için <strong>Kusursuz (Yeni)</strong> seçeneğini bırakabilirsiniz.
+             </p>
+
+             <!-- Items List Container -->
+             <div style="display: flex; flex-direction: column; gap: 10px; max-height: 280px; overflow-y: auto; padding-right: 4px; margin-bottom: 1.5rem;">
+               ${itemsHtml}
+             </div>
+
+             <!-- Footer Actions -->
+             <div style="display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.75rem;">
+               <button id="modal-cancel-btn" class="btn-cyber-mini" style="font-size: 0.75rem; padding: 6px 15px; color: #94A3B8; border-color: rgba(255,255,255,0.1); background: transparent;">
+                 İptal Et
+               </button>
+               <button id="modal-submit-btn" class="btn-cyber-mini" style="font-size: 0.75rem; padding: 6px 20px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: bold; box-shadow: 0 0 10px rgba(16,185,129,0.05);">
+                 Onayla ve Teslim Al
+               </button>
+             </div>
+
+           </div>
+         `;
+
+         document.body.appendChild(modal);
+
+         // Add Event Listeners
+         const closeModal = () => {
+           document.body.removeChild(modal);
+         };
+
+         modal.querySelector('#modal-close-btn')?.addEventListener('click', closeModal);
+         modal.querySelector('#modal-cancel-btn')?.addEventListener('click', closeModal);
+
+         modal.querySelector('#modal-submit-btn')?.addEventListener('click', async () => {
+           const submitBtn = modal.querySelector('#modal-submit-btn');
+           if (submitBtn) (submitBtn as any).disabled = true;
+
+           const itemDetails = items.map((item: any) => {
+             const shelfInput = modal.querySelector(`#modal-shelf-${item.materialCode}`);
+             const condSelect = modal.querySelector(`#modal-cond-${item.materialCode}`);
+             return {
+               materialCode: item.materialCode,
+               shelfNo: shelfInput ? (shelfInput as any).value.trim() || 'Tanımsız' : 'Tanımsız',
+               condition: condSelect ? (condSelect as any).value : 'NEW'
+             };
+           });
+
+           try {
+             await transferService.approveMultiItemTransfer(transferId, adminEmail, itemDetails);
+             closeModal();
+             alert("✅ Sevk başarıyla teslim alındı ve belirtilen raflara yerleştirilerek stoğa girildi!");
+             if ((window as any).renderInventoryTable) (window as any).renderInventoryTable();
+           } catch (err) {
+             alert("Kabul işlemi sırasında hata oluştu: " + (err as any).message);
+             if (submitBtn) (submitBtn as any).disabled = false;
+           }
+         });
+
+       } catch (err) {
+         alert("Hata: " + (err as any).message);
+       }
+     };
+
+     (window as any).rejectWarehouseMsfTransfer = async (transferId: string) => {
+       const reason = prompt("Sevk talebini reddetme / iptal etme gerekçesini giriniz:\n(İptal edildiğinde tüm stoklar çıkış deposuna geri iade edilecektir.)");
+       if (reason === null) return;
+       if (!reason.trim()) {
+         alert("Lütfen gerekçe belirtin!");
+         return;
+       }
+       const adminEmail = ((window as any).currentUser || (window as any).appState?.userProfile)?.email || 'Admin';
+       try {
+         const { transferService } = await import('../services/TransferService');
+         await transferService.rejectMultiItemTransfer(transferId, adminEmail, reason);
+         alert("❌ Sevk iptal edildi.");
+       } catch (err: any) {
+         alert("Hata: " + err.message);
+       }
+     };
+
+     (window as any).printWarehouseMsfVoucher = (transferId: string) => {
+       getDoc(doc(db, 'transfers', transferId)).then((docSnap: any) => {
+          if (!docSnap.exists()) return;
+          const transfer = { id: docSnap.id, ...docSnap.data() };
+          
+          const msfNo = transfer.msfNo || `TRF-${transfer.id?.substring(0, 8).toUpperCase()}`;
+          const fromName = (window as any)._warehousesMap[transfer.fromSiteId] || transfer.fromSiteId;
+          const toName = (window as any)._warehousesMap[transfer.toSiteId] || transfer.toSiteId;
+          const dateStr = transfer.createdAt?.toDate ? transfer.createdAt.toDate().toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
+          
+          let deliveryDetails = '';
+          if (transfer.deliveryMethod === 'PERSON') {
+            deliveryDetails = `<strong>Teslimat Tipi:</strong> Personel ile<br><strong>Taşıyan Kişi:</strong> ${transfer.shippedBy || 'Belirtilmedi'}`;
+          } else if (transfer.deliveryMethod === 'CARGO') {
+            deliveryDetails = `<strong>Teslimat Tipi:</strong> Kargo ile gönderildi<br><strong>Kargo Firması:</strong> ${transfer.cargoCarrier || 'Belirtilmedi'}<br><strong>Takip / Fatura No:</strong> ${transfer.cargoTrackingNo || 'Belirtilmedi'}`;
+          } else {
+            deliveryDetails = `<strong>Teslimat Tipi:</strong> Depolar Arası Klasik Transfer`;
+          }
+
+          const items = Array.isArray(transfer.items) 
+            ? transfer.items 
+            : [{ materialCode: transfer.materialCode, materialName: transfer.materialName, quantity: transfer.quantity }];
+
+          const tableRows = items.map((it: any, idx: number) => `
+            <tr>
+              <td style="border: 1px solid #000; padding: 6px; text-align: center;">${idx + 1}</td>
+              <td style="border: 1px solid #000; padding: 6px; font-family: monospace;">${it.materialCode}</td>
+              <td style="border: 1px solid #000; padding: 6px;">${it.materialName}</td>
+              <td style="border: 1px solid #000; padding: 6px; text-align: center; font-weight: bold;">${it.quantity}</td>
+              <td style="border: 1px solid #000; padding: 6px; text-align: center;">Adet</td>
+            </tr>
+          `).join('');
+
+          const printWindow = window.open('', '_blank');
+          if (!printWindow) return;
+
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Malzeme Sevk Formu - ${msfNo}</title>
+                <style>
+                  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #000; background: #fff; font-size: 12px; }
+                  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
+                  .logo { font-size: 20px; font-weight: bold; letter-spacing: 1px; }
+                  .title { text-align: right; }
+                  .title h1 { margin: 0; font-size: 18px; font-weight: 800; }
+                  .title span { font-size: 12px; color: #555; }
+                  .meta-table { width: 100%; margin-bottom: 20px; border-collapse: collapse; }
+                  .meta-table td { padding: 4px 0; vertical-align: top; }
+                  .items-table { width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 30px; }
+                  .items-table th { border: 1px solid #000; background-color: #f2f2f2; padding: 8px; text-align: left; font-weight: bold; }
+                  .signatures { margin-top: 50px; display: flex; justify-content: space-between; }
+                  .signature-box { width: 30%; text-align: center; border-top: 1px dashed #000; padding-top: 10px; }
+                  @media print { body { margin: 10px; } .no-print { display: none; } }
+                </style>
+              </head>
+              <body>
+                <div class="no-print" style="margin-bottom: 20px; background: #e5e7eb; padding: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+                  <span style="color:#374151; font-weight: bold;">MSF Yazdırma Önizleme</span>
+                  <button onclick="window.print()" style="background:#10b981; color:#fff; border:none; padding: 6px 15px; border-radius: 4px; font-weight:bold; cursor:pointer;">Yazdır / PDF Kaydet</button>
+                </div>
+                <div class="header">
+                  <div class="logo">DEMİRER <span style="font-weight: 300;">HOLDİNG</span></div>
+                  <div class="title">
+                    <h1>MALZEME SEVK FORMU (MSF)</h1>
+                    <span style="font-family: monospace; font-weight: bold; font-size: 13px;">No: ${msfNo}</span>
+                  </div>
+                </div>
+                <table class="meta-table">
+                  <tr>
+                    <td style="width: 50%;">
+                      <strong>ÇIKIŞ DEPOSU (SEVK EDEN):</strong><br>${fromName}<br><br>
+                      <strong>VARIŞ DEPOSU (SEVK EDİLEN):</strong><br>${toName}
+                    </td>
+                    <td style="width: 50%; text-align: right;">
+                      <strong>Sevk Tarihi:</strong> ${dateStr}<br>
+                      <strong>Oluşturan / Sevk Eden:</strong> ${transfer.requestedBy}<br><br>
+                      ${deliveryDetails}
+                    </td>
+                  </tr>
+                </table>
+                <h3 style="border-bottom: 1px solid #000; padding-bottom: 5px; margin-top: 30px;">Sevk Edilen Malzeme Listesi</h3>
+                <table class="items-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 5%; text-align: center;">S.No</th>
+                      <th style="width: 25%;">SAP No / Kod</th>
+                      <th style="width: 50%;">Malzeme Açıklaması / Adı</th>
+                      <th style="width: 10%; text-align: center;">Miktar</th>
+                      <th style="width: 10%; text-align: center;">Birim</th>
+                    </tr>
+                  </thead>
+                  <tbody>${tableRows}</tbody>
+                </table>
+                <div style="font-size: 11px; margin-top: 40px; border: 1px solid #ccc; padding: 10px; border-radius: 4px;">
+                  <strong>Sevk Açıklaması:</strong> Bu belge ile yukarıda dökümü yapılan malzemelerin çıkış deposundan sevk edildiği, alıcı deponun malzemeleri eksiksiz teslim alıp stoğa işlemesi gerektiği beyan edilir.
+                </div>
+                <div class="signatures">
+                  <div class="signature-box"><strong>Teslim Eden (Sevk Eden)</strong><br><br><br>İmza / Tarih</div>
+                  <div class="signature-box"><strong>Taşıyan Personel / Kargo</strong><br><br><br>İmza / Tarih</div>
+                  <div class="signature-box"><strong>Teslim Alan (Kabul Eden)</strong><br><br><br>İmza / Tarih</div>
+                </div>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+       });
+     };
+
+
+     (window as any).switchTab = async (tabName: string, id: string) => {
+       const tabs = ['tab-ENVANTER', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI', 'tab-DEFECT', 'tab-TRANSFERLER'];
+      const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI', 'view-DEFECT', 'view-TRANSFERLER'];
       
       tabs.forEach(t => {
         const el = document.getElementById(t);
@@ -3850,34 +4978,35 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
          }
       }
 
+      if (tabName === 'TRANSFERLER') {
+         if ((window as any).loadWarehouseTransfers) {
+            (window as any).loadWarehouseTransfers();
+         }
+      }
+
       if (tabName === 'DEPO_HAREKETLERI') {
          const searchInput = document.getElementById('depo-hareketleri-search') as HTMLInputElement;
          if (searchInput) {
            searchInput.value = '';
          }
-         const container = document.getElementById('depo-hareketleri-container');
-         if (container) {
-           container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
-           try {
-             const logs = await warehouseService.getLogs(currentWarehouse.id);
-             (window as any).__cachedDepoLogs = logs;
-             if (typeof (window as any).renderDepoHareketleriLogs === 'function') {
-               (window as any).renderDepoHareketleriLogs();
-             }
-           } catch (err: any) {
-             console.error(err);
-             container.innerHTML = `<div style="text-align:center; padding: 2rem; color: #EF4444;">Yüklenirken hata oluştu: ${err.message}</div>`;
-           }
+         if (typeof (window as any).loadDepoHareketleriLogs === 'function') {
+           (window as any).loadDepoHareketleriLogs();
+         }
+      }
+
+      if (tabName === 'SAYIM_GECMISI') {
+         if (typeof (window as any).loadSayimGecmisi === 'function') {
+           (window as any).loadSayimGecmisi();
          }
       }
 
       // Fetch audit history if needed
-      if (tabName === 'SAYIM_GECMISI') {
-          const container = document.getElementById('audit-history-container');
+      if (false && tabName === 'SAYIM_GECMISI') {
+          const container = document.getElementById('audit-history-container') as any;
           if (container) {
             container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
             try {
-              const audits = await warehouseService.getAuditHistory(currentWarehouse.id);
+              const audits = await warehouseService.getAuditHistory((currentWarehouse as any).id);
               (window as any).__cachedAudits = audits;
               if (audits.length === 0) {
                 container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
@@ -4770,6 +5899,21 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
            (window as any).renderInventoryTable();
         }
      }
+     if (currentTab === 'DEPO_HAREKETLERI') {
+        if (typeof (window as any).loadDepoHareketleriLogs === 'function') {
+           (window as any).loadDepoHareketleriLogs();
+        }
+     }
+     if (currentTab === 'SAYIM_GECMISI') {
+        if (typeof (window as any).loadSayimGecmisi === 'function') {
+           (window as any).loadSayimGecmisi();
+        }
+     }
+     if (currentTab === 'TRANSFERLER') {
+        if (typeof (window as any).loadWarehouseTransfers === 'function') {
+           (window as any).loadWarehouseTransfers();
+        }
+     }
      // Auto-search/filter from quick navigation if set
      if ((window as any)._globalWarehouseSearchQuery) {
          const searchInput = document.getElementById('inventory-search-input') as HTMLInputElement;
@@ -4940,16 +6084,22 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           <i class="fa-solid fa-layer-group"></i> ENVANTER
         </div>
         ${isMobileWarehouse ? `
+          <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+            <i class="fa-solid fa-screwdriver-wrench"></i> KULLANIMLAR
+          </div>
           <div onclick="window.switchTab('DEPO_HAREKETLERI', 'tab-DEPO_HAREKETLERI')" id="tab-DEPO_HAREKETLERI" data-active="${currentTab === 'DEPO_HAREKETLERI' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEPO_HAREKETLERI' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-clock-rotate-left"></i> DEPO HAREKETLERİ
           </div>
           <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
           </div>
+          <div onclick="window.switchTab('TRANSFERLER', 'tab-TRANSFERLER')" id="tab-TRANSFERLER" data-active="${currentTab === 'TRANSFERLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TRANSFERLER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'TRANSFERLER' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+            <i class="fa-solid fa-truck-ramp-box"></i> TRANSFERLER
+          </div>
         ` : `
           ${currentWarehouse.id !== 'MTA' ? `
             <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
-              <i class="fa-solid fa-chart-line"></i> ANALİZ
+              <i class="fa-solid fa-screwdriver-wrench"></i> KULLANIMLAR
             </div>
           ` : ''}
           <div onclick="window.switchTab('SAYIM', 'tab-SAYIM')" id="tab-SAYIM" data-active="${currentTab === 'SAYIM' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'SAYIM' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'SAYIM' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
@@ -4961,6 +6111,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           ${currentWarehouse.id !== 'MTA' ? `
             <div onclick="window.switchTab('DEFECT', 'tab-DEFECT')" id="tab-DEFECT" data-active="${currentTab === 'DEFECT' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'DEFECT' ? '#EF4444' : '#94A3B8'}; border: 1px solid ${currentTab === 'DEFECT' ? '#EF4444' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
               <i class="fa-solid fa-triangle-exclamation"></i> DEFECT LİSTESİ
+            </div>
+            <div onclick="window.switchTab('TRANSFERLER', 'tab-TRANSFERLER')" id="tab-TRANSFERLER" data-active="${currentTab === 'TRANSFERLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TRANSFERLER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'TRANSFERLER' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+              <i class="fa-solid fa-truck-ramp-box"></i> TRANSFERLER
             </div>
           ` : ''}
         `}
@@ -5094,7 +6247,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
                 <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Zimmetli Kalem</div>
               </div>
-              <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${inventoryItems.length}</div>
+              <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${inventoryItems.filter(item => item.condition !== 'DEFECT' && (item.quantity > 0 || (item.reservedQuantity || 0) > 0)).length}</div>
             </div>
           </div>
         `}
@@ -5400,6 +6553,30 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             <div>
               <h2 style="color: #FFFFFF; margin: 0; font-size: 1.25rem;">Depo Defect (Sökülen) Malzeme Listesi</h2>
               <div style="color: #94A3B8; font-size: 0.9rem;">Saha servis raporlarında söküldüğü belirtilen ve depoda bulunan defect malzemelerin listesi ve aksiyonları.</div>
+              <div style="margin-top: 0.75rem; display: flex; flex-direction: column; gap: 10px;">
+                <div style="align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.15); border-radius: 6px; font-size: 0.8rem; color: var(--accent-cyan);">
+                  <i class="fa-solid fa-location-dot"></i>
+                  <span>${getWarehouseSite(currentWarehouse)}</span>
+                </div>
+                ${isMobileWarehouse ? (() => {
+                  const sites = getTeamResponsibleSites(currentWarehouse.id);
+                  return `
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                      <span style="font-size: 0.8rem; color: #94A3B8; font-weight: bold;">Hızlı Filtre:</span>
+                      <div class="defect-site-filters" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button class="site-filter-btn active" onclick="window.filterDefectListBySite(this, 'all')" style="background: rgba(20, 241, 149, 0.2); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); padding: 4px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; transition: all 0.2s;">
+                          <i class="fa-solid fa-layer-group"></i> Tümü
+                        </button>
+                        ${sites.map(siteName => `
+                          <button class="site-filter-btn" onclick="window.filterDefectListBySite(this, '${siteName.replace(/'/g, "\\'")}')" style="background: rgba(255,255,255,0.03); color: #94A3B8; border: 1px solid rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="if(!this.classList.contains('active')) this.style.background='rgba(255,255,255,0.03)'">
+                            <i class="fa-solid fa-location-dot"></i> ${siteName}
+                          </button>
+                        `).join('')}
+                      </div>
+                    </div>
+                  `;
+                })() : ''}
+              </div>
             </div>
             ${isMaterialManager ? `
             <div style="display: flex; gap: 8px;">
@@ -5504,7 +6681,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         faultDesc: finalReportItem?.faultDesc || '-',
                         defect: finalReportItem?.defect || inv.quantity || 1,
                         recoveryNotes: inv.recoveryNotes || [],
-                        recoveryNote: inv.recoveryNote || ''
+                        recoveryNote: inv.recoveryNote || '',
+                        siteName: finalReportItem?.siteName || '-'
                       };
                     });
 
@@ -5517,62 +6695,124 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                       </tr>
                     `;
                   }
-                  
-                  return activeDefects.map(item => {
-                    const cleanNameEscaped = item.description.replace(/'/g, "\\'");
+
+                  // Group by reportId (fallback to manual)
+                  const groups = new Map();
+                  activeDefects.forEach(item => {
+                    const groupKey = item.reportId !== '-' ? item.reportId : 'manual';
+                    if (!groups.has(groupKey)) {
+                      groups.set(groupKey, {
+                        displayDate: item.displayDate,
+                        turbineNo: item.turbineNo !== '-' ? item.turbineNo : (groupKey === 'manual' ? 'Manuel Eklenenler' : 'Belirsiz Türbin'),
+                        reportId: item.reportId,
+                        matFormNo: item.matFormNo,
+                        type: item.type,
+                        faultCode: item.faultCode,
+                        faultDesc: item.faultDesc,
+                        items: []
+                      });
+                    }
+                    groups.get(groupKey).items.push(item);
+                  });
+
+                  let htmlResult = '';
+                  groups.forEach((group: any, key: string) => {
+                    const cleanKey = key.replace(/[^a-zA-Z0-9-]/g, '_');
+                    const totalQty = group.items.reduce((sum: number, it: any) => sum + (it.defect || 1), 0);
                     
-                    return `
-                      <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                    // Group Header Row
+                    htmlResult += `
+                      <tr id="group-header-${cleanKey}" onclick="window.toggleDefectGroupCollapse('${cleanKey}')" style="cursor: pointer; background: rgba(20, 241, 149, 0.03); border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='rgba(20, 241, 149, 0.06)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.03)'">
                         ${isMaterialManager ? `
-                        <td style="padding: 0.75rem 1rem; text-align: center;">
-                          <input type="checkbox" class="defect-row-checkbox" 
-                            data-id="${item.id}" 
-                            data-sap="${item.sapNo}" 
-                            data-name="${cleanNameEscaped}" 
-                            data-qty="${item.defect}" 
-                            data-serial="${item.serialNo || '-'}" 
-                            data-faultcode="${item.faultCode || '-'}" 
-                            data-faultdesc="${item.faultDesc ? item.faultDesc.replace(/'/g, "\\'") : '-'}" 
-                            style="cursor: pointer; width: 16px; height: 16px;">
+                        <td style="padding: 0.75rem 1rem; text-align: center;" onclick="event.stopPropagation();">
+                          <input type="checkbox" onchange="window.toggleDefectGroup(this, '${cleanKey}')" style="cursor: pointer; width: 16px; height: 16px;">
                         </td>
                         ` : ''}
-                        <td style="padding: 0.75rem 1rem; color: #E2E8F0;">${item.displayDate}</td>
-                        <td style="padding: 0.75rem 1rem; font-weight: bold; color: #FFF;">${item.turbineNo}</td>
-                        <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${item.reportId}</td>
-                        <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 600;">${item.matFormNo}</td>
+                        <td style="padding: 0.75rem 1rem; color: #14F195; white-space: nowrap;">
+                          <i class="fa-solid fa-chevron-right toggle-icon" style="margin-right: 8px; transition: transform 0.2s; display: inline-block;"></i>
+                          ${group.displayDate}
+                        </td>
+                        <td style="padding: 0.75rem 1rem; color: #FFF; font-weight: 700;">${group.turbineNo}</td>
+                        <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${group.reportId}</td>
+                        <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 800;">${group.matFormNo}</td>
                         <td style="padding: 0.75rem 1rem;">
-                          <span style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;
-                            ${item.type === 'BAKIM' ? 'background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3);' : 
-                              'background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);'}">
-                            ${item.type === 'BAKIM' ? 'Bakım' : 'Arıza'}
-                          </span>
+                          ${group.reportId !== '-' ? `
+                            <span style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;
+                              ${group.type === 'BAKIM' ? 'background: rgba(59, 130, 246, 0.15); color: #3B82F6; border: 1px solid rgba(59, 130, 246, 0.3);' : 
+                                'background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3);'}">
+                              ${group.type === 'BAKIM' ? 'Bakım' : 'Arıza'}
+                            </span>
+                          ` : '-'}
                         </td>
-                        <td style="padding: 0.75rem 1rem; color: #3B82F6; font-family: monospace;">${item.sapNo}</td>
-                        <td style="padding: 0.75rem 1rem; color: #10B981; font-family: monospace; font-weight: bold;">${item.serialNo || '-'}</td>
-                        <td style="padding: 0.75rem 1rem; font-weight: 500; color: #E2E8F0;">${item.description}</td>
-                        <td style="padding: 0.75rem 1rem; color: #E2E8F0;">
-                          <span style="font-weight: 600; color: #FFF;">${item.faultCode}</span>
-                          ${item.faultDesc && item.faultDesc !== '-' ? `<div style="font-size: 0.75rem; color: #94A3B8; margin-top: 2px;">${item.faultDesc}</div>` : ''}
+                        <td colspan="5" style="padding: 0.75rem 1rem; color: #E2E8F0; font-size: 0.8rem; font-weight: normal;">
+                          ${group.reportId !== '-' && group.faultCode !== '-' ? `
+                            <span style="font-weight: 600; color: #FFF; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); margin-right: 8px;">${group.faultCode}</span>
+                            ${group.faultDesc && group.faultDesc !== '-' ? `<span style="color: #94A3B8;">${group.faultDesc}</span>` : ''}
+                          ` : (key === 'manual' ? '<span style="color: #94A3B8; font-style: italic;">Manuel Depo Kayıtları</span>' : '-')}
                         </td>
-                        <td style="padding: 0.75rem 1rem; color: #14F195; font-weight: 600;">${item.shelfNo}</td>
-                        <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #f87171;">${item.defect}</td>
-                        <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;">
-                          <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-                            ${isMaterialManager ? `
-                              <i onclick="window.returnDefectToInventory('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo !== '-' ? item.serialNo : ''}', '${item.turbineNo !== '-' ? item.turbineNo : ''}', '${item.reportId !== '-' ? item.reportId : ''}')" class="fa-solid fa-reply" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sağlam Olarak Stoğa Geri Al"></i>
-                              ${item.recoveryNotes || item.recoveryNote ? `
-                                <i onclick="window.showRecoveryInfoList('${item.id}')" class="fa-solid fa-circle-info" style="cursor: pointer; opacity: 0.7; color: #60A5FA; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geri Kazanım Geçmişini Gör"></i>
-                              ` : ''}
-                              <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
-                              <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
-                            ` : `
-                              <span style="color: #64748B; font-size: 0.75rem; font-style: italic;"><i class="fa-solid fa-info-circle"></i> Sadece Bilgi</span>
-                            `}
-                          </div>
+                        <td style="padding: 0.75rem 1rem; text-align: center; color: #f87171; font-weight: 800; font-family: monospace; font-size: 0.9rem;">
+                          ${totalQty} Ad.
+                        </td>
+                        <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;" onclick="event.stopPropagation(); window.toggleDefectGroupCollapse('${cleanKey}')">
+                          <span class="expand-text" style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: bold; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.2); padding: 3px 8px; border-radius: 4px; transition: all 0.2s;"><i class="fa-solid fa-expand"></i> Göster</span>
                         </td>
                       </tr>
                     `;
-                  }).join('');
+
+                    // Child rows
+                    group.items.forEach((item: any) => {
+                      const cleanNameEscaped = (item.description || 'Bilinmeyen Malzeme').replace(/'/g, "\\'");
+                      
+                      htmlResult += `
+                        <tr class="defect-row group-row-${cleanKey}" data-site="${item.siteName}" style="display: none; border-bottom: 1px solid rgba(255,255,255,0.02); background: rgba(0, 0, 0, 0.22); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.01)'" onmouseout="this.style.background='rgba(0, 0, 0, 0.22)'">
+                          ${isMaterialManager ? `
+                          <td style="padding: 0.75rem 1rem; text-align: center;">
+                            <input type="checkbox" class="defect-row-checkbox group-checkbox-${cleanKey}" 
+                              data-id="${item.id}" 
+                              data-sap="${item.sapNo}" 
+                              data-name="${cleanNameEscaped}" 
+                              data-qty="${item.defect}" 
+                              data-serial="${item.serialNo || '-'}" 
+                              data-faultcode="${item.faultCode || '-'}" 
+                              data-faultdesc="${item.faultDesc ? item.faultDesc.replace(/'/g, "\\'") : '-'}" 
+                              style="cursor: pointer; width: 16px; height: 16px;">
+                          </td>
+                          ` : ''}
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.4); font-size: 0.8rem; padding-left: 2rem; white-space: nowrap;">↳ ${item.displayDate}</td>
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.5); font-size: 0.8rem;">${item.turbineNo}</td>
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.4); font-family: monospace; font-size: 0.75rem;">${item.reportId}</td>
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.4); font-size: 0.8rem;">${item.matFormNo}</td>
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.3); font-size: 0.8rem;">-</td>
+                          <td style="padding: 0.75rem 1rem; color: var(--accent-cyan); font-family: monospace; font-weight: bold;">${item.sapNo}</td>
+                          <td style="padding: 0.75rem 1rem; color: #10B981; font-family: monospace; font-weight: bold;">${item.serialNo || '-'}</td>
+                          <td style="padding: 0.75rem 1rem; font-weight: 500; color: #E2E8F0;">${item.description}</td>
+                          <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.6); font-size: 0.8rem;">
+                            ${item.faultCode !== '-' ? `
+                              <span style="font-weight: 600; color: #94A3B8;">${item.faultCode}</span>
+                              ${item.faultDesc && item.faultDesc !== '-' ? `<div style="font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 1px;">${item.faultDesc}</div>` : ''}
+                            ` : '-'}
+                          </td>
+                          <td style="padding: 0.75rem 1rem; color: #14F195; font-weight: 600;">${item.shelfNo}</td>
+                          <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #f87171; font-family: monospace;">${item.defect}</td>
+                          <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;">
+                            <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                              ${isMaterialManager ? `
+                                <i onclick="window.returnDefectToInventory('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo !== '-' ? item.serialNo : ''}', '${item.turbineNo !== '-' ? item.turbineNo : ''}', '${item.reportId !== '-' ? item.reportId : ''}')" class="fa-solid fa-reply" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sağlam Olarak Stoğa Geri Al"></i>
+                                ${item.recoveryNotes || item.recoveryNote ? `
+                                  <i onclick="window.showRecoveryInfoList('${item.id}')" class="fa-solid fa-circle-info" style="cursor: pointer; opacity: 0.7; color: #60A5FA; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geri Kazanım Geçmişini Gör"></i>
+                                ` : ''}
+                                <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
+                                <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                              ` : `
+                                <span style="color: #64748B; font-size: 0.75rem; font-style: italic;"><i class="fa-solid fa-info-circle"></i> Sadece Bilgi</span>
+                              `}
+                            </div>
+                          </td>
+                        </tr>
+                      `;
+                    });
+                  });
+                  return htmlResult;
                 })()}
               </tbody>
             </table>
@@ -5580,6 +6820,19 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         </div>
       </div>
       <!-- End of view-DEFECT -->
+
+      <!-- view-TRANSFERLER -->
+      <div id="view-TRANSFERLER" style="display: ${currentTab === 'TRANSFERLER' ? 'block' : 'none'};">
+        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 1.5rem;">
+          <h3 style="margin-top: 0; margin-bottom: 1.5rem; font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; color: var(--accent-cyan); font-weight: 800; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase;">
+            <i class="fa-solid fa-truck-ramp-box"></i> Depo Transferleri / Sevk Hareketleri (MSF)
+          </h3>
+          <div id="warehouse-transfers-container">
+            <!-- Dynamic transfers list will render here -->
+          </div>
+        </div>
+      </div>
+
 
       <!-- Defect Edit Modal -->
       <div id="new-warehouse-defect-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
@@ -5921,6 +7174,43 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
    
    const { excelService } = await import('../services/ExcelService');
    excelService.exportAllAuditsToExcel(audits, name, inventory);
+};
+
+(window as any).loadDepoHareketleriLogs = async () => {
+  const container = document.getElementById('depo-hareketleri-container');
+  if (container) {
+    container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
+    try {
+      const { warehouseService } = await import('../services/WarehouseService');
+      const activeWhId = (window as any).currentWarehouseId || 'MTA';
+      const logs = await warehouseService.getLogs(activeWhId);
+      (window as any).__cachedDepoLogs = logs;
+      if (typeof (window as any).renderDepoHareketleriLogs === 'function') {
+        (window as any).renderDepoHareketleriLogs();
+      }
+    } catch (err: any) {
+      console.error(err);
+      container.innerHTML = `<div style="text-align:center; padding: 2rem; color: #EF4444;">Yüklenirken hata oluştu: ${err.message}</div>`;
+    }
+  }
+};
+
+(window as any).toggleAuditDetails = (auditId: string) => {
+  const el = document.getElementById(`audit-details-${auditId}`);
+  const icon = document.getElementById(`audit-toggle-icon-${auditId}`);
+  if (el) {
+    if (el.style.display === 'none') {
+      el.style.display = 'block';
+      if (icon) {
+        icon.className = 'fa-solid fa-chevron-up';
+      }
+    } else {
+      el.style.display = 'none';
+      if (icon) {
+        icon.className = 'fa-solid fa-chevron-down';
+      }
+    }
+  }
 };
 
 (window as any).printWarehouseQR = async () => {

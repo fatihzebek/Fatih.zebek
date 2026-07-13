@@ -148,11 +148,11 @@ function registerWindowFunctions() {
 
     (window as any).renderLogRows = (logs: any[]) => {
         if (logs.length === 0) {
-            return `<tr><td colspan="9" style="padding: 2rem; text-align: center; color: var(--text-dim);">Uygun hareket kaydı bulunamadı.</td></tr>`;
+            return `<tr><td colspan="10" style="padding: 2rem; text-align: center; color: var(--text-dim);">Uygun hareket kaydı bulunamadı.</td></tr>`;
         }
         
         const badgeStyle = `padding: 3px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;`;
-
+ 
         return logs.map(log => {
             const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
             
@@ -166,10 +166,10 @@ function registerWindowFunctions() {
                 const turbMatch = log.note?.match(/T\d+/i) || log.note?.match(/Türbin\s*([^\s,]+)/i);
                 if (turbMatch) turbineNo = turbMatch[0];
             }
-
+ 
             const mcfNo = report?.matFormNo || '-';
             const displayTurbine = turbineNo || '-';
-
+ 
             let typeBadge = '';
             if (log.type === 'ADD') {
                 typeBadge = `<span style="${badgeStyle} background: rgba(0, 255, 127, 0.08); color: #00ff7f; border: 1px solid rgba(0, 255, 127, 0.15);"><i class="fa-solid fa-circle-plus"></i> STOK GİRİŞ</span>`;
@@ -180,9 +180,12 @@ function registerWindowFunctions() {
             } else {
                 typeBadge = `<span style="${badgeStyle} background: rgba(52, 152, 219, 0.08); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.15);"><i class="fa-solid fa-pen-to-square"></i> GÜNCELLEME</span>`;
             }
-
+ 
             return `
                 <tr class="hover-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: all 0.2s;">
+                    <td style="padding: 1rem 1.2rem; text-align: center; width: 40px;">
+                        <input type="checkbox" class="log-row-checkbox" value="${log.id}" onclick="window.onLogCheckboxClick(this)">
+                    </td>
                     <td style="padding: 1rem 1.2rem;">
                         <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-main);">${date.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</div>
                         <div style="font-size: 0.65rem; color: var(--text-dim);">${date.toLocaleDateString('tr-TR')}</div>
@@ -315,6 +318,15 @@ function registerWindowFunctions() {
             sumDisplay.textContent = totalQtySum;
         }
 
+        const headerCheck = document.getElementById('select-all-logs') as HTMLInputElement;
+        if (headerCheck) headerCheck.checked = false;
+        
+        const bulkDeleteBtn = document.getElementById('btn-bulk-delete-logs');
+        if (bulkDeleteBtn) bulkDeleteBtn.classList.add('hidden');
+        
+        const countSpan = document.getElementById('selected-logs-count');
+        if (countSpan) countSpan.innerText = '0';
+
         // Render pagination controls
         const paginationContainer = document.getElementById('detail-history-pagination');
         if (paginationContainer) {
@@ -348,6 +360,89 @@ function registerWindowFunctions() {
         } catch (error) {
             console.error('Log silme hatası:', error);
             alert('Log silinirken hata oluştu!');
+        }
+    };
+
+    (window as any).toggleSelectAllLogs = (headerCheckbox: HTMLInputElement) => {
+        const checkboxes = document.querySelectorAll('.log-row-checkbox') as NodeListOf<HTMLInputElement>;
+        checkboxes.forEach(cb => {
+            cb.checked = headerCheckbox.checked;
+        });
+        (window as any).updateBulkDeleteButtonVisibility();
+    };
+
+    (window as any).onLogCheckboxClick = () => {
+        (window as any).updateBulkDeleteButtonVisibility();
+    };
+
+    (window as any).updateBulkDeleteButtonVisibility = () => {
+        const checkedCount = document.querySelectorAll('.log-row-checkbox:checked').length;
+        const btn = document.getElementById('btn-bulk-delete-logs');
+        const countSpan = document.getElementById('selected-logs-count');
+        const headerCheck = document.getElementById('select-all-logs') as HTMLInputElement;
+        
+        if (countSpan) countSpan.innerText = String(checkedCount);
+        
+        if (checkedCount > 0) {
+            btn?.classList.remove('hidden');
+        } else {
+            btn?.classList.add('hidden');
+        }
+
+        const totalRows = document.querySelectorAll('.log-row-checkbox').length;
+        if (headerCheck) {
+            headerCheck.checked = totalRows > 0 && checkedCount === totalRows;
+        }
+    };
+
+    (window as any).deleteSelectedLogs = async () => {
+        const checkboxes = document.querySelectorAll('.log-row-checkbox:checked') as NodeListOf<HTMLInputElement>;
+        if (checkboxes.length === 0) {
+            alert('Lütfen silinecek hareket kayıtlarını seçin.');
+            return;
+        }
+
+        if (!confirm(`Seçilen ${checkboxes.length} adet hareket kaydını silmek istediğinizden emin misiniz?`)) return;
+
+        try {
+            const btn = document.getElementById('btn-bulk-delete-logs');
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.setAttribute('disabled', 'true');
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SİLİNİYOR...';
+            }
+
+            const currentWarehouseId = (window as any).activeWarehouseId;
+            
+            for (const checkbox of checkboxes) {
+                const logId = checkbox.value;
+                const log = (window as any).allGlobalLogs.find((l: any) => l.id === logId);
+                const whId = log?.warehouseId || currentWarehouseId;
+                if (whId && logId) {
+                    await warehouseService.deleteLog(whId, logId);
+                    (window as any).allGlobalLogs = (window as any).allGlobalLogs.filter((l: any) => l.id !== logId);
+                }
+            }
+
+            alert('Seçilen kayıtlar başarıyla silindi.');
+            
+            if (btn) {
+                btn.removeAttribute('disabled');
+                btn.innerHTML = originalHtml;
+            }
+
+            const headerCheck = document.getElementById('select-all-logs') as HTMLInputElement;
+            if (headerCheck) headerCheck.checked = false;
+
+            (window as any).filterWarehouseLogs();
+        } catch (error) {
+            console.error('Toplu log silme hatası:', error);
+            alert('Kayıtlar silinirken bir hata oluştu!');
+            const btn = document.getElementById('btn-bulk-delete-logs');
+            if (btn) {
+                btn.removeAttribute('disabled');
+                btn.innerHTML = '<i class="fa-solid fa-trash-can"></i> SEÇİLENLERİ SİL (<span id="selected-logs-count">0</span>)';
+            }
         }
     };
 
@@ -670,7 +765,12 @@ function renderWarehouseDetailView(whId: string) {
         <!-- Table View -->
         <div class="glass-panel" style="padding: 0; overflow: hidden; background: rgba(15, 23, 42, 0.45);">
             <div style="padding: 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.15); flex-wrap: wrap; gap: 0.5rem;">
-                <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">HAREKET LİSTESİ</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="font-size: 0.75rem; color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">HAREKET LİSTESİ</div>
+                    <button id="btn-bulk-delete-logs" onclick="window.deleteSelectedLogs()" class="cyber-button-small hidden" style="padding: 0.35rem 0.75rem; background: rgba(231, 76, 60, 0.15); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.4); border-radius: 6px; font-size: 0.7rem; font-weight: 700; cursor: pointer; transition: all 0.3s; line-height: 1; display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-trash-can"></i> SEÇİLENLERİ SİL (<span id="selected-logs-count">0</span>)
+                    </button>
+                </div>
                 <div style="font-size: 0.75rem; color: var(--text-dim); display: flex; gap: 1rem; flex-wrap: wrap;">
                     <span>Filtrelenen: <strong id="detail-filtered-count" style="color: var(--accent-cyan);">${totalLogs}</strong> / ${totalLogs}</span>
                     <span>|</span>
@@ -681,6 +781,9 @@ function renderWarehouseDetailView(whId: string) {
                 <table style="width: 100%; border-collapse: collapse; min-width: 900px;">
                     <thead>
                         <tr style="text-align: left; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <th style="padding: 1rem 1.2rem; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; width: 40px; text-align: center;">
+                                <input type="checkbox" id="select-all-logs" onclick="window.toggleSelectAllLogs(this)">
+                            </th>
                             <th style="padding: 1rem 1.2rem; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; width: 120px;">ZAMAN / TARİH</th>
                             <th style="padding: 1rem 1.2rem; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;">MALZEME BİLGİSİ</th>
                             <th style="padding: 1rem 1.2rem; font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; width: 110px;">İŞLEM</th>

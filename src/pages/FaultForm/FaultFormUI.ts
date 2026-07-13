@@ -197,7 +197,7 @@ export const FaultFormUI = {
                             <i class="fa-solid fa-hourglass-half"></i> TÜRBİN DURUŞ SÜRESİ
                           </div>
                           <div id="total-turbine-hours-display" style="font-size: 0.95rem; font-weight: 900; color: #fff; margin-top: 0.25rem; font-family: monospace;">0.00 SAAT</div>
-                          <div style="font-size: 0.5rem; color: var(--text-muted); margin-top: 0.1rem;">İlk Başla - Son Bitiş Arası</div>
+                          <div style="font-size: 0.5rem; color: var(--text-muted); margin-top: 0.1rem;">Toplam Çalışma/Duruş Süresi</div>
                         </div>
 
                         <!-- YOL SÜRESİ -->
@@ -333,7 +333,7 @@ export const FaultFormUI = {
                     ${type === 'T' ? `<span class="stock-badge" style="display: none; padding: 0.15rem 0.4rem; font-size: 0.65rem; border-radius: 4px; font-weight: 800; font-family: monospace; white-space: nowrap; pointer-events: none; flex-shrink: 0;"></span>` : ''}
                 </div>
             </td>
-            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 80px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${type === 'S' ? (data?.defectCount || 0) : (data?.used || 0)}"></td>
+            <td style="padding: 0.25rem 0.35rem;"><input type="number" class="cyber-input" style="width: 80px; height: 26px !important; padding: 2px 4px !important; font-size: 0.8rem; text-align: center; margin: 0 auto; display: block; border-color: rgba(${type === 'S' ? '255,0,85' : '0,230,118'},0.3);" value="${type === 'S' ? (data?.defectCount || 0) : (data?.used || 0)}" oninput="window.handleMaterialQtyChange(this)"></td>
         </tr>
     `,
     renderWorkSessionRow: (ws: any, isLast: boolean) => {

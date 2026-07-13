@@ -2210,8 +2210,8 @@ body.light-mode .btn-cyber-outline:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   display: flex;
   flex-direction: column;
-  width: 680px;
-  max-width: 88vw;
+  width: 800px;
+  max-width: 92vw;
   height: 60vh;
   max-height: 70vh;
   overflow: hidden;
@@ -2234,10 +2234,16 @@ body.light-mode .btn-cyber-outline:hover {
   background: rgba(255, 255, 255, 0.05);
   padding: 4px;
   border-radius: 12px;
-  margin: 1rem 1.5rem;
+  margin: 1rem 1rem;
   display: flex !important;
   gap: 2px;
   border-bottom: none !important;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.modal-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .turbine-tab-btn {
@@ -2256,6 +2262,7 @@ body.light-mode .btn-cyber-outline:hover {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
+  white-space: nowrap !important;
 }
 
 .turbine-tab-btn i {
@@ -2907,4 +2914,267 @@ body.light-mode .btn-cyber-outline:hover {
   zoom: 0.65;
   transform-origin: top center;
   margin: 0 auto;
+}
+
+/* LIGHT MODE GLOBAL CONTRAST FIXES */
+body.light-mode {
+  --bg-dark: #f8fafc;
+  --bg-card: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --accent-cyan: #0891b2;
+}
+
+/* Force light mode backgrounds & borders on glass-panels and glass-cards */
+body.light-mode .glass-panel,
+body.light-mode .glass-card,
+body.light-mode .wh-agent-card,
+body.light-mode .dash-stat-card,
+body.light-mode .turbine-card {
+  background: var(--bg-card) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05) !important;
+  color: var(--text-main) !important;
+}
+
+/* Dashboard Light Mode Overrides */
+body.light-mode .dash-stat-card .label {
+  color: var(--text-muted) !important;
+}
+body.light-mode .dash-stat-card .value {
+  color: var(--text-main) !important;
+}
+body.light-mode .dash-stat-card .sub-label {
+  color: var(--text-muted) !important;
+}
+
+/* Calendar & Ajanda widget in Light Mode */
+body.light-mode .cal-day {
+  color: var(--text-main) !important;
+}
+body.light-mode .cal-day-name {
+  color: var(--text-muted) !important;
+  opacity: 0.8;
+}
+body.light-mode .agenda-event-date {
+  color: var(--text-muted) !important;
+}
+body.light-mode .agenda-legend-item {
+  color: var(--text-muted) !important;
+}
+body.light-mode .agenda-event-item {
+  border-bottom-color: var(--glass-border) !important;
+}
+body.light-mode .agenda-event-item:hover {
+  background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Warehouse & Stock List in Light Mode */
+body.light-mode .wh-agent-card .wh-name {
+  color: var(--text-main) !important;
+}
+body.light-mode .wh-agent-card .wh-desc,
+body.light-mode .wh-agent-card .enter-btn {
+  color: var(--text-muted) !important;
+}
+
+/* NewWarehouses / Pages inline wrapper backgrounds & text colors */
+body.light-mode div[style*="background-color: #0A0E17"],
+body.light-mode div[style*="background-color:#0A0E17"],
+body.light-mode div[style*="background: #0A0E17"],
+body.light-mode div[style*="background:#0A0E17"],
+body.light-mode div[style*="background-color: #060912"],
+body.light-mode div[style*="background-color:#060912"] {
+  background-color: var(--bg-dark) !important;
+  background: var(--bg-dark) !important;
+  color: var(--text-main) !important;
+}
+
+body.light-mode div[style*="background-color: #111827"],
+body.light-mode div[style*="background-color:#111827"],
+body.light-mode div[style*="background-color: #1E293B"],
+body.light-mode div[style*="background-color:#1E293B"] {
+  background-color: var(--bg-card) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-main) !important;
+}
+
+body.light-mode div[style*="color: #FFFFFF"],
+body.light-mode div[style*="color: #FFF"],
+body.light-mode div[style*="color:#FFFFFF"],
+body.light-mode div[style*="color:#FFF"],
+body.light-mode div[style*="color: #E2E8F0"],
+body.light-mode div[style*="color:#E2E8F0"],
+body.light-mode h1[style*="color: #FFFFFF"],
+body.light-mode h1[style*="color: #FFF"],
+body.light-mode h1[style*="color:#FFFFFF"],
+body.light-mode h1[style*="color:#FFF"] {
+  color: var(--text-main) !important;
+}
+
+body.light-mode div[style*="color: #94A3B8"],
+body.light-mode div[style*="color:#94A3B8"] {
+  color: var(--text-muted) !important;
+}
+
+body.light-mode div[style*="border: 1px solid #1E293B"],
+body.light-mode div[style*="border:1px solid #1E293B"] {
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* Modals & Inputs in Light Mode */
+body.light-mode div[style*="position: fixed"][style*="background-color: rgba(10, 14, 23"] {
+  background-color: rgba(15, 23, 42, 0.4) !important;
+}
+body.light-mode div[style*="background-color: #111827"] h2,
+body.light-mode div[style*="background-color: #111827"] label,
+body.light-mode div[style*="background-color: #1E293B"] label {
+  color: var(--text-main) !important;
+}
+body.light-mode input[style*="background-color: #0A0E17"],
+body.light-mode input[style*="background-color: #111827"],
+body.light-mode input[style*="background-color: #1E293B"],
+body.light-mode select[style*="background-color: #0A0E17"],
+body.light-mode select[style*="background-color: #111827"],
+body.light-mode select[style*="background-color: #1E293B"] {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: var(--text-main) !important;
+}
+
+/* Turbine cards in Light Mode */
+body.light-mode .turbine-card div[style*="color: #fff"],
+body.light-mode .turbine-card div[style*="color: #ffffff"] {
+  color: var(--text-main) !important;
+}
+
+/* Quick transfer drawer */
+body.light-mode .warehouse-quick-transfer-drawer {
+  background: var(--bg-card) !important;
+  border-left: 1px solid var(--glass-border) !important;
+  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.05) !important;
+}
+body.light-mode .warehouse-quick-transfer-drawer p {
+  color: var(--text-muted) !important;
+}
+body.light-mode .warehouse-drop-target {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: var(--text-main) !important;
+}
+
+/* Audit inputs in light mode */
+body.light-mode input.manual-audit-shelf,
+body.light-mode input.manual-audit-input {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: var(--text-main) !important;
+}
+
+/* Contrast Fixes for Inline Colors in Light Mode */
+body.light-mode [style*="color: #00f3ff"],
+body.light-mode [style*="color:#00f3ff"],
+body.light-mode [style*="color: #00F3FF"],
+body.light-mode [style*="color:#00F3FF"],
+body.light-mode [style*="color: #64ffda"],
+body.light-mode [style*="color:#64ffda"] {
+  color: var(--accent-cyan) !important;
+}
+
+body.light-mode [style*="color: #8f94fb"],
+body.light-mode [style*="color:#8f94fb"] {
+  color: #4f46e5 !important; /* Dark Indigo for contrast */
+}
+
+body.light-mode [style*="background: rgba(0, 242, 254, 0.08)"],
+body.light-mode [style*="background:rgba(0, 242, 254, 0.08)"],
+body.light-mode [style*="background: rgba(143, 148, 251, 0.08)"],
+body.light-mode [style*="background:rgba(143, 148, 251, 0.08)"],
+body.light-mode [style*="background: rgba(100, 255, 218, 0.05)"],
+body.light-mode [style*="background:rgba(100, 255, 218, 0.05)"],
+body.light-mode [style*="background: rgba(100, 255, 218, 0.06)"],
+body.light-mode [style*="background:rgba(100, 255, 218, 0.06)"] {
+  background: rgba(15, 23, 42, 0.04) !important;
+}
+
+body.light-mode [style*="border: 1px solid rgba(0, 242, 254, 0.15)"],
+body.light-mode [style*="border:1px solid rgba(0, 242, 254, 0.15)"],
+body.light-mode [style*="border: 1px solid rgba(143, 148, 251, 0.15)"],
+body.light-mode [style*="border:1px solid rgba(143, 148, 251, 0.15)"],
+body.light-mode [style*="border: 1px solid rgba(100, 255, 218, 0.12)"],
+body.light-mode [style*="border:1px solid rgba(100, 255, 218, 0.12)"],
+body.light-mode [style*="border: 1px solid rgba(100, 255, 218, 0.15)"],
+body.light-mode [style*="border:1px solid rgba(100, 255, 218, 0.15)"] {
+  border-color: rgba(15, 23, 42, 0.08) !important;
+}
+
+body.light-mode [style*="border-top: 1px solid rgba(255, 255, 255, 0.05)"] {
+  border-top-color: var(--glass-border) !important;
+}
+
+body.light-mode [style*="background: rgba(255, 255, 255, 0.03)"] {
+  background: rgba(15, 23, 42, 0.02) !important;
+}
+
+body.light-mode [style*="border: 1px solid rgba(255, 255, 255, 0.05)"] {
+  border-color: var(--glass-border) !important;
+}
+
+
+.btn-cyber-mini {
+  background: transparent;
+  color: #94a3b8;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-cyber-mini:hover {
+  color: var(--accent-cyan);
+  background: rgba(0, 243, 255, 0.05);
+  border-color: rgba(0, 243, 255, 0.2);
+}
+
+.btn-cyber-mini.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 243, 255, 0.12);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.15);
+}
+
+body.light-mode .btn-cyber-mini {
+  color: #475569;
+}
+
+body.light-mode .btn-cyber-mini:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
+  border-color: rgba(15, 23, 42, 0.15);
+}
+
+body.light-mode .btn-cyber-mini.active {
+  color: #fff;
+  background: #0f172a;
+  border-color: #0f172a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

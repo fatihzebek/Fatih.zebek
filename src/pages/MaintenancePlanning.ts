@@ -14,79 +14,165 @@ export const MaintenancePlanningPage = async () => {
   const now = new Date();
 
   // Maintenance Tracking Logic
-  const maintenancePlan = (() => {
-    const plan: any[] = [];
+  const planGeneral: any[] = [];
+  const planRulman: any[] = [];
+  const plan4Year: any[] = [];
 
-    sites.forEach(site => {
-      const siteTurbines = dataService.getTurbinesBySite(site.id);
-      siteTurbines.forEach(t => {
-        const turbineReports = reports.filter(r => r.turbineSerial === t.id);
-        const lastMaint = turbineReports
-          .filter(r => {
-            const typeLower = (r.type || '').toLowerCase();
-            const templateLower = (r.templateName || '').toLowerCase();
-            const faultLower = (r.faultCode || '').toLowerCase();
-            return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
-                   templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
-                   faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
-          })
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+  sites.forEach(site => {
+    const siteTurbines = dataService.getTurbinesBySite(site.id);
+    siteTurbines.forEach(t => {
+      const turbineReports = reports.filter(r => r.turbineSerial === t.id);
 
-        if (lastMaint) {
-          const lastDate = new Date(lastMaint.date);
-          const nextDate = new Date(lastDate);
-          nextDate.setMonth(nextDate.getMonth() + 6);
+      // 1. GENERAL PLAN (Ana/Yağlama alternating cycle)
+      const lastMaintGen = turbineReports
+        .filter(r => {
+          const typeLower = (r.type || '').toLowerCase();
+          const templateLower = (r.templateName || '').toLowerCase();
+          const faultLower = (r.faultCode || '').toLowerCase();
+          return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
+                 templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
+                 faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
-          const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
-          const isLastAna = searchStr.includes('ana');
-          const lastType = isLastAna ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
-          const nextType = isLastAna ? 'YAĞLAMA BAKIMI' : 'ANA BAKIM';
+      if (lastMaintGen) {
+        const lastDate = new Date(lastMaintGen.date);
+        const nextDate = new Date(lastDate);
+        nextDate.setMonth(nextDate.getMonth() + 6);
 
-          const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          let status: 'safe' | 'warning' | 'overdue' = 'safe';
-          if (diffDays < 0) status = 'overdue';
-          else if (diffDays < 30) status = 'warning';
+        const searchStr = `${lastMaintGen.type} ${lastMaintGen.templateName} ${lastMaintGen.faultCode}`.toLowerCase();
+        const isLastAna = searchStr.includes('ana');
+        const lastType = isLastAna ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
+        const nextType = isLastAna ? 'YAĞLAMA BAKIMI' : 'ANA BAKIM';
 
-          plan.push({
-            siteName: site.name,
-            turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
-            turbineSerial: t.id,
-            lastDate: lastMaint.date,
-            lastType,
-            nextDate: nextDate.toISOString(),
-            nextType,
-            status,
-            daysRemaining: diffDays
-          });
-        } else {
-          plan.push({
-            siteName: site.name,
-            turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
-            turbineSerial: t.id,
-            lastDate: '-',
-            lastType: 'VERİ YOK',
-            nextDate: null,
-            nextType: 'BELİRLENMEDİ',
-            status: 'safe',
-            daysRemaining: 0
-          });
-        }
-      });
+        const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        let status: 'safe' | 'warning' | 'overdue' = 'safe';
+        if (diffDays < 0) status = 'overdue';
+        else if (diffDays < 30) status = 'warning';
+
+        planGeneral.push({
+          siteName: site.name,
+          turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
+          turbineSerial: t.id,
+          lastDate: lastMaintGen.date,
+          lastType,
+          nextDate: nextDate.toISOString(),
+          nextType,
+          status,
+          daysRemaining: diffDays
+        });
+      } else {
+        planGeneral.push({
+          siteName: site.name,
+          turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
+          turbineSerial: t.id,
+          lastDate: '-',
+          lastType: 'VERİ YOK',
+          nextDate: null,
+          nextType: 'BELİRLENMEDİ',
+          status: 'safe',
+          daysRemaining: 0
+        });
+      }
+
+      // 2. RULMAN PLAN (5 months interval - only problematic turbines)
+      const lastMaintRulman = turbineReports
+        .filter(r => {
+          const typeLower = (r.type || '').toLowerCase();
+          const templateLower = (r.templateName || '').toLowerCase();
+          const faultLower = (r.faultCode || '').toLowerCase();
+          return typeLower.includes('rulman') || templateLower.includes('rulman') || faultLower.includes('rulman');
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+      if (lastMaintRulman) {
+        const lastDate = new Date(lastMaintRulman.date);
+        const nextDate = new Date(lastDate);
+        nextDate.setMonth(nextDate.getMonth() + 5);
+
+        const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        let status: 'safe' | 'warning' | 'overdue' = 'safe';
+        if (diffDays < 0) status = 'overdue';
+        else if (diffDays < 30) status = 'warning';
+
+        planRulman.push({
+          siteName: site.name,
+          turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
+          turbineSerial: t.id,
+          lastDate: lastMaintRulman.date,
+          lastType: 'RULMAN BAKIMI KONTROLÜ',
+          nextDate: nextDate.toISOString(),
+          nextType: 'RULMAN BAKIMI KONTROLÜ',
+          status,
+          daysRemaining: diffDays
+        });
+      }
+
+      // 3. 4 YILLIK BAKIM PLAN (48 months interval - all turbines)
+      const lastMaint4Year = turbineReports
+        .filter(r => {
+          const typeLower = (r.type || '').toLowerCase();
+          const templateLower = (r.templateName || '').toLowerCase();
+          const faultLower = (r.faultCode || '').toLowerCase();
+          return typeLower.includes('4 yıl') || templateLower.includes('4 yıl') || faultLower.includes('4 yıl') ||
+                 typeLower.includes('4 yillik') || templateLower.includes('4 yillik') || faultLower.includes('4 yillik') ||
+                 typeLower.includes('4 yıllık') || templateLower.includes('4 yıllık') || faultLower.includes('4 yıllık');
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+      if (lastMaint4Year) {
+        const lastDate = new Date(lastMaint4Year.date);
+        const nextDate = new Date(lastDate);
+        nextDate.setMonth(nextDate.getMonth() + 48);
+
+        const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        let status: 'safe' | 'warning' | 'overdue' = 'safe';
+        if (diffDays < 0) status = 'overdue';
+        else if (diffDays < 30) status = 'warning';
+
+        plan4Year.push({
+          siteName: site.name,
+          turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
+          turbineSerial: t.id,
+          lastDate: lastMaint4Year.date,
+          lastType: '4 YILLIK BAKIM',
+          nextDate: nextDate.toISOString(),
+          nextType: '4 YILLIK BAKIM',
+          status,
+          daysRemaining: diffDays
+        });
+      } else {
+        plan4Year.push({
+          siteName: site.name,
+          turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
+          turbineSerial: t.id,
+          lastDate: '-',
+          lastType: 'VERİ YOK',
+          nextDate: null,
+          nextType: '4 YILLIK BAKIM',
+          status: 'safe',
+          daysRemaining: 0
+        });
+      }
     });
+  });
 
-    return plan;
-  })();
+  const maintDataGeneral: Record<string, any[]> = {};
+  planGeneral.forEach(p => {
+    if (!maintDataGeneral[p.siteName]) maintDataGeneral[p.siteName] = [];
+    maintDataGeneral[p.siteName].push(p);
+  });
 
-  const completionRate = (() => {
-    const totalTurbinesCount = maintenancePlan.length;
-    const hasMaintCount = maintenancePlan.filter(p => p.lastDate !== '-').length;
-    return totalTurbinesCount > 0 ? Math.round((hasMaintCount / totalTurbinesCount) * 100) : 0;
-  })();
+  const maintDataRulman: Record<string, any[]> = {};
+  planRulman.forEach(p => {
+    if (!maintDataRulman[p.siteName]) maintDataRulman[p.siteName] = [];
+    maintDataRulman[p.siteName].push(p);
+  });
 
-  const groupedPlan: Record<string, any[]> = {};
-  maintenancePlan.forEach(p => {
-    if (!groupedPlan[p.siteName]) groupedPlan[p.siteName] = [];
-    groupedPlan[p.siteName].push(p);
+  const maintData4Year: Record<string, any[]> = {};
+  plan4Year.forEach(p => {
+    if (!maintData4Year[p.siteName]) maintData4Year[p.siteName] = [];
+    maintData4Year[p.siteName].push(p);
   });
 
   const customOrder = [
@@ -102,7 +188,7 @@ export const MaintenancePlanningPage = async () => {
     'Alize Çataltape'
   ];
 
-  const siteList = Object.keys(groupedPlan).sort((a, b) => {
+  const siteList = Object.keys(maintDataGeneral).sort((a, b) => {
     const indexA = customOrder.findIndex(o => o.toLowerCase() === a.toLowerCase());
     const indexB = customOrder.findIndex(o => o.toLowerCase() === b.toLowerCase());
     if (indexA === -1 && indexB === -1) return a.localeCompare(b);
@@ -115,9 +201,39 @@ export const MaintenancePlanningPage = async () => {
   const initialSite = (savedSite && (siteList.includes(savedSite) || savedSite === 'TÜM SAHALAR')) ? savedSite : 'TÜM SAHALAR';
 
   // Expose to window for initialization
-  (window as any).maintData = groupedPlan;
+  (window as any).maintData = maintDataGeneral;
   
   let activeMaintFilter = 'ALL';
+  let activeMaintCategory = 'GENERAL'; // GENERAL, RULMAN, 4YEAR
+
+  (window as any).setMaintCategory = (category: string) => {
+    activeMaintCategory = category;
+    
+    // Toggle active classes on category buttons
+    document.querySelectorAll('.maint-cat-tab').forEach(btn => {
+      const b = btn as HTMLElement;
+      b.classList.remove('active');
+      b.style.background = 'rgba(255,255,255,0.02)';
+      b.style.borderColor = 'rgba(255,255,255,0.08)';
+      b.style.color = 'var(--text-muted)';
+    });
+
+    const activeBtn = document.getElementById(`maint-cat-${category.toLowerCase()}`);
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.style.background = 'rgba(0, 242, 255, 0.08)';
+      activeBtn.style.borderColor = 'var(--accent-cyan)';
+      activeBtn.style.color = 'var(--accent-cyan)';
+    }
+
+    // Refresh table
+    const activeItem = document.querySelector('.site-menu-item.active') as HTMLElement;
+    const site = activeItem?.getAttribute('data-site') || 'TÜM SAHALAR';
+    if ((window as any).updateMaintTable) {
+      (window as any).updateMaintTable(site);
+    }
+  };
+
   (window as any).filterMaintTable = (filter: string) => {
     activeMaintFilter = filter;
     document.querySelectorAll('.maint-tab').forEach(t => t.classList.remove('active'));
@@ -186,6 +302,8 @@ export const MaintenancePlanningPage = async () => {
             <select id="manual-maint-type" class="cyber-input" style="width: 100%; font-weight: 700; background: #000; color: #fff; border: 1px solid rgba(255,255,255,0.1);">
               <option value="ANA BAKIM">ANA BAKIM</option>
               <option value="YAĞLAMA BAKIMI">YAĞLAMA BAKIMI</option>
+              <option value="RULMAN BAKIMI KONTROLÜ">RULMAN BAKIMI KONTROLÜ</option>
+              <option value="4 YILLIK BAKIM">4 YILLIK BAKIM</option>
             </select>
           </div>
 
@@ -246,8 +364,12 @@ export const MaintenancePlanningPage = async () => {
             siteId: siteId,
             siteName: siteName,
             date: maintDate,
-            faultCode: maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 'Manuel Yağlama bakımı',
-            templateName: maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 'Manuel Yağlama bakımı',
+            faultCode: maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 
+                       (maintType === 'YAĞLAMA BAKIMI' ? 'Manuel Yağlama bakımı' : 
+                       (maintType === 'RULMAN BAKIMI KONTROLÜ' ? 'Manuel Rulman Bakımı kontrolü' : 'Manuel 4 Yıllık Bakım')),
+            templateName: maintType === 'ANA BAKIM' ? 'Manuel Ana Bakım' : 
+                          (maintType === 'YAĞLAMA BAKIMI' ? 'Manuel Yağlama bakımı' : 
+                          (maintType === 'RULMAN BAKIMI KONTROLÜ' ? 'Manuel Rulman Bakımı kontrolü' : 'Manuel 4 Yıllık Bakım')),
             team: team,
             personnel: [team],
             notes: notes || 'Ekip lideri tarafından manuel bakım kaydı girildi.',
@@ -328,33 +450,59 @@ export const MaintenancePlanningPage = async () => {
       return;
     }
 
+    let filterFn = (r: any) => {
+      const typeLower = (r.type || '').toLowerCase();
+      const templateLower = (r.templateName || '').toLowerCase();
+      const faultLower = (r.faultCode || '').toLowerCase();
+      return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
+             templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
+             faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
+    };
+
+    if (activeMaintCategory === 'RULMAN') {
+      filterFn = (r: any) => {
+        const typeLower = (r.type || '').toLowerCase();
+        const templateLower = (r.templateName || '').toLowerCase();
+        const faultLower = (r.faultCode || '').toLowerCase();
+        return typeLower.includes('rulman') || templateLower.includes('rulman') || faultLower.includes('rulman');
+      };
+    } else if (activeMaintCategory === '4YEAR') {
+      filterFn = (r: any) => {
+        const typeLower = (r.type || '').toLowerCase();
+        const templateLower = (r.templateName || '').toLowerCase();
+        const faultLower = (r.faultCode || '').toLowerCase();
+        return typeLower.includes('4 yıl') || templateLower.includes('4 yıl') || faultLower.includes('4 yıl') ||
+               typeLower.includes('4 yillik') || templateLower.includes('4 yillik') || faultLower.includes('4 yillik') ||
+               typeLower.includes('4 yıllık') || templateLower.includes('4 yıllık') || faultLower.includes('4 yıllık');
+      };
+    }
+
     // Prepare rows
     const data = turbines.map(t => {
       // Find current last maintenance of this turbine
       const turbineReports = reports.filter(r => r.turbineSerial === t.id);
       const lastMaint = turbineReports
-        .filter(r => {
-          const typeLower = (r.type || '').toLowerCase();
-          const templateLower = (r.templateName || '').toLowerCase();
-          const faultLower = (r.faultCode || '').toLowerCase();
-          return typeLower.includes('ana') || typeLower.includes('yağ') || typeLower.includes('yag') ||
-                 templateLower.includes('ana') || templateLower.includes('yağ') || templateLower.includes('yag') ||
-                 faultLower.includes('ana') || faultLower.includes('yağ') || faultLower.includes('yag');
-        })
+        .filter(filterFn)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 
       let lastType = '';
       let lastDate = '';
       if (lastMaint) {
-        const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
-        lastType = searchStr.includes('ana') ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
+        if (activeMaintCategory === 'GENERAL') {
+          const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
+          lastType = searchStr.includes('ana') ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
+        } else if (activeMaintCategory === 'RULMAN') {
+          lastType = 'RULMAN BAKIMI KONTROLÜ';
+        } else if (activeMaintCategory === '4YEAR') {
+          lastType = '4 YILLIK BAKIM';
+        }
         lastDate = lastMaint.date;
       }
 
       return {
         'TÜRBİN NO': t.no > 0 ? t.no.toString() : (t.label || t.id),
         'SERİ NO': t.id,
-        'BAKIM TİPİ': lastType || 'ANA BAKIM',
+        'BAKIM TİPİ': lastType || (activeMaintCategory === 'RULMAN' ? 'RULMAN BAKIMI KONTROLÜ' : (activeMaintCategory === '4YEAR' ? '4 YILLIK BAKIM' : 'ANA BAKIM')),
         'BAKIM TARİHİ': lastDate || '',
         'NOTLAR': lastMaint?.notes || ''
       };
@@ -444,7 +592,11 @@ export const MaintenancePlanningPage = async () => {
             });
 
             // 2. Bakım Tipi Belirleme
-            if (rowType.includes('ANA') || rowType.includes('RÜZGAR') || rowType.includes('RUZGAR')) {
+            if (rowType.includes('RULMAN') || rowType.includes('BEARING')) {
+              rowType = 'RULMAN BAKIMI KONTROLÜ';
+            } else if (rowType.includes('4 YIL') || rowType.includes('4-YIL') || rowType.includes('4YIL')) {
+              rowType = '4 YILLIK BAKIM';
+            } else if (rowType.includes('ANA') || rowType.includes('RÜZGAR') || rowType.includes('RUZGAR')) {
               rowType = 'ANA BAKIM';
             } else if (rowType.includes('YAĞ') || rowType.includes('YAG')) {
               rowType = 'YAĞLAMA BAKIMI';
@@ -522,6 +674,14 @@ export const MaintenancePlanningPage = async () => {
 
   (window as any).handleMaintTurbineSearch = (val: string) => {
     (window as any).maintTurbineSearchQuery = val;
+    const currentSite = sessionStorage.getItem('activeMaintSiteName') || initialSite;
+    if (currentSite && (window as any).updateMaintTable) {
+      (window as any).updateMaintTable(currentSite);
+    }
+  };
+
+  (window as any).handleMaintSortChange = (val: string) => {
+    (window as any).maintSortOption = val;
     const currentSite = sessionStorage.getItem('activeMaintSiteName') || initialSite;
     if (currentSite && (window as any).updateMaintTable) {
       (window as any).updateMaintTable(currentSite);
@@ -1282,17 +1442,75 @@ export const MaintenancePlanningPage = async () => {
       (window as any).setMaintViewMode('table');
     }
 
-    const maintData = (window as any).maintData;
+    (window as any).maintSortOption = 'days';
     const body = document.getElementById('maint-data-body');
     const title = document.getElementById('active-site-title');
     if (!body || !title) return;
 
     let currentSite = initialSite;
 
+    function updateSidebarBadges() {
+      let activePlan = planGeneral;
+      let activeGrouped = maintDataGeneral;
+      if (activeMaintCategory === 'RULMAN') {
+        activePlan = planRulman;
+        activeGrouped = maintDataRulman;
+      } else if (activeMaintCategory === '4YEAR') {
+        activePlan = plan4Year;
+        activeGrouped = maintData4Year;
+      }
+
+      // Update TUM SAHALAR badge
+      const tumOverdue = activePlan.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
+      const badgeAll = document.getElementById('badge-site-all');
+      if (badgeAll) {
+        if (tumOverdue > 0) {
+          badgeAll.textContent = String(tumOverdue);
+          badgeAll.style.display = 'inline-flex';
+          badgeAll.className = 'alert-badge overdue';
+        } else {
+          badgeAll.style.display = 'none';
+        }
+      }
+
+      // Update site badges
+      siteList.forEach(siteName => {
+        const siteClean = siteName.replace(/\s+/g, '-');
+        const badge = document.getElementById(`badge-site-${siteClean}`);
+        if (badge) {
+          const siteOverdueCount = (activeGrouped[siteName] || []).filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
+          const siteWarningCount = (activeGrouped[siteName] || []).filter((i: any) => i.status === 'warning').length;
+          
+          if (siteOverdueCount > 0) {
+            badge.textContent = String(siteOverdueCount);
+            badge.style.display = 'inline-flex';
+            badge.className = 'alert-badge overdue';
+          } else if (siteWarningCount > 0) {
+            badge.textContent = String(siteWarningCount);
+            badge.style.display = 'inline-flex';
+            badge.className = 'alert-badge warning';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+      });
+    }
+
     function updateTable(siteName: string) {
       currentSite = siteName;
       sessionStorage.setItem('activeMaintSiteName', siteName);
-      const allItems = siteName === 'TÜM SAHALAR' ? maintenancePlan : (maintData[siteName] || []);
+      
+      let activePlan = planGeneral;
+      let activeGrouped = maintDataGeneral;
+      if (activeMaintCategory === 'RULMAN') {
+        activePlan = planRulman;
+        activeGrouped = maintDataRulman;
+      } else if (activeMaintCategory === '4YEAR') {
+        activePlan = plan4Year;
+        activeGrouped = maintData4Year;
+      }
+
+      const allItems = siteName === 'TÜM SAHALAR' ? activePlan : (activeGrouped[siteName] || []);
       title!.textContent = siteName.toUpperCase();
       
       if (siteName === 'TÜM SAHALAR') {
@@ -1320,6 +1538,26 @@ export const MaintenancePlanningPage = async () => {
         if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'inline-flex';
         if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'inline-flex';
       }
+
+      // Update top header stats
+      const overdueVal = document.getElementById('h-stat-overdue-val');
+      const warningVal = document.getElementById('h-stat-warning-val');
+      const safeVal = document.getElementById('h-stat-safe-val');
+      const rateVal = document.getElementById('h-stat-rate-val');
+
+      const totalOverdue = activePlan.filter((p: any) => p.status === 'overdue' && p.lastDate !== '-').length;
+      const totalWarning = activePlan.filter((p: any) => p.status === 'warning').length;
+      const totalSafe = activePlan.filter((p: any) => p.status === 'safe' && p.lastDate !== '-').length;
+      const totalHasMaint = activePlan.filter((p: any) => p.lastDate !== '-').length;
+      const totalRate = activePlan.length > 0 ? Math.round((totalHasMaint / activePlan.length) * 100) : 0;
+
+      if (overdueVal) overdueVal.textContent = String(totalOverdue);
+      if (warningVal) warningVal.textContent = String(totalWarning);
+      if (safeVal) safeVal.textContent = String(totalSafe);
+      if (rateVal) rateVal.textContent = `${totalRate}%`;
+
+      // Update sidebar badges
+      updateSidebarBadges();
 
       // Calculate dynamic filter counts
       const overdueCount = allItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
@@ -1419,6 +1657,31 @@ export const MaintenancePlanningPage = async () => {
         });
       }
 
+      // Sort items based on sortOption
+      const sortOption = (window as any).maintSortOption || 'days';
+      items = [...items]; // Copy to avoid mutating original source data
+      if (sortOption === 'days') {
+        items.sort((a: any, b: any) => {
+          const aNoData = a.lastDate === '-';
+          const bNoData = b.lastDate === '-';
+          if (aNoData && !bNoData) return 1;
+          if (!aNoData && bNoData) return -1;
+          if (aNoData && bNoData) return 0;
+          return a.daysRemaining - b.daysRemaining;
+        });
+      } else if (sortOption === 'turbine') {
+        items.sort((a: any, b: any) => {
+          const getNum = (label: string) => {
+            const num = parseInt(label.replace(/[^0-9]/g, ''), 10);
+            return isNaN(num) ? 999999 : num;
+          };
+          const aNum = getNum(String(a.turbineNo));
+          const bNum = getNum(String(b.turbineNo));
+          if (aNum !== bNum) return aNum - bNum;
+          return String(a.turbineNo).localeCompare(String(b.turbineNo), undefined, { numeric: true, sensitivity: 'base' });
+        });
+      }
+
       // Render maintenance intensity chart
       renderMaintChart(items);
       
@@ -1513,23 +1776,23 @@ export const MaintenancePlanningPage = async () => {
       <div class="page-header">
         <div class="header-content">
           <h1><i class="fa-solid fa-calendar-check" style="color: var(--accent-cyan); text-shadow: 0 0 10px rgba(0, 242, 255, 0.35);"></i> BAKIM PLANLAMA MERKEZİ</h1>
-          <p>6 Aylık periyodik bakım döngüsü ve saha bazlı takip merkezi.</p>
+          <p>Periyodik bakım planlama ve saha bazlı takip merkezi.</p>
         </div>
         <div class="header-stats">
           <div class="h-stat overdue" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('OVERDUE')" title="Gecikmiş bakımları listele">
-            <span class="v">${maintenancePlan.filter(p => p.status === 'overdue' && p.lastDate !== '-').length}</span>
+            <span id="h-stat-overdue-val" class="v">-</span>
             <span class="l">GECİKMİŞ</span>
           </div>
           <div class="h-stat warning" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('WARNING')" title="Kritik/Yaklaşan bakımları listele">
-            <span class="v">${maintenancePlan.filter(p => p.status === 'warning').length}</span>
+            <span id="h-stat-warning-val" class="v">-</span>
             <span class="l">KRİTİK</span>
           </div>
           <div class="h-stat safe-stat" style="cursor: pointer; transition: transform 0.2s;" onclick="window.filterMaintTable('SAFE')" title="Planlı ve güvenli olanları listele">
-            <span class="v">${maintenancePlan.filter(p => p.status === 'safe' && p.lastDate !== '-').length}</span>
+            <span id="h-stat-safe-val" class="v">-</span>
             <span class="l">PLANLI & GÜVENLİ</span>
           </div>
           <div class="h-stat rate">
-            <span class="v" style="color: var(--accent-cyan); text-shadow: 0 0 8px rgba(0,242,255,0.3);">${completionRate}%</span>
+            <span id="h-stat-rate-val" class="v" style="color: var(--accent-cyan); text-shadow: 0 0 8px rgba(0,242,255,0.3);">-</span>
             <span class="l">BAKIM ORANI</span>
           </div>
         </div>
@@ -1548,24 +1811,16 @@ export const MaintenancePlanningPage = async () => {
             <div class="site-menu-item ${initialSite === 'TÜM SAHALAR' ? 'active' : ''}" data-site="TÜM SAHALAR">
               <i class="fa-solid fa-globe" style="color: var(--accent-cyan); text-shadow: 0 0 5px rgba(0,242,255,0.35);"></i>
               <span class="s-name" style="font-weight: 700;">TÜM SAHALAR</span>
-              ${maintenancePlan.filter(i => i.status === 'overdue' && i.lastDate !== '-').length > 0 
-                ? `<span class="alert-badge overdue">${maintenancePlan.filter(i => i.status === 'overdue' && i.lastDate !== '-').length}</span>` 
-                : ''}
+              <span id="badge-site-all" class="alert-badge overdue" style="display: none;"></span>
             </div>
             ${siteList.map((siteName, idx) => {
-              const siteOverdueCount = groupedPlan[siteName].filter(i => i.status === 'overdue' && i.lastDate !== '-').length;
-              const siteWarningCount = groupedPlan[siteName].filter(i => i.status === 'warning').length;
-              const badgeHtml = siteOverdueCount > 0 
-                ? `<span class="alert-badge overdue">${siteOverdueCount}</span>` 
-                : (siteWarningCount > 0 
-                  ? `<span class="alert-badge warning">${siteWarningCount}</span>` 
-                  : '');
+              const siteClean = siteName.replace(/\s+/g, '-');
               const isActive = siteName === initialSite;
               return `
                 <div class="site-menu-item ${isActive ? 'active' : ''}" data-site="${siteName}">
                   <i class="fa-solid fa-charging-station"></i>
                   <span class="s-name">${siteName}</span>
-                  ${badgeHtml}
+                  <span id="badge-site-${siteClean}" class="alert-badge" style="display: none;"></span>
                 </div>
               `;
             }).join('')}
@@ -1616,6 +1871,19 @@ export const MaintenancePlanningPage = async () => {
           <!-- Quick Stats Cards Container -->
           <div id="maint-quick-stats" style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;"></div>
 
+          <!-- Maintenance Category Selector Tabs -->
+          <div class="maint-category-selector" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+            <button class="maint-cat-tab active" id="maint-cat-general" onclick="window.setMaintCategory('GENERAL')" style="font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.82rem; letter-spacing: 1px; padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(0, 242, 255, 0.25); background: rgba(0, 242, 255, 0.05); color: var(--accent-cyan); cursor: pointer; transition: all 0.25s;">
+              <i class="fa-solid fa-calendar-check" style="margin-right: 6px;"></i> GENEL BAKIMLAR (ANA / YAĞLAMA)
+            </button>
+            <button class="maint-cat-tab" id="maint-cat-rulman" onclick="window.setMaintCategory('RULMAN')" style="font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.82rem; letter-spacing: 1px; padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); color: var(--text-muted); cursor: pointer; transition: all 0.25s;">
+              <i class="fa-solid fa-circle-nodes" style="margin-right: 6px;"></i> RULMAN KONTROLÜ (5 AY)
+            </button>
+            <button class="maint-cat-tab" id="maint-cat-4year" onclick="window.setMaintCategory('4YEAR')" style="font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.82rem; letter-spacing: 1px; padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); color: var(--text-muted); cursor: pointer; transition: all 0.25s;">
+              <i class="fa-solid fa-hourglass-half" style="margin-right: 6px;"></i> 4 YILLIK BAKIM (48 AY)
+            </button>
+          </div>
+
           <div class="maint-filter-tabs" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button class="maint-tab active" id="maint-tab-all" onclick="window.filterMaintTable('ALL')">
@@ -1634,10 +1902,22 @@ export const MaintenancePlanningPage = async () => {
                 <i class="fa-solid fa-circle-question"></i> VERİ YOK <span class="c">-</span>
               </button>
             </div>
-            <!-- Turbine Search Bar -->
-            <div class="maint-search-box" style="position: relative; width: 220px;">
-              <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4); font-size: 0.75rem;"></i>
-              <input type="text" id="maint-turbine-search" placeholder="Türbin Ara... (örn: T-01)" style="width: 100%; padding: 6px 10px 6px 30px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 0.75rem; font-family: 'Rajdhani', sans-serif; font-weight: 600; outline: none; transition: all 0.2s;" oninput="window.handleMaintTurbineSearch(this.value)" />
+            <!-- Sort and Search Controls -->
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <!-- Sort Select -->
+              <div style="position: relative; width: 190px;">
+                <select id="maint-sort-select" onchange="window.handleMaintSortChange(this.value)" style="width: 100%; padding: 6px 24px 6px 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 0.75rem; font-family: 'Rajdhani', sans-serif; font-weight: 600; outline: none; cursor: pointer; transition: all 0.2s; appearance: none; -webkit-appearance: none;">
+                  <option value="days" style="background: #0d1117; color: #fff;" selected>Kalan Güne Göre (Azdan Çoğa)</option>
+                  <option value="turbine" style="background: #0d1117; color: #fff;">Türbin Numarasına Göre</option>
+                </select>
+                <i class="fa-solid fa-chevron-down" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4); font-size: 0.7rem; pointer-events: none;"></i>
+              </div>
+
+              <!-- Turbine Search Bar -->
+              <div class="maint-search-box" style="position: relative; width: 220px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,0.4); font-size: 0.75rem;"></i>
+                <input type="text" id="maint-turbine-search" placeholder="Türbin Ara... (örn: T-01)" style="width: 100%; padding: 6px 10px 6px 30px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; font-size: 0.75rem; font-family: 'Rajdhani', sans-serif; font-weight: 600; outline: none; transition: all 0.2s;" oninput="window.handleMaintTurbineSearch(this.value)" />
+              </div>
             </div>
           </div>
 

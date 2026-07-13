@@ -1,3 +1,6 @@
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -13,16 +16,82 @@ class NotificationService {
   private listeners: ((notifications: AppNotification[]) => void)[] = [];
 
   constructor() {
-    // Only request permission on first interaction or lazily
+    // If permission is already granted, subscribe to push
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setTimeout(() => {
+        this.subscribeUserToPush();
+      }, 3000);
+    }
   }
 
   async requestPermission() {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       console.log('[NotificationService] Permission:', permission);
+      if (permission === 'granted') {
+        this.subscribeUserToPush();
+      }
       return permission;
     }
     return 'denied';
+  }
+
+  async subscribeUserToPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.log('[NotificationService] Push messaging is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      
+      const VAPID_PUBLIC_KEY = 'BBRUMqEX4JSbeW-4hrlYVPkR0kyAprwYoZMPIqQZkso8mhF7IlsENJfhv9VeNwReKqPzNsJyjFT2-rH_h79_f0U';
+      const convertedVapidKey = this.urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedVapidKey
+        });
+        console.log('[NotificationService] New push subscription created.');
+      } else {
+        console.log('[NotificationService] Existing push subscription found.');
+      }
+
+      const subJson = subscription.toJSON();
+      const endpoint = subJson.endpoint || '';
+      if (endpoint) {
+        const subId = btoa(endpoint).replace(/=/g, '').substring(0, 50);
+        const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+        
+        await setDoc(doc(db, 'push_subscriptions', subId), {
+          endpoint: subJson.endpoint,
+          keys: subJson.keys,
+          user: currentUser?.email || currentUser?.username || 'Bilinmeyen Kullanıcı',
+          role: currentUser?.role || 'user',
+          updatedAt: Date.now()
+        });
+        console.log('[NotificationService] Push subscription saved to Firestore.');
+      }
+    } catch (error) {
+      console.error('[NotificationService] Error subscribing user to push:', error);
+    }
+  }
+
+  private urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+      .replace(/\-/g, '+')
+      .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
   }
 
   addListener(callback: (notifications: AppNotification[]) => void) {

@@ -21,7 +21,7 @@ export const isSunday = (date: string) => new Date(date).getDay() === 0;
 export const calculateOvertimeHours = (date: string, start: string, end: string, isOffDay: boolean) => {
     if (!start || !end) return 0;
     
-    const isHoliday = isPublicHoliday(date) || isSunday(date) || isOffDay;
+    const isHoliday = isPublicHoliday(date) || isOffDay;
     const isHalfDay = HALF_DAY_HOLIDAYS_2026.includes(date);
     
     const [h1, m1] = start.split(':').map(Number);

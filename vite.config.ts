@@ -23,7 +23,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/KKD/]
+        navigateFallbackDenylist: [/^\/KKD/],
+        importScripts: ['/push-sw.js']
       },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'icons/*.webp', 'icons/*.png', 'icons.svg', 'dh-favicon.svg'],
       manifest: {
@@ -57,5 +58,16 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/firebase') || id.includes('node_modules/@firebase')) {
+            return 'firebase';
+          }
+        }
+      }
+    }
   }
 });

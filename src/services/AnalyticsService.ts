@@ -81,9 +81,8 @@ class AnalyticsService {
     let totalManHours = 0;
     let overtimeManHours = 0;
     let overtimeSegments: { personnel: string[], startTime: string, endTime: string, hours: number }[] = [];
-    let firstStart: any = null;
-    let lastEnd: any = null;
     let totalRoadHours = 0;
+    let totalTurbineHours = 0;
 
     if (report.workSessions && report.workSessions.length > 0) {
       report.workSessions.forEach(session => {
@@ -102,20 +101,7 @@ class AnalyticsService {
 
           // Turbine downtime boundaries: only for type ÇALIŞMA, WORK, or BEKLEME
           if (session.type === 'ÇALIŞMA' || session.type === 'WORK' || session.type === 'BEKLEME') {
-            const sDate = session.date || report.date || new Date().toISOString().split('T')[0];
-            const startDt = new Date(`${sDate}T${session.startTime}:00`);
-            let endDt = new Date(`${sDate}T${session.endTime}:00`);
-            if (!isNaN(startDt.getTime()) && !isNaN(endDt.getTime())) {
-              if (endDt.getTime() < startDt.getTime()) {
-                endDt = new Date(endDt.getTime() + 24 * 60 * 60 * 1000);
-              }
-              if (!firstStart || startDt < firstStart) {
-                firstStart = startDt;
-              }
-              if (!lastEnd || endDt > lastEnd) {
-                lastEnd = endDt;
-              }
-            }
+            totalTurbineHours += duration;
           }
 
           // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, or TÜRBİNDEN EVE
@@ -144,10 +130,6 @@ class AnalyticsService {
         } catch (e) {}
       });
 
-      let totalTurbineHours = 0;
-      if (firstStart && lastEnd) {
-        totalTurbineHours = (lastEnd.getTime() - firstStart.getTime()) / (1000 * 60 * 60);
-      }
       (this as any).lastTurbineDuration = totalTurbineHours;
     } else {
       const onStr = report.timeManagement?.maintenanceOn;

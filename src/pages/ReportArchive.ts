@@ -672,7 +672,7 @@ export const ReportArchivePage = async (siteId?: string) => {
           
           ${canUseAi ? `
           <button onclick="window.openAiExecutiveSummary()" class="cyber-ai-btn" style="position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 8px; font-family: 'Rajdhani'; font-weight: 800; letter-spacing: 0.5px; cursor: pointer;">
-            <i class="fa-solid fa-wand-magic-sparkles" style="color: #e0b0ff;"></i> YAPAY ZEKA ANALİZİ
+            <i class="fa-solid fa-wand-magic-sparkles" style="color: #e0b0ff;"></i> RAPOR ANALİZİ BAŞLAT
           </button>
           ` : ''}
         </div>
@@ -712,14 +712,6 @@ export const ReportArchivePage = async (siteId?: string) => {
           </div>
         </div>
         <div style="display: flex; gap: 1rem;">
-          ${canDownloadPdf ? `
-          <button onclick="window.downloadReportPDF(event)" class="cyber-button" style="background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 8px 16px; cursor: pointer;">
-            <i class="fa-solid fa-download"></i> PDF İNDİR
-          </button>
-          <button onclick="window.downloadReportExcel(event)" class="cyber-button" style="background: rgba(34, 197, 94, 0.1); border: 1px solid #22c55e; color: #22c55e; padding: 8px 16px; cursor: pointer; margin-left: 0.5rem;">
-            <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
-          </button>
-          ` : ''}
           <button onclick="window.closeReport()" class="cyber-button" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 8px 16px; cursor: pointer;">
             <i class="fa-solid fa-xmark"></i> KAPAT
           </button>
@@ -1064,9 +1056,35 @@ export const ReportArchivePage = async (siteId?: string) => {
         return;
     }
 
+    const report = await serviceReportService.getReportByNo(reportNo);
+    if (!report) {
+        alert("Rapor bulunamadı.");
+        return;
+    }
+
+    const { formatTeamName } = await import('../utils/formatters');
+    const defaultTeam = report.team || '';
+    const upperTeam = defaultTeam.toUpperCase().trim();
+
+    // If the report already belongs to a valid team, bypass the modal and directly send it back to that team!
+    if (upperTeam && (upperTeam.startsWith('TEAM') || upperTeam.startsWith('EKIP'))) {
+        const reason = prompt(`Lütfen ${defaultTeam} ekibine geri gönderme nedenini yazınız.\n(Bu açıklama ekibin işlem notlarına eklenecektir)`);
+        if (!reason || reason.trim() === '') {
+            alert("Geri gönderme işlemi iptal edildi. Geçerli bir neden belirtmelisiniz.");
+            return;
+        }
+        try {
+            await serviceReportService.sendReportBack(id, defaultTeam, reason.trim());
+            alert(`Rapor başarıyla ${defaultTeam} ekibine geri gönderildi.`);
+            (window as any).navigate('reports-archive', siteId);
+        } catch (error) {
+            alert("Hata oluştu: " + error);
+        }
+        return;
+    }
+
     // Kullanıcılardan ekip listesini çek
     const { userService } = await import('../services/UserService');
-    const { formatTeamName } = await import('../utils/formatters');
     let users: any[] = [];
     try {
       users = await userService.getAllUsers();
@@ -1074,11 +1092,14 @@ export const ReportArchivePage = async (siteId?: string) => {
       console.error('Kullanıcı listesi alınamadı:', e);
     }
 
-    // TECHNICIAN rolündeki kullanıcılardan benzersiz ekip isimleri
+    // TECHNICIAN rolündeki kullanıcılardan benzersiz ekip isimleri (sadece Team ile başlayanlar)
     const teamSet = new Set<string>();
     users.forEach(u => {
       if (u.role === 'TECHNICIAN' && u.email) {
-        teamSet.add(formatTeamName(u.email.split('@')[0]));
+        const tName = formatTeamName(u.email.split('@')[0]);
+        if (tName && tName.toUpperCase().startsWith('TEAM')) {
+          teamSet.add(tName);
+        }
       }
     });
     const teams = Array.from(teamSet).sort((a, b) => {

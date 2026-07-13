@@ -1,7 +1,7 @@
 const axios = require('axios');
 const xml2js = require('xml2js');
 
-const OPC_URL = 'http://172.17.75.50:6010';
+const OPC_URL = 'http://172.17.78.42:6010';
 
 async function tryRead(formatType) {
     let soapBody = "";

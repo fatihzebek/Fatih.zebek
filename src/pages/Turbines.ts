@@ -2,9 +2,16 @@ import { dataService } from '../services/DataService'
 import { taskService } from '../services/TaskService'
 import { serviceReportService } from '../services/ServiceReportService'
 import { turbineNoteService } from '../services/TurbineNoteService'
+import { turbineReminderService } from '../services/TurbineReminderService'
 import { authService } from '../services/AuthService'
 import { fileService } from '../services/FileService'
 import { formatTeamName } from '../utils/formatters'
+import { db, auth } from '../firebase'
+import { collection, onSnapshot, addDoc } from 'firebase/firestore'
+import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { notificationService } from '../services/NotificationService'
+
+const ENABLE_SCADA_INTEGRATION = true; // SCADA / OPC Canlı veri entegrasyonu toggle
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '')
@@ -14,6 +21,9 @@ const cleanSablonName = (sablonName: string) => {
 };
 
 export const TurbinesPage = () => {
+  // Request notification permissions
+  notificationService.requestPermission();
+
   // Clear map instances to prevent leaflet container reuse issues
   if ((window as any).sitesMapInstance) {
     try { (window as any).sitesMapInstance.remove(); } catch(e) {}
@@ -23,6 +33,18 @@ export const TurbinesPage = () => {
     try { (window as any).siteMapInstance.remove(); } catch(e) {}
     (window as any).siteMapInstance = null;
   }
+  
+  // Clear any existing real-time subscriptions to prevent memory leaks
+  if ((window as any).scadaUnsubscribe) {
+    try { (window as any).scadaUnsubscribe(); } catch(e) {}
+    (window as any).scadaUnsubscribe = null;
+    (window as any).scadaSubscribed = false;
+  }
+  if ((window as any).turbineGridUnsubscribe) {
+    try { (window as any).turbineGridUnsubscribe(); } catch(e) {}
+    (window as any).turbineGridUnsubscribe = null;
+  }
+  (window as any).triggerTurbineGridRender = null;
 
   // Start task subscription for main map and badge updates
   if (!(window as any).globalTurbinesTasksSubscribed) {
@@ -86,6 +108,12 @@ export const TurbinesPage = () => {
     (window as any).turbineGridUnsubscribe();
     (window as any).turbineGridUnsubscribe = null;
   }
+  (window as any).triggerTurbineGridRender = null;
+  if ((window as any).scadaUnsubscribe) {
+    try { (window as any).scadaUnsubscribe(); } catch(e) {}
+    (window as any).scadaUnsubscribe = null;
+    (window as any).scadaSubscribed = false;
+  }
 
   // Clear previous site map instance
   if ((window as any).siteMapInstance) {
@@ -95,6 +123,68 @@ export const TurbinesPage = () => {
 
   const site = dataService.getSites().find(s => s.id === siteId);
   if (!site) return;
+
+  // Start real-time SCADA subscription
+  if (ENABLE_SCADA_INTEGRATION && !(window as any).scadaSubscribed) {
+    (window as any).scadaSubscribed = true;
+    (window as any).scadaStatusCache = {};
+    (window as any).scadaRenderedOnce = false;
+
+    (window as any).scadaUnsubscribe = onSnapshot(collection(db, 'realtimeStatus'), (snap) => {
+      let statusChanged = false;
+      const newScadaData: any = {};
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        newScadaData[doc.id] = data;
+
+        const prevStatus = (window as any).scadaStatusCache ? (window as any).scadaStatusCache[doc.id] : undefined;
+        if (data.status !== prevStatus) {
+          statusChanged = true;
+
+           // Trigger push notification if status changes from non-fault (or different status) to a new fault
+          const isNewFault = data.isFault === true;
+          console.log(`[SCADA DEBUG] doc=${doc.id} status=${data.status} prevStatus=${prevStatus} isNewFault=${isNewFault}`);
+          if (prevStatus && isNewFault) {
+            const allTurbines = dataService.getSites().flatMap(s => dataService.getTurbinesBySite(s.id));
+            const turbine = allTurbines.find(t => t.id === doc.id);
+            const turbineName = turbine ? `${turbine.label || `T-${turbine.no.toString().padStart(2, '0')}`} (${doc.id})` : doc.id;
+
+            let faultDesc = data.status;
+            if (data.status === '66:51') faultDesc = '66:51 (Overtemperature rectifier 1)';
+            else if (data.status === '66:52') faultDesc = '66:52 (Overtemperature rectifier 2)';
+            else if (data.status === '62:43') faultDesc = '62:43 (Feeding fault - Earth contact - Fault)';
+            else faultDesc = `${data.status} (SCADA Fault)`;
+
+            // notificationService.notify(
+            //   `⚠️ SCADA ARIZA BİLDİRİMİ`,
+            //   `${turbineName} Türbininde Yeni SCADA Arızası Algılandı: ${faultDesc}`,
+            //   'error'
+            // );
+          }
+        }
+      });
+
+      (window as any).scadaData = newScadaData;
+      (window as any).scadaStatusCache = Object.keys(newScadaData).reduce((acc: any, key) => {
+        acc[key] = newScadaData[key].status;
+        return acc;
+      }, {});
+
+      // Only trigger full grid render if status actually changed or first load
+      if (statusChanged || !(window as any).scadaRenderedOnce) {
+        (window as any).scadaRenderedOnce = true;
+        if (typeof (window as any).triggerTurbineGridRender === 'function') {
+          (window as any).triggerTurbineGridRender();
+        }
+        if ((window as any).sitesMapInstance && typeof (window as any).initSitesMap === 'function') {
+          (window as any).initSitesMap();
+        }
+      }
+    }, (err) => {
+      console.error("SCADA Subscription Error:", err);
+    });
+  }
 
   (window as any).activeSiteIdForMap = siteId;
   (window as any).activeSiteNameForMap = site.name;
@@ -208,12 +298,49 @@ export const TurbinesPage = () => {
         const isFaulty = !!turbineFault;
         const isMaintenance = !!turbineMaintenance;
         
-        // Status logic based on manual tasks only
-        const status = isFaulty ? 'fault' : (isMaintenance ? 'maintenance' : 'online');
-        const color = status === 'fault' ? '#e74c3c' : (status === 'maintenance' ? '#ccff00' : 'var(--accent-cyan)');
+        // SCADA Realtime Integration
+        const scada = (window as any).scadaData ? (window as any).scadaData[t.id] : null;
+        const scadaPower = scada && scada.power !== undefined ? scada.power : null;
+        const scadaWind = scada && scada.windSpeed !== undefined ? scada.windSpeed : null;
+        const scadaStatus = scada && scada.status ? scada.status : 'OK';
         
-        const displayStatusLabel = isFaulty ? `${(turbineFault as any).faultCode || 'ARIZA BİLDİRİMİ'}` : 
-                                   (isMaintenance ? cleanSablonName((turbineMaintenance as any).secilenSablon).toUpperCase() : 'ONLINE');
+        const normalScadaStates = ['OK', '0:0', '0:1', '0:2', '0:4', '0:5', '0', '1', 'Run', 'Turbine operational', 'Turbine in operation', 'Turbine starting'];
+        const maintenanceScadaStates = ['8:0', '0:8', '8:1', '8:2', '8:3', '8:4', '8:5', '8:6', '8:7', '8:8'];
+        
+        const isNormalState = normalScadaStates.includes(scadaStatus);
+        const isMaintenanceState = maintenanceScadaStates.includes(scadaStatus);
+        const isStartingState = ['0:1', '0:2', '0:4', 'Turbine starting', 'Turbine operational'].includes(scadaStatus);
+        
+        const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
+        const isScadaMaintenance = ENABLE_SCADA_INTEGRATION && scada && scada.isMaintenance === true;
+
+        let status = isFaulty ? 'fault' : (isMaintenance || isScadaMaintenance ? 'maintenance' : 'online');
+        if (ENABLE_SCADA_INTEGRATION && hasScadaFault && status === 'online') {
+          status = 'scada_fault';
+        }
+
+        const color = status === 'fault' || status === 'scada_fault' ? '#e74c3c' : (status === 'maintenance' ? '#ccff00' : 'var(--accent-cyan)');
+        
+        let displayStatusLabel = 'ONLINE';
+        if (isFaulty) {
+          displayStatusLabel = `${(turbineFault as any).faultCode || 'ARIZA BİLDİRİMİ'}`;
+        } else if (isMaintenance) {
+          displayStatusLabel = cleanSablonName((turbineMaintenance as any).secilenSablon).toUpperCase();
+        } else if (isScadaMaintenance) {
+          let statusText = scadaStatus;
+          if (scadaStatus === '8:0') statusText = 'BAKIM (Maintenance)';
+          else if (scadaStatus === '0:8') statusText = 'BAKIMDA ÇALIŞMA (Op. during maintenance)';
+          else {
+            statusText = `BAKIM (${scadaStatus})`;
+          }
+          displayStatusLabel = statusText;
+        } else if (status === 'scada_fault') {
+          let statusText = scada.statusText || scadaStatus;
+          if (scadaStatus === 'OK' && scadaWind !== null && scadaPower !== null && scadaWind > 4.5 && scadaPower <= 0) {
+            statusText = 'Stopped (No production)';
+          }
+          displayStatusLabel = statusText;
+        }
 
         const isPaused = status !== 'online';
 
@@ -223,8 +350,10 @@ export const TurbinesPage = () => {
           const equipIcon = t.label === 'RTU' ? 'fa-microchip' : t.label === 'FCU' ? 'fa-gears' : 'fa-ethernet';
           const equipColor = t.label === 'RTU' ? 'var(--accent-cyan)' : t.label === 'FCU' ? 'var(--accent-orange)' : 'var(--accent-blue)';
           iconHtml = `
-            <div style="width: 28px; height: 28px; background: rgba(255,255,255,0.03); border: 1px solid ${equipColor}44; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: ${equipColor}; box-shadow: 0 0 10px ${equipColor}22;">
-              <i class="fa-solid ${equipIcon}" style="font-size: 0.8rem;"></i>
+            <div style="width: 50px; height: 60px; display: flex; align-items: center; justify-content: center;">
+              <div style="width: 28px; height: 28px; background: rgba(255,255,255,0.03); border: 1px solid ${equipColor}44; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: ${equipColor}; box-shadow: 0 0 10px ${equipColor}22;">
+                <i class="fa-solid ${equipIcon}" style="font-size: 0.8rem;"></i>
+              </div>
             </div>
           `;
         } else {
@@ -260,23 +389,39 @@ export const TurbinesPage = () => {
                data-site-id="${siteId}"
                data-site-name="${site.name.replace(/'/g, "\\'")}"
                style="border-color: ${color}44; padding: 0.75rem; min-height: 110px; cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden; display: flex; align-items: center; gap: 0.75rem;">
-            ${isFaulty ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${color}; box-shadow: 0 0 10px ${color}88;"></div>` : ''}
+            ${isFaulty || status === 'scada_fault' ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: ${color}; box-shadow: 0 0 10px ${color}88;"></div>` : ''}
             
-            <div style="flex-shrink: 0; pointer-events: none;">
-              ${iconHtml}
+            <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 68px;">
+              <div style="pointer-events: none; display: flex; justify-content: center; align-items: center;">
+                ${iconHtml}
+              </div>
+              ${siteId === '2688' || siteId === '3439' || siteId === '2990' || siteId === '3793' || siteId === '3213' ? `
+                <button class="cyber-reset-btn" 
+                        data-action="reset-turbine"
+                        data-turbine-no="${t.no !== undefined ? t.no : (labelText === 'RTU' ? 0 : '')}"
+                        data-turbine-id="${labelText}"
+                        data-serial="${t.id}"
+                        style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--accent-red); border-radius: 4px; padding: 3px 6px; font-family: 'Rajdhani', sans-serif; font-size: 0.65rem; font-weight: 800; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 100%; box-shadow: 0 0 6px rgba(239, 68, 68, 0.15);"
+                        onmouseover="this.style.background='var(--accent-red)'; this.style.color='#000'; this.style.borderColor='var(--accent-red)';"
+                        onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'; this.style.color='var(--accent-red)'; this.style.borderColor='rgba(239, 68, 68, 0.4)';">
+                  <i class="fa-solid fa-bolt" style="font-size: 0.55rem;"></i> RESET
+                </button>
+              ` : ''}
             </div>
 
             <div style="flex: 1; min-width: 0; pointer-events: none;">
               <div style="font-family: 'Rajdhani', sans-serif; font-size: 1rem; color: #fff; letter-spacing: 0.5px; display: flex; justify-content: space-between; margin-bottom: 2px;">
                 <span>${labelText}</span>
-                <span style="font-size: 0.65rem; color: ${color}; font-weight: 800; opacity: 0.8;">${status.toUpperCase()}</span>
+                <span style="font-size: 0.65rem; color: ${color}; font-weight: 800; opacity: 0.8;">${(status === 'scada_fault' || status === 'fault') ? 'ARIZA' : (status === 'maintenance' ? 'BAKIM' : status.toUpperCase())}</span>
               </div>
               <div style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 ${t.id}
               </div>
+              ${status !== 'online' ? `
               <div style="margin-top: 6px; font-size: 0.6rem; font-weight: 700; color: ${color}; letter-spacing: 0.5px;">
                 ${displayStatusLabel}
               </div>
+              ` : ''}
             </div>
           </div>
         `;
@@ -284,6 +429,20 @@ export const TurbinesPage = () => {
 
         // --- ADD EVENT DELEGATION FOR RELIABILITY ---
         currentGrid.onclick = (e) => {
+          const resetBtn = (e.target as HTMLElement).closest('.cyber-reset-btn') as HTMLElement;
+          if (resetBtn) {
+            e.stopPropagation();
+            e.preventDefault();
+            const card = resetBtn.closest('.turbine-card') as HTMLElement;
+            const { turbineNo, turbineId, serial } = resetBtn.dataset;
+            const cardSiteId = card?.dataset.siteId;
+            const cardSiteName = card?.dataset.siteName;
+            if (turbineNo && turbineId && serial && cardSiteId && cardSiteName) {
+              (window as any).triggerTurbineReset(parseInt(turbineNo), turbineId, serial, cardSiteId, cardSiteName);
+            }
+            return;
+          }
+
           const target = (e.target as HTMLElement).closest('.turbine-card') as HTMLElement;
           if (target && target.dataset.action === 'show-details') {
             const { id, label, siteId: sid, siteName: sname } = target.dataset;
@@ -293,6 +452,7 @@ export const TurbinesPage = () => {
           }
         };
       };
+      (window as any).triggerTurbineGridRender = renderGrid;
 
       // Initial render
       renderGrid();
@@ -324,6 +484,258 @@ export const TurbinesPage = () => {
   }
 };
 
+const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) => Promise<void>) => {
+  return new Promise<void>((resolve, reject) => {
+    const modalId = 'cyber-security-reset-modal';
+    let existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    const currentUserEmail = authService.getCurrentUser()?.email || 'Bilinmeyen Kullanıcı';
+
+    const modalHtml = `
+      <div id="${modalId}" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 8, 15, 0.85); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 999999; opacity: 0; transition: opacity 0.3s ease;">
+        <style>
+          @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+          }
+        </style>
+        <div class="glass-panel" style="width: 420px; padding: 2rem; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 16px; background: rgba(10, 15, 25, 0.95); box-shadow: 0 0 30px rgba(239, 68, 68, 0.15); display: flex; flex-direction: column; gap: 1.5rem; transform: translateY(-20px); transition: transform 0.3s ease;">
+          
+          <!-- Header -->
+          <div style="display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255, 68, 68, 0.15); padding-bottom: 1rem;">
+            <div style="width: 42px; height: 42px; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--accent-red); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--accent-red);">
+              <i class="fa-solid fa-shield-halved" style="font-size: 1.25rem;"></i>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; font-weight: 800; color: #fff; letter-spacing: 0.5px;">GÜVENLİK DOĞRULAMASI</h3>
+              <p style="margin: 0; font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Türbin sıfırlama işlemi için kimlik onayı gereklidir.</p>
+            </div>
+          </div>
+
+          <!-- Body Info -->
+          <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.03);">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Hedef Türbin:</span>
+              <strong style="color: #fff;">${turbineLabel}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>İşlem Yapan Hesap:</span>
+              <strong style="color: var(--accent-cyan);">${currentUserEmail}</strong>
+            </div>
+          </div>
+
+          <!-- Password Input -->
+          <div style="display: flex; flex-direction: column; gap: 8px; position: relative;">
+            <label style="font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.8rem; color: var(--text-muted); letter-spacing: 0.5px;">ŞİFRENİZ</label>
+            <div style="position: relative;">
+              <i class="fa-solid fa-lock" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.5; font-size: 0.85rem;"></i>
+              <input type="password" id="cyber-security-password-input" class="cyber-input" placeholder="Hesap şifrenizi girin..." style="padding-left: 2.5rem; width: 100%; height: 42px; border-radius: 8px; font-size: 0.9rem; border-color: rgba(239, 68, 68, 0.3);" required>
+            </div>
+            <div id="cyber-security-error-msg" style="color: var(--accent-red); font-size: 0.7rem; font-weight: bold; margin-top: 4px; display: none;"></div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div style="display: flex; gap: 12px; margin-top: 0.5rem;">
+            <button id="cyber-security-cancel-btn" class="btn-cyber" style="flex: 1; height: 40px; background: rgba(255, 255, 255, 0.03); border-color: rgba(255, 255, 255, 0.1); color: var(--text-muted); font-weight: bold; justify-content: center;">
+              İPTAL
+            </button>
+            <button id="cyber-security-confirm-btn" class="btn-cyber" style="flex: 1; height: 40px; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: var(--accent-red); font-weight: bold; justify-content: center; display: flex; align-items: center; gap: 6px;">
+              <span id="cyber-security-confirm-text">RESETİ ONAYLA</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    const div = document.createElement('div');
+    div.innerHTML = modalHtml;
+    const modalElement = div.firstElementChild as HTMLElement;
+    document.body.appendChild(modalElement);
+
+    // Fade in
+    setTimeout(() => {
+      modalElement.style.opacity = '1';
+      const content = modalElement.querySelector('.glass-panel') as HTMLElement;
+      if (content) content.style.transform = 'translateY(0)';
+    }, 10);
+
+    const input = modalElement.querySelector('#cyber-security-password-input') as HTMLInputElement;
+    const confirmBtn = modalElement.querySelector('#cyber-security-confirm-btn') as HTMLButtonElement;
+    const cancelBtn = modalElement.querySelector('#cyber-security-cancel-btn') as HTMLButtonElement;
+    const errorMsg = modalElement.querySelector('#cyber-security-error-msg') as HTMLElement;
+    const confirmText = modalElement.querySelector('#cyber-security-confirm-text') as HTMLElement;
+
+    // Focus input
+    setTimeout(() => input.focus(), 150);
+
+    const closeModal = (resolved: boolean) => {
+      modalElement.style.opacity = '0';
+      const content = modalElement.querySelector('.glass-panel') as HTMLElement;
+      if (content) content.style.transform = 'translateY(-20px)';
+      setTimeout(() => {
+        modalElement.remove();
+        if (resolved) {
+          resolve();
+        } else {
+          reject(new Error("İptal edildi"));
+        }
+      }, 300);
+    };
+
+    cancelBtn.onclick = () => closeModal(false);
+
+    const handleConfirm = async () => {
+      const password = input.value.trim();
+      if (!password) {
+        errorMsg.innerText = 'Lütfen şifrenizi girin.';
+        errorMsg.style.display = 'block';
+        input.focus();
+        return;
+      }
+
+      errorMsg.style.display = 'none';
+      input.disabled = true;
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      confirmText.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ONAYLANIYOR...`;
+
+      try {
+        await onConfirm(password);
+        closeModal(true);
+      } catch (err: any) {
+        console.error(err);
+        input.disabled = false;
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        confirmText.innerText = 'RESETİ ONAYLA';
+        
+        let errMsg = 'Doğrulama başarısız oldu.';
+        if (err.code === 'auth/wrong-password') {
+          errMsg = 'Hatalı şifre! Lütfen tekrar deneyin.';
+        } else if (err.code === 'auth/user-mismatch') {
+          errMsg = 'Kullanıcı hesabı eşleşmedi.';
+        } else if (err.message) {
+          errMsg = err.message;
+        }
+        
+        errorMsg.innerText = errMsg;
+        errorMsg.style.display = 'block';
+
+        // Shake animation
+        const content = modalElement.querySelector('.glass-panel') as HTMLElement;
+        if (content) {
+          content.style.animation = 'none';
+          setTimeout(() => {
+            content.style.animation = 'shake 0.4s ease';
+          }, 10);
+        }
+        
+        input.select();
+        input.focus();
+      }
+    };
+
+    confirmBtn.onclick = handleConfirm;
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        handleConfirm();
+      }
+    };
+  });
+};
+
+(window as any).triggerTurbineReset = async (turbineNo: number, turbineLabel: string, serial: string, siteId: string, siteName: string) => {
+  try {
+    // Show our cyberpunk security modal to get the password and verify it
+    await showSecurityModal(turbineLabel, async (password) => {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("Oturum açmış geçerli bir kullanıcı bulunamadı!");
+      }
+      
+      // Perform re-authentication securely
+      const credential = EmailAuthProvider.credential(user.email!, password);
+      await reauthenticateWithCredential(user, credential);
+    });
+  } catch (err) {
+    // Modal was canceled or authentication failed
+    return;
+  }
+
+  // Show a loading overlay or alert to notify user
+  const loadingAlert = document.createElement('div');
+  loadingAlert.style.position = 'fixed';
+  loadingAlert.style.top = '20px';
+  loadingAlert.style.right = '20px';
+  loadingAlert.style.background = 'rgba(10, 15, 25, 0.95)';
+  loadingAlert.style.border = '1px solid var(--accent-orange)';
+  loadingAlert.style.color = '#fff';
+  loadingAlert.style.padding = '12px 20px';
+  loadingAlert.style.borderRadius = '8px';
+  loadingAlert.style.fontFamily = "'Rajdhani', sans-serif";
+  loadingAlert.style.fontSize = '0.9rem';
+  loadingAlert.style.fontWeight = '800';
+  loadingAlert.style.zIndex = '999999';
+  loadingAlert.style.boxShadow = '0 0 15px rgba(245, 158, 11, 0.3)';
+  loadingAlert.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin" style="margin-right: 8px; color: var(--accent-orange);"></i> TÜRBİN RESETLENİYOR...`;
+  document.body.appendChild(loadingAlert);
+
+  try {
+    const docRef = await addDoc(collection(db, 'turbineResetRequests'), {
+      no: turbineNo,
+      turbineId: turbineLabel,
+      serial: serial,
+      siteId: siteId,
+      siteName: siteName,
+      status: 'pending',
+      requestedBy: authService.getCurrentUser()?.email || 'Bilinmeyen Kullanıcı',
+      requestedAt: new Date().toISOString()
+    });
+
+    console.log("Reset request written to Firestore with ID:", docRef.id);
+
+    // Listen for changes to this request doc to update the UI
+    let unsubscribe = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const status = docSnap.get('status');
+        const error = docSnap.get('error');
+
+        if (status === 'success') {
+          loadingAlert.style.borderColor = 'var(--accent-green)';
+          loadingAlert.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.3)';
+          loadingAlert.innerHTML = `<i class="fa-solid fa-circle-check" style="margin-right: 8px; color: var(--accent-green);"></i> RESET BAŞARIYLA TAMAMLANDI!`;
+          unsubscribe();
+          setTimeout(() => loadingAlert.remove(), 4000);
+        } else if (status === 'failed') {
+          loadingAlert.style.borderColor = 'var(--accent-red)';
+          loadingAlert.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.3)';
+          loadingAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right: 8px; color: var(--accent-red);"></i> RESET HATA: ${error || 'Bilinmeyen hata'}`;
+          unsubscribe();
+          setTimeout(() => loadingAlert.remove(), 6000);
+        }
+      }
+    });
+
+    // Auto-timeout after 15 seconds if no response
+    setTimeout(() => {
+      if (document.body.contains(loadingAlert)) {
+        loadingAlert.style.borderColor = 'var(--accent-red)';
+        loadingAlert.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 8px; color: var(--accent-red);"></i> ZAMAN AŞIMI: Sunucudan yanıt alınamadı.`;
+        unsubscribe();
+        setTimeout(() => loadingAlert.remove(), 5000);
+      }
+    }, 15000);
+
+  } catch (err: any) {
+    loadingAlert.style.borderColor = 'var(--accent-red)';
+    loadingAlert.innerHTML = `<i class="fa-solid fa-circle-xmark" style="margin-right: 8px; color: var(--accent-red);"></i> HATA: ${err.message}`;
+    setTimeout(() => loadingAlert.remove(), 5000);
+  }
+};
+
 (window as any).showTurbineDetails = async (turbineId: string, turbineLabel: string, siteId: string, siteName: string) => {
   console.log("Opening details for:", turbineLabel);
   
@@ -346,6 +758,36 @@ export const TurbinesPage = () => {
   (window as any).currentActiveTurbineLabel = turbineLabel;
   
   title.innerText = `${siteName} — ${turbineLabel}`;
+
+  // Reset button container logic for Anemon
+  const resetBtnContainer = document.getElementById('modal-reset-btn-container');
+  if (resetBtnContainer) {
+    // Only show for Anemon (2688), Sarıkaya (3439), Sayalar (2990), Kuyucak (3793), and Datça (3213)
+    if (siteId === '2688' || siteId === '3439' || siteId === '2990' || siteId === '3793' || siteId === '3213') {
+      // Extract turbine number from label (e.g., T-01 -> 1, T-25 -> 25)
+      const numMatch = turbineLabel.match(/\d+/);
+      let turbineNo = numMatch ? parseInt(numMatch[0]) : null;
+      if (turbineLabel === 'RTU') {
+        turbineNo = 0;
+      }
+
+      if (turbineNo !== null) {
+        resetBtnContainer.innerHTML = `
+          <button onclick="window.triggerTurbineReset(${turbineNo}, '${turbineLabel}', '${turbineId}', '${siteId}', '${siteName.replace(/'/g, "\\'")}')" 
+                  class="cyber-button" 
+                  style="background: rgba(239, 68, 68, 0.1); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;"
+                  onmouseover="this.style.background='var(--accent-red)'; this.style.color='#000'; this.style.borderColor='var(--accent-red)'"
+                  onmouseout="this.style.background='rgba(239, 68, 68, 0.1)'; this.style.color='var(--accent-red)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+            <i class="fa-solid fa-bolt"></i> RESET ⚡
+          </button>
+        `;
+      } else {
+        resetBtnContainer.innerHTML = '';
+      }
+    } else {
+      resetBtnContainer.innerHTML = '';
+    }
+  }
   
   try {
     const allTasks = (window as any).latestTurbineTasks || [];
@@ -369,8 +811,28 @@ export const TurbinesPage = () => {
       
     const tasksList = document.getElementById('modal-tasks-list');
     if (tasksList) {
+      const scadaData = (window as any).scadaData || {};
+      const scadaInfo = scadaData[turbineId];
+      const hasScadaFault = !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
+      const hasActiveTask = turbineTasks.some((t: any) => t.status !== 'Tamamlandı');
+
+
+      let scadaClaimHtml = '';
+      if (hasScadaFault && !hasActiveTask) {
+        scadaClaimHtml = `
+          <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
+            <i class="fa-solid fa-triangle-exclamation fa-xl" style="color: var(--accent-orange); margin-bottom: 0.5rem; display: block;"></i>
+            <h4 style="color: #fff; font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem;">AKTİF SCADA ARIZASI BİLDİRİLDİ</h4>
+            <p style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.85rem;">Türbinde ${scadaInfo.statusText || scadaInfo.status} arızası bulunmaktadır. Henüz bu görevi üstlenen ekip olmadı.</p>
+            <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${scadaInfo.status}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.4rem 1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.2);">
+              <i class="fa-solid fa-hand-holding-hand"></i> GÖREVİ ÜSTLEN & MÜDAHALE ET
+            </button>
+          </div>
+        `;
+      }
+
       if (turbineTasks.length === 0) {
-        tasksList.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
+        tasksList.innerHTML = scadaClaimHtml + `<div style="padding: 2rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
           <i class="fa-solid fa-folder-open" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.3;"></i>
           Bu türbine ait aktif görev bulunamadı.
         </div>`;
@@ -379,7 +841,7 @@ export const TurbinesPage = () => {
         const isAdmin = currentUser?.email?.toLowerCase().includes('admin') || 
                         currentUser?.email === 'fatih.zebek@demirerholding.com';
 
-        tasksList.innerHTML = turbineTasks.map((t: any) => {
+        tasksList.innerHTML = scadaClaimHtml + turbineTasks.map((t: any) => {
           const isCompleted = t.status === 'Tamamlandı';
           const color = isCompleted ? 'var(--accent-green)' : 'var(--accent-orange)';
           const icon = isCompleted ? 'fa-check-circle' : 'fa-clock';
@@ -658,8 +1120,27 @@ export const TurbinesPage = () => {
         // Update the tasks list dynamically
         const tasksList = document.getElementById('modal-tasks-list');
         if (tasksList) {
+          const scadaData = (window as any).scadaData || {};
+          const scadaInfo = scadaData[turbineId];
+          const hasScadaFault = !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
+          const hasActiveTask = activeTasksForDeficiencies.some((t: any) => t.status !== 'Tamamlandı');
+
+          let scadaClaimHtml = '';
+          if (hasScadaFault && !hasActiveTask) {
+            scadaClaimHtml = `
+              <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
+                <i class="fa-solid fa-triangle-exclamation fa-xl" style="color: var(--accent-orange); margin-bottom: 0.5rem; display: block;"></i>
+                <h4 style="color: #fff; font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem;">AKTİF SCADA ARIZASI BİLDİRİLDİ</h4>
+                <p style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.85rem;">Türbinde ${scadaInfo.statusText || scadaInfo.status} arızası bulunmaktadır. Henüz bu görevi üstlenen ekip olmadı.</p>
+                <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${scadaInfo.status}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.4rem 1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.2);">
+                  <i class="fa-solid fa-hand-holding-hand"></i> GÖREVİ ÜSTLEN & MÜDAHALE ET
+                </button>
+              </div>
+            `;
+          }
+
           if (activeTasksForDeficiencies.length === 0) {
-            tasksList.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
+            tasksList.innerHTML = scadaClaimHtml + `<div style="padding: 2rem; text-align: center; color: var(--text-muted); background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.1);">
               <i class="fa-solid fa-folder-open" style="font-size: 2rem; display: block; margin-bottom: 1rem; opacity: 0.3;"></i>
               Bu türbine ait aktif görev bulunamadı.
             </div>`;
@@ -668,7 +1149,7 @@ export const TurbinesPage = () => {
             const isAdmin = currentUser?.email?.toLowerCase().includes('admin') || 
                             currentUser?.email === 'fatih.zebek@demirerholding.com';
 
-            tasksList.innerHTML = activeTasksForDeficiencies.map((t: any) => {
+            tasksList.innerHTML = scadaClaimHtml + activeTasksForDeficiencies.map((t: any) => {
               const isCompleted = t.status === 'Tamamlandı';
               const color = isCompleted ? 'var(--accent-green)' : 'var(--accent-orange)';
               const icon = isCompleted ? 'fa-check-circle' : 'fa-clock';
@@ -728,6 +1209,19 @@ export const TurbinesPage = () => {
         });
       }
 
+      // Reset and load reminders tab
+      const remindersTab = document.getElementById('tab-reminders');
+      if (remindersTab) {
+        // --- REAL-TIME REMINDERS SUBSCRIPTION ---
+        if ((window as any).currentReminderUnsubscribe) {
+          (window as any).currentReminderUnsubscribe();
+        }
+        
+        (window as any).currentReminderUnsubscribe = turbineReminderService.subscribeRemindersForTurbine(turbineId, (reminders) => {
+          (window as any).renderTurbineReminders(reminders);
+        });
+      }
+
     } catch (err) {
       console.error("Türbin detayları yüklenirken hata:", err);
     } finally {
@@ -749,6 +1243,11 @@ export const TurbinesPage = () => {
     (window as any).currentNoteUnsubscribe = null;
   }
 
+  if ((window as any).currentReminderUnsubscribe) {
+    (window as any).currentReminderUnsubscribe();
+    (window as any).currentReminderUnsubscribe = null;
+  }
+
   if ((window as any).currentReportsUnsubscribe) {
     (window as any).currentReportsUnsubscribe();
     (window as any).currentReportsUnsubscribe = null;
@@ -762,7 +1261,7 @@ export const TurbinesPage = () => {
   (window as any).closeTurbinePdf();
 };
 
-(window as any).switchTurbineTab = (tabName: 'tasks' | 'materials' | 'reports' | 'notes' | 'deficiencies') => {
+(window as any).switchTurbineTab = (tabName: 'tasks' | 'materials' | 'reports' | 'notes' | 'deficiencies' | 'reminders') => {
   document.querySelectorAll('.turbine-tab-btn').forEach(btn => {
     btn.classList.remove('active');
     (btn as HTMLElement).style.borderBottomColor = 'transparent';
@@ -862,6 +1361,42 @@ export const TurbinesPage = () => {
   }
 };
 
+(window as any).claimScadaFault = async (tSerial: string, tNo: string, siteId: string, siteName: string, faultCode: string) => {
+  const currentUser = authService.getCurrentUser();
+  const userEmail = currentUser?.email || '';
+  const teamName = formatTeamName(userEmail);
+
+  if (!confirm(`"${siteName} — ${tNo}" türbinindeki ${faultCode} SCADA arızası görevini üstlenip müdahale başlatmak istiyor musunuz?`)) {
+    return;
+  }
+
+  try {
+    const taskData = {
+      secilenSablon: 'Türbin Arıza Formu',
+      sahaBilgisi: siteName,
+      siteId: siteId,
+      turbinSeriNo: tSerial,
+      turbinNo: tNo,
+      statuKodu: faultCode,
+      yoneticiNotu: `SCADA ARIZA MÜDAHALESİ:\nSaha ekibi (${teamName}) tarafından doğrudan mobil bildirim veya türbin detayından görevi üstlen seçeneği ile başlatıldı.`,
+      assignedTeam: teamName,
+      status: 'İşlemde'
+    };
+
+    const result = await taskService.createNewTask(taskData);
+    if (result.success) {
+      if ((window as any).showToast) {
+        (window as any).showToast('GÖREV ÜSTLENİLDİ', `SCADA arıza görevi ${teamName} adına başarıyla başlatıldı. Diğer ekiplere bilgi gönderildi.`, 'success');
+      } else {
+        alert(`SCADA arıza görevi ${teamName} adına başarıyla başlatıldı.`);
+      }
+    }
+  } catch (err) {
+    console.error("SCADA arıza üstlenme hatası:", err);
+    alert("Görev üstlenilirken bir hata oluştu.");
+  }
+};
+
 (window as any).renderTurbineNotes = (notes: any[]) => {
   const list = document.getElementById('modal-notes-list');
   if (list) {
@@ -906,7 +1441,7 @@ export const TurbinesPage = () => {
           </div>
           ${n.imageUrl ? `
             <div style="margin-left: 2.5rem; border-radius: 10px; overflow: hidden; max-width: 350px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
-              <img src="${n.imageUrl}" onclick="window.open(this.src)" style="width: 100%; display: block; cursor: pointer; transition: transform 0.4s ease-out;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
+              <img src="${n.imageUrl}" onclick="window.showImageLightbox(this.src)" style="width: 100%; display: block; cursor: pointer; transition: transform 0.4s ease-out;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'">
             </div>
           ` : ''}
         </div>
@@ -1005,6 +1540,228 @@ export const TurbinesPage = () => {
       console.error(err);
       alert("Not silinirken bir hata oluştu.");
     }
+  }
+};
+
+(window as any).handleReminderImageSelect = (input: HTMLInputElement) => {
+  const file = input.files?.[0];
+  const previewContainer = document.getElementById('reminder-image-preview-container');
+  const previewImg = document.getElementById('reminder-image-preview') as HTMLImageElement;
+  
+  if (file && previewContainer && previewImg) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target?.result as string;
+      previewContainer.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+(window as any).clearReminderImage = () => {
+  const input = document.getElementById('reminder-image-input') as HTMLInputElement;
+  const previewContainer = document.getElementById('reminder-image-preview-container');
+  if (input) input.value = '';
+  if (previewContainer) previewContainer.classList.add('hidden');
+};
+
+(window as any).renderTurbineReminders = (reminders: any[]) => {
+  const list = document.getElementById('modal-reminders-list');
+  if (list) {
+    if (reminders.length === 0) {
+      list.innerHTML = `<div style="padding: 3rem; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+        <i class="fa-solid fa-bell fa-3x" style="opacity: 0.2;"></i>
+        Henüz hatırlatıcı eklenmemiş.
+      </div>`;
+      return;
+    }
+
+    const currentUser = authService.getCurrentUser();
+    const isAdmin = currentUser?.email?.toLowerCase().includes('admin') || 
+                    currentUser?.email === 'fatih.zebek@demirerholding.com';
+
+    list.innerHTML = reminders.map(r => {
+      const deleteBtn = isAdmin ? `
+        <button onclick="window.deleteTurbineReminder('${r.id}')" 
+                style="background: none; border: none; outline: none; box-shadow: none; color: rgba(255,255,255,0.25); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; transition: all 0.2s; flex-shrink: 0;"
+                onmouseover="this.style.color='#ff4d4d'; this.style.background='rgba(255,77,77,0.1)';" 
+                onmouseout="this.style.color='rgba(255,255,255,0.25)'; this.style.background='none';"
+                title="Hatırlatıcıyı Sil">
+          <i class="fa-solid fa-trash-can" style="font-size: 0.85rem;"></i>
+        </button>
+      ` : '';
+
+      const reminderDateObj = new Date(r.reminderDate);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const isOverdue = !r.isCompleted && reminderDateObj <= today;
+      const dateText = reminderDateObj.toLocaleDateString('tr-TR');
+
+      const priority = r.priority || 'LOW';
+      let borderLeftColor = 'var(--accent-cyan)';
+      let priorityBadge = '';
+      let pulseStyle = '';
+
+      if (r.isCompleted) {
+        borderLeftColor = '#2ecc71';
+      } else {
+        if (priority === 'CRITICAL') {
+          borderLeftColor = '#ef4444';
+          priorityBadge = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); animation: pulse 2s infinite;"><i class="fa-solid fa-triangle-exclamation"></i> KRİTİK</span>`;
+          pulseStyle = 'box-shadow: 0 0 10px rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.25);';
+        } else if (priority === 'MEDIUM') {
+          borderLeftColor = '#f59e0b';
+          priorityBadge = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);">ORTA</span>`;
+        } else {
+          borderLeftColor = 'var(--accent-cyan)';
+          priorityBadge = `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(0, 243, 255, 0.1); color: var(--accent-cyan); border: 1px solid rgba(0, 243, 255, 0.25);">DÜŞÜK</span>`;
+        }
+      }
+
+      const statusBadge = r.isCompleted 
+        ? `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3);">TAMAMLANDI</span>` 
+        : (isOverdue 
+            ? `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 900;">SÜRESİ GEÇTİ</span>` 
+            : `<span style="padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; background: rgba(255, 255, 255, 0.05); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1);">BEKLİYOR</span>`);
+
+      const resolutionHtml = r.isCompleted && r.resolutionNote
+        ? `
+          <div style="margin-left: 2rem; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(46, 204, 113, 0.05); border: 1px dashed rgba(46, 204, 113, 0.2); border-radius: 8px; font-size: 0.8rem; color: #2ecc71; font-family: 'Inter', sans-serif;">
+            <i class="fa-solid fa-circle-info"></i> <strong>Çözüm Notu:</strong> ${r.resolutionNote} 
+            <span style="opacity: 0.6; margin-left: 5px;">— ${r.completedBy} (${r.completedAt?.toDate ? r.completedAt.toDate().toLocaleString('tr-TR') : 'Şimdi'})</span>
+          </div>
+        ` : '';
+
+      const imageHtml = r.imageUrl
+        ? `
+          <div style="margin-left: 2rem; margin-top: 0.5rem; border-radius: 8px; overflow: hidden; max-width: 250px; border: 1px solid rgba(255,255,255,0.08);">
+            <img src="${r.imageUrl}" onclick="window.showImageLightbox(this.src)" style="width: 100%; display: block; cursor: pointer; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+          </div>
+        ` : '';
+
+      return `
+        <div class="reminder-item" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid ${borderLeftColor}; padding: 1rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.75rem; transition: all 0.3s; position: relative; ${pulseStyle}">
+          <div style="display: flex; align-items: flex-start; gap: 1rem;">
+            <div class="custom-checkbox ${r.isCompleted ? 'checked' : ''}" onclick="window.toggleTurbineReminder('${r.id}', ${!r.isCompleted})" style="cursor: pointer; width: 22px; height: 22px; border: 2px solid ${r.isCompleted ? '#2ecc71' : 'rgba(255,255,255,0.2)'}; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background: ${r.isCompleted ? '#2ecc7122' : 'transparent'}; color: ${r.isCompleted ? '#2ecc71' : 'white'}; flex-shrink: 0;">
+              ${r.isCompleted ? '<i class="fa-solid fa-check" style="font-size: 0.8rem;"></i>' : ''}
+            </div>
+            <div style="flex: 1; ${r.isCompleted ? 'text-decoration: line-through; opacity: 0.4;' : ''}">
+              <div style="font-size: 0.95rem; line-height: 1.5; color: #fff; font-weight: 400; font-family: 'Inter', sans-serif;">${r.content}</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px; display: flex; align-items: center; gap: 0.8rem; font-family: 'Rajdhani', sans-serif; flex-wrap: wrap;">
+                <span style="color: var(--accent-cyan); display: flex; align-items: center; gap: 0.3rem;"><i class="fa-solid fa-user"></i> ${r.createdBy}</span>
+                <span style="opacity: 0.3;">|</span>
+                <span style="display: flex; align-items: center; gap: 0.3rem; color: ${isOverdue ? '#ef4444' : '#fff'};"><i class="fa-solid fa-calendar-days"></i> Hedef: ${dateText}</span>
+                <span style="opacity: 0.3;">|</span>
+                ${priorityBadge}
+                ${priorityBadge ? '<span style="opacity: 0.3;">|</span>' : ''}
+                ${statusBadge}
+              </div>
+            </div>
+            ${deleteBtn}
+          </div>
+          ${imageHtml}
+          ${resolutionHtml}
+        </div>
+      `;
+    }).join('');
+  }
+};
+
+(window as any).addTurbineReminder = async () => {
+  const contentInput = document.getElementById('new-turbine-reminder-input') as HTMLInputElement;
+  const dateInput = document.getElementById('new-turbine-reminder-date') as HTMLInputElement;
+  const prioritySelect = document.getElementById('new-turbine-reminder-priority') as HTMLSelectElement;
+  const imageInput = document.getElementById('reminder-image-input') as HTMLInputElement;
+  
+  const content = contentInput?.value.trim() || '';
+  const reminderDate = dateInput?.value || '';
+  const priority = (prioritySelect?.value || 'LOW') as 'LOW' | 'MEDIUM' | 'CRITICAL';
+  
+  if (!content && !imageInput?.files?.[0]) {
+    alert('Lütfen hatırlatıcı açıklaması girin veya bir resim ekleyin.');
+    return;
+  }
+  
+  if (!reminderDate) {
+    alert('Lütfen hatırlatma tarihi seçin.');
+    return;
+  }
+  
+  const turbineId = (window as any).currentActiveTurbineId;
+  const turbine = dataService.findTurbineBySerial(turbineId);
+  const siteId = turbine?.siteId || '';
+  const siteName = turbine?.siteName || '';
+
+  const currentUser = authService.getCurrentUser();
+  const userName = currentUser?.displayName || currentUser?.email || 'Bilinmeyen Kullanıcı';
+  
+  try {
+    const addBtn = document.getElementById('add-reminder-btn') as HTMLButtonElement;
+    if (addBtn) {
+      addBtn.disabled = true;
+      addBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    }
+    
+    let imageUrl = '';
+    if (imageInput?.files?.[0]) {
+      const file = imageInput.files[0];
+      const path = `turbine_reminders/${turbineId}/${Date.now()}_${file.name}`;
+      imageUrl = await fileService.uploadImage(file, path);
+    }
+    
+    await turbineReminderService.addReminder(
+      turbineId,
+      siteId,
+      siteName,
+      content || 'Fotoğraf eklendi.',
+      reminderDate,
+      userName,
+      priority,
+      imageUrl
+    );
+    
+    if (contentInput) contentInput.value = '';
+    if (dateInput) dateInput.value = '';
+    if (prioritySelect) prioritySelect.value = 'LOW';
+    (window as any).clearReminderImage();
+  } catch (error) {
+    console.error("Error adding reminder:", error);
+    alert("Hatırlatıcı eklenirken bir hata oluştu.");
+  } finally {
+    const addBtn = document.getElementById('add-reminder-btn') as HTMLButtonElement;
+    if (addBtn) {
+      addBtn.disabled = false;
+      addBtn.innerHTML = '<i class="fa-solid fa-plus"></i> EKLE';
+    }
+  }
+};
+
+(window as any).toggleTurbineReminder = async (reminderId: string, isCompleted: boolean) => {
+  try {
+    let resolutionNote = '';
+    const currentUser = authService.getCurrentUser();
+    const userName = currentUser?.displayName || currentUser?.email || 'Bilinmeyen Kullanıcı';
+
+    if (isCompleted) {
+      const note = prompt("Hatırlatıcıyı kapatmak için lütfen yapılan işlemi (çözüm notu) giriniz:");
+      if (note === null) return; // Prompt cancelled, do nothing
+      resolutionNote = note.trim();
+    }
+
+    await turbineReminderService.toggleReminder(reminderId, isCompleted, resolutionNote, userName);
+  } catch (error) {
+    console.error("Error toggling reminder:", error);
+    alert("Hatırlatıcı güncellenirken hata oluştu.");
+  }
+};
+
+(window as any).deleteTurbineReminder = async (reminderId: string) => {
+  if (!confirm("Bu hatırlatıcıyı silmek istediğinizden emin misiniz?")) return;
+  try {
+    await turbineReminderService.deleteReminder(reminderId);
+  } catch (error) {
+    console.error("Error deleting reminder:", error);
+    alert("Hatırlatıcı silinirken hata oluştu.");
   }
 };
 
@@ -1270,81 +2027,104 @@ export const TurbinesPage = () => {
   const siteTasks = (window as any).latestTurbineTasks || [];
 
   allowedSites.forEach((site: any) => {
-    const turbines = dataService.getTurbinesBySite(site.id);
-    const validTurbines = turbines.filter((t: any) => t.latitude && t.longitude);
-    if (validTurbines.length === 0) return;
+    try {
+      const turbines = dataService.getTurbinesBySite(site.id);
+      const validTurbines = turbines.filter((t: any) => t.latitude && t.longitude);
+      if (validTurbines.length === 0) return;
 
-    const sumLat = validTurbines.reduce((sum: number, t: any) => sum + t.latitude, 0);
-    const sumLng = validTurbines.reduce((sum: number, t: any) => sum + t.longitude, 0);
-    const centerLat = sumLat / validTurbines.length;
-    const centerLng = sumLng / validTurbines.length;
-    const center = [centerLat, centerLng];
-    bounds.push(center);
+      const sumLat = validTurbines.reduce((sum: number, t: any) => sum + t.latitude, 0);
+      const sumLng = validTurbines.reduce((sum: number, t: any) => sum + t.longitude, 0);
+      const centerLat = sumLat / validTurbines.length;
+      const centerLng = sumLng / validTurbines.length;
+      const center = [centerLat, centerLng];
+      bounds.push(center);
 
-    const siteTasksFiltered = siteTasks.filter((task: any) => 
-      (task.realSiteId === site.id || task.siteId.trim().toLowerCase() === site.name.trim().toLowerCase()) && 
-      task.status !== 'Tamamlandı'
-    );
+      const siteTasksFiltered = siteTasks.filter((task: any) => 
+        (task.realSiteId === site.id || task.siteId.trim().toLowerCase() === site.name.trim().toLowerCase()) && 
+        task.status !== 'Tamamlandı'
+      );
 
-    let faultyCount = 0;
-    let maintCount = 0;
+      let faultyCount = 0;
+      let maintCount = 0;
+      let scadaFaultCount = 0;
 
-    turbines.forEach((t: any) => {
-      const isFaulty = siteTasksFiltered.some((task: any) => {
-        const taskSerial = task.turbinSeriNo?.toString().trim().toUpperCase();
-        const taskTurbineId = task.turbineId?.toString().replace(/^T-0?/, 'T').trim().toUpperCase();
-        const tLabel = t.label ? t.label : `T-${t.no.toString().padStart(2, '0')}`;
-        const normalizedLabel = tLabel.replace(/^T-0?/, 'T').trim().toUpperCase();
-        const normalizedSerial = t.id.toString().trim().toUpperCase();
-        return (taskSerial === normalizedSerial || taskTurbineId === normalizedLabel) && task.secilenSablon === 'Türbin Arıza Formu';
+      turbines.forEach((t: any) => {
+        try {
+          const isFaulty = siteTasksFiltered.some((task: any) => {
+            const taskSerial = task.turbinSeriNo?.toString().trim().toUpperCase();
+            const taskTurbineId = task.turbineId?.toString().replace(/^T-0?/, 'T').trim().toUpperCase();
+            const tLabel = t.label ? t.label : `T-${t.no.toString().padStart(2, '0')}`;
+            const normalizedLabel = tLabel.replace(/^T-0?/, 'T').trim().toUpperCase();
+            const normalizedSerial = t.id ? t.id.toString().trim().toUpperCase() : "";
+            return (taskSerial === normalizedSerial || taskTurbineId === normalizedLabel) && task.secilenSablon === 'Türbin Arıza Formu';
+          });
+          const isMaint = siteTasksFiltered.some((task: any) => {
+            const taskSerial = task.turbinSeriNo?.toString().trim().toUpperCase();
+            const taskTurbineId = task.turbineId?.toString().replace(/^T-0?/, 'T').trim().toUpperCase();
+            const tLabel = t.label ? t.label : `T-${t.no.toString().padStart(2, '0')}`;
+            const normalizedLabel = tLabel.replace(/^T-0?/, 'T').trim().toUpperCase();
+            const normalizedSerial = t.id ? t.id.toString().trim().toUpperCase() : "";
+            return (taskSerial === normalizedSerial || taskTurbineId === normalizedLabel) && task.secilenSablon !== 'Türbin Arıza Formu';
+          });
+
+          // SCADA Realtime Fault Integration
+          let scada = null;
+          if (t && t.id && (window as any).scadaData) {
+            scada = (window as any).scadaData[t.id.toString()];
+          }
+          const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
+
+          if (isFaulty) {
+            faultyCount++;
+          } else if (ENABLE_SCADA_INTEGRATION && hasScadaFault) {
+            scadaFaultCount++;
+          } else if (isMaint) {
+            maintCount++;
+          }
+        } catch (innerErr) {
+          console.error("Error processing turbine inside initSitesMap:", innerErr);
+        }
       });
-      const isMaint = siteTasksFiltered.some((task: any) => {
-        const taskSerial = task.turbinSeriNo?.toString().trim().toUpperCase();
-        const taskTurbineId = task.turbineId?.toString().replace(/^T-0?/, 'T').trim().toUpperCase();
-        const tLabel = t.label ? t.label : `T-${t.no.toString().padStart(2, '0')}`;
-        const normalizedLabel = tLabel.replace(/^T-0?/, 'T').trim().toUpperCase();
-        const normalizedSerial = t.id.toString().trim().toUpperCase();
-        return (taskSerial === normalizedSerial || taskTurbineId === normalizedLabel) && task.secilenSablon !== 'Türbin Arıza Formu';
+
+      const totalFaults = faultyCount + scadaFaultCount;
+      let markerColor = '#00f2ff';
+      if (totalFaults > 0) markerColor = '#ff4d4d';
+      else if (maintCount > 0) markerColor = '#ccff00';
+
+      const markerIcon = L.divIcon({
+        className: 'custom-leaflet-marker-with-label',
+        html: `
+          <div style="display: flex; align-items: center; gap: 8px; position: relative;">
+            <div class="cyber-pulse-marker" style="border-color: ${markerColor}; background: ${markerColor}33; box-shadow: 0 0 10px ${markerColor}; flex-shrink: 0; width: 14px; height: 14px;"></div>
+            <span class="cyber-marker-label" style="color: #fff; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; font-weight: 800; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 8px rgba(0,0,0,0.8); background: rgba(10, 15, 25, 0.65); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); white-space: nowrap; pointer-events: none;">${site.name.toUpperCase()}</span>
+          </div>
+        `,
+        iconSize: [120, 24],
+        iconAnchor: [7, 12]
       });
 
-      if (isFaulty) faultyCount++;
-      else if (isMaint) maintCount++;
-    });
+      const marker = L.marker(center, { icon: markerIcon }).addTo(map);
 
-    let markerColor = '#00f2ff';
-    if (faultyCount > 0) markerColor = '#ff4d4d';
-    else if (maintCount > 0) markerColor = '#ccff00';
-
-    const markerIcon = L.divIcon({
-      className: 'custom-leaflet-marker-with-label',
-      html: `
-        <div style="display: flex; align-items: center; gap: 8px; position: relative;">
-          <div class="cyber-pulse-marker" style="border-color: ${markerColor}; background: ${markerColor}33; box-shadow: 0 0 10px ${markerColor}; flex-shrink: 0; width: 14px; height: 14px;"></div>
-          <span class="cyber-marker-label" style="color: #fff; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; font-weight: 800; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 8px rgba(0,0,0,0.8); background: rgba(10, 15, 25, 0.65); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); white-space: nowrap; pointer-events: none;">${site.name.toUpperCase()}</span>
+      const popupContent = `
+        <div class="cyber-map-popup" style="color:#fff; font-family:'Rajdhani',sans-serif; min-width:180px; padding: 5px;">
+          <h4 style="margin:0 0 8px 0; font-size:1.1rem; color:var(--accent-cyan); font-weight:800; border-bottom:1px solid rgba(0,242,255,0.2); padding-bottom:5px; text-transform:uppercase;">${site.name}</h4>
+          <div style="font-size:0.75rem; line-height:1.5; margin-bottom:12px; color:rgba(255,255,255,0.85);">
+            <div><i class="fa-solid fa-fan" style="margin-right:6px;"></i> Toplam Türbin: <strong style="color:#fff">${site.turbineCount}</strong></div>
+            ${faultyCount > 0 ? `<div style="color:#ff4d4d;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i> Manuel Hata: <strong>${faultyCount}</strong></div>` : ''}
+            ${scadaFaultCount > 0 ? `<div style="color:#ff4d4d;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i> SCADA Arızası: <strong>${scadaFaultCount}</strong></div>` : ''}
+            ${maintCount > 0 ? `<div style="color:#ccff00;"><i class="fa-solid fa-screwdriver-wrench" style="margin-right:6px;"></i> Bakımda: <strong>${maintCount}</strong></div>` : ''}
+            ${(faultyCount === 0 && scadaFaultCount === 0 && maintCount === 0) ? `<div style="color:#1ed760;"><i class="fa-solid fa-circle-check" style="margin-right:6px;"></i> Durum: <strong>Sorunsuz</strong></div>` : ''}
+          </div>
+          <button onclick="window.selectSite('${site.id}')" class="maint-action-btn" style="width:100%; display:flex; justify-content:center; gap:6px; background:rgba(0,242,255,0.1); border-color:var(--accent-cyan); color:var(--accent-cyan); cursor:pointer; font-family:'Rajdhani'; font-weight:800;">
+            SAHAYI GÖRÜNTÜLE <i class="fa-solid fa-arrow-right"></i>
+          </button>
         </div>
-      `,
-      iconSize: [120, 24],
-      iconAnchor: [7, 12]
-    });
+      `;
 
-    const marker = L.marker(center, { icon: markerIcon }).addTo(map);
-
-    const popupContent = `
-      <div class="cyber-map-popup" style="color:#fff; font-family:'Rajdhani',sans-serif; min-width:180px; padding: 5px;">
-        <h4 style="margin:0 0 8px 0; font-size:1.1rem; color:var(--accent-cyan); font-weight:800; border-bottom:1px solid rgba(0,242,255,0.2); padding-bottom:5px; text-transform:uppercase;">${site.name}</h4>
-        <div style="font-size:0.75rem; line-height:1.5; margin-bottom:12px; color:rgba(255,255,255,0.85);">
-          <div><i class="fa-solid fa-fan" style="margin-right:6px;"></i> Toplam Türbin: <strong style="color:#fff">${site.turbineCount}</strong></div>
-          ${faultyCount > 0 ? `<div style="color:#ff4d4d;"><i class="fa-solid fa-triangle-exclamation" style="margin-right:6px;"></i> Arızalı: <strong>${faultyCount}</strong></div>` : ''}
-          ${maintCount > 0 ? `<div style="color:#ccff00;"><i class="fa-solid fa-screwdriver-wrench" style="margin-right:6px;"></i> Bakımda: <strong>${maintCount}</strong></div>` : ''}
-          ${(faultyCount === 0 && maintCount === 0) ? `<div style="color:#1ed760;"><i class="fa-solid fa-circle-check" style="margin-right:6px;"></i> Durum: <strong>Sorunsuz</strong></div>` : ''}
-        </div>
-        <button onclick="window.selectSite('${site.id}')" class="maint-action-btn" style="width:100%; display:flex; justify-content:center; gap:6px; background:rgba(0,242,255,0.1); border-color:var(--accent-cyan); color:var(--accent-cyan); cursor:pointer; font-family:'Rajdhani'; font-weight:800;">
-          SAHAYI GÖRÜNTÜLE <i class="fa-solid fa-arrow-right"></i>
-        </button>
-      </div>
-    `;
-
-    marker.bindPopup(popupContent, { className: 'cyber-popup-theme' });
+      marker.bindPopup(popupContent, { className: 'cyber-popup-theme' });
+    } catch (siteErr) {
+      console.error(`Error rendering site marker for ${site.name}:`, siteErr);
+    }
   });
 
   if (bounds.length > 0) {
@@ -1467,8 +2247,21 @@ export const TurbinesPage = () => {
     const isFaulty = !!turbineFault;
     const isMaint = !!turbineMaint;
     
-    const status = isFaulty ? 'fault' : (isMaint ? 'maintenance' : 'online');
-    const markerColor = status === 'fault' ? '#ff4d4d' : (status === 'maintenance' ? '#ccff00' : '#00f2ff');
+    // SCADA Realtime Integration for Map Markers
+    let scada = null;
+    if (t && t.id && (window as any).scadaData) {
+      scada = (window as any).scadaData[t.id.toString()];
+    }
+    const scadaStatus = scada && scada.status ? scada.status : 'OK';
+    const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
+    const isScadaMaintenance = ENABLE_SCADA_INTEGRATION && scada && scada.isMaintenance === true;
+
+    let status = isFaulty ? 'fault' : (isMaint || isScadaMaintenance ? 'maintenance' : 'online');
+    if (ENABLE_SCADA_INTEGRATION && hasScadaFault && status === 'online') {
+      status = 'scada_fault';
+    }
+
+    const markerColor = status === 'fault' || status === 'scada_fault' ? '#ff4d4d' : (status === 'maintenance' ? '#ccff00' : '#00f2ff');
 
     const markerIcon = L.divIcon({
       className: 'custom-leaflet-marker-with-label',
@@ -1484,8 +2277,15 @@ export const TurbinesPage = () => {
 
     const marker = L.marker([t.latitude, t.longitude], { icon: markerIcon }).addTo(markersGroup);
 
-    const displayStatusLabel = isFaulty ? `ARIZA: ${(turbineFault as any).faultCode || 'HATA BİLDİRİMİ'}` : 
-                               (isMaint ? cleanSablonName((turbineMaint as any).secilenSablon).toUpperCase() : 'SORUNSUZ / ÇEVRİMİÇİ');
+    let displayStatusLabel = 'SORUNSUZ / ÇEVRİMİÇİ';
+    if (isFaulty) {
+      displayStatusLabel = `ARIZA: ${(turbineFault as any).faultCode || 'HATA BİLDİRİMİ'}`;
+    } else if (isMaint) {
+      displayStatusLabel = cleanSablonName((turbineMaint as any).secilenSablon).toUpperCase();
+    } else if (status === 'scada_fault') {
+      let statusText = scada.statusText || scadaStatus;
+      displayStatusLabel = statusText;
+    }
 
     const popupContent = `
       <div class="cyber-map-popup" style="color:#fff; font-family:'Rajdhani',sans-serif; min-width:180px; padding:5px;">

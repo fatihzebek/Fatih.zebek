@@ -60,7 +60,13 @@ export const DashboardPage = async () => {
         const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
         const userNum = searchTeam.replace(/[^0-9]/g, '');
         
-        if (taskNum && userNum && parseInt(taskNum) === parseInt(userNum)) return true;
+        if (taskNum && userNum) {
+          const tN = parseInt(taskNum);
+          const uN = parseInt(userNum);
+          if (tN === uN) return true;
+          // Özel Dares İstisnası: Team 5 ve Team 10 aynı ekip görevlerini görebilmeli!
+          if ((tN === 5 && uN === 10) || (tN === 10 && uN === 5)) return true;
+        }
         
         return taskPersonnel.includes(searchTeam) || searchTeam.includes(taskPersonnel);
       });

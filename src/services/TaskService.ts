@@ -1,6 +1,7 @@
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { statusService } from './StatusService';
+import { dataService } from './DataService';
 
 export interface TaskCreateData {
   secilenSablon: string;
@@ -221,6 +222,33 @@ class TaskService {
   async deleteTask(taskId: string) {
     try {
       const taskRef = doc(db, this.collectionName, taskId);
+      
+      // Release reservations if any
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        const data = taskSnap.data();
+        const siteId = data.taskInfo?.siteId;
+        const team = data.assignment?.assignedTeam;
+        const status = data.workflow?.durum;
+        const materials = data.maintenanceData?.materials || [];
+        
+        if (status !== 'Tamamlandı' && siteId && team && materials.length > 0) {
+          const { warehouseService } = await import('./WarehouseService');
+          const cleanTeamId = `team_${team.replace(/\s+/g, '_')}`;
+          
+          for (const mat of materials) {
+            if (mat.sapNo && mat.used > 0) {
+              try {
+                const whId = dataService.getWarehouseIdBySiteId(siteId) || siteId;
+                await warehouseService.decreaseReservation(whId, String(mat.sapNo).trim(), Number(mat.used), cleanTeamId);
+              } catch (resErr) {
+                console.warn(`Failed to release reservation for deleted task item ${mat.sapNo}:`, resErr);
+              }
+            }
+          }
+        }
+      }
+
       await deleteDoc(taskRef);
       this.tasksCache = null; // Invalidate cache
       return { success: true };

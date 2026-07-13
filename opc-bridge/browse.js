@@ -1,7 +1,7 @@
 const axios = require('axios');
 const xml2js = require('xml2js');
 
-const OPC_URL = 'http://172.17.75.50:6010';
+const OPC_URL = 'http://172.17.75.51:6010'; // Anemon E-82 Server
 
 async function browseOPC(itemPath = "") {
     console.log(`\n--- OPC Klasor Tarama Baslatiliyor (${itemPath || 'Kök Dizin'}) ---`);
@@ -21,28 +21,41 @@ async function browseOPC(itemPath = "") {
             headers: {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'http://opcfoundation.org/webservices/XMLDA/1.0/Browse'
-            }
+            },
+            timeout: 5000
         });
 
         xml2js.parseString(response.data, (err, result) => {
             if (err) return console.error("XML Error:", err);
-            
-            const body = result['SOAP-ENV:Envelope']['SOAP-ENV:Body'][0];
-            const browseResponse = body.BrowseResponse[0];
-            const elements = browseResponse.Elements || [];
+            try {
+                const envelopeKey = Object.keys(result || {}).find(k => k.toLowerCase().endsWith('envelope'));
+                if (!envelopeKey) return console.log("SOAP Envelope not found");
+                const envelope = result[envelopeKey];
+                
+                const bodyKey = Object.keys(envelope || {}).find(k => k.toLowerCase().endsWith('body'));
+                if (!bodyKey) return console.log("SOAP Body not found");
+                const body = envelope[bodyKey][0];
+                
+                const responseKey = Object.keys(body || {}).find(k => k.toLowerCase().endsWith('browseresponse'));
+                if (!responseKey) return console.log("SOAP BrowseResponse not found");
+                const browseResponse = body[responseKey][0];
+                
+                const elements = browseResponse.Elements || [];
 
-            console.log("\n--- Bulunan Veriler / Klasorler ---");
-            elements.forEach(el => {
-                const name = el.$.Name;
-                const itemName = el.$.ItemName;
-                const isItem = el.$.IsItem === 'true';
-                const hasChildren = el.$.HasChildren === 'true';
+                console.log("\n--- Bulunan Veriler / Klasorler ---");
+                elements.forEach(el => {
+                    const name = el.$.Name;
+                    const itemName = el.$.ItemName;
+                    const isItem = el.$.IsItem === 'true';
+                    const hasChildren = el.$.HasChildren === 'true';
 
-                console.log(`${isItem ? '[Veri]' : '[Klasor]'} ${name} --> ${itemName}`);
-            });
+                    console.log(`${isItem ? '[Veri]' : '[Klasor]'} ${name} --> ${itemName}`);
+                });
 
-            if (elements.length === 0) console.log("Bu dizinde eleman bulunamadi.");
-
+                if (elements.length === 0) console.log("Bu dizinde eleman bulunamadi.");
+            } catch (e) {
+                console.error("Ayrıştırma hatası:", e.message);
+            }
         });
 
     } catch (error) {
@@ -50,4 +63,4 @@ async function browseOPC(itemPath = "") {
     }
 }
 
-browseOPC("Loc/Wec/Plant1/Status"); // Durum detaylarina bak
+browseOPC("Loc/Wec/Plant39/Ctrl");

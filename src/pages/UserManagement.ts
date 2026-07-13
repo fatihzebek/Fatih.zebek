@@ -9,6 +9,15 @@ import { formatDisplayName } from '../utils/formatters';
 export const UserManagementPage = async () => {
   const users = await userService.getAllUsers();
   const tsiCategories = await tsiService.getCategories();
+
+  setTimeout(() => {
+    const searchInput = document.getElementById('search-users-input') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.removeAttribute('readonly');
+      searchInput.value = '';
+      (window as any).filterUsersList('');
+    }
+  }, 200);
   
   const allTabs = [
     { id: 'dashboard', label: 'Gösterge Paneli (Dashboard)' },
@@ -23,6 +32,7 @@ export const UserManagementPage = async () => {
     { id: 'tsi-library', label: 'Servis Teknik Information' },
     { id: 'bakim-planlama', label: 'Bakım Planlama' },
     { id: 'users', label: 'Kullanıcı Yetkileri' },
+    { id: 'scada-reset-logs', label: 'SCADA Reset Günlükleri' },
     { id: 'MALZEME_YONETIMI', label: 'Malzeme Yönetimi' },
     { id: 'asset-custody', label: 'Malzeme Zimmeti' },
     { id: 'tickets-page', label: 'Saha Destek (Ticket)' },
@@ -49,14 +59,38 @@ export const UserManagementPage = async () => {
   const canDelete = isCurrentUserAdmin || (typeof usersPerm === 'object' && !!usersPerm.deleteUser);
   const canCreate = isCurrentUserAdmin || (typeof usersPerm === 'object' && !!usersPerm.createUser);
 
+  const getTeamNumber = (u: any): number => {
+    const email = (u.email || '').toLowerCase();
+    const matchEmail = email.match(/tm(\d+)/);
+    if (matchEmail && matchEmail[1]) return parseInt(matchEmail[1], 10);
+    const displayName = (u.displayName || '').toLowerCase();
+    const matchName = displayName.match(/(?:team\s*|tm\s*)(\d+)/);
+    if (matchName && matchName[1]) return parseInt(matchName[1], 10);
+    return 99999;
+  };
+
   // Grouping users hierarchically
   const admins = users.filter(u => u.role === 'ADMIN');
-  const managers = users.filter(u => 
-    (u.role === 'MALZEME_YONETIMI' || u.role === 'TAMİR' || (u.managedTeams && u.managedTeams.length > 0)) && u.role !== 'ADMIN'
-  );
-  const technicians = users.filter(u => 
-    u.role === 'TECHNICIAN' && !(u.managedTeams && u.managedTeams.length > 0)
-  );
+  const managers = users
+    .filter(u => 
+      (u.role === 'MALZEME_YONETIMI' || u.role === 'TAMİR' || (u.managedTeams && u.managedTeams.length > 0)) && u.role !== 'ADMIN'
+    )
+    .sort((a, b) => {
+      const numA = getTeamNumber(a);
+      const numB = getTeamNumber(b);
+      if (numA !== numB) return numA - numB;
+      if (a.role !== b.role) return (a.role || '').localeCompare(b.role || '');
+      return (a.email || '').localeCompare(b.email || '');
+    });
+
+  const technicians = users
+    .filter(u => u.role === 'TECHNICIAN' && !(u.managedTeams && u.managedTeams.length > 0))
+    .sort((a, b) => {
+      const numA = getTeamNumber(a);
+      const numB = getTeamNumber(b);
+      if (numA !== numB) return numA - numB;
+      return (a.email || '').localeCompare(b.email || '');
+    });
   const guests = users.filter(u => u.role === 'GUEST');
 
   const renderUserCard = (user: any) => {
@@ -149,9 +183,6 @@ export const UserManagementPage = async () => {
         <h1 class="page-title" style="margin-bottom: 0;"><i class="fa-solid fa-user-shield" style="color: var(--accent-cyan);"></i> Kullanıcı Yetkilendirme</h1>
         ${canCreate ? `
           <div style="display: flex; gap: 10px;">
-            <button class="btn-cyber" onclick="window.openPresetTemplatesModal()" style="background: rgba(20, 241, 149, 0.1); border-color: rgba(20, 241, 149, 0.3); color: #14F195;">
-              <i class="fa-solid fa-wand-magic-sparkles"></i> ŞABLONLARI YÖNET
-            </button>
             <button class="btn-cyber" onclick="window.openNewUserModal()">
               <i class="fa-solid fa-user-plus"></i> YENİ KULLANICI
             </button>
@@ -162,7 +193,7 @@ export const UserManagementPage = async () => {
       <!-- Search Bar -->
       <div style="position: relative; margin-bottom: 2rem; max-width: 400px;">
         <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.6; font-size: 0.9rem;"></i>
-        <input type="text" id="search-users-input" class="cyber-input" placeholder="Kullanıcı adı veya e-posta ara..." style="padding-left: 2.75rem; width: 100%; height: 42px; border-radius: 8px; font-size: 0.85rem;" oninput="window.filterUsersList(this.value)">
+        <input type="search" id="search-users-input" name="cyber-quick-filter" readonly autocomplete="new-password" class="cyber-input" placeholder="Kullanıcı adı veya e-posta ara..." style="padding-left: 2.75rem; width: 100%; height: 42px; border-radius: 8px; font-size: 0.85rem;" oninput="window.filterUsersList(this.value)">
       </div>
 
       <div style="display: flex; flex-direction: column; gap: 2rem;">
@@ -215,39 +246,6 @@ export const UserManagementPage = async () => {
           </div>
         ` : ''}
       </div>
-
-      <!-- Section: Personnel Management -->
-      <div style="margin-top: 3rem; margin-bottom: 2rem;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 1.15rem; color: var(--accent-cyan); border-bottom: 1px solid rgba(0, 243, 255, 0.15); padding-bottom: 0.5rem; margin-bottom: 1.5rem;">
-          <span style="display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-people-group"></i> RAPORLAMA FORM PERSONEL LİSTESİ</span>
-          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Arıza/bakım formlarında seçilebilecek personelleri buradan yönetebilirsiniz.</span>
-        </div>
-        
-        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
-          <!-- Left: Add Personnel -->
-          <div class="glass-panel" style="flex: 1; min-width: 300px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; display: flex; flex-direction: column; gap: 1rem; height: fit-content;">
-            <h4 style="margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 1rem; color: white; font-weight: 700;">YENİ PERSONEL EKLE</h4>
-            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-              <input type="text" id="new-personnel-name" class="cyber-input" placeholder="Personel Adı Soyadı (Örn: Ahmet YILMAZ)..." style="width: 100%; height: 38px;">
-            </div>
-            <button onclick="window.savePersonnelName()" class="btn-cyber" style="width: 100%; height: 38px; font-weight: bold; letter-spacing: 1px; justify-content: center; align-items: center; display: flex; gap: 8px;">
-              <i class="fa-solid fa-user-plus"></i> LİSTEYE EKLE
-            </button>
-          </div>
-          
-          <!-- Right: Personnel List -->
-          <div class="glass-panel" style="flex: 2; min-width: 350px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; display: flex; flex-direction: column; gap: 1rem; max-height: 600px; overflow-y: auto;">
-            <h4 style="margin: 0; font-family: 'Rajdhani', sans-serif; font-size: 1rem; color: white; font-weight: 700; display: flex; justify-content: space-between; align-items: center;">
-              <span>MEVCUT PERSONELLER</span>
-              <span id="personnel-count-badge" style="font-size: 0.8rem; background: rgba(0, 242, 254, 0.1); color: var(--accent-cyan); padding: 2px 8px; border-radius: 6px;">0 Personel</span>
-            </h4>
-            <div id="personnel-management-list" style="display: flex; flex-direction: column; gap: 0.50rem;">
-              <div style="text-align: center; color: var(--text-muted); padding: 2rem;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <style>
         .user-row:hover {
           background: rgba(255, 255, 255, 0.03);
@@ -328,9 +326,12 @@ export const UserManagementPage = async () => {
 
               <div class="form-group">
                 <label class="permission-label" style="margin-bottom: 0.5rem; display: block;">KULLANICI ŞİFRESİ</label>
-                <div style="position: relative;">
-                  <i class="fa-solid fa-key" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
-                  <input type="password" id="new-user-pass" class="cyber-input" placeholder="••••••••" style="padding-left: 2.5rem;" required>
+                <div style="position: relative; display: flex; align-items: center;">
+                  <i class="fa-solid fa-key" style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.8rem; pointer-events: none;"></i>
+                  <input type="password" id="new-user-pass" class="cyber-input" placeholder="••••••••" style="padding-left: 2.5rem; padding-right: 2.5rem; width: 100%; box-sizing: border-box;" required>
+                  <button type="button" onclick="window.toggleNewUserPasswordVisibility()" style="position: absolute; right: 12px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;" title="Şifreyi Göster/Gizle">
+                    <i class="fa-solid fa-eye" id="new-user-pass-eye"></i>
+                  </button>
                 </div>
               </div>
 
@@ -338,7 +339,7 @@ export const UserManagementPage = async () => {
                 <label class="permission-label" style="margin-bottom: 0.5rem; display: block;">ROL / SEVİYE</label>
                 <div style="position: relative;">
                   <i class="fa-solid fa-id-card-clip" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
-                  <select id="new-user-role" class="cyber-input" style="padding-left: 2.5rem; width: 100%; box-sizing: border-box;" onchange="window.applyDefaultRolePermissions(this.value, 'new')">
+                  <select id="new-user-role" class="cyber-input" style="padding-left: 2.5rem; width: 100%; box-sizing: border-box;">
                     <option value="TECHNICIAN">Teknisyen / Saha Ekibi</option>
                     <option value="MALZEME_YONETIMI">Malzeme Yönetimi / Ambar Sorumlusu</option>
                     <option value="TAMİR">Atölye Sorumlusu</option>
@@ -413,19 +414,7 @@ export const UserManagementPage = async () => {
           </div>
         </div>
 
-        <!-- Modal Footer -->
         <div class="permission-modal-footer" style="padding: 1rem 1.5rem; background: #161b22; border-top: 1px solid #30363d; display: flex; justify-content: flex-end; gap: 12px; border-bottom-left-radius: 16px; border-bottom-right-radius: 16px; align-items: center;">
-          <div style="margin-right: auto; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">HAZIR ŞABLON:</span>
-            <select id="new-permission-template-select" class="cyber-input" style="height: 38px; font-size: 0.75rem; padding: 0 10px; width: 180px; background: #161b22; border: 1px solid rgba(20, 241, 149, 0.3); color: #14f195; border-radius: 8px; font-weight: 700; cursor: pointer;" onchange="if(this.value) { window.applyDefaultRolePermissions(this.value, 'new'); this.value=''; }">
-              <option value="" disabled selected>Şablon Seçin...</option>
-              <option value="TECHNICIAN">Teknisyen Şablonu</option>
-              <option value="MALZEME_YONETIMI">Malzeme Sorumlusu</option>
-              <option value="TAMİR">Atölye Sorumlusu</option>
-              <option value="GUEST">Misafir Şablonu</option>
-              <option value="ADMIN">Tam Yetki (Admin)</option>
-            </select>
-          </div>
           <button class="btn-cancel" onclick="window.closeNewUserModal()">VAZGEÇ</button>
           <button class="btn-save" onclick="window.saveNewUser()">
             KAYDI TAMAMLA <i class="fa-solid fa-check-double text-xs opacity-70"></i>
@@ -539,9 +528,12 @@ export const UserManagementPage = async () => {
                    <label class="permission-label-header" style="margin-bottom: 0;">YENİ ERİŞİM ŞİFRESİ</label>
                    <button type="button" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 2px 8px; height: auto;" onclick="window.generateAndFillPassword('edit-user-pass')">ŞİFRE ÜRET</button>
                  </div>
-                 <div style="position: relative;">
-                   <i class="fa-solid fa-key" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #8b949e;"></i>
-                   <input type="text" id="edit-user-pass" class="cyber-input" style="padding-left: 2.75rem; font-family: monospace;" placeholder="Güçlü bir şifre girin veya üretin...">
+                 <div style="position: relative; display: flex; align-items: center;">
+                   <i class="fa-solid fa-key" style="position: absolute; left: 16px; color: #8b949e; pointer-events: none;"></i>
+                   <input type="password" id="edit-user-pass" class="cyber-input" style="padding-left: 2.75rem; padding-right: 2.5rem; width: 100%; box-sizing: border-box; font-family: monospace;" placeholder="Güçlü bir şifre girin veya üretin...">
+                   <button type="button" onclick="window.toggleEditUserPasswordVisibility()" style="position: absolute; right: 12px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;" title="Şifreyi Göster/Gizle">
+                     <i class="fa-solid fa-eye" id="edit-user-pass-eye"></i>
+                   </button>
                  </div>
                </div>
                <!-- Account Status (Non-Admin only) -->
@@ -557,19 +549,7 @@ export const UserManagementPage = async () => {
 
         </div>
 
-        <!-- Modal Footer -->
         <div class="permission-modal-footer" style="padding: 1rem 1.5rem; background: #161b22; border-top: 1px solid #30363d; display: flex; justify-content: flex-end; gap: 12px; align-items: center;">
-          <div style="margin-right: auto; display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">HAZIR ŞABLON:</span>
-            <select id="edit-permission-template-select" class="cyber-input" style="height: 38px; font-size: 0.75rem; padding: 0 10px; width: 180px; background: #161b22; border: 1px solid rgba(20, 241, 149, 0.3); color: #14f195; border-radius: 8px; font-weight: 700; cursor: pointer;" onchange="if(this.value) { window.applyDefaultRolePermissions(this.value, 'edit'); this.value=''; }">
-              <option value="" disabled selected>Şablon Seçin...</option>
-              <option value="TECHNICIAN">Teknisyen Şablonu</option>
-              <option value="MALZEME_YONETIMI">Malzeme Sorumlusu</option>
-              <option value="TAMİR">Atölye Sorumlusu</option>
-              <option value="GUEST">Misafir Şablonu</option>
-              <option value="ADMIN">Tam Yetki (Admin)</option>
-            </select>
-          </div>
           <button class="btn-cancel" onclick="window.closePermissionModal()">İPTAL</button>
           <button id="save-permissions-btn" class="btn-save">
             KAYDET <i class="fa-solid fa-floppy-disk text-xs opacity-70"></i>
@@ -1060,10 +1040,46 @@ export const UserManagementPage = async () => {
   const passInput = document.getElementById('new-user-pass') as HTMLInputElement;
   const teamInput = document.getElementById('new-user-team') as HTMLSelectElement;
 
-  if (emailInput) emailInput.value = '';
-  if (nameInput) nameInput.value = '';
+  if (emailInput) {
+    emailInput.value = '';
+    emailInput.oninput = () => {
+      const email = emailInput.value.trim();
+      const nInput = document.getElementById('new-user-name') as HTMLInputElement;
+      if (nInput && (!nInput.value || nInput.dataset.autoFilled === 'true')) {
+        const prefix = email.split('@')[0];
+        if (prefix) {
+          const match = prefix.match(/tm(\d+)/i);
+          if (match && match[1]) {
+            const num = match[1].padStart(2, '0');
+            nInput.value = `Team${num}`;
+          } else {
+            const formatted = prefix.split(/[-_.]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            nInput.value = formatted;
+          }
+          nInput.dataset.autoFilled = 'true';
+        } else {
+          nInput.value = '';
+          nInput.dataset.autoFilled = 'false';
+        }
+      }
+    };
+  }
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.dataset.autoFilled = 'false';
+    nameInput.oninput = () => {
+      nameInput.dataset.autoFilled = 'false';
+    };
+  }
   if (roleInput) roleInput.value = 'TECHNICIAN';
-  if (passInput) passInput.value = '';
+  if (passInput) {
+    passInput.value = '';
+    passInput.type = 'password';
+  }
+  const newEye = document.getElementById('new-user-pass-eye');
+  if (newEye) {
+    newEye.className = 'fa-solid fa-eye';
+  }
   if (teamInput) teamInput.value = '';
 
   // Reset selected sites & warehouses
@@ -1107,9 +1123,6 @@ export const UserManagementPage = async () => {
       };
     }
   });
-
-  // Apply default TECHNICIAN permissions
-  (window as any).applyDefaultRolePermissions('TECHNICIAN', 'new');
 
   document.getElementById('new-user-modal')?.classList.remove('hidden');
 };
@@ -1257,9 +1270,10 @@ export const UserManagementPage = async () => {
   // Define defaults
   let defaultTabs: string[] = [];
   let defaultSubs: Record<string, string[]> = {};
+  let presetData: any = null;
 
   try {
-    let presetData = await userService.getPreset(role);
+    presetData = await userService.getPreset(role);
     if (presetData) {
       const allowedTabs = presetData.allowedTabs || {};
       defaultTabs = Object.keys(allowedTabs);
@@ -1355,6 +1369,12 @@ export const UserManagementPage = async () => {
         subContainer.querySelectorAll('.permission-sub-card').forEach((item: any) => {
           item.classList.remove('opacity-30', 'pointer-events-none');
         });
+        const tabVal = presetData?.allowedTabs?.[tabId];
+        if (tabVal === true) {
+          subContainer.querySelectorAll('input[type="checkbox"]').forEach((subCb: any) => {
+            subCb.checked = true;
+          });
+        }
       }
     }
   });
@@ -1486,7 +1506,8 @@ const granularOptions = {
   ],
   'asset-custody': [
     { id: 'assignCustody', label: 'Yeni Zimmet Atama' },
-    { id: 'returnCustody', label: 'Zimmet Geri Alma / İade' }
+    { id: 'returnCustody', label: 'Zimmet Geri Alma / İade' },
+    { id: 'viewCustodyXray', label: 'Envanter Röntgeni & Karne Görünümü' }
   ],
   'image-pool': [
     { id: 'uploadImage', label: 'Yeni Resim Yükleme' },
@@ -1509,7 +1530,7 @@ const granularOptions = {
     content.style.opacity = '0';
     arrow?.classList.remove('rotate-180');
   } else {
-    content.style.maxHeight = '2000px';
+    content.style.maxHeight = '5000px';
     content.style.opacity = '1';
     arrow?.classList.add('rotate-180');
   }
@@ -1720,12 +1741,12 @@ const granularOptions = {
           const actualWhId = subId.replace('wh_', '');
           subCb.checked = (user.allowedWarehouses || []).includes(actualWhId);
         } else if (subId.startsWith('team_Team_')) {
-          subCb.checked = (user.allowedWarehouses || []).includes(subId) || (typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId]);
+          subCb.checked = (user.allowedWarehouses || []).includes(subId) || userPerms[tabId] === true || (typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId]);
         } else if (subId.startsWith('tsicat_')) {
           const actualCatId = subId.replace('tsicat_', '');
           subCb.checked = (user.allowedTsiCategories || []).includes(actualCatId);
         } else {
-          subCb.checked = typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId];
+          subCb.checked = userPerms[tabId] === true || (typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId]);
         }
       });
     }
@@ -1734,7 +1755,15 @@ const granularOptions = {
 
   // Badges and search inputs removed from UI
 
-  (document.getElementById('edit-user-pass') as HTMLInputElement).value = user.password || '';
+  const editPass = document.getElementById('edit-user-pass') as HTMLInputElement;
+  if (editPass) {
+    editPass.value = user.password || '';
+    editPass.type = 'password';
+  }
+  const editEye = document.getElementById('edit-user-pass-eye');
+  if (editEye) {
+    editEye.className = 'fa-solid fa-eye';
+  }
   (document.getElementById('edit-user-team') as HTMLSelectElement).value = user.team || '';
 
   const activeContainer = document.getElementById('edit-user-active-container');
@@ -1850,156 +1879,7 @@ const granularOptions = {
   document.getElementById('permission-modal')?.classList.add('hidden');
 };
 
-(window as any).togglePersonnelCard = (safeName: string) => {
-  const panel = document.getElementById(`panel-${safeName}`);
-  const chevron = document.getElementById(`chevron-${safeName}`);
-  if (!panel || !chevron) return;
-  
-  if (panel.style.display === 'none') {
-    panel.style.display = 'flex';
-    chevron.style.transform = 'rotate(180deg)';
-  } else {
-    panel.style.display = 'none';
-    chevron.style.transform = 'none';
-  }
-};
 
-(window as any).savePersonnelDetails = async (name: string, safeName: string) => {
-  const companySelect = document.getElementById(`company-${safeName}`) as HTMLSelectElement;
-  const company = companySelect?.value || '';
-  
-  const checkboxes = document.querySelectorAll(`.site-checkbox-${safeName}:checked`) as NodeListOf<HTMLInputElement>;
-  const baseSites: string[] = [];
-  checkboxes.forEach(cb => baseSites.push(cb.value));
-  
-  try {
-    if ((window as any).showToast) (window as any).showToast('Bilgi', 'Detaylar kaydediliyor...', 'info');
-    await personnelService.updatePersonnelDetails(name, company, baseSites);
-    if ((window as any).showToast) (window as any).showToast('Başarılı', 'Personel bölgeleri ve şirketi güncellendi.', 'success');
-  } catch (err: any) {
-    if ((window as any).showToast) (window as any).showToast('Hata', err.message || 'Güncelleme başarısız.', 'error');
-  }
-};
-
-(window as any).renderPersonnelManagementList = () => {
-  const container = document.getElementById('personnel-management-list');
-  const countBadge = document.getElementById('personnel-count-badge');
-  if (!container) return;
-
-  const list = personnelService.getPersonnelList();
-  const details = personnelService.getPersonnelDetailsList();
-  const allSites = dataService.getSites();
-
-  if (countBadge) countBadge.innerText = `${list.length} Personel`;
-
-  if (list.length === 0) {
-    container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Kayıtlı personel bulunamadı.</div>`;
-    return;
-  }
-
-  container.innerHTML = list.map(name => {
-    const safeName = name.replace(/[^a-zA-Z0-9]/g, '_');
-    const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
-    const company = detail?.company || '';
-    const baseSites = detail?.baseSites || [];
-
-    // Short summary text for sites
-    const siteCountText = baseSites.length > 0 
-      ? `${baseSites.length} Bölge` 
-      : 'Bölge Belirtilmedi (Her sahada harcırah yazar)';
-
-    return `
-      <div class="personnel-card" id="personnel-card-${safeName}" style="display: flex; flex-direction: column; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 0.5rem; overflow: hidden; transition: all 0.2s;">
-        <!-- Header Row -->
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; cursor: pointer; user-select: none;" onclick="window.togglePersonnelCard('${safeName}')">
-          <span style="font-size: 0.85rem; color: #fff; font-weight: 500; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <i class="fa-solid fa-user-check" style="color: var(--accent-cyan); opacity: 0.8;"></i> 
-            <span>${name}</span>
-            <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 400;">
-              (${company || 'Şirket Yok'} - ${siteCountText})
-            </span>
-          </span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <i class="fa-solid fa-chevron-down" id="chevron-${safeName}" style="font-size: 0.8rem; color: var(--text-muted); transition: transform 0.2s;"></i>
-            <button onclick="event.stopPropagation(); window.deletePersonnelName('${name.replace(/'/g, "\\'")}')" 
-                    style="background: none; border: none; outline: none; box-shadow: none; color: rgba(255,255,255,0.25); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; transition: all 0.2s;" 
-                    onmouseover="this.style.color='#ff4d4d'; this.style.background='rgba(255,77,77,0.1)';" 
-                    onmouseout="this.style.color='rgba(255,255,255,0.25)'; this.style.background='none';"
-                    title="Personeli Sil">
-              <i class="fa-solid fa-trash-can" style="font-size: 0.8rem;"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Expandable Content Panel -->
-        <div id="panel-${safeName}" style="display: none; padding: 1rem; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0, 0, 0, 0.2); flex-direction: column; gap: 1rem;">
-          <!-- Company Selection -->
-          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
-            <label class="input-label" style="margin: 0; font-size: 0.7rem; letter-spacing: 1px;">BAĞLI OLDUĞU ŞİRKET</label>
-            <select class="cyber-input" id="company-${safeName}" style="height: 38px; width: 100%;">
-              <option value="" ${!company ? 'selected' : ''}>Şirket Seçin...</option>
-              <option value="Demirer Enerji" ${company === 'Demirer Enerji' ? 'selected' : ''}>Demirer Enerji</option>
-              <option value="Har Film Yapım" ${company === 'Har Film Yapım' ? 'selected' : ''}>Har Film Yapım</option>
-              <option value="YEK" ${company === 'YEK' ? 'selected' : ''}>YEK</option>
-            </select>
-          </div>
-
-          <!-- Base Sites Checkboxes -->
-          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-            <label class="input-label" style="margin: 0; font-size: 0.7rem; letter-spacing: 1px;">SORUMLU OLDUĞU BÖLGELER (BUNLAR DIŞINDAKİ SAHALARA GİDİNCE HARCIRAH YAZILIR)</label>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem; background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-              ${allSites.map(s => {
-                const checked = baseSites.includes(s.id);
-                const shortName = s.name.replace('Alize ', '').replace('Anemon ', '').replace('Mare ', '').replace('Doğal ', '').replace('Dares ', '');
-                return `
-                  <label style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--text-main); cursor: pointer; margin: 0;">
-                    <input type="checkbox" class="site-checkbox-${safeName}" value="${s.id}" ${checked ? 'checked' : ''} style="accent-color: var(--accent-cyan); width: 15px; height: 15px; margin: 0;">
-                    <span>${shortName}</span>
-                  </label>
-                `;
-              }).join('')}
-            </div>
-          </div>
-
-          <!-- Save Button -->
-          <button onclick="window.savePersonnelDetails('${name.replace(/'/g, "\\'")}', '${safeName}')" class="btn-cyber" style="height: 34px; font-size: 0.8rem; justify-content: center; align-items: center; display: flex; gap: 6px; width: 100%; max-width: 150px; align-self: flex-end; margin-top: 0.5rem;">
-            <i class="fa-solid fa-save"></i> DETAYLARI KAYDET
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-};
-
-(window as any).savePersonnelName = async () => {
-  const input = document.getElementById('new-personnel-name') as HTMLInputElement;
-  const name = input?.value?.trim();
-  if (!name) {
-    if ((window as any).showToast) (window as any).showToast('Uyarı', 'Lütfen geçerli bir isim yazın.', 'warning');
-    return;
-  }
-
-  try {
-    if ((window as any).showToast) (window as any).showToast('Bilgi', 'Personel ekleniyor...', 'info');
-    await personnelService.addPersonnel(name);
-    input.value = '';
-    if ((window as any).showToast) (window as any).showToast('Başarılı', 'Personel başarıyla eklendi.', 'success');
-  } catch (err: any) {
-    if ((window as any).showToast) (window as any).showToast('Hata', err.message || 'Ekleme başarısız.', 'error');
-  }
-};
-
-(window as any).deletePersonnelName = async (name: string) => {
-  if (!confirm(`${name} isimli personeli silmek istediğinize emin misiniz?`)) return;
-
-  try {
-    if ((window as any).showToast) (window as any).showToast('Bilgi', 'Personel siliniyor...', 'info');
-    await personnelService.deletePersonnelByName(name);
-    if ((window as any).showToast) (window as any).showToast('Başarılı', 'Personel listeden silindi.', 'success');
-  } catch (err: any) {
-    if ((window as any).showToast) (window as any).showToast('Hata', err.message || 'Silme başarısız.', 'error');
-  }
-};
 
 (window as any).filterUsersList = (query: string) => {
   const q = query.toLocaleLowerCase('tr-TR').trim();
@@ -2036,9 +1916,41 @@ const granularOptions = {
   const input = document.getElementById(inputId) as HTMLInputElement;
   if (input) {
     input.value = pass;
+    input.type = 'text';
+    const eyeId = inputId === 'new-user-pass' ? 'new-user-pass-eye' : 'edit-user-pass-eye';
+    const eye = document.getElementById(eyeId);
+    if (eye) {
+      eye.className = 'fa-solid fa-eye-slash';
+    }
     if ((window as any).showToast) {
       (window as any).showToast('Şifre Üretildi', 'Yeni şifre alana yerleştirildi.', 'success');
     }
+  }
+};
+
+(window as any).toggleNewUserPasswordVisibility = () => {
+  const input = document.getElementById('new-user-pass') as HTMLInputElement;
+  const eye = document.getElementById('new-user-pass-eye') as HTMLElement;
+  if (!input || !eye) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    eye.className = 'fa-solid fa-eye-slash';
+  } else {
+    input.type = 'password';
+    eye.className = 'fa-solid fa-eye';
+  }
+};
+
+(window as any).toggleEditUserPasswordVisibility = () => {
+  const input = document.getElementById('edit-user-pass') as HTMLInputElement;
+  const eye = document.getElementById('edit-user-pass-eye') as HTMLElement;
+  if (!input || !eye) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    eye.className = 'fa-solid fa-eye-slash';
+  } else {
+    input.type = 'password';
+    eye.className = 'fa-solid fa-eye';
   }
 };
 
@@ -2151,6 +2063,12 @@ const granularOptions = {
             subContainer.querySelectorAll('.permission-sub-card').forEach((item: any) => {
               item.classList.remove('opacity-30', 'pointer-events-none');
             });
+            const tabVal = presetData?.allowedTabs?.[tabId];
+            if (tabVal === true) {
+              subContainer.querySelectorAll('input[type="checkbox"]').forEach((subCb: any) => {
+                subCb.checked = true;
+              });
+            }
           }
         }
       });
@@ -2266,7 +2184,7 @@ const granularOptions = {
         const content = card.querySelector('.permission-accordion-content') as HTMLElement;
         const arrow = card.querySelector('.accordion-arrow');
         if (content) {
-          content.style.maxHeight = '2000px';
+          content.style.maxHeight = '5000px';
           content.style.opacity = '1';
           arrow?.classList.add('rotate-180');
         }

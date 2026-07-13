@@ -2,14 +2,24 @@ import type { ServiceReport } from '../services/ServiceReportService';
 import { formatTeamName } from '../utils/formatters';
 import * as DateTimeUtils from '../utils/DateTimeUtils';
 
+// Saat dönüştürme yardımcı fonksiyonu (Ondalık saati Saat:Dakika formatına çevirir)
+function formatHoursToHm(decimalHours: number): string {
+  if (isNaN(decimalHours) || decimalHours <= 0) return '00:00';
+  const totalMinutes = Math.round(decimalHours * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const hStr = hours < 10 ? `0${hours}` : `${hours}`;
+  const mStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+  return `${hStr}:${mStr}`;
+}
+
 // Adam-saat hesaplama yardımcı fonksiyonu
 function calculateManHours(workSessions: any[], dateStr?: string) {
-  let firstStart: any = null;
-  let lastEnd: any = null;
   let totalRoadHours = 0;
   let totalNormalManHours = 0;
   let totalOvertimeManHours = 0;
   let totalManHours = 0;
+  let totalTurbineHours = 0;
 
   (workSessions || []).forEach(ws => {
     if (!ws.startTime || !ws.endTime) return;
@@ -23,19 +33,7 @@ function calculateManHours(workSessions: any[], dateStr?: string) {
 
     // Turbine downtime boundaries: only for type ÇALIŞMA, WORK, or BEKLEME
     if (ws.type === 'ÇALIŞMA' || ws.type === 'WORK' || ws.type === 'BEKLEME') {
-      const startDt = new Date(`${sDate}T${ws.startTime}:00`);
-      let endDt = new Date(`${sDate}T${ws.endTime}:00`);
-      if (!isNaN(startDt.getTime()) && !isNaN(endDt.getTime())) {
-        if (endDt.getTime() < startDt.getTime()) {
-          endDt = new Date(endDt.getTime() + 24 * 60 * 60 * 1000);
-        }
-        if (!firstStart || startDt < firstStart) {
-          firstStart = startDt;
-        }
-        if (!lastEnd || endDt > lastEnd) {
-          lastEnd = endDt;
-        }
-      }
+      totalTurbineHours += durationH;
     }
 
     // Road travel:
@@ -58,17 +56,12 @@ function calculateManHours(workSessions: any[], dateStr?: string) {
     totalManHours += durationH * personnelCount;
   });
 
-  let totalTurbineHours = 0;
-  if (firstStart && lastEnd) {
-    totalTurbineHours = (lastEnd.getTime() - firstStart.getTime()) / (1000 * 60 * 60);
-  }
-
   return {
-    turbine: `${totalTurbineHours.toFixed(2)} SAAT`,
-    travel: `${totalRoadHours.toFixed(2)} SAAT`,
-    normal: `${totalNormalManHours.toFixed(2)} SAAT`,
-    overtime: `${totalOvertimeManHours.toFixed(2)} SAAT`,
-    total: `${totalManHours.toFixed(2)} SAAT`
+    turbine: formatHoursToHm(totalTurbineHours),
+    travel: formatHoursToHm(totalRoadHours),
+    normal: formatHoursToHm(totalNormalManHours),
+    overtime: formatHoursToHm(totalOvertimeManHours),
+    total: formatHoursToHm(totalManHours)
   };
 }
 

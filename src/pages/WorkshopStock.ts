@@ -118,7 +118,7 @@ export const WorkshopStockPage = async () => {
     }
 
     return repairedStockItems.map(item => {
-      const cleanNameEscaped = item.description.replace(/'/g, "\\'");
+      const cleanNameEscaped = (item.description || 'Bilinmeyen Malzeme').replace(/'/g, "\\'");
       const sourceWhName = warehouses.find(w => w.id === item.sourceWarehouseId)?.name || item.sourceWarehouseId;
       
       return `

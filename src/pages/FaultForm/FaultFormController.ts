@@ -1,3 +1,5 @@
+import { db } from '../../firebase';
+import { collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { dataService } from '../../services/DataService';
 import { statusService } from '../../services/StatusService';
 import { inventoryService } from '../../services/InventoryService';
@@ -116,6 +118,30 @@ export class FaultFormController {
 
     private static registerGlobalHandlers() {
         const w = window as any;
+
+        w.refreshAllStockBadges = async () => {
+            const rows = Array.from(document.querySelectorAll('#material-rows tr'));
+            for (const row of rows) {
+                const type = row.getAttribute('data-type') || '';
+                if (type.toUpperCase() !== 'T') continue;
+                const inputs = row.querySelectorAll('input');
+                if (inputs.length >= 4) {
+                    const sapInput = inputs[0];
+                    if (sapInput.value.trim()) {
+                        await w.handleSapLookup(sapInput);
+                    }
+                }
+            }
+        };
+
+        w.handleMaterialQtyChange = (input: HTMLInputElement) => {
+            if (typeof w.saveMaintenanceDraft === 'function') {
+                w.saveMaintenanceDraft(true);
+            }
+            if (typeof w.refreshAllStockBadges === 'function') {
+                w.refreshAllStockBadges();
+            }
+        };
 
         w.recordAuditClick = (index: number, status: string) => {
             if (!w.auditTracking) {
@@ -238,11 +264,41 @@ export class FaultFormController {
                         
                         if (input.getAttribute('data-lookup-id') !== lookupId) return;
 
+                        let alreadyUsedInOtherRows = 0;
+                        const allRows = Array.from(document.querySelectorAll('#material-rows tr'));
+                        const currentRowIndex = allRows.indexOf(row);
+                        
+                        allRows.forEach((otherRow, idx) => {
+                            if (idx >= currentRowIndex) return; // Only subtract from rows ABOVE the current row!
+                            const otherType = otherRow.getAttribute('data-type') || '';
+                            if (otherType.toUpperCase() !== 'T') return; // Only Takılan consumes stock
+                            const otherInputs = otherRow.querySelectorAll('input');
+                            if (otherInputs.length >= 4) {
+                                const otherSap = otherInputs[0].value.trim();
+                                if (otherSap === sapNo) {
+                                    const otherQty = parseFloat(otherInputs[3].value) || 0;
+                                    alreadyUsedInOtherRows += otherQty;
+                                }
+                            }
+                        });
+
+                        // In Edit Mode, add back the quantities originally used/deducted by this report to get virtual stock
+                        let originallyUsedInThisReport = 0;
+                        if (w.isEditMode && w.currentInitialData && Array.isArray(w.currentInitialData.materials)) {
+                            w.currentInitialData.materials.forEach((m: any) => {
+                                const mSap = String(m.sapNo || '').trim();
+                                const mType = String(m.type || 'T').toUpperCase();
+                                if (mSap === sapNo && mType === 'T') {
+                                    originallyUsedInThisReport += parseFloat(m.used) || 0;
+                                }
+                            });
+                        }
+
                         if (siteId && siteId.startsWith('team_')) {
                             const myStockResult = scanResults.find(r => r.id === siteId);
                             if (myStockResult) {
-                                stockQty = myStockResult.qty;
-                                badge.setAttribute('data-debug', JSON.stringify({id: myStockResult.id, q: myStockResult.qty}));
+                                stockQty = Math.max(0, myStockResult.qty + originallyUsedInThisReport - alreadyUsedInOtherRows);
+                                badge.setAttribute('data-debug', JSON.stringify({id: myStockResult.id, q: myStockResult.qty, added: originallyUsedInThisReport, deducted: alreadyUsedInOtherRows}));
                             } else {
                                 badge.setAttribute('data-debug', 'null_item');
                             }
@@ -1222,12 +1278,11 @@ export class FaultFormController {
         };
 
         w.calculateTotalManHours = () => {
-            let firstStart: any = null;
-            let lastEnd: any = null;
             let totalRoadHours = 0;
             let totalNormalManHours = 0;
             let totalOvertimeManHours = 0;
             let totalManHours = 0;
+            let totalTurbineHours = 0;
 
             (w.workSessions || []).forEach((ws: any) => {
                 const [h, m] = (ws.duration || '00:00').split(':').map(Number);
@@ -1237,21 +1292,7 @@ export class FaultFormController {
                 
                 // Turbine downtime boundaries: only for type ÇALIŞMA, WORK, or BEKLEME
                 if (ws.type === 'ÇALIŞMA' || ws.type === 'WORK' || ws.type === 'BEKLEME') {
-                    if (ws.date && ws.startTime && ws.endTime) {
-                        const startDt = new Date(`${ws.date}T${ws.startTime}:00`);
-                        let endDt = new Date(`${ws.date}T${ws.endTime}:00`);
-                        if (!isNaN(startDt.getTime()) && !isNaN(endDt.getTime())) {
-                            if (endDt.getTime() < startDt.getTime()) {
-                                endDt = new Date(endDt.getTime() + 24 * 60 * 60 * 1000);
-                            }
-                            if (!firstStart || startDt < firstStart) {
-                                firstStart = startDt;
-                            }
-                            if (!lastEnd || endDt > lastEnd) {
-                                lastEnd = endDt;
-                            }
-                        }
-                    }
+                    totalTurbineHours += durationH;
                 }
                 
                 // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, or TÜRBİNDEN EVE
@@ -1273,11 +1314,6 @@ export class FaultFormController {
                 totalOvertimeManHours += overtimeH * personnelCount;
                 totalManHours += durationH * personnelCount;
             });
-
-            let totalTurbineHours = 0;
-            if (firstStart && lastEnd) {
-                totalTurbineHours = (lastEnd.getTime() - firstStart.getTime()) / (1000 * 60 * 60);
-            }
 
             const formatHHMM = (decimalHours: number) => {
                 if (isNaN(decimalHours) || decimalHours < 0) return '0 SA 00 DK';
@@ -1525,6 +1561,7 @@ export class FaultFormController {
                 tbody.removeChild(tbody.lastElementChild!);
                 tbody.removeChild(tbody.lastElementChild!);
                 if (typeof w.checkMcfValidation === 'function') w.checkMcfValidation();
+                if (typeof w.refreshAllStockBadges === 'function') w.refreshAllStockBadges();
             } else {
                 alert("En az bir malzeme satırı (Poz 1) bulunmalıdır.");
             }
@@ -1887,7 +1924,205 @@ export class FaultFormController {
 
                 if (isEditMode && reportId) {
                     setBtnStatus('RAPOR GÜNCELLENİYOR...');
+                    
+                    const oldMaterials = w.currentInitialData?.materials || [];
+                    const newMaterials = reportData.materials || [];
+                    
                     await serviceReportService.updateReport(reportId, reportData, files);
+                    
+                    // Stock adjustment for Edit Mode
+                    const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
+                    const siteWarehouseId = warehouseService.resolveWarehouseId(siteId) || siteId;
+                    
+                    if (usedWarehouseId) {
+                        // 1. Group old materials by sapNo
+                        // 1. Group old materials by sapNo, type, and serialNo
+                        const oldMap = new Map<string, { sapNo: string, type: string, serialNo: string, qty: number, description: string }>();
+                        oldMaterials.forEach((mat: any) => {
+                            const sapNo = String(mat.sapNo || '').trim();
+                            if (!sapNo) return;
+                            const type = String(mat.type || 'T').toUpperCase();
+                            const serialNo = String(mat.serialNo || '').trim();
+                            const qty = type === 'T' ? (parseFloat(mat.used) || 0) : (parseFloat(mat.defectCount) || 0);
+                            const key = `${sapNo}_${type}_${serialNo}`;
+                            if (oldMap.has(key)) {
+                                oldMap.get(key)!.qty += qty;
+                            } else {
+                                oldMap.set(key, { sapNo, type, serialNo, qty, description: mat.description || '' });
+                            }
+                        });
+                        
+                        // 2. Group new materials by sapNo, type, and serialNo
+                        const newMap = new Map<string, { sapNo: string, type: string, serialNo: string, qty: number, description: string }>();
+                        newMaterials.forEach((mat: any) => {
+                            const sapNo = String(mat.sapNo || '').trim();
+                            if (!sapNo) return;
+                            const type = String(mat.type || 'T').toUpperCase();
+                            const serialNo = String(mat.serialNo || '').trim();
+                            const qty = type === 'T' ? (parseFloat(mat.used) || 0) : (parseFloat(mat.defectCount) || 0);
+                            const key = `${sapNo}_${type}_${serialNo}`;
+                            if (newMap.has(key)) {
+                                newMap.get(key)!.qty += qty;
+                            } else {
+                                newMap.set(key, { sapNo, type, serialNo, qty, description: mat.description || '' });
+                            }
+                        });
+                        
+                        // 3. Process differences key by key
+                        const allKeys = new Set([...oldMap.keys(), ...newMap.keys()]);
+                        
+                        for (const key of allKeys) {
+                            const oldVal = oldMap.get(key) || { sapNo: key.split('_')[0], type: key.split('_')[1], serialNo: key.split('_')[2], qty: 0, description: '' };
+                            const newVal = newMap.get(key) || { sapNo: key.split('_')[0], type: key.split('_')[1], serialNo: key.split('_')[2], qty: 0, description: '' };
+                            
+                            const sapNo = newVal.sapNo || oldVal.sapNo;
+                            const type = newVal.type || oldVal.type;
+                            const serialNo = newVal.serialNo !== undefined ? newVal.serialNo : oldVal.serialNo;
+                            const matDesc = newVal.description || oldVal.description || 'Bilinmeyen Malzeme';
+                            const diffQty = newVal.qty - oldVal.qty;
+                            
+                            const detailedNote = `(Rapor Güncelleme: ${reportData.reportNo}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
+
+                            if (type === 'S') {
+                                // Self-healing for legacy merged or duplicated defect records
+                                try {
+                                    const whsToClean = [siteWarehouseId, usedWarehouseId].filter((id): id is string => !!id);
+                                    for (const whId of whsToClean) {
+                                        const colRef = collection(db, 'warehouses', whId, 'inventory_v2');
+                                        const q = query(colRef, where('sapNo', '==', sapNo), where('condition', '==', 'DEFECT'));
+                                        const snap = await getDocs(q);
+                                        
+                                        const hasEmpty = snap.docs.some(d => !d.data().serialNo || d.data().serialNo === '' || d.data().serialNo === '-');
+                                        const hasDuplicates = snap.docs.some((d, idx) => {
+                                            const s = d.data().serialNo;
+                                            return s && snap.docs.findIndex(x => x.data().serialNo === s) !== idx;
+                                        });
+                                        
+                                        const sMaterials = newMaterials.filter((m: any) => String(m.sapNo).trim() === sapNo && m.type?.toUpperCase() === 'S');
+                                        const totalReportQty = sMaterials.reduce((acc: number, m: any) => acc + (parseFloat(m.defectCount) || 0), 0);
+                                        const totalDbQty = snap.docs.reduce((acc: number, d: any) => acc + (parseFloat(d.data().quantity) || 0), 0);
+                                        
+                                        if (hasEmpty || hasDuplicates || totalDbQty !== totalReportQty) {
+                                            // Delete all existing DEFECT records for this sapNo in this warehouse
+                                            const batch = writeBatch(db);
+                                            snap.docs.forEach(doc => {
+                                                batch.delete(doc.ref);
+                                            });
+                                            await batch.commit();
+                                            
+                                            // Re-write them correctly based on the report's sMaterials
+                                            for (const sm of sMaterials) {
+                                                const sNo = String(sm.serialNo || '').trim();
+                                                const qty = parseFloat(sm.defectCount) || 1;
+                                                await warehouseService.updateStockBySap(whId, sapNo, qty, {
+                                                    user: currentUser?.email || 'Sistem',
+                                                    reason: 'Self-healing: Re-syncing defect records for ' + detailedNote,
+                                                    reportNo: reportData.reportNo,
+                                                    materialName: matDesc
+                                                }, 'DEFECT', undefined, sNo);
+                                            }
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.error("Self-healing error:", err);
+                                }
+                            }
+                            
+                            if (diffQty === 0) continue;
+                            
+                            if (type === 'T') {
+                                // Adjust Used Stock (Takılan)
+                                if (diffQty > 0) {
+                                    // Decrease reservation by diffQty
+                                    if (usedWarehouseId.startsWith('team_') && siteWarehouseId) {
+                                        try {
+                                            await warehouseService.decreaseReservation(siteWarehouseId, sapNo, diffQty, usedWarehouseId);
+                                        } catch (e) {
+                                            console.warn("Failed to decrease reservation in edit mode:", e);
+                                        }
+                                    }
+
+                                    // Deduct diffQty
+                                    const stockItemNew = await warehouseService.getStockBySapAndCondition(usedWarehouseId, sapNo, 'NEW');
+                                    const qtyNew = stockItemNew?.quantity || 0;
+                                    
+                                    if (qtyNew >= diffQty) {
+                                        await warehouseService.updateStockBySap(usedWarehouseId, sapNo, -diffQty, {
+                                            user: currentUser?.email || 'Sistem',
+                                            reason: 'Rapor Güncelleme ile Malzeme Kullanımı (Artış) ' + detailedNote,
+                                            reportNo: reportData.reportNo,
+                                            materialName: matDesc,
+                                            turbineNo: reportData.turbineNo,
+                                            turbineSerial: reportData.turbineSerial,
+                                            formNo: reportData.matFormNo
+                                        }, 'NEW');
+                                    } else {
+                                        if (qtyNew > 0) {
+                                            await warehouseService.updateStockBySap(usedWarehouseId, sapNo, -qtyNew, {
+                                                user: currentUser?.email || 'Sistem',
+                                                reason: 'Rapor Güncelleme ile Malzeme Kullanımı (Artış - Kısmi NEW) ' + detailedNote,
+                                                reportNo: reportData.reportNo,
+                                                materialName: matDesc,
+                                                turbineNo: reportData.turbineNo,
+                                                turbineSerial: reportData.turbineSerial,
+                                                formNo: reportData.matFormNo
+                                            }, 'NEW');
+                                        }
+                                        const remainder = diffQty - qtyNew;
+                                        await warehouseService.updateStockBySap(usedWarehouseId, sapNo, -remainder, {
+                                            user: currentUser?.email || 'Sistem',
+                                            reason: 'Rapor Güncelleme ile Malzeme Kullanımı (Artış - Kısmi REVİZE) ' + detailedNote,
+                                            reportNo: reportData.reportNo,
+                                            materialName: matDesc,
+                                            turbineNo: reportData.turbineNo,
+                                            turbineSerial: reportData.turbineSerial,
+                                            formNo: reportData.matFormNo
+                                        }, 'REVISED');
+                                    }
+                                } else if (diffQty < 0) {
+                                    // Restore reservation (negative diffQty adds it back)
+                                    if (usedWarehouseId.startsWith('team_') && siteWarehouseId) {
+                                        try {
+                                            await warehouseService.decreaseReservation(siteWarehouseId, sapNo, diffQty, usedWarehouseId);
+                                        } catch (e) {
+                                            console.warn("Failed to restore reservation in edit mode:", e);
+                                        }
+                                    }
+
+                                    // Refund Math.abs(diffQty)
+                                    const refundQty = Math.abs(diffQty);
+                                    await warehouseService.updateStockBySap(usedWarehouseId, sapNo, refundQty, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Rapor Güncelleme ile Malzeme İadesi (Azalış) ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: matDesc,
+                                        turbineNo: reportData.turbineNo,
+                                        turbineSerial: reportData.turbineSerial,
+                                        formNo: reportData.matFormNo
+                                    }, 'NEW');
+                                }
+                            } else if (type === 'S') {
+                                // Adjust Defect Stock (Sökülen)
+                                if (siteWarehouseId) {
+                                    await warehouseService.updateStockBySap(siteWarehouseId, sapNo, diffQty, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Rapor Güncelleme ile Sökülen Arızalı Parça Düzeltmesi ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: matDesc
+                                    }, 'DEFECT', undefined, serialNo);
+                                }
+                                if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
+                                    await warehouseService.updateStockBySap(usedWarehouseId, sapNo, diffQty, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Rapor Güncelleme ile Sökülen Arızalı Parça Düzeltmesi ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: matDesc
+                                    }, 'DEFECT', undefined, serialNo);
+                                }
+                            }
+                        }
+                    }
+                    
                     alert("Rapor başarıyla güncellendi!");
                     w.navigate('reports-archive');
                 } else {
@@ -1966,7 +2201,7 @@ export class FaultFormController {
                                         reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
                                         reportNo: reportData.reportNo,
                                         materialName: mat.description
-                                    }, 'DEFECT');
+                                    }, 'DEFECT', undefined, mat.serialNo);
                                 }
                                 if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
                                     await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
@@ -1974,7 +2209,7 @@ export class FaultFormController {
                                         reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
                                         reportNo: reportData.reportNo,
                                         materialName: mat.description
-                                    }, 'DEFECT');
+                                    }, 'DEFECT', undefined, mat.serialNo);
                                 }
                             }
                         }
@@ -2037,6 +2272,7 @@ export class FaultFormController {
      static async initializeForm(initialData: any) {
         console.log("Initializing Fault Form Data Hydration...");
         const w = window as any;
+        w.currentInitialData = initialData;
         w.auditTracking = {
             formOpenedTime: Date.now(),
             clicks: []
@@ -2052,6 +2288,8 @@ export class FaultFormController {
         const { maintenanceService } = await import('../../services/MaintenanceService');
         const isSmartEditor = localStorage.getItem('currentEditingTemplateId') !== null;
         const isEditMode = initialData?.isEditMode;
+        w.isEditMode = isEditMode;
+        w.currentInitialData = initialData;
         w.currentEditReportNo = isEditMode ? initialData.reportNo : null;
 
         if (isSmartEditor) {
@@ -2209,6 +2447,9 @@ export class FaultFormController {
             let faultCode = faultCodeInput?.value || initialData?.rawFaultCode || initialData?.faultCode || '';
             if (faultCode && faultCode.includes(' - ')) {
                 faultCode = faultCode.split(' - ')[0].trim();
+            }
+            if (faultCodeInput && !faultCodeInput.value && faultCode) {
+                faultCodeInput.value = faultCode;
             }
             if (faultCode) {
                 const exact = statusService.getCodeByKod(faultCode);

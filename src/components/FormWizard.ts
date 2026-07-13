@@ -217,6 +217,15 @@ export const NewTaskForm = async () => {
               <input type="hidden" id="nt-task-type" required>
             </div>
           </div>
+
+          <!-- Planned Stop Description Input (Dynamic) -->
+          <div id="nt-planned-stop-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem;">
+            <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">PLANLI DURUŞ AÇIKLAMASI</label>
+            <div style="position: relative;">
+              <i class="fa-solid fa-align-left" style="position: absolute; left: 14px; top: 15px; color: var(--accent-cyan); font-size: 0.9rem; z-index: 5;"></i>
+              <textarea id="nt-planned-stop-desc" class="cyber-input" placeholder="Lütfen duruş nedenini/açıklamasını yazın (Örn: Rulman Onarımı, Kanat Revizyonu vb.)..." style="padding-left: 42px; padding-top: 12px; height: 100px; border-radius: 10px; resize: none; font-size: 0.95rem; font-family: 'Rajdhani', sans-serif; box-sizing: border-box; width: 100%; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15); color: #fff;"></textarea>
+            </div>
+          </div>
           
           <!-- Fault Code Input (Dynamic) -->
           <div id="nt-fault-code-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem;">
@@ -384,6 +393,22 @@ export const NewTaskForm = async () => {
       }
       const valInput = document.getElementById('nt-fault-code-value') as HTMLInputElement;
       if (valInput) valInput.value = '';
+    }
+  }
+
+  // Planlı Duruş Açıklama Bölümü
+  const plannedStopSection = document.getElementById('nt-planned-stop-section');
+  const plannedStopDesc = document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement;
+  if (plannedStopSection) {
+    if (type === 'Planlı Duruş') {
+      plannedStopSection.style.display = 'block';
+      if (plannedStopDesc) plannedStopDesc.required = true;
+    } else {
+      plannedStopSection.style.display = 'none';
+      if (plannedStopDesc) {
+        plannedStopDesc.required = false;
+        plannedStopDesc.value = '';
+      }
     }
   }
 
@@ -702,6 +727,8 @@ const resetTelemetryCards = () => {
     }
 
 
+    const plannedStopDesc = (document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement)?.value || '';
+
     // Logic Engineer'ın motoruna gönder
     await taskService.createNewTask({
       secilenSablon: templateName,
@@ -710,7 +737,7 @@ const resetTelemetryCards = () => {
       turbinSeriNo: serial,
       turbinNo: turbine,
       statuKodu: faultCode,
-      yoneticiNotu: `Sistemden atanan ${templateName} görevi.`,
+      yoneticiNotu: taskType === 'Planlı Duruş' ? (plannedStopDesc || 'Planlı Operasyonel Duruş') : `Sistemden atanan ${templateName} görevi.`,
       assignedTeam: team,
       maintenanceData
     });

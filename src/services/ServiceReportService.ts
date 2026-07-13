@@ -214,8 +214,12 @@ class ServiceReportService {
       return null;
     }
   }
-  async getAllReports(): Promise<ServiceReport[]> {
-    if (this.reportsCache) {
+  private lastFetchTime: number = 0;
+  private CACHE_DURATION = 10000; // 10 seconds
+
+  async getAllReports(forceRefresh: boolean = false): Promise<ServiceReport[]> {
+    const now = Date.now();
+    if (!forceRefresh && this.reportsCache && (now - this.lastFetchTime < this.CACHE_DURATION)) {
       return this.reportsCache;
     }
     try {
@@ -224,6 +228,7 @@ class ServiceReportService {
       const reports = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       const sorted = reports.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       this.reportsCache = sorted;
+      this.lastFetchTime = now;
       return sorted;
     } catch (error) {
       console.error("Error fetching all reports:", error);

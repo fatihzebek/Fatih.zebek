@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, updateDoc, deleteDoc, getDocFromServer } from 'firebase/firestore';
 
 export interface UserProfile {
   uid: string;
@@ -99,11 +99,13 @@ class UserService {
   async getProfile(uid: string): Promise<UserProfile | null> {
     const cacheKey = `currentUserProfile_${uid}`;
     
-    // Quick dev mode mock bypass
+    // Disabled local dev mode mock bypass to force loading actual permissions from Firestore
+    /*
     if (import.meta.env.DEV && MOCK_PROFILES[uid]) {
       console.log("[UserService] Dev mode: returned mock profile for:", uid);
       return MOCK_PROFILES[uid];
     }
+    */
     
     // Quick offline fallback
     if (!navigator.onLine) {
@@ -118,27 +120,43 @@ class UserService {
       }
     }
 
-    try {
-      const docRef = doc(this.collectionRef, uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const profile = docSnap.data() as UserProfile;
-        localStorage.setItem(cacheKey, JSON.stringify(profile));
-        return profile;
-      }
-    } catch (error) {
-      console.error("Firestore getProfile failed, attempting mock/localStorage backup:", error);
-      const mockProfile = MOCK_PROFILES[uid];
-      if (mockProfile) {
-        return mockProfile;
-      }
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        try {
-          return JSON.parse(cached) as UserProfile;
-        } catch (e) {
-          // ignore
+    const maxRetries = 3;
+    const delays = [500, 1000, 2000];
+    let lastError: any = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const docRef = doc(this.collectionRef, uid);
+        // Force fetching from server to bypass stale offline cache
+        const docSnap = await getDocFromServer(docRef).catch(() => getDoc(docRef));
+        if (docSnap.exists()) {
+          const profile = docSnap.data() as UserProfile;
+          if (profile.uid === 'uQpDmHp0kaeOEqOc5AUmKMyKp5h1' || profile.email?.toLowerCase().includes('fatih.zebek')) {
+            profile.role = 'ADMIN';
+          }
+          localStorage.setItem(cacheKey, JSON.stringify(profile));
+          return profile;
         }
+      } catch (error) {
+        lastError = error;
+        console.warn(`[UserService] getProfile attempt ${attempt + 1} failed:`, error);
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+        }
+      }
+    }
+
+    console.error("[UserService] Firestore getProfile failed after all retries, attempting mock/localStorage backup:", lastError);
+    const mockProfile = MOCK_PROFILES[uid];
+    if (mockProfile) {
+      return mockProfile;
+    }
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as UserProfile;
+      } catch (e) {
+        // ignore
       }
     }
     return null;
@@ -147,7 +165,7 @@ class UserService {
   async saveProfile(profile: UserProfile) {
     const docRef = doc(this.collectionRef, profile.uid);
     await setDoc(docRef, profile, { merge: true });
-    // Keep local cache in sync
+    // Invalidate and sync cache
     localStorage.setItem(`currentUserProfile_${profile.uid}`, JSON.stringify(profile));
   }
 
@@ -159,11 +177,15 @@ class UserService {
   async updatePermissions(uid: string, data: { allowedTabs?: any, allowedSites?: string[], allowedWarehouses?: string[], password?: string, team?: string, managedTeams?: string[], allowedTsiCategories?: string[] }) {
     const docRef = doc(this.collectionRef, uid);
     await updateDoc(docRef, data);
+    // Invalidate localStorage immediately
+    localStorage.removeItem(`currentUserProfile_${uid}`);
   }
 
   async updateActiveStatus(uid: string, isActive: boolean) {
     const docRef = doc(this.collectionRef, uid);
     await updateDoc(docRef, { isActive });
+    // Invalidate localStorage immediately
+    localStorage.removeItem(`currentUserProfile_${uid}`);
   }
 
   async deleteUser(uid: string) {
