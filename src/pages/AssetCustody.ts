@@ -192,10 +192,6 @@ export const AssetCustodyPage = async () => {
         </table>
       </div>
     </div>
-
-    <datalist id="personnel-datalist">
-      ${personnelNames.map(name => `<option value="${name}"></option>`).join('')}
-    </datalist>
     `;
   };
 
@@ -502,11 +498,11 @@ export const AssetCustodyPage = async () => {
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
             <div>
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ KİŞİ</label>
-              <input type="text" id="custody-person" class="cyber-input" list="personnel-datalist" placeholder="İsim arayın..." style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
+              <input type="text" id="custody-person" class="cyber-input" list="personnel-datalist" placeholder="İsim arayın..." style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" oninput="window.handleModalPersonChange()">
             </div>
             <div>
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ EKİP</label>
-              <select id="custody-team" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
+              <select id="custody-team" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" onchange="window.filterModalPersonnelByTeam()">
                 <option value="">Seçiniz</option>
                 ${allowedTeams.map(teamName => `<option value="${teamName}">${teamName}</option>`).join('')}
               </select>
@@ -734,6 +730,50 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
 }
 
 // === WINDOW FUNCTIONS ===
+(window as any).filterModalPersonnelByTeam = () => {
+  const teamSelect = document.getElementById('custody-team') as HTMLSelectElement;
+  const selectedTeam = teamSelect?.value || '';
+  const datalist = document.getElementById('personnel-datalist');
+  if (!datalist) return;
+
+  const details = personnelService.getPersonnelDetailsList();
+  let filtered = personnelService.getPersonnelList();
+
+  const user = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAdminUser = user?.role?.toUpperCase() === 'ADMIN' || user?.role?.toUpperCase() === 'MALZEME_YONETIMI';
+  const regionalTeams = dataService.getAllowedTeams();
+
+  if (selectedTeam) {
+    filtered = filtered.filter(name => {
+      const d = details.find(det => det.name === name);
+      return d && d.team === selectedTeam;
+    });
+  } else {
+    if (!isAdminUser) {
+      filtered = filtered.filter(name => {
+        const d = details.find(det => det.name === name);
+        return !d || !d.team || regionalTeams.includes(d.team);
+      });
+    }
+  }
+
+  datalist.innerHTML = filtered.map(name => `<option value="${name}">`).join('');
+};
+
+(window as any).handleModalPersonChange = () => {
+  const personInput = document.getElementById('custody-person') as HTMLInputElement;
+  const personName = personInput?.value || '';
+  const teamSelect = document.getElementById('custody-team') as HTMLSelectElement;
+  if (!personName || !teamSelect) return;
+
+  const details = personnelService.getPersonnelDetailsList();
+  const d = details.find(det => det.name.toLowerCase() === personName.toLowerCase());
+  if (d && d.team) {
+    teamSelect.value = d.team;
+    (window as any).filterModalPersonnelByTeam();
+  }
+};
+
 (window as any).switchCustodyTab = (tab: string) => {
   activeTab = tab;
   (window as any).navigate('asset-custody');
@@ -782,6 +822,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     : '<i class="fa-solid fa-screwdriver-wrench"></i> YENİ ZİMMET KAYDI';
   
   (window as any).toggleCustodyWarehouse();
+  (window as any).filterModalPersonnelByTeam();
   modal.classList.remove('hidden');
 };
 
