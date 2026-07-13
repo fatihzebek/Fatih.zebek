@@ -643,24 +643,9 @@ export const AssetCustodyPage = async () => {
             </div>
           </div>
 
-          <!-- Row 3: Person (50%), Team (50%) -->
+          <!-- Row 3: Location (50%), Condition (50%) -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
             <div>
-              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ KİŞİ</label>
-              <input type="text" id="custody-person" class="cyber-input" list="personnel-datalist" placeholder="İsim arayın..." style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" oninput="window.handleModalPersonChange()">
-            </div>
-            <div>
-              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ EKİP</label>
-              <select id="custody-team" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" onchange="window.filterModalPersonnelByTeam()">
-                <option value="">Seçiniz</option>
-                ${allowedTeams.map(teamName => `<option value="${teamName}">${teamName}</option>`).join('')}
-              </select>
-            </div>
-          </div>
-
-          <!-- Row 4: Flexbox for Location, Warehouse, and Condition -->
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 130px;">
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">KONUM LOKASYONU</label>
               <select id="custody-location" class="cyber-input" onchange="window.toggleCustodyWarehouse()" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
                 <option value="person">👤 Kişide</option>
@@ -668,13 +653,7 @@ export const AssetCustodyPage = async () => {
                 <option value="depo">🏭 Depoda</option>
               </select>
             </div>
-            <div id="custody-warehouse-group" style="flex: 1; min-width: 130px; display: none;">
-              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">DEPO LOKASYONU</label>
-              <select id="custody-warehouse" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
-                ${allowedWarehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
-              </select>
-            </div>
-            <div id="custody-condition-group" style="flex: 1; min-width: 130px;">
+            <div>
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">CİHAZ DURUMU</label>
               <select id="custody-condition" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
                 <option value="saglam">✅ Sağlam</option>
@@ -682,6 +661,31 @@ export const AssetCustodyPage = async () => {
                 <option value="hurda">❌ Hurda</option>
                 <option value="kayip">🔍 Kayıp</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Row 4: Dynamic Assignment Field based on Location -->
+          <div id="custody-assignment-row">
+            <!-- Person Assignment Group -->
+            <div id="custody-person-group">
+              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ KİŞİ</label>
+              <input type="text" id="custody-person" class="cyber-input" list="personnel-datalist" placeholder="İsim arayın..." style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" oninput="window.handleModalPersonChange()">
+            </div>
+
+            <!-- Team Assignment Group -->
+            <div id="custody-team-group" style="display: none;">
+              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ZİMMETLİ EKİP</label>
+              <select id="custody-team" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;" onchange="window.filterModalPersonnelByTeam()">
+                <option value="">Seçiniz</option>
+                ${allowedTeams.map(teamName => `<option value="${teamName}">${teamName}</option>`).join('')}
+              </select>
+            </div>
+
+            <!-- Depot Assignment Group -->
+            <div id="custody-warehouse-group" style="display: none;">
+              <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">DEPO LOKASYONU</label>
+              <select id="custody-warehouse" class="cyber-input" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
+                ${allowedWarehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
             </div>
           </div>
 
@@ -1052,49 +1056,70 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
 
 (window as any).toggleCustodyWarehouse = () => {
   const loc = (document.getElementById('custody-location') as HTMLSelectElement)?.value;
+  const personGroup = document.getElementById('custody-person-group');
+  const teamGroup = document.getElementById('custody-team-group');
   const whGroup = document.getElementById('custody-warehouse-group');
+
+  if (personGroup) personGroup.style.display = loc === 'person' ? 'block' : 'none';
+  if (teamGroup) teamGroup.style.display = loc === 'team' ? 'block' : 'none';
   if (whGroup) whGroup.style.display = loc === 'depo' ? 'block' : 'none';
 };
 
 (window as any).saveCustodyItem = async () => {
   const id = (document.getElementById('custody-edit-id') as HTMLInputElement).value;
+  const location = (document.getElementById('custody-location') as HTMLSelectElement).value as 'team' | 'depo' | 'person';
+  let assignedTo = '';
+  let assignedTeam = '';
+  let warehouseId = '';
+
+  if (location === 'person') {
+    assignedTo = (document.getElementById('custody-person') as HTMLInputElement).value.trim();
+    if (!assignedTo) {
+      (window as any).showToast?.('HATA', 'Konum "Kişide" ise Zimmetli Kişi alanı zorunludur.', 'error');
+      return;
+    }
+    const validPersonnel = personnelService.getPersonnelList();
+    const match = validPersonnel.find(p => p.toLocaleLowerCase('tr-TR') === assignedTo.toLocaleLowerCase('tr-TR'));
+    if (!match) {
+      (window as any).showToast?.('HATA', 'Zimmetlenecek kişi personel listesinde bulunamadı. Lütfen listeden seçin.', 'error');
+      return;
+    }
+    assignedTo = match; // Normalize case
+    const details = personnelService.getPersonnelDetailsList();
+    const d = details.find(det => det.name === match);
+    if (d && d.team) {
+      assignedTeam = d.team;
+    }
+  } else if (location === 'team') {
+    assignedTeam = (document.getElementById('custody-team') as HTMLSelectElement).value;
+    if (!assignedTeam) {
+      (window as any).showToast?.('HATA', 'Konum "Ekipte" ise Zimmetli Ekip alanı zorunludur.', 'error');
+      return;
+    }
+  } else if (location === 'depo') {
+    warehouseId = (document.getElementById('custody-warehouse') as HTMLSelectElement).value;
+    if (!warehouseId) {
+      (window as any).showToast?.('HATA', 'Konum "Depoda" ise Depo Lokasyonu alanı zorunludur.', 'error');
+      return;
+    }
+  }
+
   const data = {
     productCode: (document.getElementById('custody-code') as HTMLInputElement).value.trim(),
     productName: (document.getElementById('custody-name') as HTMLInputElement).value.trim(),
     serialNo: (document.getElementById('custody-serial') as HTMLInputElement).value.trim(),
     category: (document.getElementById('custody-category') as HTMLSelectElement).value,
     description: '',
-    assignedTo: (document.getElementById('custody-person') as HTMLInputElement).value.trim(),
-    assignedTeam: (document.getElementById('custody-team') as HTMLSelectElement).value,
-    location: (document.getElementById('custody-location') as HTMLSelectElement).value as 'team' | 'depo' | 'person',
-    warehouseId: (document.getElementById('custody-warehouse') as HTMLSelectElement)?.value || '',
+    assignedTo,
+    assignedTeam,
+    location,
+    warehouseId,
     condition: (document.getElementById('custody-condition') as HTMLSelectElement).value as 'saglam' | 'arizali' | 'hurda' | 'kayip',
     conditionNote: (document.getElementById('custody-condition-note') as HTMLInputElement).value.trim(),
     createdBy: (window as any).currentUser?.displayName || 'Admin',
     imageUrl: (document.getElementById('custody-photo-url') as HTMLInputElement).value,
     quantity: parseInt((document.getElementById('custody-quantity') as HTMLInputElement).value) || 1
   };
-
-  if (!data.productName) {
-    (window as any).showToast?.('HATA', 'Malzeme adı zorunludur.', 'error');
-    return;
-  }
-
-  if (data.location === 'person' && !data.assignedTo) {
-    (window as any).showToast?.('HATA', 'Konum "Kişide" ise Zimmetli Kişi alanı zorunludur.', 'error');
-    return;
-  }
-
-  // Strictly validate that assignedTo is a real personnel in datalist if a name is provided
-  if (data.assignedTo) {
-    const validPersonnel = personnelService.getPersonnelList();
-    const match = validPersonnel.find(p => p.toLocaleLowerCase('tr-TR') === data.assignedTo.toLocaleLowerCase('tr-TR'));
-    if (!match) {
-      (window as any).showToast?.('HATA', 'Zimmetlenecek kişi personel listesinde bulunamadı. Lütfen listeden seçin.', 'error');
-      return;
-    }
-    data.assignedTo = match; // Normalize case
-  }
 
   try {
     if (id) {
