@@ -391,6 +391,134 @@ export const AssetCustodyPage = async () => {
     `;
   };
 
+  const renderCompareTab = () => {
+    // Get unique list of materials by name
+    const uniqueProducts: Record<string, { name: string, category: string, code?: string }> = {};
+    allItems.forEach(item => {
+      const key = item.productName.trim().toLowerCase();
+      if (!uniqueProducts[key]) {
+        uniqueProducts[key] = {
+          name: item.productName,
+          category: item.category,
+          code: item.productCode
+        };
+      }
+    });
+
+    const productKeys = Object.keys(uniqueProducts);
+
+    // Sort products by name
+    productKeys.sort((a, b) => uniqueProducts[a].name.localeCompare(uniqueProducts[b].name, 'tr-TR'));
+
+    return `
+      <!-- SEARCH & FILTER STRIP -->
+      <div class="glass-panel" style="padding: 1rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <div style="position: relative; flex: 1; min-width: 250px;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.6; font-size: 0.9rem;"></i>
+          <input type="search" id="compare-search" class="cyber-input" placeholder="Malzeme adı veya kodu ara..." style="padding-left: 2.75rem; width: 100%; height: 38px; border-radius: 8px; font-size: 0.8rem;" oninput="window.filterCompareTab()">
+        </div>
+        <div style="width: 200px;">
+          <select id="compare-filter-cat" class="cyber-input" style="width: 100%; height: 38px; border-radius: 8px; font-size: 0.8rem;" onchange="window.filterCompareTab()">
+            <option value="all">Tüm Kategoriler</option>
+            <option value="El Aleti">🔧 El Aleti</option>
+            <option value="Ölçü Aleti">📏 Ölçü Aleti</option>
+            <option value="Elektrik Aleti">⚡ Elektrik Aleti</option>
+            <option value="Güvenlik Ekipmanı">🦺 Güvenlik Ekipmanı</option>
+            <option value="Hidrolik Ekipman">🔴 Hidrolik Ekipman</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE -->
+      <div id="compare-empty-state" class="glass-panel" style="display: none; text-align: center; padding: 4rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+        <i class="fa-solid fa-code-compare" style="font-size: 2.5rem; opacity: 0.15; margin-bottom: 1rem; display: block;"></i>
+        Filtreyle eşleşen karşılaştırma kaydı bulunamadı.
+      </div>
+
+      <!-- CARDS GRID -->
+      <div id="compare-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.5rem;">
+        ${productKeys.map(key => {
+          const prod = uniqueProducts[key];
+          
+          // Find which teams have this product, and their counts
+          const havingTeams: Record<string, number> = {};
+          allItems.forEach(item => {
+            if (item.productName.trim().toLowerCase() === key) {
+              if (item.location === 'team' && item.assignedTeam) {
+                havingTeams[item.assignedTeam] = (havingTeams[item.assignedTeam] || 0) + (item.quantity || 1);
+              } else if (item.location === 'person' && item.assignedTeam) {
+                havingTeams[item.assignedTeam] = (havingTeams[item.assignedTeam] || 0) + (item.quantity || 1);
+              }
+            }
+          });
+
+          // Split into Haves and Have-nots
+          const havesList: { teamName: string, qty: number }[] = [];
+          const haveNotsList: string[] = [];
+
+          allowedTeams.forEach(team => {
+            if (havingTeams[team]) {
+              havesList.push({ teamName: team, qty: havingTeams[team] });
+            } else {
+              haveNotsList.push(team);
+            }
+          });
+
+          return `
+            <div class="glass-panel compare-card" data-name="${prod.name.toLowerCase()}" data-category="${prod.category}" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.3s ease;">
+              <!-- Card Header -->
+              <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                <div>
+                  <h3 style="margin: 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">${prod.name}</h3>
+                  ${prod.code ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace;">SAP: ${prod.code}</span>` : ''}
+                </div>
+                <span style="font-size: 0.6rem; font-weight: 800; text-transform: uppercase; color: var(--accent-cyan); letter-spacing: 0.5px; background: rgba(0,242,254,0.05); border: 1px solid rgba(0,242,254,0.15); padding: 2px 8px; border-radius: 4px;">
+                  ${prod.category}
+                </span>
+              </div>
+
+              <!-- Card Body: Haves -->
+              <div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: #10b981; letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                  <i class="fa-solid fa-circle-check"></i> MALZEMENİN BULUNDUĞU EKİPLER (${havesList.length})
+                </div>
+                ${havesList.length === 0 ? `
+                  <div style="font-size: 0.7rem; color: var(--text-muted); font-style: italic; padding: 4px 0;">Hiçbir ekipte bulunmuyor.</div>
+                ` : `
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${havesList.map(h => `
+                      <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); font-size: 0.65rem; padding: 2px 8px; font-weight: 700;">
+                        ${h.teamName} <span style="opacity: 0.6; margin-left: 2px;">(${h.qty})</span>
+                      </span>
+                    `).join('')}
+                  </div>
+                `}
+              </div>
+
+              <!-- Card Body: Have-Nots -->
+              <div>
+                <div style="font-size: 0.65rem; font-weight: 800; color: #f87171; letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                  <i class="fa-solid fa-circle-xmark"></i> MALZEMENİN OLMADIĞI EKİPLER (${haveNotsList.length})
+                </div>
+                ${haveNotsList.length === 0 ? `
+                  <div style="font-size: 0.7rem; color: #34d399; font-style: italic; padding: 4px 0;">Tüm ekiplerde mevcut.</div>
+                ` : `
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${haveNotsList.map(team => `
+                      <span class="badge" style="background: rgba(255, 255, 255, 0.02); color: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.05); font-size: 0.65rem; padding: 2px 8px; font-weight: 700;">
+                        ${team}
+                      </span>
+                    `).join('')}
+                  </div>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  };
+
   return `
     <div class="fade-in-up content-area" style="padding: 1rem;">
       <!-- HEADER -->
@@ -426,6 +554,10 @@ export const AssetCustodyPage = async () => {
           style="background: transparent; border: none; color: ${activeTab === 'xray' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'xray' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
           <i class="fa-solid fa-shield-halved" style="margin-right: 6px;"></i> ENVANTER RÖNTGENİ & KARNE
         </button>
+        <button class="tab-btn ${activeTab === 'compare' ? 'active' : ''}" onclick="window.switchCustodyTab('compare')" 
+          style="background: transparent; border: none; color: ${activeTab === 'compare' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'compare' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
+          <i class="fa-solid fa-code-compare" style="margin-right: 6px;"></i> EKİP KARŞILAŞTIRMA
+        </button>
         ` : ''}
       </div>
 
@@ -454,7 +586,7 @@ export const AssetCustodyPage = async () => {
       </div>
 
       <!-- TAB CONTENT -->
-      ${activeTab === 'list' ? renderListTab() : renderXrayTab()}
+      ${activeTab === 'list' ? renderListTab() : (activeTab === 'xray' ? renderXrayTab() : renderCompareTab())}
 
     </div>
 
@@ -829,6 +961,36 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   } catch (err) {
     console.error(err);
     (window as any).showToast?.('HATA', 'Sıfırlama sırasında bir hata oluştu.', 'error');
+  }
+};
+
+(window as any).filterCompareTab = () => {
+  const searchInput = document.getElementById('compare-search') as HTMLInputElement;
+  const searchVal = searchInput?.value.toLocaleLowerCase('tr-TR').trim() || '';
+  const catSelect = document.getElementById('compare-filter-cat') as HTMLSelectElement;
+  const catVal = catSelect?.value || 'all';
+
+  const cards = document.querySelectorAll('.compare-card');
+  let visibleCount = 0;
+
+  cards.forEach((card: any) => {
+    const name = card.getAttribute('data-name') || '';
+    const cat = card.getAttribute('data-category') || '';
+
+    const matchesSearch = !searchVal || name.includes(searchVal);
+    const matchesCat = catVal === 'all' || cat === catVal;
+
+    if (matchesSearch && matchesCat) {
+      card.style.setProperty('display', 'flex', 'important');
+      visibleCount++;
+    } else {
+      card.style.setProperty('display', 'none', 'important');
+    }
+  });
+
+  const emptyDiv = document.getElementById('compare-empty-state');
+  if (emptyDiv) {
+    emptyDiv.style.display = visibleCount === 0 ? 'block' : 'none';
   }
 };
 
