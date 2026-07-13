@@ -172,7 +172,7 @@ export const AssetCustodyPage = async () => {
               <i class="fa-solid fa-toolbox" style="font-size: 2.5rem; opacity: 0.15; margin-bottom: 1rem; display: block;"></i>
               Henüz zimmet kaydı bulunmuyor. Yeni kayıt eklemek için üst kısımdaki butonu kullanın.
             </td></tr>
-            ` : allItems.map(item => renderRow(item, hasCustodyPermission('assignCustody'))).join('')}
+            ` : allItems.map(item => renderRow(item, hasCustodyPermission('assignCustody'), isAdmin)).join('')}
           </tbody>
         </table>
       </div>
@@ -667,7 +667,7 @@ export const AssetCustodyPage = async () => {
   `;
 };
 
-function renderRow(item: CustodyItem, isAdmin: boolean): string {
+function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): string {
   const condLabel: Record<string, string> = { saglam: '✅ Sağlam', arizali: '⚠️ Arızalı', hurda: '❌ Hurda', kayip: '🔍 Kayıp' };
   const catColors: Record<string, string> = { 
     'El Aleti': 'rgba(245,158,11,0.15)', 
@@ -696,6 +696,7 @@ function renderRow(item: CustodyItem, isAdmin: boolean): string {
         </div>
       </td>
       <td><span style="font-weight: 700; color: #fff; font-family: monospace; font-size: 0.8rem;">${item.serialNo || '-'}</span></td>
+      <td style="text-align: center; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; color: #fff;">${item.quantity || 1}</td>
       <td><span class="custody-cat-badge" style="background: ${catColors[item.category] || catColors['Diğer']}; color: var(--text-main);">${item.category}</span></td>
       <td>
         <div class="custody-person">${item.assignedTo || '-'}</div>
@@ -705,9 +706,13 @@ function renderRow(item: CustodyItem, isAdmin: boolean): string {
       <td><span class="custody-cond-badge ${item.condition}">${condLabel[item.condition] || 'Bilinmiyor'}</span></td>
       <td><span class="custody-note-text" title="${item.conditionNote || ''}">${item.conditionNote || '-'}</span></td>
       <td style="white-space: nowrap; text-align: center;">
-        ${isAdmin ? `
+        ${canEdit ? `
           <button class="custody-action-btn" onclick="window.editCustodyItem('${item.id}')" title="Düzenle"><i class="fa-solid fa-pencil"></i></button>
-        ` : '-'}
+        ` : ''}
+        ${isAdminUser ? `
+          <button class="custody-action-btn red" onclick="window.deleteCustodyItem('${item.id}')" title="Sil"><i class="fa-solid fa-trash"></i></button>
+        ` : ''}
+        ${!canEdit && !isAdminUser ? '-' : ''}
       </td>
     </tr>
   `;
