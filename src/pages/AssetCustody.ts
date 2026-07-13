@@ -34,6 +34,9 @@ export const AssetCustodyPage = async () => {
   });
 
   let allowedPersonnelNames = personnelService.getPersonnelList();
+  const excludeCustodyNames = ['fatih zebek', 'furkan yildirim', 'furkan yıldırım'];
+  allowedPersonnelNames = allowedPersonnelNames.filter(name => !excludeCustodyNames.includes(name.toLowerCase().trim()));
+
   if (!isAdmin) {
     const details = personnelService.getPersonnelDetailsList();
     allowedPersonnelNames = allowedPersonnelNames.filter(name => {
@@ -398,11 +401,18 @@ export const AssetCustodyPage = async () => {
           </h1>
           <p style="color: var(--text-muted); font-size: 0.8rem; margin: 4px 0 0 0;">Demirbaş el aletlerinin ve ölçüm cihazlarının seri numaralarıyla takibi ve kullanım analizleri</p>
         </div>
-        ${hasCustodyPermission('assignCustody') ? `
-        <button class="btn-cyber" onclick="window.openCustodyModal()" style="gap: 8px;">
-          <i class="fa-solid fa-plus"></i> YENİ ZİMMET KAYDI
-        </button>
-        ` : ''}
+        <div style="display: flex; gap: 10px; align-items: center;">
+          ${isAdmin ? `
+          <button class="btn-cyber red" onclick="window.resetCustodySystem()" style="gap: 8px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;">
+            <i class="fa-solid fa-rotate-left"></i> VERİLERİ SIFIRLA
+          </button>
+          ` : ''}
+          ${hasCustodyPermission('assignCustody') ? `
+          <button class="btn-cyber" onclick="window.openCustodyModal()" style="gap: 8px;">
+            <i class="fa-solid fa-plus"></i> YENİ ZİMMET KAYDI
+          </button>
+          ` : ''}
+        </div>
       </div>
 
       <!-- TABS -->
@@ -746,6 +756,9 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   const details = personnelService.getPersonnelDetailsList();
   let filtered = personnelService.getPersonnelList();
 
+  const excludeCustodyNames = ['fatih zebek', 'furkan yildirim', 'furkan yıldırım'];
+  filtered = filtered.filter(name => !excludeCustodyNames.includes(name.toLowerCase().trim()));
+
   const user = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
   const isAdminUser = user?.role?.toUpperCase() === 'ADMIN' || user?.role?.toUpperCase() === 'MALZEME_YONETIMI';
   const regionalTeams = dataService.getAllowedTeams();
@@ -786,6 +799,36 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   if (d && d.team) {
     teamSelect.value = d.team;
     (window as any).filterModalPersonnelByTeam();
+  }
+};
+
+(window as any).resetCustodySystem = async () => {
+  const user = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAdminUser = user?.role?.toUpperCase() === 'ADMIN';
+  if (!isAdminUser) {
+    (window as any).showToast?.('HATA', 'Bu işlemi sadece Admin gerçekleştirebilir.', 'error');
+    return;
+  }
+
+  const confirmHistory = confirm("⚠️ DİKKAT: Tüm geçmiş zimmet hareketleri ve karne istatistikleri silinecektir. Bu işlem geri alınamaz!\n\nGeçmiş günlüklerini sıfırlamak istiyor musunuz?");
+  if (!confirmHistory) return;
+
+  try {
+    (window as any).showToast?.('BİLGİ', 'Geçmiş veriler siliniyor...', 'info');
+    await assetCustodyService.clearAllHistory();
+
+    const confirmActive = confirm("Mevcut tüm aktif zimmet kayıtlarını da (şu anki alet zimmet listesini de) tamamen silmek ve sıfırdan başlamak istiyor musunuz?");
+    if (confirmActive) {
+      await assetCustodyService.clearAllCustodyItems();
+    }
+
+    (window as any).showToast?.('BAŞARILI', 'Sıfırlama işlemi başarıyla tamamlandı. Sayfa yenileniyor...', 'success');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  } catch (err) {
+    console.error(err);
+    (window as any).showToast?.('HATA', 'Sıfırlama sırasında bir hata oluştu.', 'error');
   }
 };
 

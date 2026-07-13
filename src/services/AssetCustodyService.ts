@@ -120,6 +120,20 @@ class AssetCustodyService {
       console.error('Zimmet logu yazılamadı:', error);
     }
   }
+
+  async clearAllHistory(): Promise<void> {
+    const q = collection(db, 'asset_custody_history');
+    const snapshot = await getDocs(q);
+    const promises = snapshot.docs.map(d => deleteDoc(doc(db, 'asset_custody_history', d.id)));
+    await Promise.all(promises);
+  }
+
+  async clearAllCustodyItems(): Promise<void> {
+    const q = collection(db, this.collectionName);
+    const snapshot = await getDocs(q);
+    const promises = snapshot.docs.map(d => deleteDoc(doc(db, this.collectionName, d.id)));
+    await Promise.all(promises);
+  }
 }
 
 export const assetCustodyService = new AssetCustodyService();
