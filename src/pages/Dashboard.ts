@@ -141,13 +141,23 @@ export const DashboardPage = async () => {
     return !!dashPerms;
   };
   if (currentUser && currentUser.role === 'TECHNICIAN') {
+    const allowedSites = dataService.getSites().map(s => s.id);
+    tasks = tasks.filter(t => {
+      let tSiteId = t.siteId || '';
+      if (tSiteId && isNaN(Number(tSiteId))) {
+        const siteObj = dataService.getAllSites().find(s => s.name.toLowerCase() === tSiteId.toLowerCase() || s.name.toLowerCase().includes(tSiteId.toLowerCase()));
+        if (siteObj) tSiteId = siteObj.id;
+      }
+      return allowedSites.includes(tSiteId);
+    });
+
     const userTeam = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
     if (userTeam) {
       tasks = tasks.filter(t => {
         const taskPersonnel = String(t.personnel || '').toUpperCase().trim();
         const searchTeam = userTeam.toUpperCase().trim();
         
-        // "SİSTEM" veya boş olanları herkese göster
+        // "SİSTEM" veya boş olanları (kendi bölgelerinde olduğu sürece) göster
         if (!taskPersonnel || taskPersonnel === 'SİSTEM' || taskPersonnel === 'ATANMADI') return true;
         
         const taskNum = taskPersonnel.replace(/[^0-9]/g, '');

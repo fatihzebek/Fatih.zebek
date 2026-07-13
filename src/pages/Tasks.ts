@@ -930,10 +930,15 @@ export const TasksPage = async () => {
       if (isMyTeamTask) return true;
       
       // Diğer durumlar (örneğin SİSTEM veya boş olanlar) için allowedSites kontrolü uygula
-      const allowedSites = currentUser?.allowedSites || [];
-      if (allowedSites.length > 0 && !allowedSites.includes(t.siteId)) return false;
+      const allowedSites = dataService.getSites().map(s => s.id);
+      let tSiteId = t.siteId || '';
+      if (tSiteId && isNaN(Number(tSiteId))) {
+        const siteObj = dataService.getAllSites().find(s => s.name.toLowerCase() === tSiteId.toLowerCase() || s.name.toLowerCase().includes(tSiteId.toLowerCase()));
+        if (siteObj) tSiteId = siteObj.id;
+      }
+      if (!allowedSites.includes(tSiteId)) return false;
 
-      // "SİSTEM" veya boş olanları herkese göster
+      // "SİSTEM" veya boş olanları (kendi bölgesinde olduğu sürece) göster
       if (taskPersonnel === 'SİSTEM' || !taskPersonnel || taskPersonnel === 'ATANMADI') return true;
       
       if (!userTeam && managedTeams.length === 0) return true;
