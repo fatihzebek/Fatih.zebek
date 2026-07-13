@@ -520,7 +520,7 @@ export const AssetCustodyPage = async () => {
               <select id="custody-location" class="cyber-input" onchange="window.toggleCustodyWarehouse()" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
                 <option value="person">👤 Kişide</option>
                 <option value="team">👥 Ekipte</option>
-                ${hasCustodyPermission('returnCustody') ? '<option value="depo">🏭 Depoda</option>' : ''}
+                <option value="depo">🏭 Depoda</option>
               </select>
             </div>
             <div id="custody-warehouse-group" style="flex: 1; min-width: 130px; display: none;">
