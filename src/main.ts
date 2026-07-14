@@ -1099,7 +1099,7 @@ const getContent = async () => {
       return await PersonnelManagementPage();
     }
     case 'warehouses': {
-      const { NewWarehousePage } = await import('./pages/NewWarehouses');
+      const { NewWarehousePage } = await import('./pages/NewWarehouses/index');
       return await NewWarehousePage(state.selectedWarehouseId);
     }
     case 'workshop': {
