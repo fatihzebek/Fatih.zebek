@@ -1051,7 +1051,7 @@ export const ReportArchivePage = async (siteId?: string) => {
     const currentUser = (window as any).currentUser;
     const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
     const perms = currentUser?.allowedTabs?.['reports-archive'] || {};
-    if (!isAdmin && !perms.editReport) {
+    if (!isAdmin && !perms.returnReport) {
         alert("Bu işlemi yapmak için yetkiniz bulunmamaktadır.");
         return;
     }

@@ -694,6 +694,13 @@ const resetTelemetryCards = () => {
     const team = (document.getElementById('nt-team') as HTMLSelectElement).value;
     const faultCode = (document.getElementById('nt-fault-code-value') as HTMLInputElement).value;
     
+    if (!team) {
+      alert("Lütfen görev için atanacak bir ekip seçiniz.");
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      return;
+    }
+
     if (taskType === 'Türbin Arıza Formu' && !faultCode) {
       alert('Lütfen arama sonuçlarından geçerli bir Arıza Kodu seçiniz. (Arama kutusuna yazdıktan sonra çıkan listeden tıklamalısınız)');
       btn.disabled = false;

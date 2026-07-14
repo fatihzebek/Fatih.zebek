@@ -8,7 +8,8 @@
     "dev:local2": "vite --mode local2",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "advise": "node scripts/code_advisor.js"
+    "advise": "node scripts/code_advisor.js",
+    "sync-sap": "node scripts/sync_sap.js"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

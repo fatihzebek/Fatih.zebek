@@ -23,7 +23,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
   const taskPerms = currentUser?.allowedTabs?.tasks || {};
   const hasDeleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).deleteTask);
   const hasCompleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).completeTask);
-  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).transferTask);
+  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && (!!(taskPerms as any).transferTask || !!(taskPerms as any).delegateTask));
   if (tasks.length === 0) {
     return `
       <div style="padding: 4rem; text-align: center; color: var(--text-muted);">
@@ -395,6 +395,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             letter-spacing: 0.5px;
             position: relative;
             overflow: hidden;
+            flex-shrink: 0 !important;
           }
           .action-btn-main::after {
             content: '';
@@ -473,6 +474,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             cursor: pointer;
             box-sizing: border-box !important;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            flex-shrink: 0 !important;
           }
           .action-btn-delete:hover {
             background: rgba(255, 82, 82, 0.14) !important;
@@ -554,17 +556,19 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
 
         <div class="glass-panel tasks-table-panel">
           <div style="overflow-x: auto;">
-            <table>
+            <table style="table-layout: fixed; width: 100%;">
               <thead>
                 <tr>
-                  <th style="width: 140px;"><i class="fa-regular fa-calendar"></i> TARİH</th>
-                  <th style="width: 160px;"><i class="fa-solid fa-wind"></i> SAHA / TÜRBİN</th>
-                  <th style="width: 120px;"><i class="fa-solid fa-users"></i> EKİP</th>
-                  <th><i class="fa-solid fa-wrench"></i> GÖREV TÜRÜ</th>
-                  <th style="width: 180px;"><i class="fa-solid fa-signal"></i> DURUM</th>
-                  <th style="width: 140px; text-align: right;"><i class="fa-solid fa-bolt"></i> AKSİYON</th>
+                  <th style="width: 130px; text-align: left;">TARİH</th>
+                  <th style="width: 200px; text-align: left;">SAHA / TÜRBİN</th>
+                  <th style="width: 110px; text-align: left;">EKİP</th>
+                  <th style="text-align: left;">GÖREV TÜRÜ</th>
+                  <th style="width: 210px; text-align: left;">DURUM</th>
+                  <th style="width: 200px; text-align: right; padding-right: 18px !important;">AKSİYON</th>
                 </tr>
-                          ${filteredTasks.map(task => {
+              </thead>
+              <tbody>
+                ${filteredTasks.map(task => {
                   const isReturned = (task as any).isReturnedReport;
                   const isHoldWeather = task.status === 'HOLD_WEATHER';
                   const isFault = (task.rawFaultCode && task.rawFaultCode !== '---');
@@ -599,12 +603,12 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </div>
                     </td>
                     <td>
-                       <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
-                         <span style="font-weight: 700; color: var(--text-main); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.3px;">
-                           ${dataService.getAllSites().find(s => s.id === task.siteId)?.name || task.siteId}
-                         </span>
-                         <span class="turbine-id-badge" style="margin: 0; font-size: 0.72rem; padding: 1px 6px;">${task.turbineId}</span>
-                       </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
+                          <span style="font-weight: 700; color: var(--text-main); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${dataService.getAllSites().find(s => s.id === task.siteId)?.name || task.siteId}
+                          </span>
+                          <span class="turbine-id-badge" style="margin: 0; font-size: 0.72rem; padding: 1px 6px; flex-shrink: 0;">${task.turbineId}</span>
+                        </div>
                     </td>
                     <td>
                       <span class="team-badge">
@@ -650,8 +654,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                                 ? '<span class="status-dot gray"></span> TAMAMLANDI' 
                                 : `<span class="status-dot orange"></span> ${task.status.toUpperCase()}`))}
                       </span>
-                    </td>
-                    <td>
+                    <td style="text-align: right; padding-right: 18px !important;">
                        <div class="action-btn-container">
                          ${task.status === 'Tamamlandı' ? `
                            <button class="action-btn-main detail-btn" onclick="alert('Bu görev tamamlanmıştır.')"><i class="fa-solid fa-eye" style="margin-right: 5px; font-size: 0.65rem;"></i> DETAY</button>
@@ -1021,7 +1024,14 @@ export const TasksPage = async () => {
                 isReturnedReport: true,
                 originalReportNo: r.reportNo || '',
                 type: r.type || 'ARIZA',
-                faultDesc: fDesc
+                faultDesc: fDesc,
+                materials: r.materials || [],
+                workSessions: r.workSessions || [],
+                notes: r.notes || '',
+                matFormNo: r.matFormNo || '',
+                checklist: r.checklist || [],
+                imageUrls: r.imageUrls || [],
+                photos: r.imageUrls || []
               });
             } catch (err: any) {
               console.error("Single report map error:", err, r);
@@ -1266,7 +1276,7 @@ export const TasksPage = async () => {
     if (task) {
       if (task.isReturnedReport) {
         // İade edilen raporlar için İSG formunu atla, direkt düzenlemeye geç
-        (window as any).navigate('form-ariza', { ...task, status: 'Geri Gönderildi' });
+        (window as any).navigate('form-ariza', { ...task, status: 'Geri Gönderildi', isEditMode: true });
         return;
       }
 
@@ -1295,7 +1305,7 @@ export const TasksPage = async () => {
   const currentUser = (window as any).currentUser;
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
   const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).transferTask);
+  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && (!!(taskPerms as any).transferTask || !!(taskPerms as any).delegateTask));
 
   if (!hasTransferTaskPerm) {
     alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Transfer Etme yetkisi)");

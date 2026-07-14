@@ -126,6 +126,16 @@ async function checkSystemVersion() {
     if (localVersion !== serverVersion) {
       showUpdateOverlay();
       localStorage.setItem('app_version', serverVersion);
+      
+      // Force Service Worker to update and download new bundle
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          if (reg) {
+            reg.update().catch(() => {});
+          }
+        }).catch(() => {});
+      }
+      
       setTimeout(() => {
         window.location.reload();
       }, 2500);
@@ -376,7 +386,7 @@ const Sidebar = () => {
           </li>
           <ul id="regions-submenu" class="sub-menu ${state.currentPage === 'turbines' ? '' : 'hidden'}">
             ${filteredSites.map(site => `
-              <li class="sub-item ${state.selectedSiteId === site.id ? 'active' : ''}" onclick="window.selectSiteAndNavigate('${site.id}')">
+              <li class="sub-item ${state.currentPage === 'turbines' && state.selectedSiteId === site.id ? 'active' : ''}" onclick="window.selectSiteAndNavigate('${site.id}')">
                 <i class="fa-solid fa-charging-station" style="font-size: 0.6rem; opacity: 0.5;"></i> ${site.name}
               </li>
             `).join('')}
@@ -389,7 +399,7 @@ const Sidebar = () => {
           </li>
           <ul id="warehouses-submenu" class="sub-menu ${state.currentPage === 'warehouses' ? '' : 'hidden'}">
             ${filteredWarehouses.map(wh => `
-              <li class="sub-item ${state.selectedWarehouseId === wh.id ? 'active' : ''}" 
+              <li class="sub-item ${state.currentPage === 'warehouses' && state.selectedWarehouseId === wh.id ? 'active' : ''}" 
                   ondragover="if(window.warehouseSidebarDragOver) window.warehouseSidebarDragOver(event)" 
                   ondragleave="if(window.warehouseSidebarDragLeave) window.warehouseSidebarDragLeave(event)" 
                   ondrop="if(window.warehouseSidebarDrop) window.warehouseSidebarDrop(event, '${wh.id}')"
@@ -426,7 +436,7 @@ const Sidebar = () => {
           </li>
           <ul id="reports-archive-submenu" class="sub-menu ${state.currentPage === 'reports-archive' ? '' : 'hidden'}">
             ${filteredSites.map(site => `
-              <li class="sub-item ${state.selectedReportSiteId === site.id ? 'active' : ''}" onclick="window.selectReportSiteAndNavigate('${site.id}')">
+              <li class="sub-item ${state.currentPage === 'reports-archive' && state.selectedReportSiteId === site.id ? 'active' : ''}" onclick="window.selectReportSiteAndNavigate('${site.id}')">
                 <i class="fa-solid fa-file-pdf" style="font-size: 0.6rem; opacity: 0.5;"></i> Rapor_${(site.name || 'Bilinmeyen').replace('Alize ', '').replace('Anemon ', '')}
               </li>
             `).join('')}
@@ -767,7 +777,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           team: autoTeam.startsWith('Team') ? autoTeam : '',
           allowedTabs: {
             dashboard: true,
-            tasks: { access: true, createTask: false, deleteTask: false, completeTask: true, transferTask: false },
+            tasks: { access: true, createTask: false, deleteTask: false, completeTask: true, transferTask: false, delegateTask: false },
             'bearing-analysis': true
           },
           allowedSites: [],
@@ -1346,8 +1356,8 @@ const getContent = async () => {
   state.selectedWarehouseId = siteId;
   if (tabName) {
     state.warehouseTab = tabName;
-  } else if (isSameWarehouse && (window as any).currentWarehouseTab) {
-    state.warehouseTab = (window as any).currentWarehouseTab;
+  } else if (state.warehouseTab) {
+    // Keep current active tab when switching warehouses
   } else {
     state.warehouseTab = 'inventory';
   }

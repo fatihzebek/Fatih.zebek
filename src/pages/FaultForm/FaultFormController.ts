@@ -2111,14 +2111,6 @@ export class FaultFormController {
                                         materialName: matDesc
                                     }, 'DEFECT', undefined, serialNo);
                                 }
-                                if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
-                                    await warehouseService.updateStockBySap(usedWarehouseId, sapNo, diffQty, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Rapor Güncelleme ile Sökülen Arızalı Parça Düzeltmesi ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: matDesc
-                                    }, 'DEFECT', undefined, serialNo);
-                                }
                             }
                         }
                     }
@@ -2197,14 +2189,6 @@ export class FaultFormController {
                                 
                                 if (siteWarehouseId) {
                                     await warehouseService.updateStockBySap(siteWarehouseId, mat.sapNo, mat.defectCount, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: mat.description
-                                    }, 'DEFECT', undefined, mat.serialNo);
-                                }
-                                if (usedWarehouseId && usedWarehouseId.startsWith('team_') && usedWarehouseId !== siteWarehouseId) {
-                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
                                         user: currentUser?.email || 'Sistem',
                                         reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
                                         reportNo: reportData.reportNo,
@@ -2422,12 +2406,13 @@ export class FaultFormController {
         }
 
         // Photos
-        if (isEditMode && initialData.photos) {
+        if (isEditMode && (initialData.photos || initialData.imageUrls)) {
             const container = document.getElementById('image-previews');
             if (container) {
                 const noMsg = document.getElementById('no-photo-msg');
                 if (noMsg) noMsg.style.display = 'none';
-                initialData.photos.forEach((url: string) => {
+                const photoList = initialData.photos || initialData.imageUrls || [];
+                photoList.forEach((url: string) => {
                     const wrapper = document.createElement('div');
                     wrapper.innerHTML = `<img src="${url}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">`;
                     container.appendChild(wrapper);

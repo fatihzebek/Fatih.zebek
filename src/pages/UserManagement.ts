@@ -1507,15 +1507,22 @@ const granularOptions = {
   'asset-custody': [
     { id: 'assignCustody', label: 'Yeni Zimmet Atama' },
     { id: 'returnCustody', label: 'Zimmet Geri Alma / İade' },
-    { id: 'viewCustodyXray', label: 'Envanter Röntgeni & Karne Görünümü' }
+    { id: 'viewCustodyXray', label: 'Envanter Röntgeni & Karne Görünümü' },
+    { id: 'importExcel', label: 'Excel ile Zimmet Yükleme Yetkisi' }
   ],
   'image-pool': [
     { id: 'uploadImage', label: 'Yeni Resim Yükleme' },
     { id: 'deleteImage', label: 'Resim Silme' }
   ],
   'turbines': [],
-  'warehouses': [],
-  'team_warehouses': []
+  'warehouses': [
+    { id: 'deleteItem', label: 'Depodan Malzeme Silme Yetkisi' },
+    { id: 'manageStock', label: 'Depo Yönetimi (Tamir/Hurda/Geri Alım/Düzeltme)' }
+  ],
+  'team_warehouses': [
+    { id: 'deleteItem', label: 'Depodan Malzeme Silme Yetkisi' },
+    { id: 'manageStock', label: 'Depo Yönetimi (Tamir/Hurda/Geri Alım/Düzeltme)' }
+  ]
 };
 
 (window as any).togglePermissionAccordion = (_tabId: string, header: HTMLElement) => {

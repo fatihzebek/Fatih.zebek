@@ -3,14 +3,16 @@ import type { CustodyItem, CustodyHistoryEntry } from '../services/AssetCustodyS
 import { dataService } from '../services/DataService';
 import { personnelService } from '../services/PersonnelService';
 import { fileService } from '../services/FileService';
-
+import * as XLSX from 'xlsx';
 let allItems: CustodyItem[] = [];
 let globalHistory: CustodyHistoryEntry[] = [];
+let cachedRawList: CustodyItem[] | null = null;
 let activeTab = 'list'; // 'list' or 'xray'
 let filterTeam = 'all';
 let filterPerson = 'all';
 let filterCondition = 'all';
 let filterLocation = 'all';
+let filterWarehouse = 'all';
 let searchQuery = '';
 
 export const AssetCustodyPage = async () => {
@@ -25,6 +27,7 @@ export const AssetCustodyPage = async () => {
     return !!custTab[permId];
   };
 
+  const warehouses = dataService.getWarehouses();
   const allowedTeams = dataService.getAllowedTeams();
   const allowedSiteIds = dataService.getSites().map(s => s.id);
   const allowedWarehouses = dataService.getWarehouses().filter(w => {
@@ -52,22 +55,31 @@ export const AssetCustodyPage = async () => {
     });
   }
   const showXray = hasCustodyPermission('viewCustodyXray');
-  if (!showXray) {
+  if (!showXray && activeTab === 'xray') {
     activeTab = 'list';
   }
 
-  // Load and filter out Diğer
-  const rawList = (await assetCustodyService.getAll()).filter(item => item.category !== 'Diğer');
-  
+  let rawList: CustodyItem[];
+  if (cachedRawList) {
+    rawList = cachedRawList;
+  } else {
+    rawList = (await assetCustodyService.getAll()).filter(item => item.category !== 'Diğer');
+    cachedRawList = rawList;
+  }
+
   // Filter list by allowed regional teams for non-admins
   if (!isAdmin) {
-    allItems = rawList.filter(item => allowedTeams.includes(item.assignedTeam));
+    allItems = rawList.filter(item => item.location === 'depo' || allowedTeams.includes(item.assignedTeam));
   } else {
     allItems = rawList;
   }
 
   try {
-    globalHistory = await assetCustodyService.getGlobalHistory();
+    if (activeTab === 'xray') {
+      globalHistory = await assetCustodyService.getGlobalHistory();
+    } else {
+      globalHistory = [];
+    }
   } catch (err) {
     globalHistory = [];
   }
@@ -170,6 +182,10 @@ export const AssetCustodyPage = async () => {
         <option value="person" ${filterLocation === 'person' ? 'selected' : ''}>👤 Kişide</option>
         <option value="team" ${filterLocation === 'team' ? 'selected' : ''}>👥 Ekipte</option>
         <option value="depo" ${filterLocation === 'depo' ? 'selected' : ''}>🏭 Depoda</option>
+      </select>
+      <select id="custody-filter-warehouse" onchange="window.filterCustodyItems()" style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; outline: none; display: ${filterLocation === 'depo' ? 'inline-block' : 'none'};">
+        <option value="all" ${filterWarehouse === 'all' ? 'selected' : ''}>Tüm Depolar</option>
+        ${warehouses.map(w => `<option value="${w.id}" ${filterWarehouse === w.id ? 'selected' : ''}>${w.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim()}</option>`).join('')}
       </select>
     </div>
 
@@ -391,24 +407,15 @@ export const AssetCustodyPage = async () => {
     `;
   };
 
-  const renderCompareTab = () => {
-    // Get unique list of materials by name
-    const uniqueProducts: Record<string, { name: string, category: string, code?: string }> = {};
-    allItems.forEach(item => {
-      const key = item.productName.trim().toLowerCase();
-      if (!uniqueProducts[key]) {
-        uniqueProducts[key] = {
-          name: item.productName,
-          category: item.category,
-          code: item.productCode
-        };
-      }
-    });
-
-    const productKeys = Object.keys(uniqueProducts);
-
-    // Sort products by name
-    productKeys.sort((a, b) => uniqueProducts[a].name.localeCompare(uniqueProducts[b].name, 'tr-TR'));
+  const renderCompareTab = (mode: 'team' | 'person' | 'warehouse') => {
+    let entities: any[] = [];
+    if (mode === 'team') {
+      entities = [...allowedTeams].sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    } else if (mode === 'person') {
+      entities = [...allowedPersonnelNames].sort((a, b) => a.localeCompare(b, 'tr-TR'));
+    } else {
+      entities = [...allowedWarehouses].sort((a, b) => a.name.localeCompare(b.name, 'tr-TR'));
+    }
 
     return `
       <!-- SEARCH & FILTER STRIP -->
@@ -437,80 +444,108 @@ export const AssetCustodyPage = async () => {
 
       <!-- CARDS GRID -->
       <div id="compare-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.5rem;">
-        ${productKeys.map(key => {
-          const prod = uniqueProducts[key];
-          
-          // Find which teams have this product, and their counts
-          const havingTeams: Record<string, number> = {};
-          allItems.forEach(item => {
-            if (item.productName.trim().toLowerCase() === key) {
-              if (item.location === 'team' && item.assignedTeam) {
-                havingTeams[item.assignedTeam] = (havingTeams[item.assignedTeam] || 0) + (item.quantity || 1);
-              } else if (item.location === 'person' && item.assignedTeam) {
-                havingTeams[item.assignedTeam] = (havingTeams[item.assignedTeam] || 0) + (item.quantity || 1);
-              }
-            }
-          });
+        ${entities.map(entity => {
+          const entityId = mode === 'warehouse' ? (entity as any).id : entity;
+          const entityName = mode === 'warehouse' ? (entity as any).name : entity;
 
-          // Split into Haves and Have-nots
-          const havesList: { teamName: string, qty: number }[] = [];
-          const haveNotsList: string[] = [];
-
-          allowedTeams.forEach(team => {
-            if (havingTeams[team]) {
-              havesList.push({ teamName: team, qty: havingTeams[team] });
+          const matchedItems = allItems.filter(item => {
+            if (mode === 'team') {
+              return (item.location === 'team' || item.location === 'person') && item.assignedTeam === entityId;
+            } else if (mode === 'person') {
+              return item.location === 'person' && item.assignedTo === entityId;
             } else {
-              haveNotsList.push(team);
+              return item.location === 'depo' && item.warehouseId === entityId;
             }
           });
+
+          const grouped: Record<string, { name: string, code?: string, category: string, qty: number }> = {};
+          matchedItems.forEach(item => {
+            const key = item.productName.trim().toLowerCase();
+            if (!grouped[key]) {
+              grouped[key] = {
+                name: item.productName,
+                code: item.productCode,
+                category: item.category,
+                qty: 0
+              };
+            }
+            grouped[key].qty += item.quantity || 1;
+          });
+
+          const uniqueItemsList = Object.values(grouped).sort((a, b) => a.name.localeCompare(b.name, 'tr-TR'));
+          const totalDistinct = uniqueItemsList.length;
+          const totalQty = uniqueItemsList.reduce((sum, it) => sum + it.qty, 0);
+
+          let iconClass = 'fa-solid fa-users-gear';
+          let iconColor = 'var(--accent-cyan)';
+          if (mode === 'person') {
+            iconClass = 'fa-solid fa-user-tie';
+            iconColor = '#a78bfa';
+          } else if (mode === 'warehouse') {
+            iconClass = 'fa-solid fa-warehouse';
+            iconColor = '#f59e0b';
+          }
 
           return `
-            <div class="glass-panel compare-card" data-name="${prod.name.toLowerCase()}" data-category="${prod.category}" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.3s ease;">
+            <div class="glass-panel compare-card" data-entity-id="${entityId.toLowerCase()}" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; border: 1px solid rgba(255, 255, 255, 0.05); transition: all 0.3s ease; height: 380px; box-sizing: border-box;">
               <!-- Card Header -->
-              <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-                <div>
-                  <h3 style="margin: 0; font-family: 'Rajdhani'; font-size: 1.1rem; color: #fff; font-weight: 700;">${prod.name}</h3>
-                  ${prod.code ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace;">SAP: ${prod.code}</span>` : ''}
+              <div style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                  <i class="${iconClass}" style="color: ${iconColor}; font-size: 1.1rem; flex-shrink: 0;"></i>
+                  <h3 style="margin: 0; font-family: 'Rajdhani'; font-size: 1.15rem; color: #fff; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${entityName}">${entityName}</h3>
                 </div>
-                <span style="font-size: 0.6rem; font-weight: 800; text-transform: uppercase; color: var(--accent-cyan); letter-spacing: 0.5px; background: rgba(0,242,254,0.05); border: 1px solid rgba(0,242,254,0.15); padding: 2px 8px; border-radius: 4px;">
-                  ${prod.category}
+                <span style="font-size: 0.65rem; font-weight: 800; text-transform: uppercase; color: var(--accent-cyan); letter-spacing: 0.5px; background: rgba(0,242,254,0.05); border: 1px solid rgba(0,242,254,0.15); padding: 3px 8px; border-radius: 20px;">
+                  ${totalDistinct} Kalem / ${totalQty} Adet
                 </span>
               </div>
 
-              <!-- Card Body: Haves -->
-              <div>
-                <div style="font-size: 0.65rem; font-weight: 800; color: #10b981; letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-                  <i class="fa-solid fa-circle-check"></i> MALZEMENİN BULUNDUĞU EKİPLER (${havesList.length})
+              <!-- Card Body: Materials List -->
+              <div class="compare-items-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+                ${uniqueItemsList.map(it => {
+                  const catIcons: Record<string, string> = {
+                    'El Aleti': '🔧',
+                    'Ölçü Aleti': '📏',
+                    'Elektrik Aleti': '⚡',
+                    'Güvenlik Ekipmanı': '🦺',
+                    'Hidrolik Ekipman': '🔴',
+                    'Diğer': '📦'
+                  };
+                  const icon = catIcons[it.category] || '📦';
+                  return `
+                    <div class="compare-item" data-name="${it.name.toLowerCase()}" data-category="${it.category}" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.04); border-radius: 8px; padding: 8px 10px; transition: all 0.2s;">
+                      <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; margin-right: 8px;">
+                        <div style="font-size: 0.8rem; font-weight: 600; color: #E2E8F0; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${it.name}">
+                          <span style="font-size: 0.85rem; flex-shrink: 0;">${icon}</span>
+                          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${it.name}</span>
+                        </div>
+                        ${it.code ? `<span style="font-size: 0.6rem; color: var(--text-muted); font-family: monospace; padding-left: 20px;">SAP: ${it.code}</span>` : ''}
+                      </div>
+                      <div style="font-size: 0.75rem; font-weight: 800; color: var(--accent-cyan); background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); padding: 2px 6px; border-radius: 6px; font-family: 'Rajdhani'; flex-shrink: 0;">
+                        ${it.qty} Ad.
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+                <div class="compare-empty-message" style="display: ${totalDistinct === 0 ? 'block' : 'none'}; font-size: 0.75rem; color: var(--text-muted); font-style: italic; text-align: center; padding: 2.5rem 0;">
+                  Hiçbir zimmetli malzeme bulunmuyor.
                 </div>
-                ${havesList.length === 0 ? `
-                  <div style="font-size: 0.7rem; color: var(--text-muted); font-style: italic; padding: 4px 0;">Hiçbir ekipte bulunmuyor.</div>
-                ` : `
-                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                    ${havesList.map(h => `
-                      <span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); font-size: 0.65rem; padding: 2px 8px; font-weight: 700;">
-                        ${h.teamName} <span style="opacity: 0.6; margin-left: 2px;">(${h.qty})</span>
-                      </span>
-                    `).join('')}
-                  </div>
-                `}
               </div>
 
-              <!-- Card Body: Have-Nots -->
-              <div>
-                <div style="font-size: 0.65rem; font-weight: 800; color: #f87171; letter-spacing: 0.5px; margin-bottom: 6px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-                  <i class="fa-solid fa-circle-xmark"></i> MALZEMENİN OLMADIĞI EKİPLER (${haveNotsList.length})
-                </div>
-                ${haveNotsList.length === 0 ? `
-                  <div style="font-size: 0.7rem; color: #34d399; font-style: italic; padding: 4px 0;">Tüm ekiplerde mevcut.</div>
-                ` : `
-                  <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                    ${haveNotsList.map(team => `
-                      <span class="badge" style="background: rgba(255, 255, 255, 0.02); color: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.05); font-size: 0.65rem; padding: 2px 8px; font-weight: 700;">
-                        ${team}
-                      </span>
-                    `).join('')}
-                  </div>
-                `}
+              <!-- Card Footer: Excel Actions -->
+              <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.6rem; display: flex; justify-content: flex-end; gap: 8px;">
+                <button class="cyber-btn-small" onclick="window.clearCustodyListForCard('${mode}', '${entityId}', '${entityName.replace(/'/g, "\\'")}', ${totalQty})" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s; margin-right: auto;" onmouseover="this.style.background='rgba(239, 68, 68, 0.15)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'" title="Tüm Zimmetleri Sil">
+                  <i class="fa-solid fa-trash-can"></i> LİSTEYİ SİL
+                </button>
+
+                <button class="cyber-btn-small" onclick="window.downloadCustodyTemplateForCard('${mode}', '${entityId}', '${entityName.replace(/'/g, "\\'")}')" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='rgba(59, 130, 246, 0.15)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.08)'" title="Zimmetleri Excel Olarak İndir">
+                  <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
+                </button>
+                
+                <input type="file" id="excel-import-${entityId}" style="display: none;" accept=".xlsx, .xls" onchange="window.importCustodyFromExcelForCard(event, '${mode}', '${entityId}', '${entityName.replace(/'/g, "\\'")}')">
+                
+                <button class="cyber-btn-small" onclick="document.getElementById('excel-import-${entityId}').click()" style="background: rgba(167, 139, 250, 0.08); border: 1px solid rgba(167, 139, 250, 0.2); color: #c084fc; padding: 4px 10px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='rgba(167, 139, 250, 0.15)'" onmouseout="this.style.background='rgba(167, 139, 250, 0.08)'" title="Excel'den Bu Karta Zimmet Yükle">
+                  <i class="fa-solid fa-file-import"></i> EXCEL YÜKLE
+                </button>
               </div>
             </div>
           `;
@@ -530,16 +565,26 @@ export const AssetCustodyPage = async () => {
           <p style="color: var(--text-muted); font-size: 0.8rem; margin: 4px 0 0 0;">Demirbaş el aletlerinin ve ölçüm cihazlarının seri numaralarıyla takibi ve kullanım analizleri</p>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
-          ${isAdmin ? `
-          <button class="btn-cyber red" onclick="window.resetCustodySystem()" style="gap: 8px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171;">
-            <i class="fa-solid fa-rotate-left"></i> VERİLERİ SIFIRLA
-          </button>
-          ` : ''}
+
           ${hasCustodyPermission('assignCustody') ? `
           <button class="btn-cyber" onclick="window.openCustodyModal()" style="gap: 8px;">
             <i class="fa-solid fa-plus"></i> YENİ ZİMMET KAYDI
           </button>
           ` : ''}
+          ${(() => {
+            const canImportExcel = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                                   currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' || 
+                                   hasCustodyPermission('importExcel');
+            return canImportExcel ? `
+              <button class="btn-cyber" onclick="document.getElementById('custody-excel-import-file').click()" style="gap: 8px; background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.4); color: #c084fc;">
+                <i class="fa-solid fa-file-excel"></i> EXCEL YÜKLE
+              </button>
+              <input type="file" id="custody-excel-import-file" style="display: none;" accept=".xlsx, .xls" onchange="window.importCustodyFromExcel(event)">
+              <button class="btn-cyber" onclick="window.downloadCustodyTemplate()" style="gap: 8px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa;" title="Yükleme Şablonu İndir">
+                <i class="fa-solid fa-download"></i> ŞABLON İNDİR
+              </button>
+            ` : '';
+          })()}
         </div>
       </div>
 
@@ -554,11 +599,19 @@ export const AssetCustodyPage = async () => {
           style="background: transparent; border: none; color: ${activeTab === 'xray' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'xray' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
           <i class="fa-solid fa-shield-halved" style="margin-right: 6px;"></i> ENVANTER RÖNTGENİ & KARNE
         </button>
-        <button class="tab-btn ${activeTab === 'compare' ? 'active' : ''}" onclick="window.switchCustodyTab('compare')" 
-          style="background: transparent; border: none; color: ${activeTab === 'compare' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'compare' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
-          <i class="fa-solid fa-code-compare" style="margin-right: 6px;"></i> EKİP KARŞILAŞTIRMA
-        </button>
         ` : ''}
+        <button class="tab-btn ${activeTab === 'compare-team' ? 'active' : ''}" onclick="window.switchCustodyTab('compare-team')" 
+          style="background: transparent; border: none; color: ${activeTab === 'compare-team' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'compare-team' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
+          <i class="fa-solid fa-users-gear" style="margin-right: 6px;"></i> EKİP KARŞILAŞTIRMA
+        </button>
+        <button class="tab-btn ${activeTab === 'compare-person' ? 'active' : ''}" onclick="window.switchCustodyTab('compare-person')" 
+          style="background: transparent; border: none; color: ${activeTab === 'compare-person' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'compare-person' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
+          <i class="fa-solid fa-user-tie" style="margin-right: 6px;"></i> KİŞİ KARŞILAŞTIRMA
+        </button>
+        <button class="tab-btn ${activeTab === 'compare-warehouse' ? 'active' : ''}" onclick="window.switchCustodyTab('compare-warehouse')" 
+          style="background: transparent; border: none; color: ${activeTab === 'compare-warehouse' ? 'var(--accent-cyan)' : 'var(--text-muted)'}; font-weight: 800; font-family: 'Rajdhani'; font-size: 0.95rem; padding: 12px 20px; cursor: pointer; border-bottom: 2px solid ${activeTab === 'compare-warehouse' ? 'var(--accent-cyan)' : 'transparent'}; letter-spacing: 1px;">
+          <i class="fa-solid fa-warehouse" style="margin-right: 6px;"></i> DEPO KARŞILAŞTIRMA
+        </button>
       </div>
 
       <!-- STATS STRIP -->
@@ -586,7 +639,22 @@ export const AssetCustodyPage = async () => {
       </div>
 
       <!-- TAB CONTENT -->
-      ${activeTab === 'list' ? renderListTab() : (activeTab === 'xray' ? renderXrayTab() : renderCompareTab())}
+      ${activeTab === 'list' ? renderListTab() : (activeTab === 'xray' ? renderXrayTab() : (activeTab === 'compare-warehouse' ? renderCompareTab('warehouse') : (activeTab === 'compare-person' ? renderCompareTab('person') : renderCompareTab('team'))))}
+
+      <!-- UPLOAD PROGRESS OVERLAY -->
+      <div id="custody-upload-progress-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 1.5rem;">
+        <div class="glass-panel" style="width: 400px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); text-align: center; border-radius: 12px;">
+          <i class="fa-solid fa-file-excel animate-pulse" style="font-size: 3rem; color: #a78bfa; margin-bottom: 1.5rem; display: block;"></i>
+          <h3 style="font-family: 'Rajdhani'; font-weight: 800; font-size: 1.3rem; margin: 0 0 0.5rem 0; color: #fff;">Zimmetler Yükleniyor</h3>
+          <p id="upload-progress-text" style="color: var(--text-muted); font-size: 0.8rem; margin: 0 0 1.5rem 0;">Veriler okunuyor...</p>
+          
+          <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 1rem;">
+            <div id="upload-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--accent-cyan), #a78bfa); transition: width 0.1s ease-out; border-radius: 4px;"></div>
+          </div>
+          
+          <span id="upload-progress-percentage" style="font-family: monospace; font-size: 0.9rem; font-weight: bold; color: var(--accent-cyan);">0%</span>
+        </div>
+      </div>
 
     </div>
 
@@ -785,6 +853,11 @@ export const AssetCustodyPage = async () => {
     </div>
 
     <style>
+      .compare-items-list::-webkit-scrollbar { width: 5px; }
+      .compare-items-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.01); }
+      .compare-items-list::-webkit-scrollbar-thumb { background: rgba(0, 242, 254, 0.15); border-radius: 4px; }
+      .compare-items-list::-webkit-scrollbar-thumb:hover { background: rgba(0, 242, 254, 0.3); }
+
       .tab-btn { transition: all 0.2s; }
       .tab-btn:hover { color: var(--accent-cyan) !important; background: rgba(0,242,254,0.02) !important; }
       .tab-btn.active { text-shadow: 0 0 10px rgba(0,242,254,0.5); }
@@ -842,8 +915,12 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     'Diğer': 'rgba(255,255,255,0.05)' 
   };
   
+  const warehouses = dataService.getWarehouses();
+  const wh = warehouses.find(w => w.id === item.warehouseId);
+  const warehouseName = wh ? wh.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim() : 'Depoda';
+
   return `
-    <tr data-team="${item.assignedTeam}" data-person="${item.assignedTo || ''}" data-condition="${item.condition}" data-location="${item.location}" data-search="${(item.productCode + ' ' + item.productName + ' ' + (item.serialNo || '') + ' ' + item.assignedTo + ' ' + item.description).toLowerCase()}">
+    <tr data-team="${item.assignedTeam}" data-person="${item.assignedTo || ''}" data-condition="${item.condition}" data-location="${item.location}" data-warehouse-id="${item.warehouseId || ''}" data-search="${(item.productCode + ' ' + item.productName + ' ' + (item.serialNo || '') + ' ' + item.assignedTo + ' ' + item.description).toLowerCase()}">
       <td><span class="custody-code">${item.productCode || '-'}</span></td>
       <td>
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -866,7 +943,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
         <div class="custody-person">${item.assignedTo || '-'}</div>
         ${item.assignedTeam ? `<span class="custody-team-tag">${item.assignedTeam}</span>` : ''}
       </td>
-      <td><span class="custody-loc-badge ${item.location}">${item.location === 'team' ? '👥 Ekipte' : (item.location === 'depo' ? '🏭 Depoda' : '👤 Kişide')}</span></td>
+      <td><span class="custody-loc-badge ${item.location}">${item.location === 'team' ? '👥 Ekipte' : (item.location === 'depo' ? `🏭 ${warehouseName}` : '👤 Kişide')}</span></td>
       <td><span class="custody-cond-badge ${item.condition}">${condLabel[item.condition] || 'Bilinmiyor'}</span></td>
       <td><span class="custody-note-text" title="${item.conditionNote || ''}">${item.conditionNote || '-'}</span></td>
       <td style="white-space: nowrap; text-align: center;">
@@ -978,13 +1055,40 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   let visibleCount = 0;
 
   cards.forEach((card: any) => {
-    const name = card.getAttribute('data-name') || '';
-    const cat = card.getAttribute('data-category') || '';
+    const items = card.querySelectorAll('.compare-item');
+    const emptyMessage = card.querySelector('.compare-empty-message');
+    let matchesCount = 0;
+    let totalItemsCount = items.length;
 
-    const matchesSearch = !searchVal || name.includes(searchVal);
-    const matchesCat = catVal === 'all' || cat === catVal;
+    items.forEach((item: any) => {
+      const name = item.getAttribute('data-name') || '';
+      const cat = item.getAttribute('data-category') || '';
 
-    if (matchesSearch && matchesCat) {
+      const matchesSearch = !searchVal || name.includes(searchVal);
+      const matchesCat = catVal === 'all' || cat === catVal;
+
+      if (matchesSearch && matchesCat) {
+        item.style.setProperty('display', 'flex', 'important');
+        matchesCount++;
+      } else {
+        item.style.setProperty('display', 'none', 'important');
+      }
+    });
+
+    if (emptyMessage) {
+      if (totalItemsCount > 0 && matchesCount === 0) {
+        emptyMessage.style.display = 'block';
+        emptyMessage.innerText = 'Eşleşen malzeme bulunamadı.';
+      } else if (totalItemsCount === 0) {
+        emptyMessage.style.display = 'block';
+        emptyMessage.innerText = 'Hiçbir zimmetli malzeme bulunmuyor.';
+      } else {
+        emptyMessage.style.display = 'none';
+      }
+    }
+
+    const isFiltersEmpty = !searchVal && catVal === 'all';
+    if (matchesCount > 0 || isFiltersEmpty) {
       card.style.setProperty('display', 'flex', 'important');
       visibleCount++;
     } else {
@@ -1122,6 +1226,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   };
 
   try {
+    cachedRawList = null;
     if (id) {
       // Fetch original item to compare and write log
       const original = allItems.find(i => i.id === id);
@@ -1189,6 +1294,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
 (window as any).deleteCustodyItem = async (id: string) => {
   if (!confirm('Bu zimmet kaydını silmek istediğinize emin misiniz?')) return;
   try {
+    cachedRawList = null;
     const item = allItems.find(i => i.id === id);
     
     // Release warehouse reservation if this custody item had a valid SAP no and team
@@ -1342,6 +1448,18 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   filterPerson = (document.getElementById('custody-filter-person') as HTMLSelectElement)?.value || 'all';
   filterCondition = (document.getElementById('custody-filter-condition') as HTMLSelectElement)?.value || 'all';
   filterLocation = (document.getElementById('custody-filter-location') as HTMLSelectElement)?.value || 'all';
+  filterWarehouse = (document.getElementById('custody-filter-warehouse') as HTMLSelectElement)?.value || 'all';
+
+  const warehouseFilterEl = document.getElementById('custody-filter-warehouse') as HTMLSelectElement;
+  if (warehouseFilterEl) {
+    if (filterLocation === 'depo') {
+      warehouseFilterEl.style.display = 'inline-block';
+    } else {
+      warehouseFilterEl.style.display = 'none';
+      warehouseFilterEl.value = 'all';
+      filterWarehouse = 'all';
+    }
+  }
 
   const rows = document.querySelectorAll('#custody-table-body tr[data-team]');
   rows.forEach((row: any) => {
@@ -1349,13 +1467,19 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     const person = row.getAttribute('data-person');
     const condition = row.getAttribute('data-condition');
     const location = row.getAttribute('data-location');
+    const whId = row.getAttribute('data-warehouse-id') || '';
     const searchStr = row.getAttribute('data-search');
     
     let show = true;
-    if (filterTeam !== 'all' && team !== filterTeam) show = false;
-    if (filterPerson !== 'all' && person !== filterPerson) show = false;
+    if (filterLocation === 'depo') {
+      if (location !== 'depo') show = false;
+      if (filterWarehouse !== 'all' && whId !== filterWarehouse) show = false;
+    } else {
+      if (filterTeam !== 'all' && team !== filterTeam) show = false;
+      if (filterPerson !== 'all' && person !== filterPerson) show = false;
+      if (filterLocation !== 'all' && location !== filterLocation) show = false;
+    }
     if (filterCondition !== 'all' && condition !== filterCondition) show = false;
-    if (filterLocation !== 'all' && location !== filterLocation) show = false;
     if (searchQuery && !searchStr.includes(searchQuery)) show = false;
     
     row.style.display = show ? '' : 'none';
@@ -1413,5 +1537,632 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
 (window as any).closeCustodyImageModal = () => {
   const modal = document.getElementById('custody-image-modal');
   if (modal) modal.classList.add('hidden');
+};
+
+(window as any).downloadCustodyTemplateForCard = (mode: 'team' | 'person' | 'warehouse', entityId: string, entityName: string) => {
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAllowed = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                    currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' ||
+                    (currentUser?.role?.toUpperCase() === 'ADMIN') ||
+                    (currentUser?.allowedTabs?.['asset-custody'] === true) ||
+                    (typeof currentUser?.allowedTabs?.['asset-custody'] === 'object' && !!currentUser?.allowedTabs?.['asset-custody']?.importExcel);
+  if (!isAllowed) {
+    (window as any).showToast?.('HATA', 'Bu işlemi yapmaya yetkiniz yoktur.', 'error');
+    return;
+  }
+
+  // Gather current materials of this entity
+  const matchedItems = allItems.filter(item => {
+    if (mode === 'team') {
+      return (item.location === 'team' || item.location === 'person') && item.assignedTeam === entityId;
+    } else if (mode === 'person') {
+      return item.location === 'person' && item.assignedTo === entityId;
+    } else {
+      return item.location === 'depo' && item.warehouseId === entityId;
+    }
+  });
+
+  const sampleData = matchedItems.map(item => ({
+    'Malzeme Kodu': item.productCode || '',
+    'Malzeme Adı': item.productName || '',
+    'Seri Numarası': item.serialNo || '',
+    'Adet': item.quantity || 1,
+    'Kategori': item.category || 'El Aleti',
+    'Durum': item.condition === 'saglam' ? 'Sağlam' : (item.condition === 'arizali' ? 'Arızalı' : (item.condition === 'hurda' ? 'Hurda' : 'Kayıp')),
+    'Açıklama / Not': item.description || ''
+  }));
+
+  if (sampleData.length === 0) {
+    // Add a single empty row as template
+    sampleData.push({
+      'Malzeme Kodu': '12345-01',
+      'Malzeme Adı': 'Örnek El Aleti',
+      'Seri Numarası': 'SN-00000',
+      'Adet': 1,
+      'Kategori': 'El Aleti',
+      'Durum': 'Sağlam',
+      'Açıklama / Not': 'Örnek not'
+    });
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(sampleData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Zimmetler');
+
+  // Auto-fit columns
+  const maxLens = sampleData.reduce((acc: any, row: any) => {
+    Object.keys(row).forEach(key => {
+      const val = row[key];
+      const len = val ? String(val).length : 0;
+      const keyLen = key.length;
+      acc[key] = Math.max(acc[key] || 0, len, keyLen);
+    });
+    return acc;
+  }, {});
+  
+  worksheet['!cols'] = Object.keys(maxLens).map(key => ({ wch: maxLens[key] + 3 }));
+
+  const fileName = `${entityName.replace(/\s+/g, '_')}_Zimmet_Listesi.xlsx`;
+  XLSX.writeFile(workbook, fileName);
+};
+
+(window as any).importCustodyFromExcelForCard = async (event: Event, mode: 'team' | 'person' | 'warehouse', entityId: string, entityName: string) => {
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAllowed = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                    currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' ||
+                    (currentUser?.role?.toUpperCase() === 'ADMIN') ||
+                    (currentUser?.allowedTabs?.['asset-custody'] === true) ||
+                    (typeof currentUser?.allowedTabs?.['asset-custody'] === 'object' && !!currentUser?.allowedTabs?.['asset-custody']?.importExcel);
+  if (!isAllowed) {
+    (window as any).showToast?.('HATA', 'Bu işlemi yapmaya yetkiniz yoktur.', 'error');
+    return;
+  }
+
+  const input = event.target as HTMLInputElement;
+  if (!input.files || input.files.length === 0) return;
+
+  if (!confirm(`${entityName} zimmetlerine Excel dosyasındaki malzemeler eklenecektir. Onaylıyor musunuz?`)) {
+    input.value = '';
+    return;
+  }
+
+  const file = input.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async (e) => {
+    try {
+      cachedRawList = null;
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      if (jsonData.length === 0) {
+        (window as any).showToast?.('HATA', 'Seçilen Excel dosyasında veri bulunamadı.', 'error');
+        return;
+      }
+
+      // Show progress overlay
+      const progressOverlay = document.getElementById('custody-upload-progress-overlay');
+      const progressText = document.getElementById('upload-progress-text');
+      const progressBar = document.getElementById('upload-progress-bar');
+      const progressPercent = document.getElementById('upload-progress-percentage');
+
+      if (progressOverlay) progressOverlay.style.display = 'flex';
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressPercent) progressPercent.innerText = '0%';
+      if (progressText) progressText.innerText = `0 / ${jsonData.length} satır işlendi...`;
+
+      // Fetch existing tools to check duplicate serial numbers
+      const existingItems = await assetCustodyService.getAll();
+      const existingSerials = new Set(
+        existingItems
+          .map(item => item.serialNo?.toLowerCase().trim())
+          .filter(sn => sn && sn !== '-' && sn !== '')
+      );
+
+      let successCount = 0;
+      let duplicateCount = 0;
+      let failCount = 0;
+      let completedCount = 0;
+
+      const chunkSize = 15;
+      const totalRows = jsonData.length;
+
+      for (let i = 0; i < totalRows; i += chunkSize) {
+        const chunk = jsonData.slice(i, i + chunkSize);
+
+        await Promise.all(chunk.map(async (row) => {
+          const productName = String(row['Malzeme Adı'] || row['Ürün Adı'] || '').trim();
+          const productCode = String(row['Malzeme Kodu'] || row['SAP Kodu'] || '').trim();
+          const serialNo = String(row['Seri Numarası'] || row['Seri No'] || '').trim();
+          const quantity = Number(row['Adet'] || row['Miktar'] || 1);
+          
+          let category = String(row['Kategori'] || 'El Aleti').trim();
+          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
+          if (!validCategories.includes(category)) {
+            category = 'El Aleti';
+          }
+
+          const rawCond = String(row['Durum'] || 'Sağlam').toLowerCase().trim();
+          let condition: 'saglam' | 'arizali' | 'hurda' | 'kayip' = 'saglam';
+          if (rawCond.includes('arız') || rawCond.includes('ariz')) condition = 'arizali';
+          else if (rawCond.includes('hurd')) condition = 'hurda';
+          else if (rawCond.includes('kay')) condition = 'kayip';
+
+          const description = String(row['Açıklama'] || row['Açıklama / Not'] || '').trim();
+
+          if (!productName) {
+            failCount++;
+            completedCount++;
+            return;
+          }
+
+          // Duplicate Serial Check
+          if (serialNo && serialNo !== '-' && existingSerials.has(serialNo.toLowerCase().trim())) {
+            duplicateCount++;
+            completedCount++;
+            return;
+          }
+
+          // Setup dynamic location fields based on mode
+          let location: 'team' | 'person' | 'depo' = 'team';
+          let assignedTeam = '';
+          let assignedTo = '';
+          let warehouseId = '';
+
+          if (mode === 'team') {
+            location = 'team';
+            assignedTeam = entityId;
+          } else if (mode === 'person') {
+            location = 'person';
+            assignedTo = entityId;
+            const details = personnelService.getPersonnelDetailsList();
+            const pDet = details.find(det => det.name === entityId);
+            if (pDet?.team) {
+              assignedTeam = pDet.team;
+            }
+          } else {
+            location = 'depo';
+            warehouseId = entityId;
+          }
+
+          try {
+            const newItemData = {
+              productCode,
+              productName,
+              serialNo: serialNo || '-',
+              description: description || '-',
+              category,
+              assignedTo,
+              assignedTeam,
+              location,
+              warehouseId,
+              condition,
+              conditionNote: description || '',
+              quantity: isNaN(quantity) || quantity <= 0 ? 1 : quantity,
+              createdBy: currentUser?.displayName || 'Admin'
+            };
+
+            const newId = await assetCustodyService.add(newItemData);
+            
+            await assetCustodyService.addHistoryLog({
+              itemId: newId,
+              productCode,
+              productName,
+              serialNo: serialNo || '-',
+              quantity: newItemData.quantity,
+              action: 'Oluşturuldu',
+              newAssignee: assignedTo,
+              newTeam: assignedTeam,
+              newCondition: condition,
+              note: description || 'Excel ile yüklendi.',
+              by: currentUser?.displayName || 'Admin'
+            });
+
+            successCount++;
+            if (serialNo && serialNo !== '-') {
+              existingSerials.add(serialNo.toLowerCase().trim());
+            }
+          } catch (itemErr) {
+            console.error('Failed to import custody row:', itemErr);
+            failCount++;
+          }
+          completedCount++;
+        }));
+
+        // Update progress bar
+        const percent = Math.min(100, Math.round((completedCount / totalRows) * 100));
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressPercent) progressPercent.innerText = `${percent}%`;
+        if (progressText) progressText.innerText = `${completedCount} / ${totalRows} satır işlendi...`;
+
+        // Small break to paint UI
+        await new Promise(r => setTimeout(r, 40));
+      }
+
+      if (progressOverlay) progressOverlay.style.display = 'none';
+
+      (window as any).showToast?.('BAŞARILI', `${successCount} adet zimmet kaydı başarıyla eklendi. (Kopya: ${duplicateCount}, Hatalı: ${failCount})`, 'success');
+      
+      // Reload list
+      if ((window as any).navigate) {
+        (window as any).navigate('asset-custody');
+      }
+    } catch (err) {
+      console.error(err);
+      const progressOverlay = document.getElementById('custody-upload-progress-overlay');
+      if (progressOverlay) progressOverlay.style.display = 'none';
+      (window as any).showToast?.('HATA', 'Dosya okunurken bir hata oluştu.', 'error');
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+};
+
+(window as any).clearCustodyListForCard = async (mode: 'team' | 'person' | 'warehouse', entityId: string, entityName: string, totalQty: number) => {
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAllowed = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                    currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' ||
+                    (currentUser?.role?.toUpperCase() === 'ADMIN') ||
+                    (currentUser?.allowedTabs?.['asset-custody'] === true);
+  if (!isAllowed) {
+    (window as any).showToast?.('HATA', 'Bu işlemi yapmaya yetkiniz yoktur.', 'error');
+    return;
+  }
+
+  const password = prompt(`⚠️ DİKKAT: "${entityName}" içindeki tüm aktif zimmetli malzemeleri silmek üzeresiniz!\n\nDevam etmek için lütfen silme şifresini girin:`);
+  if (password === null) return;
+  if (password !== 'demirer') {
+    (window as any).showToast?.('HATA', 'Geçersiz şifre! Silme işlemi iptal edildi.', 'error');
+    return;
+  }
+
+  try {
+    cachedRawList = null;
+    (window as any).showToast?.('BİLGİ', 'Malzemeler siliniyor...', 'info');
+
+    // Gather matched items
+    const matchedItems = allItems.filter(item => {
+      if (mode === 'team') {
+        return (item.location === 'team' || item.location === 'person') && item.assignedTeam === entityId;
+      } else if (mode === 'person') {
+        return item.location === 'person' && item.assignedTo === entityId;
+      } else {
+        return item.location === 'depo' && item.warehouseId === entityId;
+      }
+    });
+
+    if (matchedItems.length === 0) {
+      (window as any).showToast?.('UYARI', 'Silinecek herhangi bir malzeme bulunamadı.', 'warning');
+      return;
+    }
+
+    // Delete each matched item in parallel
+    const deletePromises = matchedItems.map(item => {
+      if (item.id) {
+        return assetCustodyService.remove(item.id);
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(deletePromises);
+
+    // Add a single bulk log
+    await assetCustodyService.addHistoryLog({
+      itemId: 'BULK_DELETE',
+      productCode: '-',
+      productName: `Toplu Zimmet Silme: ${entityName}`,
+      serialNo: '-',
+      quantity: totalQty,
+      action: 'Silindi',
+      newAssignee: '',
+      newTeam: '',
+      newCondition: 'hurda',
+      note: `Kullanıcı şifre doğrulayarak "${entityName}" deposundaki/kartındaki tüm (${totalQty} adet) zimmet kayıtlarını sildi.`,
+      by: currentUser?.displayName || currentUser?.email || 'Admin'
+    });
+
+    (window as any).showToast?.('BAŞARILI', `"${entityName}" zimmet listesi başarıyla temizlendi.`, 'success');
+    
+    // Reload list
+    if ((window as any).navigate) {
+      (window as any).navigate('asset-custody');
+    }
+  } catch (err) {
+    console.error(err);
+    (window as any).showToast?.('HATA', 'Silme işlemi sırasında bir hata oluştu.', 'error');
+  }
+};
+
+(window as any).downloadCustodyTemplate = () => {
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAllowed = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                    currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' ||
+                    (currentUser?.role?.toUpperCase() === 'ADMIN') ||
+                    (currentUser?.allowedTabs?.['asset-custody'] === true) ||
+                    (typeof currentUser?.allowedTabs?.['asset-custody'] === 'object' && !!currentUser?.allowedTabs?.['asset-custody']?.importExcel);
+  if (!isAllowed) {
+    (window as any).showToast?.('HATA', 'Bu işlemi yapmaya yetkiniz yoktur.', 'error');
+    return;
+  }
+
+  const sampleData = [
+    {
+      'Malzeme Kodu': '12345-01',
+      'Malzeme Adı': '1/2 Tork Anahtarı',
+      'Seri Numarası': 'SN-987654',
+      'Adet': 1,
+      'Kategori': 'Ölçü Aleti',
+      'Konum': 'Ekipte',
+      'Zimmetli Kişi': '',
+      'Zimmetli Ekip': 'Team 05',
+      'Depo Adı': '',
+      'Durum': 'Sağlam',
+      'Açıklama / Not': 'İlk teslimat'
+    },
+    {
+      'Malzeme Kodu': '',
+      'Malzeme Adı': 'Yıldız Tornavida Seti',
+      'Seri Numarası': '',
+      'Adet': 2,
+      'Kategori': 'El Aleti',
+      'Konum': 'Kişide',
+      'Zimmetli Kişi': 'Ahmet Yılmaz',
+      'Zimmetli Ekip': 'Team 03',
+      'Depo Adı': '',
+      'Durum': 'Sağlam',
+      'Açıklama / Not': ''
+    },
+    {
+      'Malzeme Kodu': '91079',
+      'Malzeme Adı': 'Cetaform Pense',
+      'Seri Numarası': 'SN-00012',
+      'Adet': 1,
+      'Kategori': 'El Aleti',
+      'Konum': 'Depoda',
+      'Zimmetli Kişi': '',
+      'Zimmetli Ekip': '',
+      'Depo Adı': 'Merkez Depo',
+      'Durum': 'Arızalı',
+      'Açıklama / Not': 'Çenesi aşınmış'
+    }
+  ];
+
+  const worksheet = XLSX.utils.json_to_sheet(sampleData);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Zimmet Sablon');
+  
+  // Auto-fit columns
+  const maxLens = sampleData.reduce((acc: any, row: any) => {
+    Object.keys(row).forEach(key => {
+      const val = row[key];
+      const len = val ? String(val).length : 0;
+      const keyLen = key.length;
+      acc[key] = Math.max(acc[key] || 0, len, keyLen);
+    });
+    return acc;
+  }, {});
+  
+  worksheet['!cols'] = Object.keys(maxLens).map(key => ({ wch: maxLens[key] + 3 }));
+
+  const fileName = 'DH_Servis_Zimmet_Yukleme_Sablonu.xlsx';
+  XLSX.writeFile(workbook, fileName);
+};
+
+(window as any).importCustodyFromExcel = async (event: Event) => {
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const isAllowed = currentUser?.email === 'fatih.zebek@demirerholding.com' || 
+                    currentUser?.email?.toLowerCase() === 'dh-tm09@demirerholding.com' ||
+                    (currentUser?.role?.toUpperCase() === 'ADMIN') ||
+                    (currentUser?.allowedTabs?.['asset-custody'] === true) ||
+                    (typeof currentUser?.allowedTabs?.['asset-custody'] === 'object' && !!currentUser?.allowedTabs?.['asset-custody']?.importExcel);
+  if (!isAllowed) {
+    (window as any).showToast?.('HATA', 'Bu işlemi yapmaya yetkiniz yoktur.', 'error');
+    return;
+  }
+
+  const input = event.target as HTMLInputElement;
+  if (!input.files || input.files.length === 0) return;
+
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      cachedRawList = null;
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      if (jsonData.length === 0) {
+        (window as any).showToast?.('HATA', 'Seçilen Excel dosyasında veri bulunamadı.', 'error');
+        return;
+      }
+
+      // Show progress overlay
+      const progressOverlay = document.getElementById('custody-upload-progress-overlay');
+      const progressText = document.getElementById('upload-progress-text');
+      const progressBar = document.getElementById('upload-progress-bar');
+      const progressPercent = document.getElementById('upload-progress-percentage');
+
+      if (progressOverlay) progressOverlay.style.display = 'flex';
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressPercent) progressPercent.innerText = '0%';
+      if (progressText) progressText.innerText = `0 / ${jsonData.length} satır işlendi...`;
+
+      // Fetch existing tools to check duplicate serial numbers
+      const existingItems = await assetCustodyService.getAll();
+      const existingSerials = new Set(
+        existingItems
+          .map(item => item.serialNo?.toLowerCase().trim())
+          .filter(sn => sn && sn !== '-' && sn !== '')
+      );
+
+      const depots = dataService.getWarehouses();
+
+      let successCount = 0;
+      let duplicateCount = 0;
+      let failCount = 0;
+      let completedCount = 0;
+
+      const chunkSize = 15;
+      const totalRows = jsonData.length;
+
+      for (let i = 0; i < totalRows; i += chunkSize) {
+        const chunk = jsonData.slice(i, i + chunkSize);
+
+        await Promise.all(chunk.map(async (row) => {
+          const productName = String(row['Malzeme Adı'] || row['Ürün Adı'] || '').trim();
+          const productCode = String(row['Malzeme Kodu'] || row['SAP Kodu'] || '').trim();
+          const serialNo = String(row['Seri Numarası'] || row['Seri No'] || '').trim();
+          const quantity = Number(row['Adet'] || row['Miktar'] || 1);
+          
+          let category = String(row['Kategori'] || 'El Aleti').trim();
+          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
+          if (!validCategories.includes(category)) {
+            category = 'El Aleti';
+          }
+
+          const locationInput = String(row['Konum'] || 'Kişide').toLowerCase().trim();
+          let location: 'person' | 'team' | 'depo' = 'person';
+          if (locationInput.includes('ekip') || locationInput.includes('team')) {
+            location = 'team';
+          } else if (locationInput.includes('depo') || locationInput.includes('warehouse')) {
+            location = 'depo';
+          }
+
+          const conditionInput = String(row['Durum'] || 'Sağlam').toLowerCase().trim();
+          let condition: 'saglam' | 'arizali' | 'hurda' | 'kayip' = 'saglam';
+          if (conditionInput.includes('arız') || conditionInput.includes('ariz') || conditionInput.includes('defect')) {
+            condition = 'arizali';
+          } else if (conditionInput.includes('hurda') || conditionInput.includes('scrap')) {
+            condition = 'hurda';
+          } else if (conditionInput.includes('kayıp') || conditionInput.includes('kayip') || conditionInput.includes('lost')) {
+            condition = 'kayip';
+          }
+
+          const description = String(row['Açıklama / Not'] || row['Açıklama'] || row['Not'] || '').trim();
+
+          // Validation: product name is required
+          if (!productName) {
+            failCount++;
+            completedCount++;
+            return;
+          }
+
+          // Duplicate serial check
+          if (serialNo && serialNo !== '-' && existingSerials.has(serialNo.toLowerCase().trim())) {
+            duplicateCount++;
+            completedCount++;
+            return;
+          }
+
+          let assignedTo = '';
+          let assignedTeam = '';
+          let warehouseId = '';
+
+          if (location === 'person') {
+            const personInput = String(row['Zimmetli Kişi'] || row['Zimmetli Personel'] || row['Kişi'] || '').trim();
+            const matchedPerson = personnelService.getPersonnelList().find(p => p.toLowerCase().trim() === personInput.toLowerCase().trim());
+            assignedTo = matchedPerson || personInput || '';
+            
+            if (assignedTo) {
+              const pDetails = personnelService.getPersonnelDetailsList().find(det => det.name === assignedTo);
+              if (pDetails?.team) {
+                assignedTeam = pDetails.team;
+              }
+            }
+          } else if (location === 'team') {
+            assignedTeam = String(row['Zimmetli Ekip'] || row['Ekip'] || '').trim();
+            const teamMatch = assignedTeam.match(/^team\s*(\d+)$/i);
+            if (teamMatch) {
+              const num = parseInt(teamMatch[1]);
+              assignedTeam = `Team ${num < 10 ? '0' + num : num}`;
+            }
+          } else if (location === 'depo') {
+            const depoInput = String(row['Depo Adı'] || row['Depo'] || '').trim();
+            const matchedDepo = depots.find(d => d.name.toLowerCase().trim() === depoInput.toLowerCase().trim() || d.id.toLowerCase().trim() === depoInput.toLowerCase().trim());
+            if (matchedDepo) {
+              warehouseId = matchedDepo.id;
+            } else if (depots.length > 0) {
+              warehouseId = depots[0].id;
+            }
+          }
+
+          try {
+            const newItemData = {
+              productCode,
+              productName,
+              serialNo: serialNo || '-',
+              description: description || '-',
+              category,
+              assignedTo,
+              assignedTeam,
+              location,
+              warehouseId,
+              condition,
+              conditionNote: description || '',
+              quantity: isNaN(quantity) || quantity <= 0 ? 1 : quantity,
+              createdBy: currentUser?.displayName || 'Admin'
+            };
+
+            const newId = await assetCustodyService.add(newItemData);
+            
+            await assetCustodyService.addHistoryLog({
+              itemId: newId,
+              productCode,
+              productName,
+              serialNo: serialNo || '-',
+              quantity: newItemData.quantity,
+              action: 'Oluşturuldu',
+              newAssignee: assignedTo,
+              newTeam: assignedTeam,
+              newCondition: condition,
+              note: description || 'Excel ile yüklendi.',
+              by: currentUser?.displayName || 'Admin'
+            });
+
+            if (serialNo && serialNo !== '-') {
+              existingSerials.add(serialNo.toLowerCase().trim());
+            }
+
+            successCount++;
+          } catch (itemErr) {
+            console.error('Failed to import custody row:', itemErr);
+            failCount++;
+          }
+          completedCount++;
+        }));
+
+        // Update progress bar
+        const percent = Math.min(100, Math.round((completedCount / totalRows) * 100));
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressPercent) progressPercent.innerText = `${percent}%`;
+        if (progressText) progressText.innerText = `${completedCount} / ${totalRows} satır işlendi...`;
+
+        // Small break to paint UI
+        await new Promise(r => setTimeout(r, 40));
+      }
+
+      if (progressOverlay) progressOverlay.style.display = 'none';
+
+      (window as any).showToast?.('BAŞARILI', `${successCount} adet yeni zimmet kaydı eklendi. ${duplicateCount} adet mükerrer seri nolu kayıt atlandı. ${failCount} adet geçersiz kayıt atlandı.`, 'success');
+      
+      setTimeout(() => {
+        (window as any).navigate('asset-custody');
+      }, 2000);
+      
+    } catch (excelErr) {
+      console.error(excelErr);
+      const progressOverlay = document.getElementById('custody-upload-progress-overlay');
+      if (progressOverlay) progressOverlay.style.display = 'none';
+      (window as any).showToast?.('HATA', 'Excel dosyası işlenirken hata oluştu.', 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
 };
 

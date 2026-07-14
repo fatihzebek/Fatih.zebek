@@ -853,6 +853,14 @@ const msfPageSize = 5;
     deliveryDetails = `<strong>Teslimat Tipi:</strong> Depolar Arası Klasik Transfer`;
   }
 
+  if (transfer.status === 'TAMAMLANDI' || transfer.status === 'COMPLETED') {
+    const resolvedDateStr = transfer.resolvedAt?.toDate 
+      ? transfer.resolvedAt.toDate().toLocaleString('tr-TR') 
+      : (transfer.approvedAt?.toDate ? transfer.approvedAt.toDate().toLocaleString('tr-TR') : 'Belirtilmedi');
+    const receiver = transfer.resolvedBy || transfer.approvedBy || 'Belirtilmedi';
+    deliveryDetails += `<br><br><span style="color:#10b981; font-weight:bold;">🟢 TESLİM EDİLDİ</span><br><strong>Teslim Tarihi:</strong> ${resolvedDateStr}<br><strong>Teslim Alan:</strong> ${receiver}`;
+  }
+
   const items = Array.isArray(transfer.items) 
     ? transfer.items 
     : [{ materialCode: transfer.materialCode, materialName: transfer.materialName, quantity: transfer.quantity }];
@@ -1002,16 +1010,25 @@ const msfPageSize = 5;
 
         <div class="signatures">
           <div class="signature-box">
-            <strong>Teslim Eden (Sevk Eden)</strong><br><br><br>
-            İmza / Tarih
+            <strong>Teslim Eden (Sevk Eden)</strong><br><br>
+            <span style="font-size: 11px; font-weight: bold; color: #000;">${transfer.requestedBy || ''}</span><br>
+            <span style="font-size: 10px; color: #555;">Tarih: ${dateStr}</span>
           </div>
           <div class="signature-box">
-            <strong>Taşıyan Personel / Kargo</strong><br><br><br>
-            İmza / Tarih
+            <strong>Taşıyan Personel / Kargo</strong><br><br>
+            ${transfer.deliveryMethod === 'PERSON' && transfer.shippedBy ? `
+              <span style="font-size: 11px; font-weight: bold; color: #000;">${transfer.shippedBy}</span>
+            ` : (transfer.deliveryMethod === 'CARGO' && transfer.cargoCarrier ? `
+              <span style="font-size: 11px; font-weight: bold; color: #000;">${transfer.cargoCarrier}</span><br>
+              <span style="font-size: 10px; color: #555;">Takip No: ${transfer.cargoTrackingNo || ''}</span>
+            ` : 'İmza / Tarih')}
           </div>
           <div class="signature-box">
-            <strong>Teslim Alan (Kabul Eden)</strong><br><br><br>
-            İmza / Tarih
+            <strong>Teslim Alan (Kabul Eden)</strong><br><br>
+            ${(transfer.status === 'TAMAMLANDI' || transfer.status === 'COMPLETED') ? `
+              <span style="font-size: 11px; font-weight: bold; color: #000;">${transfer.resolvedBy || transfer.approvedBy || ''}</span><br>
+              <span style="font-size: 10px; color: #555;">Tarih: ${transfer.resolvedAt?.toDate ? transfer.resolvedAt.toDate().toLocaleString('tr-TR') : (transfer.approvedAt?.toDate ? transfer.approvedAt.toDate().toLocaleString('tr-TR') : '')}</span>
+            ` : 'İmza / Tarih'}
           </div>
         </div>
       </body>

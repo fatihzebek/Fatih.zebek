@@ -1,7 +1,8 @@
 import { warehouseService } from '../services/WarehouseService';
+import { inventoryService } from '../services/InventoryService';
 import { dataService } from '../services/DataService';
 import { formatTeamName } from '../utils/formatters';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 
 export const GlobalWarehouseHistoryPage = async () => {
     // 1. Resolve combined list of warehouses (11 Main + 15 Teams)
@@ -146,40 +147,135 @@ function registerWindowFunctions() {
         });
     };
 
+function standardizeTurbineNo(val: string): string {
+    if (!val || val === '-') return '-';
+    const match = val.match(/\d+/);
+    if (match) {
+        const num = parseInt(match[0], 10);
+        return `T${String(num).padStart(2, '0')}`;
+    }
+    return val;
+}
+
+function cleanLogNote(note: string): string {
+    if (!note) return '';
+    let displayNote = note;
+    const reportIdMatch = displayNote.match(/Rapor:\s*(AL_SR[A-Za-z0-9_]+)/i);
+    if (reportIdMatch) {
+        const reportId = reportIdMatch[1];
+        const detailedPattern = new RegExp(`Rapor:\\s*${reportId},\\s*Arıza\\s*Kodu:`, 'i');
+        if (detailedPattern.test(displayNote)) {
+            const standalonePattern = new RegExp(`\\s*\\(Rapor:\\s*${reportId}\\)`, 'gi');
+            displayNote = displayNote.replace(standalonePattern, '');
+        }
+    }
+    return displayNote
+        .replace(/\s*\[Durum:\s*(NEW|DEFECT|SCRAP)\]/gi, '')
+        .trim();
+}
+
     (window as any).renderLogRows = (logs: any[]) => {
         if (logs.length === 0) {
             return `<tr><td colspan="10" style="padding: 2rem; text-align: center; color: var(--text-dim);">Uygun hareket kaydı bulunamadı.</td></tr>`;
         }
         
-        const badgeStyle = `padding: 3px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;`;
+        const badgeStyle = `padding: 3px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.5px; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: 115px;`;
  
         return logs.map(log => {
             const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
             
             // Parse report details
             const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
-            const reportNo = match ? match[1].trim().toUpperCase() : '';
+            const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
             const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
             
             let turbineNo = report?.turbineNo || '';
             if (!turbineNo) {
-                const turbMatch = log.note?.match(/T\d+/i) || log.note?.match(/Türbin\s*([^\s,]+)/i);
+                const turbMatch = log.note?.match(/T-?\d+/i) || log.note?.match(/Türbin\s*([T\d-]+)/i);
                 if (turbMatch) turbineNo = turbMatch[0];
             }
+            turbineNo = standardizeTurbineNo(turbineNo);
  
             const mcfNo = report?.matFormNo || '-';
             const displayTurbine = turbineNo || '-';
  
             let typeBadge = '';
             if (log.type === 'ADD') {
-                typeBadge = `<span style="${badgeStyle} background: rgba(0, 255, 127, 0.08); color: #00ff7f; border: 1px solid rgba(0, 255, 127, 0.15);"><i class="fa-solid fa-circle-plus"></i> STOK GİRİŞ</span>`;
+                const isDefect = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScrap = log.note && log.note.includes('[Durum: SCRAP]');
+                const isIncrease = log.oldQty !== undefined && log.oldQty > 0;
+                
+                if (isDefect) {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(245, 158, 11, 0.08); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.15);"><i class="fa-solid fa-screwdriver-wrench"></i> SÖKÜLEN PARÇA</span>`;
+                } else if (isScrap) {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.15);"><i class="fa-solid fa-trash"></i> HURDA GİRİŞİ</span>`;
+                } else if (isIncrease) {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(0, 255, 127, 0.08); color: #00ff7f; border: 1px solid rgba(0, 255, 127, 0.15);"><i class="fa-solid fa-chart-line"></i> STOK ARTIŞI</span>`;
+                } else {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(59, 130, 246, 0.08); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.15);"><i class="fa-solid fa-circle-plus"></i> STOK GİRİŞ</span>`;
+                }
             } else if (log.type === 'REMOVE') {
-                typeBadge = `<span style="${badgeStyle} background: rgba(255, 77, 77, 0.08); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.15);"><i class="fa-solid fa-circle-minus"></i> STOK ÇIKIŞ</span>`;
+                const isDefect = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScrap = log.note && log.note.includes('[Durum: SCRAP]');
+                
+                if (isDefect) {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(245, 158, 11, 0.08); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.15);"><i class="fa-solid fa-arrow-right-from-bracket"></i> ARIZALI ÇIKIŞ</span>`;
+                } else if (isScrap) {
+                    typeBadge = `<span style="${badgeStyle} background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.15);"><i class="fa-solid fa-trash"></i> HURDA ÇIKIŞI</span>`;
+                } else {
+                    const isReportUse = log.note && log.note.includes('Saha Raporu');
+                    if (isReportUse) {
+                        typeBadge = `<span style="${badgeStyle} background: rgba(0, 255, 127, 0.08); color: #00ff7f; border: 1px solid rgba(0, 255, 127, 0.15);"><i class="fa-solid fa-wrench"></i> TAKILAN PARÇA</span>`;
+                    } else {
+                        typeBadge = `<span style="${badgeStyle} background: rgba(255, 77, 77, 0.08); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.15);"><i class="fa-solid fa-circle-minus"></i> STOK ÇIKIŞ</span>`;
+                    }
+                }
             } else if (log.type === 'TRANSFER') {
                 typeBadge = `<span style="${badgeStyle} background: rgba(245, 158, 11, 0.08); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.15);"><i class="fa-solid fa-circle-arrow-right"></i> TRANSFER</span>`;
             } else {
                 typeBadge = `<span style="${badgeStyle} background: rgba(52, 152, 219, 0.08); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.15);"><i class="fa-solid fa-pen-to-square"></i> GÜNCELLEME</span>`;
             }
+ 
+            let isDecrease = log.type === 'REMOVE';
+            if (log.type === 'TRANSFER' && log.quantity < 0) {
+                isDecrease = true;
+            }
+            let isReturnToMain = false;
+            if (log.type === 'TRANSFER' && log.transferInfo) {
+                if (log.transferInfo.from.startsWith('team_') && !log.transferInfo.to.startsWith('team_')) {
+                    isReturnToMain = true;
+                }
+            }
+            
+            const isReportUse = log.type === 'REMOVE' && log.note && log.note.includes('Saha Raporu');
+            const isDefectLog = log.note && log.note.includes('[Durum: DEFECT]');
+            
+            let qtySign = '';
+            let qtyColorVal = '#00ff7f';
+            
+            if (isReportUse) {
+                qtySign = '+';
+                qtyColorVal = '#00ff7f'; // Takılan Parça is Green (+)
+            } else if (isDefectLog) {
+                qtySign = '-';
+                qtyColorVal = '#ff4d4d'; // Sökülen Parça is Red (-)
+            } else {
+                qtySign = isDecrease ? '-' : '+';
+                qtyColorVal = ((isDecrease && !isReturnToMain)) ? '#ff4d4d' : '#00ff7f';
+            }
+  
+            let resolvedLogName = log.itemName || log.materialName || '';
+            if (!resolvedLogName || resolvedLogName === 'Bilinmeyen Malzeme' || resolvedLogName === 'Bilinmeyen') {
+                const dictMat = inventoryService.getMaterialBySap(log.sapNo);
+                if (dictMat && dictMat.d) {
+                    resolvedLogName = dictMat.d;
+                }
+            }
+            if (!resolvedLogName) {
+                resolvedLogName = 'Bilinmeyen Malzeme';
+            }
+ 
+            const displayNote = cleanLogNote(log.note);
  
             return `
                 <tr class="hover-row" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: all 0.2s;">
@@ -191,14 +287,14 @@ function registerWindowFunctions() {
                         <div style="font-size: 0.65rem; color: var(--text-dim);">${date.toLocaleDateString('tr-TR')}</div>
                     </td>
                     <td style="padding: 1rem 1.2rem;">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-main);">${log.itemName || log.materialName || 'Bilinmeyen Malzeme'}</div>
-                        <div style="font-size: 0.65rem; color: var(--text-dim); font-family: monospace;">SAP: ${log.sapNo || '-'}</div>
+                        <div style="font-size: 0.65rem; color: var(--text-dim); font-family: monospace; margin-bottom: 2px;">SAP: ${log.sapNo || '-'}</div>
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-main);">${resolvedLogName}</div>
                     </td>
                     <td style="padding: 1rem 1.2rem;">
                         ${typeBadge}
                     </td>
                     <td style="padding: 1rem 1.2rem; text-align: center;">
-                        <div style="font-size: 0.95rem; font-weight: 900; color: var(--text-main);">${Math.abs(log.quantity)}</div>
+                        <div style="font-size: 0.95rem; font-weight: 900; color: ${qtyColorVal};">${qtySign}${Math.abs(log.quantity)}</div>
                         <div style="font-size: 0.5rem; color: var(--text-dim); font-weight: 700;">ADET</div>
                     </td>
                     <td style="padding: 1rem 1.2rem; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan);">${displayTurbine}</td>
@@ -211,7 +307,7 @@ function registerWindowFunctions() {
                              <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">${formatTeamName(log.user)}</div>
                         </div>
                     </td>
-                    <td style="padding: 1rem 1.2rem; font-size: 0.75rem; color: var(--text-main); max-width: 200px; word-break: break-word;">${log.note || '-'}</td>
+                    <td style="padding: 1rem 1.2rem; font-size: 0.75rem; color: var(--text-main); max-width: 200px; word-break: break-word;">${displayNote || '-'}</td>
                     <td style="padding: 1rem 1.2rem; text-align: right;">
                         <button onclick="window.deleteSingleLog('${log.warehouseId}', '${log.id}')" 
                                 style="background: none; border: none; color: var(--accent-red); opacity: 0.3; cursor: pointer; transition: all 0.2s;"
@@ -234,7 +330,18 @@ function registerWindowFunctions() {
         const dateFilter = (document.getElementById('detail-date-filter') as HTMLInputElement)?.value || '';
 
         const activeId = (window as any).activeWarehouseId;
-        const whLogs = (window as any).allGlobalLogs.filter((log: any) => log.warehouseId === activeId);
+        const activeWarehouse = (window as any).allGlobalWarehouses.find((w: any) => w.id === activeId);
+        const activeName = activeWarehouse ? activeWarehouse.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim() : '';
+
+        const whLogs = (window as any).allGlobalLogs.filter((log: any) => {
+            if (log.warehouseId === activeId) return true;
+            if (activeId && !activeId.startsWith('team_') && log.warehouseId.startsWith('team_')) {
+                if (log.note && activeName && log.note.includes(`Konum: ${activeName}`)) {
+                    return true;
+                }
+            }
+            return false;
+        });
 
         const filtered = whLogs.filter((log: any) => {
             const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
@@ -245,30 +352,80 @@ function registerWindowFunctions() {
                 if (logDateStr !== dateFilter) return false;
             }
 
-            // SAP / Name filter
+            // SAP / Name / Note / Op Type filter
             const sap = String(log.sapNo || '').toLowerCase();
-            const name = String(log.itemName || log.materialName || '').toLowerCase();
-            if (sapQuery && !sap.includes(sapQuery) && !name.includes(sapQuery)) return false;
+            let resolvedNameVal = log.itemName || log.materialName || '';
+            if (!resolvedNameVal || resolvedNameVal === 'Bilinmeyen Malzeme' || resolvedNameVal === 'Bilinmeyen') {
+                const dictMat = inventoryService.getMaterialBySap(log.sapNo);
+                if (dictMat && dictMat.d) {
+                    resolvedNameVal = dictMat.d;
+                }
+            }
+            const name = String(resolvedNameVal).toLowerCase();
+            const note = String(log.note || '').toLowerCase();
+            
+            let opTypeStr = '';
+            if (log.type === 'ADD') {
+                const isDef = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScr = log.note && log.note.includes('[Durum: SCRAP]');
+                const isInc = log.oldQty !== undefined && log.oldQty > 0;
+                if (isDef) opTypeStr = 'sökülen girişi defect';
+                else if (isScr) opTypeStr = 'hurda girişi';
+                else opTypeStr = isInc ? 'stok artışı' : 'stok giriş';
+            } else if (log.type === 'REMOVE') {
+                const isDef = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScr = log.note && log.note.includes('[Durum: SCRAP]');
+                if (isDef) opTypeStr = 'sökülen çıkışı defect';
+                else if (isScr) opTypeStr = 'hurda çıkışı';
+                else opTypeStr = 'stok çıkış';
+            } else if (log.type === 'TRANSFER') {
+                opTypeStr = 'transfer';
+            } else {
+                opTypeStr = 'güncelleme';
+            }
+
+            if (sapQuery && !sap.includes(sapQuery) && !name.includes(sapQuery) && !note.includes(sapQuery) && !opTypeStr.includes(sapQuery)) return false;
 
             // Operation type filter
             if (typeFilter !== 'ALL') {
-                if (typeFilter === 'ADD' && log.type !== 'ADD') return false;
-                if (typeFilter === 'REMOVE' && log.type !== 'REMOVE') return false;
-                if (typeFilter === 'TRANSFER' && log.type !== 'TRANSFER') return false;
+                const isDefect = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScrap = log.note && log.note.includes('[Durum: SCRAP]');
+                const isIncrease = log.oldQty !== undefined && log.oldQty > 0;
+                const isReportUse = log.type === 'REMOVE' && log.note && log.note.includes('Saha Raporu');
+                
+                if (typeFilter === 'ADD_NEW') {
+                    if (log.type !== 'ADD' || isDefect || isScrap) return false;
+                } else if (typeFilter === 'ADD_INCREASE') {
+                    if (log.type !== 'ADD' || !isIncrease || isDefect || isScrap) return false;
+                } else if (typeFilter === 'ADD_DEFECT') {
+                    if (log.type !== 'ADD' || !isDefect) return false;
+                } else if (typeFilter === 'REMOVE_REPORT') {
+                    if (!isReportUse) return false;
+                } else if (typeFilter === 'REMOVE_NEW') {
+                    if (log.type !== 'REMOVE' || isReportUse || isDefect || isScrap) return false;
+                } else if (typeFilter === 'REMOVE_DEFECT') {
+                    if (log.type !== 'REMOVE' || !isDefect) return false;
+                } else if (typeFilter === 'TRANSFER') {
+                    if (log.type !== 'TRANSFER') return false;
+                } else if (typeFilter === 'ADD_SCRAP') {
+                    if (log.type !== 'ADD' || !isScrap) return false;
+                } else if (typeFilter === 'REMOVE_SCRAP') {
+                    if (log.type !== 'REMOVE' || !isScrap) return false;
+                }
             }
 
             // Parse report details
             const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
-            const reportNo = match ? match[1].trim().toUpperCase() : '';
+            const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
             const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
             
             // Turbine filter
             let turbineNo = report?.turbineNo || '';
             if (!turbineNo) {
-                const turbMatch = log.note?.match(/T\d+/i) || log.note?.match(/Türbin\s*([^\s,]+)/i);
+                const turbMatch = log.note?.match(/T-?\d+/i) || log.note?.match(/Türbin\s*([T\d-]+)/i);
                 if (turbMatch) turbineNo = turbMatch[0];
             }
-            turbineNo = turbineNo.toLowerCase();
+            turbineNo = standardizeTurbineNo(turbineNo).toLowerCase();
             if (turbineQuery && !turbineNo.includes(turbineQuery)) return false;
 
             // MCF filter
@@ -510,32 +667,164 @@ function registerWindowFunctions() {
                 const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
                 
                 const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
-                const reportNo = match ? match[1].trim().toUpperCase() : '';
+                const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
                 const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
                 
                 let turbineNo = report?.turbineNo || '';
                 if (!turbineNo) {
-                    const turbMatch = log.note?.match(/T\d+/i) || log.note?.match(/Türbin\s*([^\s,]+)/i);
+                    const turbMatch = log.note?.match(/T-?\d+/i) || log.note?.match(/Türbin\s*([T\d-]+)/i);
                     if (turbMatch) turbineNo = turbMatch[0];
                 }
+                turbineNo = standardizeTurbineNo(turbineNo);
 
                 const mcfNo = report?.matFormNo || '-';
 
+                let resolvedExcelName = log.itemName || log.materialName || '';
+                if (!resolvedExcelName || resolvedExcelName === 'Bilinmeyen Malzeme' || resolvedExcelName === 'Bilinmeyen') {
+                    const dictMat = inventoryService.getMaterialBySap(log.sapNo);
+                    if (dictMat && dictMat.d) {
+                        resolvedExcelName = dictMat.d;
+                    }
+                }
+                if (!resolvedExcelName) {
+                    resolvedExcelName = 'Bilinmeyen';
+                }
+
+                const displayNote = cleanLogNote(log.note);
+
+                let isDecrease = log.type === 'REMOVE';
+                if (log.type === 'TRANSFER' && log.quantity < 0) {
+                    isDecrease = true;
+                }
+
+                const isDefect = log.note && log.note.includes('[Durum: DEFECT]');
+                const isScrap = log.note && log.note.includes('[Durum: SCRAP]');
+
+                let actionText = 'Güncelleme';
+                if (log.type === 'ADD') {
+                    if (isDefect) actionText = 'Sökülen Parça';
+                    else if (isScrap) actionText = 'Hurda Girişi';
+                    else actionText = 'Stok Giriş';
+                } else if (log.type === 'REMOVE') {
+                    if (isDefect) actionText = 'Arızalı Çıkış';
+                    else if (isScrap) actionText = 'Hurda Çıkışı';
+                    else {
+                        const isReportUse = log.note && log.note.includes('Saha Raporu');
+                        actionText = isReportUse ? 'Takılan Parça' : 'Stok Çıkış';
+                    }
+                } else if (log.type === 'TRANSFER') {
+                    actionText = 'Transfer';
+                }
+
+                let finalQty = isDecrease ? -Math.abs(log.quantity) : Math.abs(log.quantity);
+                if (actionText === 'Takılan Parça') {
+                    finalQty = Math.abs(log.quantity); // positive 1
+                } else if (actionText === 'Sökülen Parça') {
+                    finalQty = -Math.abs(log.quantity); // negative -1
+                }
+
                 return {
                     'Tarih': date.toLocaleString('tr-TR'),
-                    'Saha / Depo': log.warehouseName || '-',
-                    'Malzeme Adı': log.itemName || log.materialName || 'Bilinmeyen',
                     'SAP No': log.sapNo || '-',
-                    'İşlem Tipi': log.type === 'ADD' ? 'Stok Giriş' : log.type === 'REMOVE' ? 'Stok Çıkış' : log.type === 'TRANSFER' ? 'Transfer' : 'Güncelleme',
-                    'Miktar': log.quantity,
+                    'Malzeme Adı': resolvedExcelName,
+                    'Seri No': log.serialNo || '-',
+                    'İşlem Tipi': actionText,
+                    'Miktar': finalQty,
                     'Türbin No': turbineNo || '-',
                     'MÇF No': mcfNo,
                     'Sorumlu': formatTeamName(log.user),
-                    'Not/Açıklama': log.note || '-'
+                    'Saha / Depo': log.warehouseName || '-',
+                    'Not/Açıklama': displayNote || '-'
                 };
             });
 
             const ws = XLSX.utils.json_to_sheet(exportData);
+            
+            // Professional cell styling
+            if (ws && ws['!ref']) {
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                for (let r = range.s.r; r <= range.e.r; r++) {
+                    for (let c = range.s.c; c <= range.e.c; c++) {
+                        const cellRef = XLSX.utils.encode_cell({ r, c });
+                        if (!ws[cellRef]) continue;
+                        const cell = ws[cellRef];
+                        
+                        const font: any = { name: "Arial", size: 10 };
+                        const alignment: any = { vertical: "center" };
+                        const border: any = {
+                            top: { style: "thin", color: { rgb: "E2E8F0" } },
+                            bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+                            left: { style: "thin", color: { rgb: "E2E8F0" } },
+                            right: { style: "thin", color: { rgb: "E2E8F0" } }
+                        };
+                        let fill: any = null;
+                        
+                        if (r === 0) {
+                            fill = { fgColor: { rgb: "1E293B" } }; // Slate-800
+                            font.color = { rgb: "FFFFFF" };
+                            font.bold = true;
+                            font.size = 11;
+                            alignment.horizontal = "center";
+                            border.bottom = { style: "medium", color: { rgb: "0F172A" } };
+                        } else {
+                            // Zebra striping
+                            if (r % 2 === 0) {
+                                fill = { fgColor: { rgb: "F8FAFC" } }; // Slate-50
+                            }
+                            
+                            // Alignments: Tarih (0), SAP No (1), Seri No (3), İşlem Tipi (4), Miktar (5), Türbin No (6), MÇF No (7), Sorumlu (8) centered
+                            // Malzeme Adı (2), Saha / Depo (9), Not/Açıklama (10) left-aligned
+                            if ([0, 1, 3, 4, 5, 6, 7, 8].includes(c)) {
+                                alignment.horizontal = "center";
+                            } else {
+                                alignment.horizontal = "left";
+                            }
+                            
+                            // Style İşlem Tipi column (c === 4)
+                            if (c === 4) {
+                                const val = String(cell.v).trim();
+                                if (val === 'Sökülen Parça' || val === 'Stok Çıkış') {
+                                    fill = { fgColor: { rgb: "FEE2E2" } }; // red bg
+                                    font.color = { rgb: "B91C1C" }; // dark red text
+                                    font.bold = true;
+                                } else if (val === 'Takılan Parça' || val === 'Stok Giriş') {
+                                    fill = { fgColor: { rgb: "DCFCE7" } }; // green bg
+                                    font.color = { rgb: "15803D" }; // dark green text
+                                    font.bold = true;
+                                } else if (val === 'Transfer') {
+                                    fill = { fgColor: { rgb: "F1F5F9" } }; // slate bg
+                                    font.color = { rgb: "475569" }; // dark gray text
+                                    font.bold = true;
+                                } else if (val === 'Arızalı Çıkış') {
+                                    fill = { fgColor: { rgb: "FFEDD5" } }; // orange bg
+                                    font.color = { rgb: "C2410C" }; // dark orange text
+                                    font.bold = true;
+                                } else if (val.includes('Hurda')) {
+                                    fill = { fgColor: { rgb: "F1F5F9" } };
+                                    font.color = { rgb: "64748B" };
+                                    font.bold = true;
+                                }
+                            }
+
+                            // Style Miktar column (c === 5)
+                            if (c === 5) {
+                                const val = Number(cell.v);
+                                if (val > 0) {
+                                    font.color = { rgb: "16A34A" }; // green
+                                    font.bold = true;
+                                } else if (val < 0) {
+                                    font.color = { rgb: "DC2626" }; // red
+                                    font.bold = true;
+                                }
+                            }
+                        }
+                        
+                        cell.s = { font, alignment, border };
+                        if (fill) cell.s.fill = fill;
+                    }
+                }
+            }
+
             const wb = XLSX.utils.book_new();
             const sheetName = activeId ? "Depo Hareketleri" : "Tüm Hareketler";
             XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -661,7 +950,18 @@ function renderWarehouseDetailView(whId: string) {
     const wh = warehouses.find((w: any) => w.id === whId);
     if (!wh) return '<div>Depo bulunamadı.</div>';
 
-    const whLogs = allLogs.filter((l: any) => l.warehouseId === whId);
+    const activeWarehouse = warehouses.find((w: any) => w.id === whId);
+    const activeName = activeWarehouse ? activeWarehouse.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim() : '';
+
+    const whLogs = allLogs.filter((l: any) => {
+        if (l.warehouseId === whId) return true;
+        if (whId && !whId.startsWith('team_') && l.warehouseId.startsWith('team_')) {
+            if (l.note && activeName && l.note.includes(`Konum: ${activeName}`)) {
+                return true;
+            }
+        }
+        return false;
+    });
     const totalLogs = whLogs.length;
 
     let lastLogText = 'İşlem Yok';
@@ -734,9 +1034,15 @@ function renderWarehouseDetailView(whId: string) {
                     <select id="detail-type-filter" onchange="window.filterWarehouseLogs()"
                             style="background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
                         <option value="ALL">Tümü</option>
-                        <option value="ADD">Stok Giriş</option>
-                        <option value="REMOVE">Stok Çıkış</option>
+                        <option value="ADD_NEW">Stok Giriş</option>
+                        <option value="ADD_INCREASE">Stok Artışı</option>
+                        <option value="ADD_DEFECT">Sökülen Parça</option>
+                        <option value="REMOVE_REPORT">Takılan Parça</option>
+                        <option value="REMOVE_NEW">Stok Çıkış</option>
+                        <option value="REMOVE_DEFECT">Arızalı Çıkış</option>
                         <option value="TRANSFER">Transfer</option>
+                        <option value="ADD_SCRAP">Hurda Girişi</option>
+                        <option value="REMOVE_SCRAP">Hurda Çıkışı</option>
                     </select>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">

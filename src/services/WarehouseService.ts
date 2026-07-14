@@ -41,6 +41,7 @@ export interface InventoryLog {
   team?: string;
   note?: string;
   serialNo?: string;
+  transferInfo?: { from: string; to: string; fromName: string; toName: string; };
 }
 
 export interface AuditResult {
@@ -162,7 +163,13 @@ class WarehouseService {
     return data;
   }
 
-  async addMaterial(id: string, item: Omit<InventoryItem, 'id' | 'lastUpdated'>) {
+  async addMaterial(id: string, item: Omit<InventoryItem, 'id' | 'lastUpdated'>, logDetails?: {
+    sourceWh?: string;
+    deliveryNote?: string;
+    invoiceNo?: string;
+    updatedBy?: string;
+    entryNote?: string;
+  }) {
     const warehouseId = this.resolveWarehouseId(id);
     const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
     
@@ -208,6 +215,35 @@ class WarehouseService {
     }
     
     this.checkCriticalStock(warehouseId, { id: result.id, ...normalizedItem });
+
+    // Write audit log if quantity is greater than 0
+    if (normalizedItem.quantity > 0) {
+      let noteText = '';
+      if (logDetails) {
+        const parts = [];
+        if (logDetails.sourceWh && logDetails.sourceWh !== '-') parts.push(`Gelen Yer: ${logDetails.sourceWh}`);
+        if (logDetails.deliveryNote && logDetails.deliveryNote !== '-') parts.push(`İrsaliye: ${logDetails.deliveryNote}`);
+        if (logDetails.invoiceNo && logDetails.invoiceNo !== '-') parts.push(`Fatura: ${logDetails.invoiceNo}`);
+        if (logDetails.entryNote && logDetails.entryNote !== '-') parts.push(`Not: ${logDetails.entryNote}`);
+        noteText = parts.length > 0 ? parts.join(', ') : 'İlk Stok Girişi';
+      } else {
+        noteText = 'İlk Stok Girişi';
+      }
+      
+      await this.addLog(warehouseId, {
+        itemId: result.id,
+        sapNo: normalizedItem.sapNo || '',
+        materialName: normalizedItem.description || 'Bilinmeyen',
+        oldQty: 0,
+        newQty: normalizedItem.quantity,
+        quantity: normalizedItem.quantity,
+        type: 'ADD',
+        user: logDetails?.updatedBy || 'Sistem',
+        note: noteText,
+        serialNo: (normalizedItem as any).serialNo || ''
+      });
+    }
+
     return result;
   }
 
@@ -287,9 +323,19 @@ class WarehouseService {
     this.inventoryCache.delete(warehouseId);
   }
 
-  async updateMaterial(id: string, itemId: string, updates: Partial<InventoryItem>) {
+  async updateMaterial(id: string, itemId: string, updates: Partial<InventoryItem>, logDetails?: {
+    sourceWh?: string;
+    deliveryNote?: string;
+    invoiceNo?: string;
+    updatedBy?: string;
+  }) {
     const warehouseId = this.resolveWarehouseId(id);
     const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', itemId);
+    
+    // Fetch old item to calculate delta and write log
+    const itemSnap = await getDoc(docRef);
+    const oldData = itemSnap.exists() ? itemSnap.data() as InventoryItem : null;
+    const oldQty = oldData ? (oldData.quantity || 0) : 0;
     
     if (warehouseId.startsWith('team_') && updates.quantity !== undefined && updates.quantity <= 0) {
       await deleteDoc(docRef);
@@ -327,6 +373,37 @@ class WarehouseService {
 
     if (updatedItem) {
       this.checkCriticalStock(warehouseId, updatedItem);
+    }
+
+    // Write log if there is a quantity change
+    if (updates.quantity !== undefined) {
+      const delta = updates.quantity - oldQty;
+      if (delta !== 0) {
+        let noteText = '';
+        if (delta > 0 && logDetails) {
+          const parts = [];
+          if (logDetails.sourceWh && logDetails.sourceWh !== '-') parts.push(`Gelen Yer: ${logDetails.sourceWh}`);
+          if (logDetails.deliveryNote && logDetails.deliveryNote !== '-') parts.push(`İrsaliye: ${logDetails.deliveryNote}`);
+          if (logDetails.invoiceNo && logDetails.invoiceNo !== '-') parts.push(`Fatura: ${logDetails.invoiceNo}`);
+          if ((logDetails as any).entryNote) parts.push(`Not: ${(logDetails as any).entryNote}`);
+          noteText = parts.length > 0 ? parts.join(', ') : 'Manuel Miktar Artışı';
+        } else {
+          noteText = delta > 0 ? 'Manuel Miktar Artışı' : 'Manuel Miktar Azalışı';
+        }
+        
+        await this.addLog(warehouseId, {
+          itemId: itemId,
+          sapNo: updates.sapNo || oldData?.sapNo || '',
+          materialName: updates.description || oldData?.description || 'Bilinmeyen',
+          oldQty: oldQty,
+          newQty: updates.quantity,
+          quantity: Math.abs(delta),
+          type: delta > 0 ? 'ADD' : 'REMOVE',
+          user: logDetails?.updatedBy || 'Sistem',
+          note: noteText,
+          serialNo: updates.serialNo || oldData?.serialNo || ''
+        });
+      }
     }
   }
 
@@ -527,6 +604,50 @@ class WarehouseService {
     });
 
     // 4. Write Logs (outside transaction)
+    let customNote = '';
+    if (targetWarehouseId.startsWith('team_') && !sourceWarehouseId.startsWith('team_')) {
+      try {
+        const rawTeam = targetWarehouseId.replace('team_', '').replace(/_/g, ' ');
+        const teamNumMatch = rawTeam.match(/\d+/);
+        const teamNum = teamNumMatch ? parseInt(teamNumMatch[0], 10) : null;
+        
+        const tasksQuery = query(
+          collection(db, 'tasks'),
+          where('metadata.isDeleted', '==', false)
+        );
+        const taskSnaps = await getDocs(tasksQuery);
+        let activeTask: any = null;
+        
+        for (const dDoc of taskSnaps.docs) {
+          const tData = dDoc.data();
+          const tStatus = tData.workflow?.durum || '';
+          if (tStatus === 'Tamamlandı' || tStatus === 'CANCELLED' || tStatus === 'İptal Edildi') continue;
+          
+          const tTeam = tData.assignment?.assignedTeam || '';
+          const tTeamNumMatch = tTeam.match(/\d+/);
+          const tTeamNum = tTeamNumMatch ? parseInt(tTeamNumMatch[0], 10) : null;
+          
+          if (teamNum !== null && tTeamNum === teamNum) {
+            activeTask = tData;
+            break;
+          }
+        }
+        
+        if (activeTask) {
+          const faultCode = activeTask.faultData?.statuKodu || 'Genel';
+          const turbineNo = activeTask.taskInfo?.turbinNo || '-';
+          const teamNameStr = teamNum !== null ? `team ${teamNum}` : rawTeam;
+          const cleanSourceName = sourceName.toLowerCase();
+          customNote = `${faultCode} ${turbineNo} nolu türbin arızası için ${teamNameStr} ${cleanSourceName} deposundan ${quantity} adet malzeme sevki yapmıştır.`;
+        }
+      } catch (e) {
+        console.error("Error matching active task for transfer log note:", e);
+      }
+    }
+
+    const sourceNote = customNote || (targetWarehouseId.startsWith('team_') ? `${targetName} ekibine zimmetlendi.` : `${targetName} deposuna transfer edildi.`);
+    const targetNote = customNote || (sourceWarehouseId.startsWith('team_') ? `${sourceName} ekibinden iade alındı.` : `${sourceName} deposundan transfer edildi.`);
+
     const logPromises = [
       this.addLog(sourceWarehouseId, {
         itemId: sourceItemId,
@@ -537,8 +658,14 @@ class WarehouseService {
         oldQty: sourceItemCached.quantity,
         newQty: finalSourceQty,
         user,
-        note: targetWarehouseId.startsWith('team_') ? `${targetName} ekibine zimmetlendi.` : `${targetName} deposuna transfer edildi.`,
-        serialNo: sourceItemCached.serialNo || ''
+        note: sourceNote,
+        serialNo: sourceItemCached.serialNo || '',
+        transferInfo: {
+          from: sourceWarehouseId,
+          to: targetWarehouseId,
+          fromName: sourceName,
+          toName: targetName
+        }
       })
     ];
 
@@ -552,8 +679,14 @@ class WarehouseService {
         oldQty: targetItemCached ? targetItemCached.quantity : 0,
         newQty: finalTargetQty,
         user,
-        note: sourceWarehouseId.startsWith('team_') ? `${sourceName} ekibinden iade alındı.` : `${sourceName} deposundan transfer edildi.`,
-        serialNo: targetItemCached?.serialNo || sourceItemCached.serialNo || ''
+        note: targetNote,
+        serialNo: targetItemCached?.serialNo || sourceItemCached.serialNo || '',
+        transferInfo: {
+          from: sourceWarehouseId,
+          to: targetWarehouseId,
+          fromName: sourceName,
+          toName: targetName
+        }
       })
     );
 
@@ -1231,6 +1364,14 @@ class WarehouseService {
       }
     }
 
+    let finalNote = logInfo.reason || '';
+    if (logInfo.reportNo && !finalNote.includes(logInfo.reportNo)) {
+      finalNote += ` (Rapor: ${logInfo.reportNo})`;
+    }
+    if (condition !== 'NEW') {
+      finalNote += ` [Durum: ${condition}]`;
+    }
+
     await this.addLog(warehouseId, {
       itemId: itemId,
       sapNo: sapNo,
@@ -1240,7 +1381,7 @@ class WarehouseService {
       quantity: Math.abs(delta),
       type: delta > 0 ? 'ADD' : 'REMOVE',
       user: logInfo.user,
-      note: logInfo.reason + (logInfo.reportNo ? ` (Rapor: ${logInfo.reportNo})` : '') + ` [Durum: ${condition}]`,
+      note: finalNote,
       source: 'Sistem',
       serialNo: serialNo || item?.serialNo || '',
       turbineNo: parsedTurbineNo,
