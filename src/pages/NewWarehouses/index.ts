@@ -365,6 +365,26 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   warehouseState.targetOptions = targetOptions;
   (window as any)._warehouseTargetOptions = targetOptions;
 
+  // Fetch initial live inventory items synchronously to prevent statistics/UI flicker
+  try {
+     const rawItems = await warehouseService.getInventory(currentWarehouse.id, true);
+     warehouseState.inventoryItems = rawItems.map((item: any) => {
+       let resolvedName = item.name || item.description || '';
+       if (!resolvedName || resolvedName === 'Bilinmeyen Malzeme') {
+         const dictMat = inventoryService.getMaterialBySap(item.sapNo);
+         if (dictMat && dictMat.d) {
+           resolvedName = dictMat.d;
+         }
+       }
+       if (!resolvedName) resolvedName = 'Bilinmeyen Malzeme';
+       return { ...item, name: resolvedName };
+     });
+     warehouseState.inventoryWithQRs = warehouseState.inventoryItems.map(item => ({ ...item, qrDataUrl: '' }));
+     (window as any).currentInventoryData = warehouseState.inventoryItems;
+  } catch (err) {
+     console.warn("Could not retrieve initial inventory:", err);
+  }
+
   // Real-time notifications and returns
   let pendingReturns: any[] = [];
   try {
@@ -387,25 +407,28 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   let sortedTurbines: any[] = [];
   let reports: any[] = [];
 
-  if (currentWarehouse.id !== 'MTA') {
+  if (currentWarehouse) {
     try {
       const { serviceReportService } = await import('../../services/ServiceReportService');
       const allReports = await serviceReportService.getAllReports();
-      const responsibleSites = getTeamResponsibleSites(currentWarehouse.id);
+      const whNameBase = currentWarehouse.name.toLowerCase().replace('depo', '').trim();
       
-      reports = allReports.filter((rep: any) => {
+      reports = allReports.filter((report: any) => {
+         if (!report.materials || report.materials.length === 0) return false;
+         
+         let isMatch = false;
          if (isMobileWarehouse) {
-            const assignmentTeam = rep.assignment?.assignedTeam ? formatTeamName(rep.assignment.assignedTeam) : '';
-            const whTeam = formatTeamName(currentWarehouse.name.replace('Deposu', ''));
-            return assignmentTeam === whTeam;
+           const whTeam = formatTeamName(currentWarehouse.id);
+           const reportCreatorTeam = report.createdBy ? formatTeamName(report.createdBy.split('@')[0]) : '';
+           const reportPersonnelStr = Array.isArray(report.personnel) ? report.personnel.join(', ') : (report.personnel || '');
+           const reportPersonnelTeam = reportPersonnelStr ? formatTeamName(reportPersonnelStr) : '';
+           const reportTeamField = report.team ? formatTeamName(report.team) : '';
+           isMatch = (whTeam === reportCreatorTeam || whTeam === reportPersonnelTeam || whTeam === reportTeamField);
          } else {
-            const matchesSite = responsibleSites.some(siteName => {
-               const repSiteLower = String(rep.siteName || '').toLowerCase().trim();
-               const targetSiteLower = String(siteName).toLowerCase().trim();
-               return repSiteLower.includes(targetSiteLower) || targetSiteLower.includes(repSiteLower);
-            });
-            return matchesSite;
+           const reportSiteBase = (report.siteName || '').toLowerCase().trim();
+           isMatch = whNameBase.includes(reportSiteBase) || reportSiteBase.includes(whNameBase) || whNameBase === 'merkez';
          }
+         return isMatch;
       });
 
       // Filter by period
@@ -2330,6 +2353,66 @@ function setupWarehouseLogic(currentWarehouse: any) {
     warehouseState.warehouseTransfersSearchQuery = input ? input.value.trim().toLowerCase() : '';
     warehouseState.warehouseTransfersPage = 1;
     (window as any).renderWarehouseTransfersList();
+  };
+
+  (window as any).loadWarehouseTransfers = () => {
+    const container = document.getElementById('warehouse-transfers-container');
+    if (!container) return;
+
+    const dirStyle = (dir: string) => {
+      return warehouseState.warehouseTransfersDirection === dir 
+        ? 'background: rgba(20, 241, 149, 0.15); color: #14F195;' 
+        : 'background: transparent; color: #94A3B8;';
+    };
+
+    container.innerHTML = `
+       <!-- Controls Panel (Search, Direction, Excel) -->
+       <div style="display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 10px 12px; border-radius: 8px;">
+         
+         <!-- Search Input -->
+         <div style="flex: 1; min-width: 220px; position: relative;">
+           <input type="text" id="transfer-search-input" oninput="window.onTransferSearchInput()" value="${warehouseState.warehouseTransfersSearchQuery}" placeholder="SAP No, Malzeme, Depo veya MSF No Ara..." style="width: 100%; box-sizing: border-box; padding: 6px 10px 6px 30px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: #0A0E17; color: #FFF; font-size: 0.78rem;">
+           <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.8rem;"></i>
+         </div>
+
+         <!-- Direction Selector -->
+         <div style="display: flex; background: #0A0E17; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 2px;">
+           <button onclick="window.setTransferDirection('ALL')" id="btn-dir-all" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('ALL')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Tümü</button>
+           <button onclick="window.setTransferDirection('INCOMING')" id="btn-dir-in" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('INCOMING')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Gelenler</button>
+           <button onclick="window.setTransferDirection('OUTGOING')" id="btn-dir-out" style="font-size: 0.72rem; border: none; border-radius: 4px; padding: 4px 10px; ${dirStyle('OUTGOING')} font-family: 'Rajdhani', sans-serif; font-weight: bold; cursor: pointer; transition: all 0.2s;">Gidenler</button>
+         </div>
+
+         <!-- Excel Export Button -->
+         <button onclick="window.exportTransfersListToExcel()" class="btn-cyber-mini" style="font-size: 0.75rem; padding: 6px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: bold; display: flex; align-items: center; gap: 6px;">
+           <i class="fa-solid fa-file-excel"></i> Excel İndir
+         </button>
+
+       </div>
+
+       <div id="warehouse-transfers-cards-list">
+         <div style="color: var(--accent-cyan); text-align: center; padding: 2rem;"><i class="fa-solid fa-spinner fa-spin"></i> Transferler Listeleniyor...</div>
+       </div>
+    `;
+
+    (window as any).renderWarehouseTransfersList();
+  };
+
+  (window as any).toggleAuditDetails = (auditId: string) => {
+    const el = document.getElementById(`audit-details-${auditId}`);
+    const icon = document.getElementById(`audit-toggle-icon-${auditId}`);
+    if (el) {
+      if (el.style.display === 'none') {
+        el.style.display = 'block';
+        if (icon) {
+          icon.className = 'fa-solid fa-chevron-up';
+        }
+      } else {
+        el.style.display = 'none';
+        if (icon) {
+          icon.className = 'fa-solid fa-chevron-down';
+        }
+      }
+    }
   };
 
   (window as any).getFilteredTransfersList = () => {
