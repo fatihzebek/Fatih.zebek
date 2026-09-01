@@ -150,7 +150,7 @@ class EmailService {
 
       // Create temporary container offscreen
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 780px; background: #ffffff; z-index: -99999;';
+      wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 720px; background: #ffffff; z-index: -99999;';
       wrapper.innerHTML = htmlContent;
       document.body.appendChild(wrapper);
 
@@ -167,7 +167,7 @@ class EmailService {
       await new Promise(r => setTimeout(r, 400));
 
       const opt = {
-          margin: [8, 6, 8, 6],
+          margin: [8, 8, 8, 8],
           filename: `Servis_Raporu_${reportNo}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { 

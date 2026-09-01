@@ -328,7 +328,7 @@ let ohsHtml = '';
   }
 
   return `
-    <div id="pdf-container" style="background: #fff; color: #000; padding: 6px 8px; width: 780px; max-width: 780px; min-width: 780px; box-sizing: border-box; margin: 0 auto; font-family: Arial, Helvetica, sans-serif;">
+    <div id="pdf-container" style="background: #fff; color: #000; padding: 12px 18px; width: 720px; max-width: 720px; min-width: 720px; box-sizing: border-box; margin: 0 auto; font-family: Arial, Helvetica, sans-serif;">
       
       <!-- CSS Isolation directly injected to guarantee it works even with caching -->
       <style>
@@ -344,10 +344,10 @@ let ohsHtml = '';
           }
 
           #pdf-container {
-            width: 780px !important;
-            max-width: 780px !important;
+            width: 720px !important;
+            max-width: 720px !important;
             margin: 0 auto;
-            padding: 6px 8px;
+            padding: 12px 18px;
             box-sizing: border-box !important;
           }
 
@@ -369,7 +369,7 @@ let ohsHtml = '';
           }
         }
 
-        #pdf-container { width: 780px !important; max-width: 780px !important; min-width: 780px !important; box-sizing: border-box !important; }
+        #pdf-container { width: 720px !important; max-width: 720px !important; min-width: 720px !important; padding: 12px 18px !important; box-sizing: border-box !important; }
         #pdf-container table { display: table !important; width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
         #pdf-container table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         #pdf-container table th, #pdf-container table td { word-wrap: break-word !important; overflow-wrap: break-word !important; box-sizing: border-box !important; }
