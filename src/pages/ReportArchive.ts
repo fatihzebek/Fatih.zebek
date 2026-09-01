@@ -1670,22 +1670,13 @@ export const ReportArchivePage = async (siteId?: string) => {
             fileName = fileName.replace(/Ğ/g,'G').replace(/ğ/g,'g').replace(/Ü/g,'U').replace(/ü/g,'u').replace(/Ş/g,'S').replace(/ş/g,'s').replace(/İ/g,'I').replace(/ı/g,'i').replace(/Ö/g,'O').replace(/ö/g,'o').replace(/Ç/g,'C').replace(/ç/g,'c');
             fileName = fileName.replace(/[\\/:*?"<>|]/g, '-');
 
-            // Create temporary container positioned at (0, 0) with zero visibility to prevent coordinate/viewport shifts
+            // Create temporary container offscreen
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 780px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+            wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 780px; background: #ffffff; z-index: -99999;';
             wrapper.innerHTML = htmlContent;
             document.body.appendChild(wrapper);
 
             const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
-            if (targetElement) {
-              targetElement.style.width = '780px';
-              targetElement.style.minWidth = '780px';
-              targetElement.style.maxWidth = '780px';
-              targetElement.style.margin = '0 auto';
-              targetElement.style.padding = '6px 8px';
-              targetElement.style.boxSizing = 'border-box';
-              targetElement.style.background = '#ffffff';
-            }
 
             // Wait for images to load inside target
             const images = wrapper.querySelectorAll('img');
@@ -1695,17 +1686,16 @@ export const ReportArchivePage = async (siteId?: string) => {
                     return new Promise(res => { img.onload = res; img.onerror = res; });
                 }));
             }
-            await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, 400));
 
             const opt = {
-                margin: [6, 4, 6, 4],
+                margin: [8, 6, 8, 6],
                 filename: fileName,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
                     scale: 2, 
                     useCORS: true, 
-                    backgroundColor: '#ffffff',
-                    windowWidth: 780
+                    backgroundColor: '#ffffff'
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { 
@@ -1715,18 +1705,12 @@ export const ReportArchivePage = async (siteId?: string) => {
                 }
             };
 
-            const originalHtmlFontSize = document.documentElement.style.fontSize;
-            document.documentElement.style.fontSize = '12px';
-
             try {
                 // Direct PDF download using target element
                 await (window as any).html2pdf().set(opt).from(targetElement).save();
             } finally {
-                document.documentElement.style.fontSize = originalHtmlFontSize;
+                if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
             }
-
-            // Clean up DOM
-            document.body.removeChild(wrapper);
         }
     } catch (err) {
         console.error("PDF Download error", err);
