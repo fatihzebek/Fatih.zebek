@@ -150,17 +150,17 @@ class EmailService {
 
       // Create temporary container positioned at (0, 0) with zero visibility to prevent coordinate/viewport shifts
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 800px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+      wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 780px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
       wrapper.innerHTML = htmlContent;
       document.body.appendChild(wrapper);
 
       const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
       if (targetElement) {
-        targetElement.style.width = '800px';
-        targetElement.style.minWidth = '800px';
-        targetElement.style.maxWidth = '800px';
+        targetElement.style.width = '780px';
+        targetElement.style.minWidth = '780px';
+        targetElement.style.maxWidth = '780px';
         targetElement.style.margin = '0 auto';
-        targetElement.style.padding = '10px 14px';
+        targetElement.style.padding = '6px 8px';
         targetElement.style.boxSizing = 'border-box';
         targetElement.style.background = '#ffffff';
       }
@@ -176,19 +176,20 @@ class EmailService {
       await new Promise(r => setTimeout(r, 600));
 
       const opt = {
-          margin: [8, 6, 8, 6],
+          margin: [6, 4, 6, 4],
           filename: `Servis_Raporu_${reportNo}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              backgroundColor: '#ffffff'
+              backgroundColor: '#ffffff',
+              windowWidth: 780
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { 
-              mode: ['avoid-all', 'css', 'legacy'], 
-              before: ['.html2pdf__page-break', '.section-break', '.ohs-table-block'], 
-              avoid: ['tr', '.pdf-no-break', 'img', '.report-section', 'table'] 
+              mode: ['css', 'legacy'], 
+              before: '.html2pdf__page-break', 
+              avoid: ['tr', 'img'] 
           }
       };
 

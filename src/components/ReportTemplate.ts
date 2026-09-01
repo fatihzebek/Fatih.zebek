@@ -153,61 +153,67 @@ export const renderReportPDF = (report: ServiceReport) => {
       }
 
       return `
-        <tr style="background: ${rowBg}; page-break-inside: avoid;">
-          <td style="border: 1px solid #bbb; padding: 3px; text-align: center; font-weight: 700; color: #555;">${(idx + 1).toString().padStart(2, '0')}</td>
-          <td style="border: 1px solid #bbb; padding: 3px 6px; font-weight: ${item.status === 'NOT_OK' ? '700' : '400'};${item.status === 'NOT_OK' ? ' color: #b91c1c;' : ''}">
+        <tr style="background: ${rowBg}; page-break-inside: avoid; break-inside: avoid;">
+          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center; font-weight: 700; color: #555;">${(idx + 1).toString().padStart(2, '0')}</td>
+          <td style="border: 1px solid #bbb; padding: 4px 6px; font-weight: ${item.status === 'NOT_OK' ? '700' : '400'};${item.status === 'NOT_OK' ? ' color: #b91c1c;' : ''}; word-break: break-word;">
             ${item.text}
             ${advHtml}
           </td>
-          <td style="border: 1px solid #bbb; padding: 3px; text-align: center;">
-            <span style="background: ${statusBg}; color: ${statusColor}; padding: 1px 6px; border-radius: 3px; font-weight: 800; font-size: 0.96rem; border: 1px solid ${statusColor}33;">${statusLabel}</span>
+          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center;">
+            <span style="background: ${statusBg}; color: ${statusColor}; padding: 1px 4px; border-radius: 3px; font-weight: 800; font-size: 0.85rem; border: 1px solid ${statusColor}33; display: inline-block;">${statusLabel}</span>
           </td>
-          <td style="border: 1px solid #bbb; padding: 3px 6px; font-size: 1.02rem; color: ${item.status === 'NOT_OK' ? '#b91c1c' : '#666'}; font-style: ${item.comment ? 'normal' : 'italic'};">
+          <td style="border: 1px solid #bbb; padding: 4px 6px; font-size: 0.92rem; color: ${item.status === 'NOT_OK' ? '#b91c1c' : '#666'}; font-style: ${item.comment ? 'normal' : 'italic'}; word-break: break-word;">
             ${item.comment || '-'}
           </td>
         </tr>`;
     };
 
+    checklistHtml += `<div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>`;
     checklistHtml += `<div style="padding-top: 5px;">`;
     
     checklistHtml += `
-      <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>
       <div style="text-align: center; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 8px;">
-        <h1 style="font-size: 1.32rem; margin: 0 0 2px; font-weight: 900; letter-spacing: 1px;">BAKIM KONTROL LİSTESİ</h1>
-        <div style="font-size: 1.02rem; color: #555;">${report.templateName || ''} | Rapor No: <strong>${report.reportNo}</strong> | Türbin: <strong>${report.turbineNo}</strong> (${report.turbineSerial}) | Saha: <strong>${report.siteName}</strong> | Tarih: <strong>${new Date(report.date).toLocaleDateString('tr-TR')}</strong></div>
+        <h1 style="font-size: 1.25rem; margin: 0 0 2px; font-weight: 900; letter-spacing: 0.5px;">BAKIM KONTROL LİSTESİ</h1>
+        <div style="font-size: 0.9rem; color: #555;">${report.templateName || ''} | Rapor No: <strong>${report.reportNo}</strong> | Türbin: <strong>${report.turbineNo}</strong> (${report.turbineSerial}) | Saha: <strong>${report.siteName}</strong> | Tarih: <strong>${new Date(report.date).toLocaleDateString('tr-TR')}</strong></div>
       </div>
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 1.08rem;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 0.95rem; table-layout: fixed;">
         <tr>
           <td style="width: 33.3%; padding: 0 3px 0 0;">
-            <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 4px; padding: 4px 8px; text-align: center;">
+            <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 4px; padding: 4px 6px; text-align: center;">
               <span style="font-size: 0.75rem; font-weight: 700; color: #16a34a; text-transform: uppercase;">Tamamlandı: </span>
-              <span style="font-size: 1.2rem; font-weight: 900; color: #15803d;">${okCount} / ${totalChecklist}</span>
+              <span style="font-size: 1.1rem; font-weight: 900; color: #15803d;">${okCount} / ${totalChecklist}</span>
             </div>
           </td>
           <td style="width: 33.3%; padding: 0 2px;">
-            <div style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 4px; padding: 4px 8px; text-align: center;">
+            <div style="background: #fef2f2; border: 1px solid #ef4444; border-radius: 4px; padding: 4px 6px; text-align: center;">
               <span style="font-size: 0.75rem; font-weight: 700; color: #dc2626; text-transform: uppercase;">Tamamlanmadı: </span>
-              <span style="font-size: 1.2rem; font-weight: 900; color: #b91c1c;">${notOkCount}</span>
+              <span style="font-size: 1.1rem; font-weight: 900; color: #b91c1c;">${notOkCount}</span>
             </div>
           </td>
           <td style="width: 33.3%; padding: 0 0 0 3px;">
-            <div style="background: #f5f5f5; border: 1px solid #aaa; border-radius: 4px; padding: 4px 8px; text-align: center;">
+            <div style="background: #f5f5f5; border: 1px solid #aaa; border-radius: 4px; padding: 4px 6px; text-align: center;">
               <span style="font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase;">Opsiyon Dışı: </span>
-              <span style="font-size: 1.2rem; font-weight: 900; color: #555;">${naCount}</span>
+              <span style="font-size: 1.1rem; font-weight: 900; color: #555;">${naCount}</span>
             </div>
           </td>
         </tr>
       </table>
       <div style="margin-bottom: 8px;">
-        <div style="background: #e8ecf1; padding: 4px 12px; font-weight: 800; font-size: 1.14rem; border: 1px solid #bbb; border-bottom: none;">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           BAKIM DENETİM LİSTESİ
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem;">
-          <tr style="background: #f5f7fa;">
-            <th style="border: 1px solid #bbb; padding: 4px; width: 30px; font-weight: 700; text-align: center;">NO</th>
-            <th style="border: 1px solid #bbb; padding: 4px; text-align: left; font-weight: 700;">KONTROL MADDESİ</th>
-            <th style="border: 1px solid #bbb; padding: 4px; width: 110px; font-weight: 700; text-align: center;">DURUM</th>
-            <th style="border: 1px solid #bbb; padding: 4px; width: 180px; font-weight: 700; text-align: left;">AÇIKLAMA</th>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.92rem; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 32px;">
+            <col>
+            <col style="width: 105px;">
+            <col style="width: 130px;">
+          </colgroup>
+          <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
+            <th style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center;">NO</th>
+            <th style="border: 1px solid #bbb; padding: 4px 6px; text-align: left; font-weight: 700;">KONTROL MADDESİ</th>
+            <th style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center;">DURUM</th>
+            <th style="border: 1px solid #bbb; padding: 4px 6px; font-weight: 700; text-align: left;">AÇIKLAMA</th>
           </tr>`;
           
     checklist.forEach((item, i) => {
@@ -218,33 +224,38 @@ export const renderReportPDF = (report: ServiceReport) => {
     
     if (notOkCount > 0) {
       checklistHtml += `
-        <div style="margin-bottom: 12px; page-break-inside: avoid;">
-          <div style="background: #fef2f2; padding: 4px 12px; font-weight: 800; font-size: 1.14rem; border: 1px solid #ef4444; border-bottom: none; color: #b91c1c;">
+        <div style="margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+          <div style="background: #fef2f2; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #ef4444; border-bottom: none; color: #b91c1c;">
             🚨 ANALİZ VE BULGULAR (${notOkCount})
           </div>
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #ef4444; font-size: 1.08rem;">
-            <tr style="background: #fef2f2;">
-              <th style="border: 1px solid #ef4444; padding: 4px; width: 30px; font-weight: 700; text-align: center;">NO</th>
-              <th style="border: 1px solid #ef4444; padding: 4px; text-align: left; font-weight: 700;">Kontrol Maddesi</th>
-              <th style="border: 1px solid #ef4444; padding: 4px; text-align: left; font-weight: 700;">Tamamlanamama Nedeni / Arıza Bulgusu</th>
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #ef4444; font-size: 0.92rem; table-layout: fixed;">
+            <colgroup>
+              <col style="width: 32px;">
+              <col style="width: 40%;">
+              <col style="width: 55%;">
+            </colgroup>
+            <tr style="background: #fef2f2; page-break-inside: avoid; break-inside: avoid;">
+              <th style="border: 1px solid #ef4444; padding: 4px 2px; font-weight: 700; text-align: center;">NO</th>
+              <th style="border: 1px solid #ef4444; padding: 4px 6px; text-align: left; font-weight: 700;">Kontrol Maddesi</th>
+              <th style="border: 1px solid #ef4444; padding: 4px 6px; text-align: left; font-weight: 700;">Tamamlanamama Nedeni / Arıza Bulgusu</th>
             </tr>
             ${checklist.filter(item => item.status === 'NOT_OK').map((item) => {
               const originalIndex = checklist.indexOf(item);
               return `
-                <tr style="background: #fff; page-break-inside: avoid;">
-                  <td style="border: 1px solid #ef4444; padding: 4px; text-align: center; font-weight: 800; color: #b91c1c;">${(originalIndex + 1).toString().padStart(2, '0')}</td>
-                  <td style="border: 1px solid #ef4444; padding: 4px; font-weight: 600;">${item.text}</td>
-                  <td style="border: 1px solid #ef4444; padding: 4px; color: #b91c1c; font-weight: 500;">${item.comment || 'Açıklama girilmemiş'}</td>
+                <tr style="background: #fff; page-break-inside: avoid; break-inside: avoid;">
+                  <td style="border: 1px solid #ef4444; padding: 4px 2px; text-align: center; font-weight: 800; color: #b91c1c;">${(originalIndex + 1).toString().padStart(2, '0')}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px 6px; font-weight: 600; word-break: break-word;">${item.text}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px 6px; color: #b91c1c; font-weight: 500; word-break: break-word;">${item.comment || 'Açıklama girilmemiş'}</td>
                 </tr>`;
             }).join('')}
           </table>
         </div>`;
     } else {
       checklistHtml += `
-        <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 12px; page-break-inside: avoid;">
-          <div style="font-size: 1.56rem; margin-bottom: 4px;">✅</div>
-          <div style="font-weight: 700; color: #15803d; font-size: 1.2rem;">Tüm maddeler başarıyla tamamlandı.</div>
-          <div style="font-size: 1.02rem; color: #16a34a;">Olumsuz bir bulguya rastlanmadı.</div>
+        <div style="background: #e6f9e8; border: 1px solid #22c55e; border-radius: 8px; padding: 12px; text-align: center; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+          <div style="font-size: 1.4rem; margin-bottom: 2px;">✅</div>
+          <div style="font-weight: 700; color: #15803d; font-size: 1.05rem;">Tüm maddeler başarıyla tamamlandı.</div>
+          <div style="font-size: 0.9rem; color: #16a34a;">Olumsuz bir bulguya rastlanmadı.</div>
         </div>`;
     }
     checklistHtml += `</div>`;
@@ -288,20 +299,26 @@ let ohsHtml = '';
 
         return `
             <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>
-            <table class="ohs-table-block" style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem; margin-top: 5px; margin-bottom: 20px;">
+            <table class="ohs-table-block" style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.92rem; table-layout: fixed; margin-top: 5px; margin-bottom: 15px;">
+              <colgroup>
+                <col style="width: 32px;">
+                <col>
+                <col style="width: 130px;">
+                <col style="width: 130px;">
+              </colgroup>
               <tr style="page-break-inside: avoid; break-inside: avoid;">
-                <td colspan="4" style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb;">${dayIndex + 1}. GÜN İSG VE SAHA GÜVENLİK ONAYLARI</td>
+                <td colspan="4" style="background: #e8ecf1; padding: 6px 10px; font-weight: 800; font-size: 1.1rem; border: 1px solid #bbb;">${dayIndex + 1}. GÜN İSG VE SAHA GÜVENLİK ONAYLARI</td>
               </tr>
               <tr style="page-break-inside: avoid; break-inside: avoid;">
-                <td colspan="4" style="background: #e8ecf1; padding: 0; border: 1px solid #bbb; text-align: right; font-weight: 800; font-size: 1.2rem;">
-                  <div style="padding: 0 12px 6px; text-align: right;">${dateStr || ''}</div>
+                <td colspan="4" style="background: #e8ecf1; padding: 0 10px 6px; border: 1px solid #bbb; text-align: right; font-weight: 800; font-size: 0.95rem;">
+                  ${dateStr || ''}
                 </td>
               </tr>
               <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
-                <th style="border: 1px solid #bbb; padding: 6px; width: 35px; font-weight: 700; text-align: center;">NO</th>
-                <th style="border: 1px solid #bbb; padding: 6px; font-weight: 700; text-align: left;">İSG KONTROL MADDESİ</th>
-                <th style="border: 1px solid #bbb; padding: 6px; width: 140px; font-weight: 700; text-align: center;">ONAYLAYAN PERSONEL</th>
-                <th style="border: 1px solid #bbb; padding: 6px; width: 150px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
+                <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700; text-align: center;">NO</th>
+                <th style="border: 1px solid #bbb; padding: 5px 6px; font-weight: 700; text-align: left;">İSG KONTROL MADDESİ</th>
+                <th style="border: 1px solid #bbb; padding: 5px 4px; font-weight: 700; text-align: center;">ONAYLAYAN PERSONEL</th>
+                <th style="border: 1px solid #bbb; padding: 5px 4px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
               </tr>
               ${itemsHtml}
             </table>
@@ -311,7 +328,7 @@ let ohsHtml = '';
   }
 
   return `
-    <div id="pdf-container" style="background: #fff; color: #000; padding: 10px 14px; width: 800px; max-width: 800px; min-width: 800px; box-sizing: border-box; margin: 0 auto; font-family: Arial, Helvetica, sans-serif;">
+    <div id="pdf-container" style="background: #fff; color: #000; padding: 6px 8px; width: 780px; max-width: 780px; min-width: 780px; box-sizing: border-box; margin: 0 auto; font-family: Arial, Helvetica, sans-serif;">
       
       <!-- CSS Isolation directly injected to guarantee it works even with caching -->
       <style>
@@ -327,10 +344,10 @@ let ohsHtml = '';
           }
 
           #pdf-container {
-            width: 800px !important;
-            max-width: 800px !important;
+            width: 780px !important;
+            max-width: 780px !important;
             margin: 0 auto;
-            padding: 10px 14px;
+            padding: 6px 8px;
             box-sizing: border-box !important;
           }
 
@@ -352,12 +369,12 @@ let ohsHtml = '';
           }
         }
 
-        #pdf-container { width: 800px !important; max-width: 800px !important; box-sizing: border-box !important; }
+        #pdf-container { width: 780px !important; max-width: 780px !important; min-width: 780px !important; box-sizing: border-box !important; }
         #pdf-container table { display: table !important; width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
         #pdf-container table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         #pdf-container table th, #pdf-container table td { word-wrap: break-word !important; overflow-wrap: break-word !important; box-sizing: border-box !important; }
         #pdf-container .pdf-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
-        #pdf-container .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 15px; }
+        #pdf-container .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 12px; }
         .html2pdf__page-break { page-break-before: always !important; break-before: page !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
       </style>
 
@@ -366,59 +383,65 @@ let ohsHtml = '';
       <!-- ═══════════════════════════════════════════ -->
 
       <!-- Header -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 3px solid #002d6b; padding-bottom: 15px;">
-        <div style="display: flex; gap: 15px; align-items: center;">
-            <div style="flex-shrink: 0; width: 70px; height: 70px; background-color: #002d6b; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-              <span style="font-family: Arial, sans-serif; font-weight: 900; font-size: 44px; color: #ffffff; letter-spacing: -3px; line-height: 1; display: inline-block; margin-top: -2px;">dh</span>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 14px; border-bottom: 3px solid #002d6b; padding-bottom: 10px; box-sizing: border-box;">
+        <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="flex-shrink: 0; width: 55px; height: 55px; background-color: #002d6b; border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+              <span style="font-family: Arial, sans-serif; font-weight: 900; font-size: 34px; color: #ffffff; letter-spacing: -2px; line-height: 1; display: inline-block;">dh</span>
             </div>
           <div>
-            <h1 style="font-size: 1.6rem; margin: 0 0 4px; font-weight: 900; letter-spacing: 0.5px; color: #002d6b;">DEMİRER HOLDİNG</h1>
-            <div style="font-size: 1.1rem; color: #555; font-weight: 700;">TEKNİK SERVİS ${isMaintenance ? 'BAKIM' : 'ARIZA'} RAPORU</div>
+            <h1 style="font-size: 1.35rem; margin: 0 0 2px; font-weight: 900; letter-spacing: 0.5px; color: #002d6b; line-height: 1.2;">DEMİRER HOLDİNG</h1>
+            <div style="font-size: 0.95rem; color: #555; font-weight: 700;">TEKNİK SERVİS ${isMaintenance ? 'BAKIM' : 'ARIZA'} RAPORU</div>
           </div>
         </div>
-        <div style="text-align: right;">
-          <div style="font-size: 1.2rem; font-weight: 800; color: #cc0000; margin-bottom: 4px;">Rapor No: ${report.reportNo}</div>
-          <div style="font-size: 0.95rem; color: #666; font-weight: 600;">Tarih: ${new Date(report.date).toLocaleDateString('tr-TR')}</div>
-          ${report.templateName ? `<div style="font-size: 0.85rem; color: #888; margin-top: 4px; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${report.templateName}</div>` : ''}
+        <div style="text-align: right; flex-shrink: 0;">
+          <div style="font-size: 1.1rem; font-weight: 800; color: #cc0000; margin-bottom: 2px;">Rapor No: ${report.reportNo}</div>
+          <div style="font-size: 0.85rem; color: #666; font-weight: 600;">Tarih: ${new Date(report.date).toLocaleDateString('tr-TR')}</div>
+          ${report.templateName ? `<div style="font-size: 0.8rem; color: #888; margin-top: 2px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${report.templateName}</div>` : ''}
         </div>
       </div>
 
       <!-- SERVİS AYRINTILARI -->
-      <div class="report-section" style="margin-bottom: 20px;">
-        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none;">
+      <div class="report-section">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           SERVİS AYRINTILARI
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.98rem;">
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.9rem; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 16%;">
+            <col style="width: 34%;">
+            <col style="width: 16%;">
+            <col style="width: 34%;">
+          </colgroup>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; width: 15%; background: #f5f7fa; font-weight: 700;">Tarih</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px; width: 35%;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; width: 15%; background: #f5f7fa; font-weight: 700; white-space: nowrap;">Bölge / Saha</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px; width: 35%;">${report.siteName}</td>
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">Tarih</th>
+            <td style="border: 1px solid #bbb; padding: 5px 8px;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700; white-space: nowrap;">Bölge / Saha</th>
+            <td style="border: 1px solid #bbb; padding: 5px 8px; word-break: break-word;">${report.siteName}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Türbin Seri No</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px;">${report.turbineSerial}</td>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Türbin No</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px;">${report.turbineNo}</td>
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">Türbin Seri No</th>
+            <td style="border: 1px solid #bbb; padding: 5px 8px;">${report.turbineSerial}</td>
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">Türbin No</th>
+            <td style="border: 1px solid #bbb; padding: 5px 8px;">${report.turbineNo}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
               const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
               return isPlanli ? 'Planlı Kontrol' : (isMaintenance ? 'Bakım Türü' : 'Arıza Kodu');
             })()}</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px; font-weight: 700;">${(() => {
+            <td style="border: 1px solid #bbb; padding: 5px 8px; font-weight: 700; word-break: break-word;">${(() => {
               const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
               return isPlanli ? 'Planlı Duruş' : (isMaintenance ? (report.templateName || (report.faultCode !== '-' ? report.faultCode : '') || 'Bakım') : (report.faultCode || '-'));
             })()}</td>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Ekip</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px; font-weight: 700;">${formatTeamName(report.team)}</td>
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">Ekip</th>
+            <td style="border: 1px solid #bbb; padding: 5px 8px; font-weight: 700;">${formatTeamName(report.team)}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
+            <th style="border: 1px solid #bbb; padding: 5px 8px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
               const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
               return isPlanli ? 'Açıklama' : (isMaintenance ? 'Bakım Talimatı' : 'Arıza Tanımı');
             })()}</th>
-            <td colspan="3" style="border: 1px solid #bbb; padding: 7px 10px; font-size: 1.14rem;">${(() => {
+            <td colspan="3" style="border: 1px solid #bbb; padding: 5px 8px; font-size: 0.92rem; word-break: break-word;">${(() => {
               const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
               if (isPlanli) {
                 return report.faultDesc || 'Planlı Duruş';
@@ -455,75 +478,95 @@ let ohsHtml = '';
       </div>
 
       <!-- ÇALIŞMA ZAMANLARI -->
-      <div class="report-section" style="margin-bottom: 20px;">
-        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none;">
+      <div class="report-section">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           ÇALIŞMA ZAMANLARI
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.14rem; text-align: center;">
-          <tr style="background: #f5f7fa;">
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Kayıt Türü</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Personel</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Tarih</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Başlangıç</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Bitiş</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Süre</th>
-            <th style="border: 1px solid #bbb; padding: 7px; font-weight: 700;">Açıklama / Not</th>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.92rem; text-align: center; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 14%;">
+            <col style="width: 25%;">
+            <col style="width: 14%;">
+            <col style="width: 11%;">
+            <col style="width: 11%;">
+            <col style="width: 10%;">
+            <col style="width: 15%;">
+          </colgroup>
+          <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Kayıt Türü</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Personel</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Tarih</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Başlangıç</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Bitiş</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Süre</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Açıklama</th>
           </tr>
           ${sessions.length > 0 ? sessions.filter((s: any) => s.startTime && s.endTime).map((session: any) => {
             const personnelList = Array.isArray(session.personnel) ? session.personnel.join(', ') : (session.personnel || '-');
             const typeLabel = session.type || 'ÇALIŞMA';
             return `
-              <tr>
-                <td style="border: 1px solid #bbb; padding: 6px; font-weight: 600;">${typeLabel}</td>
-                <td style="border: 1px solid #bbb; padding: 6px;">${personnelList}</td>
-                <td style="border: 1px solid #bbb; padding: 6px;">${session.date ? new Date(session.date).toLocaleDateString('tr-TR') : '-'}</td>
-                <td style="border: 1px solid #bbb; padding: 6px; font-weight: 600;">${session.startTime || '-'}</td>
-                <td style="border: 1px solid #bbb; padding: 6px; font-weight: 600;">${session.endTime || '-'}</td>
-                <td style="border: 1px solid #bbb; padding: 6px; font-weight: 700; color: #0055aa;">${session.duration || '-'}</td>
-                <td style="border: 1px solid #bbb; padding: 6px; text-align: left; font-size: 1.08rem;">${session.note || session.comment || '-'}</td>
+              <tr style="page-break-inside: avoid; break-inside: avoid;">
+                <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 600;">${typeLabel}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 2px; word-break: break-word;">${personnelList}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 2px;">${session.date ? new Date(session.date).toLocaleDateString('tr-TR') : '-'}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 600;">${session.startTime || '-'}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 600;">${session.endTime || '-'}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; color: #0055aa;">${session.duration || '-'}</td>
+                <td style="border: 1px solid #bbb; padding: 4px 4px; text-align: left; font-size: 0.85rem; word-break: break-word;">${session.note || session.comment || '-'}</td>
               </tr>
             `;
           }).join('') : `
-            <tr><td colspan="7" style="border: 1px solid #bbb; padding: 15px; color: #999;">Çalışma kaydı bulunmamaktadır.</td></tr>
+            <tr><td colspan="7" style="border: 1px solid #bbb; padding: 10px; color: #999;">Çalışma kaydı bulunmamaktadır.</td></tr>
           `}
         </table>
 
         <!-- Adam-Saat Özeti -->
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; border-top: none; font-size: 1.14rem; text-align: center;">
-          <tr style="background: #eaeff5;">
-            <th style="border: 1px solid #bbb; padding: 8px; font-weight: 700;">Türbin Süresi</th>
-            <th style="border: 1px solid #bbb; padding: 8px; font-weight: 700;">Yol Süresi</th>
-            <th style="border: 1px solid #bbb; padding: 8px; font-weight: 700;">Normal Adam-Saat</th>
-            <th style="border: 1px solid #bbb; padding: 8px; font-weight: 700;">Mesai Adam-Saat</th>
-            <th style="border: 1px solid #bbb; padding: 8px; font-weight: 700;">Toplam Adam-Saat</th>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; border-top: none; font-size: 0.92rem; text-align: center; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+            <col style="width: 20%;">
+          </colgroup>
+          <tr style="background: #eaeff5; page-break-inside: avoid; break-inside: avoid;">
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Türbin Süresi</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Yol Süresi</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Normal Adam-Saat</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Mesai Adam-Saat</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">Toplam Adam-Saat</th>
           </tr>
-          <tr>
-            <td style="border: 1px solid #bbb; padding: 8px; font-weight: 800; color: #0055aa;">${manHours.turbine}</td>
-            <td style="border: 1px solid #bbb; padding: 8px; font-weight: 800; color: #0055aa;">${manHours.travel}</td>
-            <td style="border: 1px solid #bbb; padding: 8px; font-weight: 800; color: #0055aa;">${manHours.normal}</td>
-            <td style="border: 1px solid #bbb; padding: 8px; font-weight: 800; color: #cc6600;">${manHours.overtime}</td>
-            <td style="border: 1px solid #bbb; padding: 8px; font-weight: 900; color: #006633;">${manHours.total}</td>
+          <tr style="page-break-inside: avoid; break-inside: avoid;">
+            <td style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 800; color: #0055aa;">${manHours.turbine}</td>
+            <td style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 800; color: #0055aa;">${manHours.travel}</td>
+            <td style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 800; color: #0055aa;">${manHours.normal}</td>
+            <td style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 800; color: #cc6600;">${manHours.overtime}</td>
+            <td style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 900; color: #006633;">${manHours.total}</td>
           </tr>
         </table>
       </div>
 
       <!-- YAPILAN İŞLEMLER VE FOTOĞRAFLAR -->
-      <div class="report-section" style="margin-bottom: 20px;">
-        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none;">
+      <div class="report-section">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           YAPILAN İŞLEMLER VE FOTOĞRAFLAR
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.98rem;">
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.9rem; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 50%;">
+            <col style="width: 50%;">
+          </colgroup>
           <tr>
-            <td style="border: 1px solid #bbb; padding: 15px; vertical-align: top; width: 50%; min-height: 100px;">
-              <div style="font-weight: 700; font-size: 1.08rem; color: #555; margin-bottom: 6px;">YAPILAN İŞLEMLER / NOTLAR</div>
+            <td style="border: 1px solid #bbb; padding: 10px; vertical-align: top; word-break: break-word;">
+              <div style="font-weight: 700; font-size: 0.95rem; color: #555; margin-bottom: 4px;">YAPILAN İŞLEMLER / NOTLAR</div>
               <div style="white-space: pre-wrap;">${report.notes || '<span style="color: #999;">Not girilmemiştir.</span>'}</div>
             </td>
-            <td style="border: 1px solid #bbb; padding: 15px; vertical-align: top; width: 50%;">
-              <div style="font-weight: 700; font-size: 1.08rem; color: #555; margin-bottom: 6px;">FOTOĞRAFLAR</div>
+            <td style="border: 1px solid #bbb; padding: 10px; vertical-align: top;">
+              <div style="font-weight: 700; font-size: 0.95rem; color: #555; margin-bottom: 4px;">FOTOĞRAFLAR</div>
               ${report.imageUrls && report.imageUrls.length > 0 ? `
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
-                  ${report.imageUrls.map(url => `
-                    <img src="${getCORSUrl(url)}" style="width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" crossorigin="anonymous">
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+                  ${report.imageUrls.slice(0, 4).map(url => `
+                    <img src="${getCORSUrl(url)}" style="width: 100%; height: 90px; object-fit: cover; border: 1px solid #ddd; border-radius: 4px;" crossorigin="anonymous">
                   `).join('')}
                 </div>
               ` : '<span style="color: #999;">Fotoğraf eklenmemiştir.</span>'}
@@ -533,31 +576,39 @@ let ohsHtml = '';
       </div>
 
       <!-- MALZEME YÖNETİMİ -->
-      <div class="report-section" style="margin-bottom: 20px;">
-        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none; display: flex; justify-content: space-between; align-items: center;">
+      <div class="report-section">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none; display: flex; justify-content: space-between; align-items: center;">
           <span>MALZEME YÖNETİMİ</span>
-          <span style="font-weight: 600; font-size: 1.14rem;">MÇF No: <strong style="color: #cc0000;">${report.matFormNo || '-'}</strong></span>
+          <span style="font-weight: 600; font-size: 0.95rem;">MÇF No: <strong style="color: #cc0000;">${report.matFormNo || '-'}</strong></span>
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem; text-align: center;">
-          <tr style="background: #f5f7fa; font-size: 0.8rem; line-height: 1.1;">
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 35px; font-weight: 700; vertical-align: middle;">POZ</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 30px; font-weight: 700; vertical-align: middle;">S/T</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 85px; font-weight: 700; vertical-align: middle;">SAP NO</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 100px; font-weight: 700; vertical-align: middle;">SERİ NO</th>
-            <th style="border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-weight: 700; vertical-align: middle;">MALZEME AÇIKLAMASI</th>
-            <th style="border: 1px solid #bbb; padding: 6px 2px; width: 80px; font-weight: 700; vertical-align: middle;">ADET</th>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.9rem; text-align: center; table-layout: fixed;">
+          <colgroup>
+            <col style="width: 35px;">
+            <col style="width: 35px;">
+            <col style="width: 80px;">
+            <col style="width: 95px;">
+            <col>
+            <col style="width: 55px;">
+          </colgroup>
+          <tr style="background: #f5f7fa; font-size: 0.8rem; line-height: 1.1; page-break-inside: avoid; break-inside: avoid;">
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">POZ</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">S/T</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">SAP NO</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">SERİ NO</th>
+            <th style="border: 1px solid #bbb; padding: 5px 6px; text-align: left; font-weight: 700;">MALZEME AÇIKLAMASI</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700;">ADET</th>
           </tr>
           ${(report.materials || []).length > 0 ? (report.materials || []).map(mat => `
-            <tr>
-              <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700;">${mat.poz}</td>
-              <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700; color: ${mat.type === 'S' ? '#cc0000' : '#006633'};">${mat.type}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.sapNo}</td>
-              <td style="border: 1px solid #bbb; padding: 5px;">${mat.serialNo || '-'}</td>
-              <td style="border: 1px solid #bbb; padding: 5px; text-align: left;">${mat.description}</td>
-              <td style="border: 1px solid #bbb; padding: 5px; font-weight: 700;">${mat.type === 'S' ? (mat.defectCount || 0) : (mat.used || 0)}</td>
+            <tr style="page-break-inside: avoid; break-inside: avoid;">
+              <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700;">${mat.poz}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; color: ${mat.type === 'S' ? '#cc0000' : '#006633'};">${mat.type}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 2px;">${mat.sapNo}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 2px; word-break: break-word;">${mat.serialNo || '-'}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 6px; text-align: left; word-break: break-word;">${mat.description}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700;">${mat.type === 'S' ? (mat.defectCount || 0) : (mat.used || 0)}</td>
             </tr>
           `).join('') : `
-            <tr><td colspan="6" style="border: 1px solid #bbb; padding: 15px; color: #999;">Malzeme kaydı bulunmamaktadır.</td></tr>
+            <tr><td colspan="6" style="border: 1px solid #bbb; padding: 10px; color: #999;">Malzeme kaydı bulunmamaktadır.</td></tr>
           `}
         </table>
       </div>
@@ -567,15 +618,15 @@ let ohsHtml = '';
 
       ${report.imageUrls && report.imageUrls.length > 0 ? `
       <!-- FOTOĞRAF GALERİSİ -->
-      <div class="report-section" style="margin-bottom: 20px; page-break-inside: avoid;">
-        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none;">
+      <div class="report-section" style="margin-top: 15px; page-break-inside: avoid; break-inside: avoid;">
+        <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           İŞLEM VE ARIZA FOTOĞRAFLARI (${report.imageUrls.length} FOTOĞRAF)
         </div>
-        <div style="border: 1px solid #bbb; padding: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #fff;">
+        <div style="border: 1px solid #bbb; padding: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #fff;">
           ${report.imageUrls.map((url, idx) => `
-            <div style="border: 1px solid #ddd; border-radius: 4px; overflow: hidden; background: #f8fafc; text-align: center; padding: 4px;">
-              <img src="${getCORSUrl(url)}" style="width: 100%; height: 160px; object-fit: cover; border-radius: 2px;" crossorigin="anonymous">
-              <div style="font-size: 0.8rem; font-weight: 700; color: #555; margin-top: 4px;">Fotoğraf #${idx + 1}</div>
+            <div style="border: 1px solid #ddd; border-radius: 4px; overflow: hidden; background: #f8fafc; text-align: center; padding: 3px;">
+              <img src="${getCORSUrl(url)}" style="width: 100%; height: 140px; object-fit: cover; border-radius: 2px;" crossorigin="anonymous">
+              <div style="font-size: 0.75rem; font-weight: 700; color: #555; margin-top: 2px;">Fotoğraf #${idx + 1}</div>
             </div>
           `).join('')}
         </div>
@@ -583,9 +634,9 @@ let ohsHtml = '';
       ` : ''}
 
       <!-- Footer -->
-      <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #bbb; display: flex; justify-content: space-between; font-size: 1.02rem; color: #999;">
+      <div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #bbb; display: flex; justify-content: space-between; font-size: 0.85rem; color: #888;">
         <span>DH Servis | Demirer Holding</span>
-        <span>Oluşturulma: ${new Date(report.date).toLocaleDateString('tr-TR')} ${hasChecklist ? '| Sayfa 1-2' : ''}</span>
+        <span>Oluşturulma: ${new Date(report.date).toLocaleDateString('tr-TR')}</span>
       </div>
 
     </div>
