@@ -19,7 +19,7 @@ function getEmailEndpoint(): string {
   return 'https://europe-west1-dh-servis-rapor.cloudfunctions.net/sendEmail';
 }
 
-export const DEFAULT_REPORT_EMAIL = 'fatih.zebek@demirerholding.com';
+export const DEFAULT_REPORT_EMAIL = 'servis.rapor@demirerholding.com';
 export const DEFAULT_DISPATCH_EMAILS = 'fatih.zebek@demirerholding.com, emir.unver@demirerholding.com, hursit.akter@demirerholding.com';
 
 class EmailService {

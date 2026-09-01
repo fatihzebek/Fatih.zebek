@@ -48,7 +48,8 @@ exports.sendEmail = onRequest(
       });
 
       const mailOptions = {
-        from: '"DH-Servis Atölye & Rapor" <dhservisrapor@gmail.com>',
+        from: '"DH-Servis Rapor" <dhservisrapor@gmail.com>',
+        replyTo: 'servis.rapor@demirerholding.com',
         to: to,
         subject: subject,
         html: html

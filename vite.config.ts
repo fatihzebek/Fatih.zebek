@@ -73,7 +73,8 @@ function gmailEmailPlugin() {
             });
 
             const mailOptions: any = {
-              from: '"DH-Servis Atölye & Rapor" <dhservisrapor@gmail.com>',
+              from: '"DH-Servis Rapor" <dhservisrapor@gmail.com>',
+              replyTo: 'servis.rapor@demirerholding.com',
               to: targetEmail,
               subject: subject,
               html: html
