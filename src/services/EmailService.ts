@@ -53,11 +53,21 @@ class EmailService {
         base64Content = await this.blobToBase64(pdfFile);
       }
 
-      const dateVal = (report as any).date || '2026.08.04';
-      const siteVal = report.siteName || 'DH';
-      const turbineVal = turbineStr || 'T01';
+      const d = new Date(report.date || Date.now());
+      const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+      const actionStr = report.templateName || (report as any).faultCode || 'Rapor';
+      let safeFileName = `${dateStr}-${report.siteName || 'Saha'}-${actionStr}-${turbineStr || 'T'}-${reportNo}.pdf`;
+      safeFileName = safeFileName
+        .replace(/Ğ/g,'G').replace(/ğ/g,'g')
+        .replace(/Ü/g,'U').replace(/ü/g,'u')
+        .replace(/Ş/g,'S').replace(/ş/g,'s')
+        .replace(/İ/g,'I').replace(/ı/g,'i')
+        .replace(/Ö/g,'O').replace(/ö/g,'o')
+        .replace(/Ç/g,'C').replace(/ç/g,'c')
+        .replace(/[\\/:*?"<>|]/g, '-')
+        .replace(/\s+/g, '_');
 
-      // 3. Dispatch via Local Gmail SMTP Service (dhrapor@gmail.com)
+      // 3. Dispatch via Cloud Function / Gmail SMTP Service (dhservisrapor@gmail.com)
       const res = await fetch(getEmailEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -66,7 +76,7 @@ class EmailService {
           subject: subject,
           html: htmlBody,
           pdfBase64: base64Content,
-          filename: `${dateVal}-${siteVal}-${turbineVal}-${reportNo}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_')
+          filename: safeFileName
         })
       });
 
@@ -140,17 +150,17 @@ class EmailService {
 
       // Create temporary container positioned at (0, 0) with zero visibility to prevent coordinate/viewport shifts
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 900px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+      wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 800px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
       wrapper.innerHTML = htmlContent;
       document.body.appendChild(wrapper);
 
       const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
       if (targetElement) {
-        targetElement.style.width = '880px';
-        targetElement.style.minWidth = '880px';
-        targetElement.style.maxWidth = '880px';
-        targetElement.style.margin = '0';
-        targetElement.style.padding = '12px 16px';
+        targetElement.style.width = '800px';
+        targetElement.style.minWidth = '800px';
+        targetElement.style.maxWidth = '800px';
+        targetElement.style.margin = '0 auto';
+        targetElement.style.padding = '10px 14px';
         targetElement.style.boxSizing = 'border-box';
         targetElement.style.background = '#ffffff';
       }
@@ -172,16 +182,14 @@ class EmailService {
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              backgroundColor: '#ffffff',
-              x: 0,
-              y: 0,
-              scrollX: 0,
-              scrollY: 0,
-              width: 880,
-              windowWidth: 900
+              backgroundColor: '#ffffff'
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'], before: ['.html2pdf__page-break', '.section-break'], avoid: ['tr', '.pdf-no-break', 'img'] }
+          pagebreak: { 
+              mode: ['avoid-all', 'css', 'legacy'], 
+              before: ['.html2pdf__page-break', '.section-break', '.ohs-table-block'], 
+              avoid: ['tr', '.pdf-no-break', 'img', '.report-section', 'table'] 
+          }
       };
 
       const originalHtmlFontSize = document.documentElement.style.fontSize;

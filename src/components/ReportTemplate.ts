@@ -170,9 +170,9 @@ export const renderReportPDF = (report: ServiceReport) => {
 
     checklistHtml += `<div style="padding-top: 5px;">`;
     
-    
-      checklistHtml += `
-        <div style="page-break-before: always; break-before: page; text-align: center; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 8px;">
+    checklistHtml += `
+      <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>
+      <div style="text-align: center; margin-bottom: 8px; border-bottom: 2px solid #000; padding-bottom: 8px;">
         <h1 style="font-size: 1.32rem; margin: 0 0 2px; font-weight: 900; letter-spacing: 1px;">BAKIM KONTROL LİSTESİ</h1>
         <div style="font-size: 1.02rem; color: #555;">${report.templateName || ''} | Rapor No: <strong>${report.reportNo}</strong> | Türbin: <strong>${report.turbineNo}</strong> (${report.turbineSerial}) | Saha: <strong>${report.siteName}</strong> | Tarih: <strong>${new Date(report.date).toLocaleDateString('tr-TR')}</strong></div>
       </div>
@@ -287,21 +287,21 @@ let ohsHtml = '';
         }
 
         return `
-            
-            <table class="ohs-table-block" style="page-break-before: always; break-before: page; width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem; margin-top: 5px; margin-bottom: 20px;">
-              <tr>
+            <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>
+            <table class="ohs-table-block" style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 1.08rem; margin-top: 5px; margin-bottom: 20px;">
+              <tr style="page-break-inside: avoid; break-inside: avoid;">
                 <td colspan="4" style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb;">${dayIndex + 1}. GÜN İSG VE SAHA GÜVENLİK ONAYLARI</td>
               </tr>
-              <tr>
+              <tr style="page-break-inside: avoid; break-inside: avoid;">
                 <td colspan="4" style="background: #e8ecf1; padding: 0; border: 1px solid #bbb; text-align: right; font-weight: 800; font-size: 1.2rem;">
                   <div style="padding: 0 12px 6px; text-align: right;">${dateStr || ''}</div>
                 </td>
               </tr>
-              <tr style="background: #f5f7fa;">
-                <th style="border: 1px solid #bbb; padding: 6px; width: 30px; font-weight: 700; text-align: center;">NO</th>
+              <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
+                <th style="border: 1px solid #bbb; padding: 6px; width: 35px; font-weight: 700; text-align: center;">NO</th>
                 <th style="border: 1px solid #bbb; padding: 6px; font-weight: 700; text-align: left;">İSG KONTROL MADDESİ</th>
                 <th style="border: 1px solid #bbb; padding: 6px; width: 140px; font-weight: 700; text-align: center;">ONAYLAYAN PERSONEL</th>
-                <th style="border: 1px solid #bbb; padding: 6px; width: 160px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
+                <th style="border: 1px solid #bbb; padding: 6px; width: 150px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
               </tr>
               ${itemsHtml}
             </table>
@@ -311,7 +311,7 @@ let ohsHtml = '';
   }
 
   return `
-    <div id="pdf-container" style="background: #fff; color: #000; padding: 10px 20px; width: 100%; min-width: 820px; max-width: none; box-sizing: border-box; margin: 0 auto; font-family: Arial, sans-serif;">
+    <div id="pdf-container" style="background: #fff; color: #000; padding: 10px 14px; width: 800px; max-width: 800px; min-width: 800px; box-sizing: border-box; margin: 0 auto; font-family: Arial, Helvetica, sans-serif;">
       
       <!-- CSS Isolation directly injected to guarantee it works even with caching -->
       <style>
@@ -327,33 +327,38 @@ let ohsHtml = '';
           }
 
           #pdf-container {
-            width: 100%;
+            width: 800px !important;
+            max-width: 800px !important;
             margin: 0 auto;
-            padding: 0;
+            padding: 10px 14px;
+            box-sizing: border-box !important;
           }
 
           tr, td, th, img, .info-card, .chart-container, .scada-data, .pdf-no-break, .report-section {
-            page-break-inside: avoid;
-            break-inside: avoid;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           table {
-            display: table;
-            width: 100%;
-            border-collapse: collapse;
+            display: table !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+            table-layout: fixed !important;
           }
 
-          .section-break {
-            page-break-before: always;
-            break-before: page;
+          .section-break, .html2pdf__page-break {
+            page-break-before: always !important;
+            break-before: page !important;
           }
         }
 
-        #pdf-container table { display: table; width: 100%; border-collapse: collapse; min-width: 0 !important; }
-        #pdf-container table tr { page-break-inside: avoid; break-inside: avoid; }
-        #pdf-container table th, #pdf-container table td { word-wrap: break-word; }
-        #pdf-container .pdf-no-break { page-break-inside: avoid; break-inside: avoid; }
-        #pdf-container .report-section { page-break-inside: avoid; break-inside: avoid; }
+        #pdf-container { width: 800px !important; max-width: 800px !important; box-sizing: border-box !important; }
+        #pdf-container table { display: table !important; width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; }
+        #pdf-container table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+        #pdf-container table th, #pdf-container table td { word-wrap: break-word !important; overflow-wrap: break-word !important; box-sizing: border-box !important; }
+        #pdf-container .pdf-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
+        #pdf-container .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 15px; }
+        .html2pdf__page-break { page-break-before: always !important; break-before: page !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
       </style>
 
       <!-- ═══════════════════════════════════════════ -->

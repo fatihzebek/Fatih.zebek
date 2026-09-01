@@ -1672,17 +1672,17 @@ export const ReportArchivePage = async (siteId?: string) => {
 
             // Create temporary container positioned at (0, 0) with zero visibility to prevent coordinate/viewport shifts
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 900px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+            wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 800px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
             wrapper.innerHTML = htmlContent;
             document.body.appendChild(wrapper);
 
             const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
             if (targetElement) {
-              targetElement.style.width = '880px';
-              targetElement.style.minWidth = '880px';
-              targetElement.style.maxWidth = '880px';
-              targetElement.style.margin = '0';
-              targetElement.style.padding = '12px 16px';
+              targetElement.style.width = '800px';
+              targetElement.style.minWidth = '800px';
+              targetElement.style.maxWidth = '800px';
+              targetElement.style.margin = '0 auto';
+              targetElement.style.padding = '10px 14px';
               targetElement.style.boxSizing = 'border-box';
               targetElement.style.background = '#ffffff';
             }
@@ -1704,16 +1704,14 @@ export const ReportArchivePage = async (siteId?: string) => {
                 html2canvas: { 
                     scale: 2, 
                     useCORS: true, 
-                    backgroundColor: '#ffffff',
-                    x: 0,
-                    y: 0,
-                    scrollX: 0,
-                    scrollY: 0,
-                    width: 880,
-                    windowWidth: 900
+                    backgroundColor: '#ffffff'
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'], before: ['.html2pdf__page-break', '.section-break'], avoid: ['tr', '.pdf-no-break', 'img'] }
+                pagebreak: { 
+                    mode: ['avoid-all', 'css', 'legacy'], 
+                    before: ['.html2pdf__page-break', '.section-break', '.ohs-table-block'], 
+                    avoid: ['tr', '.pdf-no-break', 'img', '.report-section', 'table'] 
+                }
             };
 
             const originalHtmlFontSize = document.documentElement.style.fontSize;
