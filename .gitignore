@@ -30,3 +30,4 @@ _VERSIONS/
 scratch/
 scratch_*
 *.zip
+functions/node_modules/

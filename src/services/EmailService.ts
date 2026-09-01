@@ -3,6 +3,22 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { ServiceReport } from './ServiceReportService';
 import { renderReportPDF } from '../components/ReportTemplate';
 
+/**
+ * Returns the email API endpoint URL.
+ * Production: Firebase Cloud Function (europe-west1)
+ * Development: Local Vite dev server middleware (/api/send-email)
+ */
+function getEmailEndpoint(): string {
+  const isDev = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  );
+  if (isDev) {
+    return '/api/send-email';
+  }
+  return 'https://europe-west1-dh-servis-rapor.cloudfunctions.net/sendEmail';
+}
+
 export const DEFAULT_REPORT_EMAIL = 'fatih.zebek@demirerholding.com';
 export const DEFAULT_DISPATCH_EMAILS = 'fatih.zebek@demirerholding.com, emir.unver@demirerholding.com, hursit.akter@demirerholding.com';
 
@@ -42,7 +58,7 @@ class EmailService {
       const turbineVal = turbineStr || 'T01';
 
       // 3. Dispatch via Local Gmail SMTP Service (dhrapor@gmail.com)
-      const res = await fetch('/api/send-email', {
+      const res = await fetch(getEmailEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -540,7 +556,7 @@ class EmailService {
         base64Content = await this.blobToBase64(pdfFile);
       }
 
-      const res = await fetch('/api/send-email', {
+      const res = await fetch(getEmailEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -725,7 +741,7 @@ class EmailService {
     const htmlBody = this.buildAuditReportEmailHTML(data);
 
     try {
-      const res = await fetch('/api/send-email', {
+      const res = await fetch(getEmailEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -969,7 +985,7 @@ class EmailService {
     const htmlBody = this.buildAuditRevisionEmailHTML(data);
 
     try {
-      const res = await fetch('/api/send-email', {
+      const res = await fetch(getEmailEndpoint(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
