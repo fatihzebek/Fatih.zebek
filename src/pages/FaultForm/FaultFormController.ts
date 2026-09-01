@@ -2021,16 +2021,25 @@ export class FaultFormController {
                     }
                 }
 
-                const activeTeam = (w.teamPersonnel || []).filter((p: string) => p && p.trim() !== '');
-                
-                const workSessions = (w.workSessions || []).map((ws: any, idx: number) => {
-                    const isSessionLocked = ws.locked === true || !(idx === (w.workSessions.length - 1));
+                const activeTeam = (w.teamPersonnel || []).filter((p: string) => p && p.trim() !== '' && p !== '-- Personel Yok --');
+                const rawSessions = w.workSessions || [];
+                if (rawSessions.length === 0) {
+                    throw new Error("Lütfen en az bir çalışma zamanı (Başlangıç/Bitiş saati) ekleyiniz!");
+                }
+
+                const workSessions = rawSessions.map((ws: any, idx: number) => {
+                    const isSessionLocked = ws.locked === true || !(idx === (rawSessions.length - 1));
                     let rowPersonnel = activeTeam;
                     if (isSessionLocked) {
-                        rowPersonnel = Array.isArray(ws.personnel) && ws.personnel.length > 0 ? ws.personnel : [];
-                        if (rowPersonnel.length === 0) rowPersonnel = typeof ws.personnel === 'string' ? [ws.personnel] : ['-- Personel Yok --'];
+                        rowPersonnel = Array.isArray(ws.personnel) && ws.personnel.length > 0 
+                            ? ws.personnel.filter((p: string) => p && p.trim() !== '' && p !== '-- Personel Yok --') 
+                            : (typeof ws.personnel === 'string' && ws.personnel !== '-- Personel Yok --' ? [ws.personnel] : activeTeam);
                     } else {
-                        rowPersonnel = activeTeam.length > 0 ? activeTeam : (ws.personnel && ws.personnel.length > 0 ? ws.personnel : []);
+                        rowPersonnel = activeTeam.length > 0 
+                            ? activeTeam 
+                            : (ws.personnel && ws.personnel.length > 0 
+                                ? (Array.isArray(ws.personnel) ? ws.personnel : [ws.personnel]).filter((p: string) => p && p.trim() !== '' && p !== '-- Personel Yok --') 
+                                : []);
                     }
                     return {
                         ...ws,
@@ -2039,8 +2048,16 @@ export class FaultFormController {
                 });
                 w.workSessions = workSessions;
                 
-                const personnel = Array.from(new Set(workSessions.flatMap((ws: any) => ws.personnel || []))).filter((p: any) => p && typeof p === 'string' && p.trim() !== '');
-                if (personnel.length === 0) throw new Error("Lütfen en az bir personel ismi giriniz.");
+                const personnel = Array.from(new Set(workSessions.flatMap((ws: any) => ws.personnel || []))).filter((p: any) => p && typeof p === 'string' && p.trim() !== '' && p !== '-- Personel Yok --');
+                if (personnel.length === 0) {
+                    throw new Error("DİKKAT: Rapor personelsiz kaydedilemez! Lütfen Çalışma Zamanları alanına en az bir personel ekleyiniz.");
+                }
+
+                // Her çalışma zamanı satırında en az bir personel olmalı
+                const sessionWithoutPersonnel = workSessions.findIndex((ws: any) => !ws.personnel || ws.personnel.length === 0);
+                if (sessionWithoutPersonnel !== -1) {
+                    throw new Error(`Çalışma Zamanları satır ${sessionWithoutPersonnel + 1} için personel seçilmemiş! Lütfen personele ait satırları doldurunuz.`);
+                }
 
                 const auditItems = w.smartAuditItems || [];
                 

@@ -91,6 +91,13 @@ class ServiceReportService {
     files: File[],
     onProgress?: (msg: string) => void
   ) {
+    const sessionPersonnel = (report.workSessions || []).flatMap((ws: any) => ws.personnel || []);
+    const validPersonnel = Array.from(new Set([...(report.personnel || []), ...sessionPersonnel]))
+      .filter((p: any) => p && typeof p === 'string' && p.trim() !== '' && p !== '-- Personel Yok --');
+    if (validPersonnel.length === 0) {
+      throw new Error("Rapor kaydedilemedi: En az bir personel ismi belirtilmelidir.");
+    }
+
     if (!navigator.onLine) {
       onProgress?.('İnternet bağlantısı yok. Rapor çevrimdışı kuyruğuna alınıyor...');
       await offlineSyncService.saveReportToQueue(report, files);
