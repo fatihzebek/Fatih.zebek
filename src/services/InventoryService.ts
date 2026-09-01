@@ -37,6 +37,10 @@ class InventoryService {
     return this.materials.find(m => m.n === sap);
   }
 
+  getAllMaterials(): Material[] {
+    return this.materials;
+  }
+
   /**
    * Compress and convert image to base64 data URL.
    * Stores directly in Firestore — no Firebase Storage CORS issues.

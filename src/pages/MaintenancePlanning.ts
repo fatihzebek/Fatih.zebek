@@ -2,8 +2,11 @@ import { dataService } from '../services/DataService';
 import { serviceReportService } from '../services/ServiceReportService';
 
 export const MaintenancePlanningPage = async () => {
-  const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const userRole = currentUser?.role?.toUpperCase() || 'ADMIN';
+  const userEmail = (currentUser?.email || '').toLowerCase();
+  const isFen = userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'fen' || userEmail.includes('fatih.zebek');
+  const isAdmin = !currentUser?.role || userRole === 'ADMIN' || userRole === 'YÖNETİCİ' || userRole === 'SAHA YÖNETİCİSİ' || isFen;
   const allSites = dataService.getSites();
   const sites = isAdmin ? allSites : allSites.filter(s => currentUser?.allowedSites?.includes(s.id));
   const reports = (await serviceReportService.getAllReports()).filter(r => {
@@ -54,6 +57,7 @@ export const MaintenancePlanningPage = async () => {
           siteName: site.name,
           turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
           turbineSerial: t.id,
+          turbineType: t.type || '',
           lastDate: lastMaintGen.date,
           lastType,
           nextDate: nextDate.toISOString(),
@@ -66,6 +70,7 @@ export const MaintenancePlanningPage = async () => {
           siteName: site.name,
           turbineNo: t.no > 0 ? t.no.toString() : (t.label || t.id),
           turbineSerial: t.id,
+          turbineType: t.type || '',
           lastDate: '-',
           lastType: 'VERİ YOK',
           nextDate: null,
@@ -1496,6 +1501,100 @@ export const MaintenancePlanningPage = async () => {
       });
     }
 
+    function renderTurbineModelCounts(sName: string) {
+      const container = document.getElementById('turbine-model-counts-container');
+      if (!container) return;
+      if (!isFen) {
+        container.style.display = 'none';
+        return;
+      }
+
+      let turbines: any[] = [];
+      const sites = dataService.getSites();
+      if (sName === 'TÜM SAHALAR') {
+        sites.forEach(s => {
+          turbines.push(...dataService.getTurbinesBySite(s.id));
+        });
+      } else {
+        const sObj = sites.find(s => s.name === sName);
+        if (sObj) {
+          turbines = dataService.getTurbinesBySite(sObj.id);
+        }
+      }
+
+      const counts: Record<string, number> = {};
+
+      turbines.forEach(t => {
+        // Exclude control equipment (RTU, FCU, SAİ)
+        const cType = (t.controlType || '').toUpperCase();
+        if (cType.includes('RTU') || cType.includes('FCU') || cType.includes('SAI')) {
+          return;
+        }
+
+        let modelKey = (t.type || '').toUpperCase().trim();
+        const serial = String(t.id || '').trim();
+
+        if (modelKey.includes('E82/E2') || modelKey.includes('E82-E2') || modelKey.includes('E82E2') || serial.startsWith('8264') || serial.startsWith('8257') || serial.startsWith('8241')) {
+          modelKey = 'E82/E2';
+        } else if (modelKey.includes('E82') || serial.startsWith('82')) {
+          modelKey = 'E82';
+        } else if (modelKey.includes('E70') || serial.startsWith('78')) {
+          modelKey = 'E70';
+        } else if (modelKey.includes('E92') || serial.startsWith('92')) {
+          modelKey = 'E92';
+        } else if (modelKey === 'E40' || serial.startsWith('41')) {
+          modelKey = 'E40';
+        } else if (modelKey === 'E44' || serial.startsWith('45')) {
+          modelKey = 'E44';
+        } else if (modelKey === 'E48' || serial.startsWith('48')) {
+          modelKey = 'E48';
+        } else if (modelKey === 'E44-E48') {
+          if (serial.startsWith('45')) modelKey = 'E44';
+          else modelKey = 'E48';
+        }
+
+        if (modelKey) {
+          counts[modelKey] = (counts[modelKey] || 0) + 1;
+        }
+      });
+
+      const preferredOrder = ['E40', 'E44', 'E48', 'E70', 'E82', 'E82/E2', 'E92'];
+      const presentModels = Object.keys(counts).sort((a, b) => {
+        const ia = preferredOrder.indexOf(a);
+        const ib = preferredOrder.indexOf(b);
+        if (ia !== -1 && ib !== -1) return ia - ib;
+        if (ia !== -1) return -1;
+        if (ib !== -1) return 1;
+        return a.localeCompare(b);
+      });
+
+      const colorMap: Record<string, string> = {
+        'E40': '#38bdf8',
+        'E44': '#ffb900',
+        'E48': '#f59e0b',
+        'E70': '#a855f7',
+        'E82': '#14f195',
+        'E82/E2': '#00f2ff',
+        'E92': '#ec4899'
+      };
+
+      let badgesHtml = '';
+      presentModels.forEach(modelKey => {
+        const count = counts[modelKey];
+        if (count > 0) {
+          const badgeColor = colorMap[modelKey] || '#00f2ff';
+          badgesHtml += `
+            <div style="display: inline-flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, 0.03); height: 30px; padding: 0 8px; border-radius: 6px; border: 1.2px solid ${badgeColor}50; font-family: 'Rajdhani', sans-serif; font-size: 0.68rem; font-weight: 800; color: #E2E8F0; transition: all 0.2s; box-shadow: 0 2px 6px rgba(0,0,0,0.2); box-sizing: border-box;" title="${sName} - ${modelKey} Türbin Sayısı">
+              <span style="color: ${badgeColor}; font-weight: 800; letter-spacing: 0.4px;">${modelKey}:</span>
+              <span style="color: #FFF; background: ${badgeColor}35; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; font-family: tabular-nums; font-weight: 800;">${count}</span>
+            </div>
+          `;
+        }
+      });
+
+      container.innerHTML = badgesHtml;
+    }
+
     function updateTable(siteName: string) {
       currentSite = siteName;
       sessionStorage.setItem('activeMaintSiteName', siteName);
@@ -1522,22 +1621,15 @@ export const MaintenancePlanningPage = async () => {
         (window as any).activeMaintSiteName = siteName;
       }
 
-      // Hide or show Excel buttons depending on whether it is TÜM SAHALAR
+      // Ensure Excel action buttons remain visible across all sites including TÜM SAHALAR
       const btnExcelDownload = document.querySelector('button[onclick="window.downloadMaintPlanningExcel()"]');
       const btnExcelUpload = document.getElementById('btn-upload-maint-excel');
       const btnManualMaint = document.querySelector('button[onclick="window.openManualMaintModal()"]');
       const btnTemplateExcel = document.querySelector('button[onclick="window.downloadMaintTemplateExcel()"]');
-      if (siteName === 'TÜM SAHALAR') {
-        if (btnExcelDownload) (btnExcelDownload as HTMLElement).style.display = 'none';
-        if (btnExcelUpload) (btnExcelUpload as HTMLElement).style.display = 'none';
-        if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'none';
-        if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'none';
-      } else {
-        if (btnExcelDownload) (btnExcelDownload as HTMLElement).style.display = 'inline-flex';
-        if (btnExcelUpload) (btnExcelUpload as HTMLElement).style.display = 'inline-flex';
-        if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'inline-flex';
-        if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'inline-flex';
-      }
+      if (btnExcelDownload) (btnExcelDownload as HTMLElement).style.display = 'inline-flex';
+      if (btnExcelUpload) (btnExcelUpload as HTMLElement).style.display = 'inline-flex';
+      if (btnManualMaint) (btnManualMaint as HTMLElement).style.display = 'inline-flex';
+      if (btnTemplateExcel) (btnTemplateExcel as HTMLElement).style.display = 'inline-flex';
 
       // Update top header stats
       const overdueVal = document.getElementById('h-stat-overdue-val');
@@ -1558,6 +1650,7 @@ export const MaintenancePlanningPage = async () => {
 
       // Update sidebar badges
       updateSidebarBadges();
+      renderTurbineModelCounts(siteName);
 
       // Calculate dynamic filter counts
       const overdueCount = allItems.filter((i: any) => i.status === 'overdue' && i.lastDate !== '-').length;
@@ -1716,7 +1809,8 @@ export const MaintenancePlanningPage = async () => {
         
         // Show site name next to turbine in "TÜM SAHALAR" mode
         const siteSuffix = siteName === 'TÜM SAHALAR' ? ` <span style="font-size:0.72rem; color:#64748B; margin-left:5px; font-weight:600;">(${item.siteName})</span>` : '';
-        const serialSuffix = `<span style="font-size:0.72rem; color:#8A99AD; margin-left:6px; font-weight:600; font-family:'Rajdhani',sans-serif; letter-spacing:0.5px;">(SN: ${serial})</span>`;
+        const turbineTypeStr = item.turbineType ? ` ${item.turbineType}` : '';
+        const serialSuffix = `<span style="font-size:0.72rem; color:#8A99AD; margin-left:6px; font-weight:600; font-family:'Rajdhani',sans-serif; letter-spacing:0.5px;">(${serial}${turbineTypeStr})</span>`;
 
         html += `<tr style="${isNoData ? 'opacity: 0.7;' : ''}">`;
         html += `<td class="t-no"><span class="turbine-id-badge" style="font-size: 0.8rem; font-weight: 800; font-family: 'Rajdhani', sans-serif;">${tName}</span>${serialSuffix}${siteSuffix}</td>`;
@@ -1829,43 +1923,47 @@ export const MaintenancePlanningPage = async () => {
 
         <!-- Main Content -->
         <div class="maintenance-main-content glass-panel">
-          <div class="view-header">
-            <div class="site-title-box" style="display: flex; align-items: center; gap: 15px;">
-              <i class="fa-solid fa-wind"></i>
-              <h2 id="active-site-title">${initialSite.toUpperCase() || 'SAHA SEÇİN'}</h2>
-              ${isAdmin ? `
-              <div style="display: flex; gap: 4px; margin-left: 10px; background: rgba(255,255,255,0.03); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); align-items: center;">
-                <button id="maint-view-table-btn" onclick="window.setMaintViewMode('table')" style="background: rgba(0, 242, 255, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.72rem; padding: 4px 12px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
-                  <i class="fa-solid fa-table"></i> TABLO GÖRÜNÜMÜ
-                </button>
-                <button id="maint-view-chart-btn" onclick="window.setMaintViewMode('chart')" style="background: transparent; border: 1px solid transparent; color: var(--text-muted); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.72rem; padding: 4px 12px; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; gap: 5px;">
-                  <i class="fa-solid fa-chart-bar"></i> HEDEF GRAFİK
-                </button>
+          <div class="view-header" style="flex-direction: column; align-items: stretch; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div class="site-title-box" style="display: flex; align-items: center; gap: 12px;">
+                <i class="fa-solid fa-wind"></i>
+                <h2 id="active-site-title">${initialSite.toUpperCase() || 'SAHA SEÇİN'}</h2>
+                <div style="display: flex; gap: 4px; margin-left: 6px; background: rgba(255,255,255,0.03); padding: 2px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); align-items: center; height: 30px; box-sizing: border-box;">
+                  <button id="maint-view-table-btn" onclick="window.setMaintViewMode('table')" style="background: rgba(0, 242, 255, 0.1); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.68rem; padding: 0 9px; height: 100%; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-table"></i> TABLO GÖRÜNÜMÜ
+                  </button>
+                  <button id="maint-view-chart-btn" onclick="window.setMaintViewMode('chart')" style="background: transparent; border: 1px solid transparent; color: var(--text-muted); cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.68rem; padding: 0 9px; height: 100%; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-chart-bar"></i> HEDEF GRAFİK
+                  </button>
+                </div>
               </div>
-              ` : ''}
-            </div>
-            <div style="display: flex; align-items: center; gap: 15px;">
-              ${isAdmin ? `
-              <button class="maint-action-btn" onclick="window.downloadMaintTemplateExcel()" style="background: rgba(255, 235, 59, 0.06); border-color: rgba(255, 235, 59, 0.25); color: #fded7e;" title="Excel Yükleme Şablonunu İndir">
-                <i class="fa-solid fa-download"></i> ŞABLON İNDİR
-              </button>
-              <button class="maint-action-btn" onclick="window.downloadMaintPlanningExcel()" style="background: rgba(0, 242, 255, 0.06); border-color: rgba(0, 242, 255, 0.25); color: var(--accent-cyan);">
-                <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
-              </button>
-              <input type="file" id="maint-excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleMaintExcelUpload(event)" />
-              <button class="maint-action-btn" id="btn-upload-maint-excel" onclick="document.getElementById('maint-excel-upload-input').click()" style="background: rgba(20, 241, 149, 0.06); border-color: rgba(20, 241, 149, 0.25); color: #14F195;">
-                <i class="fa-solid fa-upload"></i> EXCEL YÜKLE
-              </button>
-              <button class="maint-action-btn" onclick="window.openManualMaintModal()" style="background: rgba(100, 255, 218, 0.06); border-color: rgba(100, 255, 218, 0.25); color: #64ffda;">
-                <i class="fa-solid fa-wrench"></i> MANUEL BAKIM EKLE
-              </button>
-              ` : ''}
-              <div class="maint-legend">
-                <span class="leg-box overdue">Gecikmiş</span>
-                <span class="leg-box warning">Kritik</span>
-                <span class="leg-box safe">Planlı</span>
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                ${isFen ? `
+                <button class="maint-action-btn" onclick="window.downloadMaintTemplateExcel()" style="background: rgba(255, 235, 59, 0.06); border-color: rgba(255, 235, 59, 0.25); color: #fded7e;" title="Excel Yükleme Şablonunu İndir">
+                  <i class="fa-solid fa-download"></i> ŞABLON İNDİR
+                </button>
+                <button class="maint-action-btn" onclick="window.downloadMaintPlanningExcel()" style="background: rgba(0, 242, 255, 0.06); border-color: rgba(0, 242, 255, 0.25); color: var(--accent-cyan);">
+                  <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
+                </button>
+                <input type="file" id="maint-excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleMaintExcelUpload(event)" />
+                <button class="maint-action-btn" id="btn-upload-maint-excel" onclick="document.getElementById('maint-excel-upload-input').click()" style="background: rgba(20, 241, 149, 0.06); border-color: rgba(20, 241, 149, 0.25); color: #14F195;">
+                  <i class="fa-solid fa-upload"></i> EXCEL YÜKLE
+                </button>
+                <button class="maint-action-btn" onclick="window.openManualMaintModal()" style="background: rgba(100, 255, 218, 0.06); border-color: rgba(100, 255, 218, 0.25); color: #64ffda;">
+                  <i class="fa-solid fa-wrench"></i> MANUEL BAKIM EKLE
+                </button>
+                ` : ''}
+                <div class="maint-legend">
+                  <span class="leg-box overdue">Gecikmiş</span>
+                  <span class="leg-box warning">Kritik</span>
+                  <span class="leg-box safe">Planlı</span>
+                </div>
               </div>
             </div>
+            <!-- Dedicated Turbine Model Badges Bar -->
+            ${isFen ? `
+            <div id="turbine-model-counts-container" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: rgba(0, 0, 0, 0.15); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.04);"></div>
+            ` : ''}
           </div>
 
           <!-- Quick Stats Cards Container -->
@@ -2009,7 +2107,7 @@ export const MaintenancePlanningPage = async () => {
       }
 
       .maintenance-main-content { flex: 1; display: flex; flex-direction: column; padding: 25px; border: 1px solid rgba(255,255,255,0.05); background: rgba(10, 15, 25, 0.4); border-radius: 16px; }
-      .view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+      .view-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; }
       .site-title-box { display: flex; align-items: center; gap: 12px; }
       .site-title-box i { color: var(--accent-cyan); font-size: 1.25rem; text-shadow: 0 0 8px rgba(0,242,255,0.4); }
       .site-title-box h2 { margin: 0; font-family: 'Rajdhani'; letter-spacing: 2px; color: #fff; font-size: 1.4rem; font-weight: 800; }
@@ -2097,16 +2195,18 @@ export const MaintenancePlanningPage = async () => {
         color: var(--accent-cyan);
         border: 1px solid rgba(0, 242, 255, 0.2);
         border-radius: 6px;
-        padding: 5px 12px;
+        height: 30px;
+        padding: 0 9px;
+        box-sizing: border-box;
         font-size: 0.68rem;
         font-weight: 800;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 5px;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         text-transform: none;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
         font-family: 'Rajdhani', sans-serif;
       }
       .maint-action-btn:hover {

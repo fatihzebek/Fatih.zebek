@@ -2,6 +2,7 @@ import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp, getDocs, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { offlineSyncService } from './OfflineSyncService';
+import { emailService } from './EmailService';
 
 export interface WorkSession {
   id: string;
@@ -40,6 +41,7 @@ export interface ServiceReport {
   personnel: string[];
   ohsData?: any;
   voidedOvertimes?: string[];
+  overtimeApprovals?: any;
   notes: string;
   matFormNo?: string;
   imageUrls: string[];
@@ -127,6 +129,19 @@ class ServiceReportService {
         createdAt: serverTimestamp()
       });
       this.reportsCache = null; // Invalidate cache
+
+      // Otomatik E-Posta ve PDF Gönderimi
+      try {
+        const fullReportForEmail: ServiceReport = {
+          id: docRef.id,
+          ...safeReport,
+          imageUrls
+        };
+        await emailService.sendReportEmail(fullReportForEmail);
+      } catch (emailErr) {
+        console.warn("[Email] E-posta gönderim uyarısı (rapor kaydedildi):", emailErr);
+      }
+
       return docRef.id;
     } catch (err) {
       console.error("Firestore save error:", err);
@@ -215,7 +230,7 @@ class ServiceReportService {
     }
   }
   private lastFetchTime: number = 0;
-  private CACHE_DURATION = 10000; // 10 seconds
+  private CACHE_DURATION = 600000; // 10 minutes (fast instant loading)
 
   async getAllReports(forceRefresh: boolean = false): Promise<ServiceReport[]> {
     const now = Date.now();

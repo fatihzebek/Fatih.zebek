@@ -18,7 +18,12 @@ export interface InventoryItem {
   currency?: 'TRY' | 'USD' | 'EUR';
   condition?: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP';
   serialNo?: string;
+  unit?: string;
   note?: string;
+  status?: string;
+  scrappedQty?: number;
+  dispatchedQty?: number;
+  dispatchNo?: string;
   reservations?: Record<string, number>;
 }
 
@@ -59,6 +64,8 @@ export interface AuditResult {
 export interface AuditRecord {
   id?: string;
   user: string;
+  userEmail?: string;
+  team?: string;
   totalItems: number;
   totalDiff: number;
   discrepantItems?: number;
@@ -70,11 +77,37 @@ export interface AuditRecord {
   imported?: boolean;
   startTime?: string;
   endTime?: string;
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'REVISION_REQUESTED';
+  approvedBy?: string;
+  approvedAt?: any;
+  revisionNote?: string;
+  revisionRequestedBy?: string;
+  revisionRequestedAt?: any;
+}
+
+export interface FieldScrapRecord {
+  id?: string;
+  warehouseId: string;
+  warehouseName: string;
+  itemId?: string;
+  sapNo: string;
+  serialNo?: string;
+  description: string;
+  quantity: number;
+  turbine?: string;
+  reportNo?: string;
+  mcfNo?: string;
+  faultCode?: string;
+  faultDesc?: string;
+  scrapReason: string;
+  scrappedBy: string;
+  scrappedAt: any;
+  createdAt?: any;
 }
 
 class WarehouseService {
   private inventoryCache: Map<string, { data: InventoryItem[], timestamp: number }> = new Map();
-  private CACHE_DURATION = 2000; // 2 seconds
+  private CACHE_DURATION = 600000; // 10 minutes (fast instant loading)
   private globalImagesCache: Map<string, string> | null = null;
 
   public resolveWarehouseId(id: string): string {
@@ -122,42 +155,6 @@ class WarehouseService {
       } as any as InventoryItem;
     });
     
-    // Auto-sync missing images from GlobalMaterialImages
-    try {
-        if (!this.globalImagesCache) {
-            const globalSnapshot = await getDocs(collection(db, 'GlobalMaterialImages'));
-            const globalImages = new Map<string, string>();
-            globalSnapshot.forEach(doc => {
-                if (doc.data().imageUrl) {
-                    const rawId = doc.id.trim();
-                    globalImages.set(rawId, doc.data().imageUrl);
-                    const stripped = rawId.replace(/^0+/, '');
-                    if (stripped) {
-                        globalImages.set(stripped, doc.data().imageUrl);
-                    }
-                }
-            });
-            this.globalImagesCache = globalImages;
-        }
-
-        const globalImages = this.globalImagesCache;
-        
-        data = data.map(item => {
-            if (!item.imageUrl && item.sapNo) {
-                const safeSapNo = String(item.sapNo).trim().replace(/\//g, '_');
-                if (globalImages.has(safeSapNo)) {
-                    return { ...item, imageUrl: globalImages.get(safeSapNo) };
-                }
-                const stripped = safeSapNo.replace(/^0+/, '');
-                if (globalImages.has(stripped)) {
-                    return { ...item, imageUrl: globalImages.get(stripped) };
-                }
-            }
-            return item;
-        });
-    } catch (e) {
-        console.warn("Could not sync global images", e);
-    }
     
     this.inventoryCache.set(warehouseId, { data, timestamp: now });
     return data;
@@ -264,19 +261,16 @@ class WarehouseService {
     if (sapNo && String(sapNo).trim() !== '') {
         try {
             const cleanSapNo = String(sapNo).trim();
-            const safeSapNo = cleanSapNo.replace(/\//g, '_');
-            await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { imageUrl }, { merge: true });
             
-            // Sync image to other cached items across all warehouses in session
-            this.inventoryCache.forEach((cache, _) => {
-               cache.data = cache.data.map(i => {
-                  const itemSapStr = String(i.sapNo || '').trim();
-                  if (!i.imageUrl && (itemSapStr === cleanSapNo || itemSapStr.replace(/^0+/, '') === cleanSapNo.replace(/^0+/, ''))) {
-                     return { ...i, imageUrl } as any;
-                  }
-                  return i;
-               });
-            });
+            // 1. Sync image across ALL warehouses in Firestore & Global Pool
+            await this.syncMaterialImageGlobally(cleanSapNo, imageUrl);
+
+            // 2. Update RAM memory pool map
+            if ((window as any).globalImagePoolMap) {
+               (window as any).globalImagePoolMap.set(cleanSapNo, imageUrl);
+               const stripped = cleanSapNo.replace(/^0+/, '');
+               if (stripped) (window as any).globalImagePoolMap.set(stripped, imageUrl);
+            }
         } catch (e) {
             console.warn("Could not update global image", e);
         }
@@ -699,18 +693,26 @@ class WarehouseService {
     }
   }
 
-  async syncMaterialImageGlobally(sapNo: string, imageUrl: string) {
+  async syncMaterialImageGlobally(sapNo: string, imageUrl: string, imageUrls?: string[], note?: string) {
     if (!sapNo) return;
+    this.globalImagesCache = null;
     
     // Save to Global Pool
     try {
         const cleanSapNo = String(sapNo).trim();
         const safeSapNo = cleanSapNo.replace(/\//g, '_');
-        await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { 
+        const payload: any = { 
             sapNo: cleanSapNo, 
             imageUrl, 
             lastUpdated: serverTimestamp() 
-        }, { merge: true });
+        };
+        if (imageUrls && Array.isArray(imageUrls)) {
+            payload.imageUrls = imageUrls;
+        }
+        if (note !== undefined) {
+            payload.note = note;
+        }
+        await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), payload, { merge: true });
     } catch(err) {
         console.warn("Failed to save to global image pool", err);
     }
@@ -740,11 +742,21 @@ class WarehouseService {
     });
     
     await Promise.all(updatePromises);
+    
+    // Update in-memory global image pool map
+    if ((window as any).globalImagePoolMap && sapNo) {
+       const clean = String(sapNo).trim();
+       (window as any).globalImagePoolMap.set(clean, imageUrl);
+       const stripped = clean.replace(/^0+/, '');
+       if (stripped) (window as any).globalImagePoolMap.set(stripped, imageUrl);
+    }
+
     console.log(`[GlobalSync] Successfully synced image for SAP: ${sapNo} across all warehouses.`);
   }
 
   async syncMaterialCardGlobally(sapNo: string, updates: any) {
     if (!sapNo) return;
+    this.globalImagesCache = null;
     
     // Save to Global Pool
     try {
@@ -791,48 +803,119 @@ class WarehouseService {
   }
 
   async getGlobalImagePool(): Promise<Map<string, string>> {
+    if (this.globalImagesCache) {
+        return this.globalImagesCache;
+    }
     const pool = new Map<string, string>();
+    try {
+        const snap2 = await getDocs(collection(db, 'GlobalMaterialImages'));
+        snap2.docs.forEach(d => {
+            const data = d.data();
+            const url = data.imageUrl || (Array.isArray(data.imageUrls) ? data.imageUrls[0] : '');
+            if (url) {
+                const rawId = d.id.trim();
+                pool.set(rawId, url);
+                const stripped = rawId.replace(/^0+/, '');
+                if (stripped) pool.set(stripped, url);
+
+                const cleanCode = rawId.split(' - ')[0].trim();
+                pool.set(cleanCode, url);
+                const strippedCode = cleanCode.replace(/^0+/, '');
+                if (strippedCode) pool.set(strippedCode, url);
+
+                if (data.sapNo) {
+                   const cleanSap = String(data.sapNo).trim();
+                   pool.set(cleanSap, url);
+                   const s = cleanSap.replace(/^0+/, '');
+                   if (s) pool.set(s, url);
+                   const sCode = cleanSap.split(' - ')[0].trim();
+                   pool.set(sCode, url);
+                   const sStrippedCode = sCode.replace(/^0+/, '');
+                   if (sStrippedCode) pool.set(sStrippedCode, url);
+                }
+            }
+        });
+    } catch(err) {}
+
+    this.globalImagesCache = pool;
+    return pool;
+  }
+
+  async getGlobalImagePoolDetails(): Promise<Map<string, { imageUrl: string; imageUrls?: string[]; note?: string; description?: string }>> {
+    const detailsMap = new Map<string, { imageUrl: string; imageUrls?: string[]; note?: string; description?: string }>();
     try {
         const snap = await getDocs(collection(db, 'GlobalMaterialImages'));
         snap.docs.forEach(d => {
             const data = d.data();
-            if (data.imageUrl) {
-                const rawId = d.id.trim();
-                pool.set(rawId, data.imageUrl);
-                const stripped = rawId.replace(/^0+/, '');
-                if (stripped) {
-                    pool.set(stripped, data.imageUrl);
-                }
-            }
+            const rawId = d.id.trim();
+            const imgs: string[] = Array.isArray(data.imageUrls) && data.imageUrls.length > 0 
+                ? data.imageUrls 
+                : (data.imageUrl ? [data.imageUrl] : []);
+            const detail = {
+                imageUrl: data.imageUrl || imgs[0] || '',
+                imageUrls: imgs,
+                note: data.note || '',
+                description: data.description || ''
+            };
+            detailsMap.set(rawId, detail);
+            const stripped = rawId.replace(/^0+/, '');
+            if (stripped && !detailsMap.has(stripped)) detailsMap.set(stripped, detail);
         });
     } catch(err) {
-        console.warn("Failed to fetch global image pool", err);
+        console.warn("Failed to get global image details pool", err);
     }
-    return pool;
+    return detailsMap;
   }
 
   async deleteGlobalMaterialImage(sapNo: string) {
     if (!sapNo) return;
+    this.globalImagesCache = null;
     
-    // 1. Delete from GlobalMaterialImages
+    const cleanSapNo = String(sapNo).trim();
+    const safeSapNo = cleanSapNo.replace(/\//g, '_');
+    const stripped = cleanSapNo.replace(/^0+/, '');
+    
+    // Extract basic SAP code part (before ' - ' if present)
+    const cleanSapCode = cleanSapNo.split(' - ')[0].trim();
+    const strippedSapCode = cleanSapCode.replace(/^0+/, '');
+    
+    // 1. Delete all possible variations from GlobalMaterialImages
     try {
-        const cleanSapNo = String(sapNo).trim();
-        const safeSapNo = cleanSapNo.replace(/\//g, '_');
         await deleteDoc(doc(db, 'GlobalMaterialImages', safeSapNo));
-        const stripped = cleanSapNo.replace(/^0+/, '');
         if (stripped) {
             await deleteDoc(doc(db, 'GlobalMaterialImages', stripped));
+        }
+        await deleteDoc(doc(db, 'GlobalMaterialImages', cleanSapCode));
+        if (strippedSapCode) {
+            await deleteDoc(doc(db, 'GlobalMaterialImages', strippedSapCode));
+        }
+        await deleteDoc(doc(db, 'GlobalMaterialImages', '0' + cleanSapCode));
+        await deleteDoc(doc(db, 'GlobalMaterialImages', '00' + cleanSapCode));
+        
+        if (cleanSapNo === stripped) {
+            await deleteDoc(doc(db, 'GlobalMaterialImages', '0' + safeSapNo));
+            await deleteDoc(doc(db, 'GlobalMaterialImages', '00' + safeSapNo));
         }
     } catch(err) {
         console.warn("Failed to delete from global image pool", err);
     }
     
-    // 2. Clear imageUrl in all warehouses' inventory_v2 for this sapNo
+    // 2. Clear imageUrl in all warehouses' inventory_v2 for any matching variation
+    const variations = [cleanSapNo];
+    if (stripped && !variations.includes(stripped)) variations.push(stripped);
+    if (cleanSapCode && !variations.includes(cleanSapCode)) variations.push(cleanSapCode);
+    if (strippedSapCode && !variations.includes(strippedSapCode)) variations.push(strippedSapCode);
+    
+    const zeroVar1 = '0' + cleanSapCode;
+    if (!variations.includes(zeroVar1)) variations.push(zeroVar1);
+    const zeroVar2 = '00' + cleanSapCode;
+    if (!variations.includes(zeroVar2)) variations.push(zeroVar2);
+    
     const warehouses = dataService.getWarehouses();
     const updatePromises = warehouses.map(async (w) => {
       try {
         const colRef = collection(db, 'warehouses', w.id, 'inventory_v2');
-        const q = query(colRef, where('sapNo', '==', sapNo));
+        const q = query(colRef, where('sapNo', 'in', variations));
         const snap = await getDocs(q);
         
         const docUpdates = snap.docs.map(document => 
@@ -843,12 +926,12 @@ class WarehouseService {
         // Clear local cache for this warehouse
         this.inventoryCache.delete(w.id);
       } catch (err) {
-        console.error(`Failed to clear image for sap ${sapNo} in warehouse ${w.id}`, err);
+        console.error(`Failed to clear image for sap variations of ${sapNo} in warehouse ${w.id}`, err);
       }
     });
     
     await Promise.all(updatePromises);
-    console.log(`[GlobalDelete] Successfully deleted image for SAP: ${sapNo} across all warehouses.`);
+    console.log(`[GlobalDelete] Successfully deleted image variations for SAP: ${sapNo} across all warehouses.`);
   }
 
   async clearInventory(id: string) {
@@ -917,19 +1000,27 @@ class WarehouseService {
   }
 
   // --- Audit (Sayım) Logic ---
-  async saveAudit(id: string, auditData: Omit<AuditRecord, 'id' | 'timestamp'>) {
+  async saveAudit(id: string, auditData: Omit<AuditRecord, 'id' | 'timestamp'>, autoApplyStock: boolean = false) {
     const warehouseId = this.resolveWarehouseId(id);
     const colRef = collection(db, 'warehouses', warehouseId, 'audits');
-    await addDoc(colRef, {
+    const docRef = await addDoc(colRef, {
       ...auditData,
+      status: autoApplyStock ? 'APPROVED' : (auditData.status || 'PENDING_APPROVAL'),
       timestamp: serverTimestamp(),
       date: new Date().toLocaleDateString('tr-TR')
     });
 
-    // Update each item's lastAuditDate and quantity in the inventory
+    if (autoApplyStock) {
+      await this.applyAuditResultsToInventory(warehouseId, auditData.results, auditData.user);
+    }
+    return docRef.id;
+  }
+
+  async applyAuditResultsToInventory(warehouseId: string, results: AuditResult[], user: string) {
+    const resolvedWhId = this.resolveWarehouseId(warehouseId);
     const auditTimestamp = serverTimestamp();
-    const promises = auditData.results.map(async res => {
-      const itemDocRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', res.itemId);
+    const promises = results.map(async res => {
+      const itemDocRef = doc(db, 'warehouses', resolvedWhId, 'inventory_v2', res.itemId);
       const itemSnap = await getDoc(itemDocRef);
       const targetSerial = itemSnap.exists() ? itemSnap.data().serialNo || '' : '';
       await updateDoc(itemDocRef, {
@@ -938,7 +1029,7 @@ class WarehouseService {
         lastUpdated: auditTimestamp
       });
       if (res.diff !== 0) {
-        await this.addLog(warehouseId, {
+        await this.addLog(resolvedWhId, {
            itemId: res.itemId,
            sapNo: res.sapNo || '',
            materialName: res.description || 'Bilinmeyen',
@@ -946,15 +1037,44 @@ class WarehouseService {
            quantity: res.diff,
            oldQty: res.systemQty,
            newQty: res.physicalQty,
-           user: auditData.user,
-           note: res.note ? `Sayım Güncellemesi: ${res.note}` : 'Sayım Güncellemesi',
+           user: user,
+           note: res.note ? `Sayım Güncellemesi (Onaylandı): ${res.note}` : 'Sayım Güncellemesi (Onaylandı)',
            serialNo: targetSerial
         });
       }
     });
 
     await Promise.all(promises);
-    this.inventoryCache.delete(warehouseId);
+    this.inventoryCache.delete(resolvedWhId);
+  }
+
+  async approveAuditAndApplyStock(warehouseId: string, auditId: string, approverName: string) {
+    const resolvedWhId = this.resolveWarehouseId(warehouseId);
+    const auditDocRef = doc(db, 'warehouses', resolvedWhId, 'audits', auditId);
+    const auditSnap = await getDoc(auditDocRef);
+    if (!auditSnap.exists()) throw new Error('Sayım kaydı bulunamadı.');
+
+    const auditData = auditSnap.data() as AuditRecord;
+    if (auditData.results && auditData.results.length > 0) {
+      await this.applyAuditResultsToInventory(resolvedWhId, auditData.results, approverName);
+    }
+
+    await updateDoc(auditDocRef, {
+      status: 'APPROVED',
+      approvedBy: approverName,
+      approvedAt: serverTimestamp()
+    });
+  }
+
+  async requestAuditRevision(warehouseId: string, auditId: string, managerName: string, note: string) {
+    const resolvedWhId = this.resolveWarehouseId(warehouseId);
+    const auditDocRef = doc(db, 'warehouses', resolvedWhId, 'audits', auditId);
+    await updateDoc(auditDocRef, {
+      status: 'REVISION_REQUESTED',
+      revisionNote: note,
+      revisionRequestedBy: managerName,
+      revisionRequestedAt: serverTimestamp()
+    });
   }
 
   async getAuditHistory(id: string): Promise<AuditRecord[]> {
@@ -975,6 +1095,34 @@ class WarehouseService {
     const warehouseId = this.resolveWarehouseId(id);
     const docRef = doc(db, 'warehouses', warehouseId, 'audits', auditId);
     await updateDoc(docRef, data);
+  }
+
+  // --- Field Scraps (Sahalardan Çıkan Hurdalar) ---
+  async addFieldScrap(scrapData: Omit<FieldScrapRecord, 'id' | 'scrappedAt'>): Promise<string> {
+    const colRef = collection(db, 'field_scraps');
+    const docRef = await addDoc(colRef, {
+      ...scrapData,
+      scrappedAt: serverTimestamp(),
+      createdAt: serverTimestamp()
+    });
+    return docRef.id;
+  }
+
+  async getFieldScraps(warehouseId?: string): Promise<FieldScrapRecord[]> {
+    const colRef = collection(db, 'field_scraps');
+    let q;
+    if (warehouseId && warehouseId !== 'ALL') {
+      q = query(colRef, where('warehouseId', '==', warehouseId), orderBy('scrappedAt', 'desc'));
+    } else {
+      q = query(colRef, orderBy('scrappedAt', 'desc'));
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as FieldScrapRecord));
+  }
+
+  async deleteFieldScrap(scrapId: string): Promise<void> {
+    const docRef = doc(db, 'field_scraps', scrapId);
+    await deleteDoc(docRef);
   }
 
 
@@ -1421,11 +1569,25 @@ class WarehouseService {
   }
 
   async decreaseReservation(warehouseId: string, sapNo: string, quantity: number, teamId: string) {
+    const findMatchingReservationKey = (resMap: Record<string, number> | undefined, tId: string): string | null => {
+      if (!resMap) return null;
+      if (resMap[tId] !== undefined && Number(resMap[tId]) > 0) return tId;
+      const cleanTarget = tId.replace(/\s+/g, '').replace(/_/g, '').toLowerCase();
+      for (const key of Object.keys(resMap)) {
+        const cleanKey = key.replace(/\s+/g, '').replace(/_/g, '').toLowerCase();
+        if (cleanKey === cleanTarget || cleanKey.endsWith(cleanTarget.replace('team', '')) || cleanTarget.endsWith(cleanKey.replace('team', ''))) {
+          if (Number(resMap[key]) > 0) return key;
+        }
+      }
+      return null;
+    };
+
     let targetWhId = warehouseId;
     let inventory = await this.getInventory(targetWhId);
     let item = inventory.find(i => String(i.sapNo).trim() === String(sapNo).trim() && i.condition !== 'DEFECT');
     
-    let hasReservation = item && item.reservations && (item.reservations[teamId] || 0) > 0;
+    let matchedKey = item ? findMatchingReservationKey((item as any).reservations, teamId) : null;
+    let hasReservation = !!matchedKey;
     
     if (!hasReservation) {
       const allWhs = dataService.getWarehouses();
@@ -1433,39 +1595,39 @@ class WarehouseService {
         if (w.id === warehouseId || w.id.startsWith('team_')) continue;
         const inv = await this.getInventory(w.id);
         const it = inv.find(i => String(i.sapNo).trim() === String(sapNo).trim() && i.condition !== 'DEFECT');
-        if (it && it.reservations && (it.reservations[teamId] || 0) > 0) {
+        const k = it ? findMatchingReservationKey((it as any).reservations, teamId) : null;
+        if (k) {
           targetWhId = w.id;
           inventory = inv;
           item = it;
+          matchedKey = k;
           hasReservation = true;
           break;
         }
       }
     }
 
-    if (!item || !item.id) return;
+    if (!item || !item.id || !matchedKey) return;
 
     const currentReserved = item.reservedQuantity || 0;
-    const reservations = (item as any).reservations || {};
-    const currentTeamQty = reservations[teamId] || 0;
+    const reservations = { ...((item as any).reservations || {}) };
+    const currentTeamQty = Number(reservations[matchedKey] || 0);
     if (currentTeamQty <= 0) return;
 
-    const newReservations = {
-      ...reservations,
-      [teamId]: Math.max(0, currentTeamQty - quantity)
-    };
-    if (newReservations[teamId] <= 0) {
-      delete newReservations[teamId];
+    const newTeamQty = Math.max(0, currentTeamQty - quantity);
+    if (newTeamQty <= 0) {
+      delete reservations[matchedKey];
+    } else {
+      reservations[matchedKey] = newTeamQty;
     }
 
     const docRef = doc(db, 'warehouses', targetWhId, 'inventory_v2', item.id);
     await updateDoc(docRef, {
       reservedQuantity: Math.max(0, currentReserved - quantity),
-      reservations: newReservations,
+      reservations: reservations,
       lastUpdated: serverTimestamp()
     });
 
-    // Update local cache directly to avoid query lag
     const cached = this.inventoryCache.get(targetWhId);
     if (cached) {
       const idx = cached.data.findIndex(i => i.id === item.id);
@@ -1473,7 +1635,7 @@ class WarehouseService {
         cached.data[idx] = { 
           ...cached.data[idx], 
           reservedQuantity: Math.max(0, currentReserved - quantity),
-          reservations: newReservations,
+          reservations: reservations,
           lastUpdated: new Date() as any
         };
         cached.timestamp = Date.now();

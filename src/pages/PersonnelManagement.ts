@@ -10,6 +10,35 @@ export const PersonnelManagementPage = async () => {
 
   return `
     <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 2rem;">
+      <style>
+        button[onclick="window.savePersonnelName()"].btn-cyber {
+          background: rgba(0, 242, 255, 0.06) !important;
+          border: 1px solid rgba(0, 242, 255, 0.25) !important;
+          color: #00f2ff !important;
+          min-height: unset !important;
+          height: 42px !important;
+          padding: 0 16px !important;
+          border-radius: 8px !important;
+          font-family: 'Rajdhani', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 0.8rem !important;
+          transition: all 0.2s !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          letter-spacing: 0.5px !important;
+          text-transform: uppercase !important;
+          box-shadow: none !important;
+          cursor: pointer !important;
+        }
+        button[onclick="window.savePersonnelName()"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(0, 242, 255, 0.1) !important;
+        }
+      </style>
       <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div>
           <h1 class="page-title" style="margin-bottom: 0; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 1.8rem; color: #fff; display: flex; align-items: center; gap: 12px;">
@@ -63,7 +92,10 @@ export const PersonnelManagementPage = async () => {
   }
 };
 
-(window as any).savePersonnelDetails = async (name: string, safeName: string) => {
+(window as any).savePersonnelDetails = async (originalName: string, safeName: string) => {
+  const nameInput = document.getElementById(`name-${safeName}`) as HTMLInputElement;
+  const newName = nameInput?.value?.trim() || originalName;
+
   const companySelect = document.getElementById(`company-${safeName}`) as HTMLSelectElement;
   const company = companySelect?.value || '';
   
@@ -76,8 +108,8 @@ export const PersonnelManagementPage = async () => {
   
   try {
     if ((window as any).showToast) (window as any).showToast('Bilgi', 'Detaylar kaydediliyor...', 'info');
-    await personnelService.updatePersonnelDetails(name, company, baseSites, team);
-    if ((window as any).showToast) (window as any).showToast('Başarılı', 'Personel bölgeleri, şirketi ve ekibi güncellendi.', 'success');
+    await personnelService.updatePersonnelDetails(originalName, company, baseSites, team, newName);
+    if ((window as any).showToast) (window as any).showToast('Başarılı', 'Personel bilgileri güncellendi.', 'success');
   } catch (err: any) {
     if ((window as any).showToast) (window as any).showToast('Hata', err.message || 'Güncelleme başarısız.', 'error');
   }
@@ -103,6 +135,10 @@ export const PersonnelManagementPage = async () => {
     const safeName = name.replace(/[^a-zA-Z0-9]/g, '_');
     const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
     const company = detail?.company || '';
+    const cleanCo = company.toLowerCase().trim();
+    const isDemirer = cleanCo === 'demirer enerji' || cleanCo.includes('demirer enerji');
+    const isHarFilm = cleanCo === 'har film yapım' || cleanCo.includes('har film');
+    const isYek = cleanCo === 'yek' || cleanCo.includes('yek');
     const baseSites = detail?.baseSites || [];
     const team = detail?.team || '';
 
@@ -135,6 +171,12 @@ export const PersonnelManagementPage = async () => {
 
         <!-- Expandable Content Panel -->
         <div id="panel-${safeName}" style="display: none; padding: 1.25rem; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0, 0, 0, 0.25); flex-direction: column; gap: 1rem;">
+          <!-- Personnel Name Input Field -->
+          <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+            <label class="input-label" style="margin: 0; font-size: 0.7rem; letter-spacing: 1px; color: var(--accent-cyan);">PERSONEL ADI SOYADI</label>
+            <input type="text" class="cyber-input" id="name-${safeName}" value="${name}" style="height: 38px; width: 100%; border-radius: 6px; font-weight: 700;" placeholder="Personel adını giriniz...">
+          </div>
+
           <!-- Company & Team Grid -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
             <!-- Company Selection -->
@@ -142,9 +184,9 @@ export const PersonnelManagementPage = async () => {
               <label class="input-label" style="margin: 0; font-size: 0.7rem; letter-spacing: 1px;">BAĞLI OLDUĞU ŞİRKET</label>
               <select class="cyber-input" id="company-${safeName}" style="height: 38px; width: 100%; border-radius: 6px;">
                 <option value="" ${!company ? 'selected' : ''}>Şirket Seçin...</option>
-                <option value="Demirer Enerji" ${company === 'Demirer Enerji' ? 'selected' : ''}>Demirer Enerji</option>
-                <option value="Har Film Yapım" ${company === 'Har Film Yapım' ? 'selected' : ''}>Har Film Yapım</option>
-                <option value="YEK" ${company === 'YEK' ? 'selected' : ''}>YEK</option>
+                <option value="Demirer Enerji Elektrik Üretim A.Ş." ${isDemirer ? 'selected' : ''}>Demirer Enerji Elektrik Üretim A.Ş.</option>
+                <option value="Har Film Yapım Enerji Yatırım Danışmanlık ve Tic. A.Ş." ${isHarFilm ? 'selected' : ''}>Har Film Yapım Enerji Yatırım Danışmanlık ve Tic. A.Ş.</option>
+                <option value="YEK Demirer Enerji Yatırım Danışmanlık A.Ş." ${isYek ? 'selected' : ''}>YEK Demirer Enerji Yatırım Danışmanlık A.Ş.</option>
               </select>
             </div>
 
@@ -153,6 +195,9 @@ export const PersonnelManagementPage = async () => {
               <label class="input-label" style="margin: 0; font-size: 0.7rem; letter-spacing: 1px;">ATANDIĞI EKİP (TEAM)</label>
               <select class="cyber-input" id="team-${safeName}" style="height: 38px; width: 100%; border-radius: 6px;">
                 <option value="" ${!team ? 'selected' : ''}>Ekip Atanmadı...</option>
+                <option value="Ofis" ${team === 'Ofis' ? 'selected' : ''}>Ofis Çalışanı</option>
+                <option value="İSG" ${team === 'İSG' ? 'selected' : ''}>İSG Uzmanı</option>
+                <option value="Diğer" ${team === 'Diğer' ? 'selected' : ''}>Diğer</option>
                 ${Array.from({length: 15}, (_, i) => {
                   const tVal = `Team ${String(i + 1).padStart(2, '0')}`;
                   return `<option value="${tVal}" ${team === tVal ? 'selected' : ''}>${tVal}</option>`;

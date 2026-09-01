@@ -33,13 +33,16 @@ export const UserManagementPage = async () => {
     { id: 'bakim-planlama', label: 'Bakım Planlama' },
     { id: 'users', label: 'Kullanıcı Yetkileri' },
     { id: 'scada-reset-logs', label: 'SCADA Reset Günlükleri' },
+    { id: 'parameter-audit', label: 'Parametre Denetimi' },
+    { id: 'leave-management', label: 'İzin Yönetimi' },
     { id: 'MALZEME_YONETIMI', label: 'Malzeme Yönetimi' },
     { id: 'asset-custody', label: 'Malzeme Zimmeti' },
     { id: 'tickets-page', label: 'Saha Destek (Ticket)' },
-    { id: 'image-pool', label: 'Resim Havuzu' },
+    { id: 'image-pool', label: 'Görsel Ürün Tarama' },
     { id: 'kkd-kontrol', label: 'KKD Muayene Takip' },
     { id: 'olcu-aletleri', label: 'Ölçü Aletleri Kalibrasyon' },
-    { id: 'tork-aletleri', label: 'Tork Aletleri Kalibrasyon' }
+    { id: 'tork-aletleri', label: 'Tork Aletleri Kalibrasyon' },
+    { id: 'fault-library', label: 'Arıza Çözüm Kütüphanesi' }
   ];
 
   (granularOptions as any)['tsi-library'] = [
@@ -91,7 +94,7 @@ export const UserManagementPage = async () => {
       if (numA !== numB) return numA - numB;
       return (a.email || '').localeCompare(b.email || '');
     });
-  const guests = users.filter(u => u.role === 'GUEST');
+  const guests = users.filter(u => u.role === 'GUEST' || u.role === 'USER');
 
   const renderUserCard = (user: any) => {
     const tabCount = Array.isArray(user.allowedTabs) ? user.allowedTabs.length : Object.keys(user.allowedTabs || {}).length;
@@ -135,9 +138,24 @@ export const UserManagementPage = async () => {
         <!-- Role -->
         <div style="width: 180px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px;">
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="badge" style="background: ${user.role === 'ADMIN' ? 'rgba(253, 224, 71, 0.15)' : 'rgba(51, 65, 85, 0.8)'}; color: ${user.role === 'ADMIN' ? '#fde047' : '#93c5fd'}; border: 1px solid ${user.role === 'ADMIN' ? 'rgba(253, 224, 71, 0.3)' : 'rgba(147, 197, 253, 0.2)'}; font-size: 0.65rem; padding: 2px 10px; width: fit-content; font-weight: 700;">
-               ${user.role}
-            </span>
+            ${(() => {
+              let rText = user.role || '';
+              let badgeStyle = 'background: rgba(51, 65, 85, 0.8); color: #93c5fd; border: 1px solid rgba(147, 197, 253, 0.2);';
+              if (user.role === 'ADMIN') {
+                rText = 'ADMIN';
+                badgeStyle = 'background: rgba(253, 224, 71, 0.15); color: #fde047; border: 1px solid rgba(253, 224, 71, 0.3);';
+              } else if (user.role === 'MALZEME_YONETIMI') {
+                rText = 'AMBAR';
+              } else if (user.role === 'TAMİR') {
+                rText = 'ATÖLYE';
+              } else if (user.role === 'USER') {
+                rText = 'KULLANICI';
+                badgeStyle = 'background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2);';
+              } else if (user.role === 'GUEST') {
+                rText = 'MİSAFİR';
+              }
+              return `<span class="badge" style="${badgeStyle} font-size: 0.65rem; padding: 2px 10px; width: fit-content; font-weight: 700;">${rText}</span>`;
+            })()}
           </div>
           ${isTeamLeader ? `<span class="badge" style="background: rgba(249, 115, 22, 0.1); color: #f97316; font-size: 0.55rem; padding: 2px 8px; border: 1px solid rgba(249, 115, 22, 0.2); width: fit-content; letter-spacing: 1px; font-weight: 800;">EKİP LİDERİ</span>` : ''}
         </div>
@@ -179,6 +197,35 @@ export const UserManagementPage = async () => {
 
   return `
     <div class="fade-in-up content-area">
+      <style>
+        .content-area button[onclick="window.openNewUserModal()"].btn-cyber {
+          background: rgba(0, 242, 255, 0.06) !important;
+          border: 1px solid rgba(0, 242, 255, 0.25) !important;
+          color: #00f2ff !important;
+          min-height: unset !important;
+          height: 38px !important;
+          padding: 0 16px !important;
+          border-radius: 6px !important;
+          font-family: 'Rajdhani', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 0.75rem !important;
+          transition: all 0.2s !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          letter-spacing: 0.5px !important;
+          text-transform: uppercase !important;
+          box-shadow: none !important;
+          cursor: pointer !important;
+        }
+        .content-area button[onclick="window.openNewUserModal()"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(0, 242, 255, 0.1) !important;
+        }
+      </style>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h1 class="page-title" style="margin-bottom: 0;"><i class="fa-solid fa-user-shield" style="color: var(--accent-cyan);"></i> Kullanıcı Yetkilendirme</h1>
         ${canCreate ? `
@@ -238,7 +285,7 @@ export const UserManagementPage = async () => {
         ${guests.length > 0 ? `
           <div class="user-tier-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
             <div style="display: flex; align-items: center; gap: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 1.05rem; color: #9ca3af; border-bottom: 1px solid rgba(156, 163, 175, 0.15); padding-bottom: 0.5rem;">
-              <i class="fa-solid fa-eye-slash" style="font-size: 0.9rem;"></i> MİSAFİR & GÖZLEMCİ HESAPLARI
+              <i class="fa-solid fa-user-tag" style="font-size: 0.9rem;"></i> OFİS KULLANICILARI
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.5rem; border-left: 2px dashed rgba(156, 163, 175, 0.2); padding-left: 1rem;">
               ${guests.map(renderUserCard).join('')}
@@ -341,6 +388,7 @@ export const UserManagementPage = async () => {
                   <i class="fa-solid fa-id-card-clip" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
                   <select id="new-user-role" class="cyber-input" style="padding-left: 2.5rem; width: 100%; box-sizing: border-box;">
                     <option value="TECHNICIAN">Teknisyen / Saha Ekibi</option>
+                    <option value="USER">Kullanıcı (Ofis)</option>
                     <option value="MALZEME_YONETIMI">Malzeme Yönetimi / Ambar Sorumlusu</option>
                     <option value="TAMİR">Atölye Sorumlusu</option>
                     <option value="GUEST">Misafir / İzleyici</option>
@@ -578,6 +626,7 @@ export const UserManagementPage = async () => {
           <select id="preset-template-role-select" class="cyber-input" style="height: 38px; font-size: 0.8rem; padding: 0 10px; width: 220px; background: #161b22; border: 1px solid var(--accent-cyan); color: #fff; border-radius: 8px; font-weight: 700; cursor: pointer;" onchange="window.loadPresetTemplateToManager(this.value)">
             <option value="" disabled selected>Şablon Seçin...</option>
             <option value="TECHNICIAN">Teknisyen Şablonu</option>
+            <option value="USER">Kullanıcı Şablonu</option>
             <option value="MALZEME_YONETIMI">Malzeme Sorumlusu</option>
             <option value="TAMİR">Atölye Sorumlusu</option>
             <option value="GUEST">Misafir Şablonu</option>
@@ -631,6 +680,16 @@ export const UserManagementPage = async () => {
     </div>
     
     <style>
+      /* Center modal overlay content */
+      .modal-overlay {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      .modal-overlay.hidden {
+        display: none !important;
+      }
+
       /* Permission Modal Custom Cyber-Luxury Styles */
       .permission-modal-container {
         background: #0d1117;
@@ -986,46 +1045,50 @@ export const UserManagementPage = async () => {
       
       /* Footer Buttons */
       .btn-cancel {
-        background: #ffffff;
-        color: #0d1117;
-        border: none;
-        padding: 10px 24px;
-        border-radius: 9999px;
-        font-size: 0.85rem;
+        background: transparent;
+        color: #94A3B8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 8px 20px;
+        border-radius: 6px;
+        font-size: 0.75rem;
         font-weight: 800;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.2s;
         text-transform: uppercase;
         letter-spacing: 1px;
+        font-family: 'Rajdhani', sans-serif;
       }
       
       .btn-cancel:hover {
-        background: #e6e6e6;
-        transform: translateY(-1px);
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: #fff;
       }
       
       .btn-save {
-        background: linear-gradient(135deg, #06b6d4, #0891b2);
-        color: #ffffff;
-        border: none;
-        padding: 10px 28px;
-        border-radius: 9999px;
-        font-size: 0.85rem;
+        background: rgba(0, 242, 255, 0.06);
+        color: #00f2ff;
+        border: 1px solid rgba(0, 242, 255, 0.25);
+        padding: 8px 24px;
+        border-radius: 6px;
+        font-size: 0.75rem;
         font-weight: 800;
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.2s;
         display: flex;
         align-items: center;
         gap: 8px;
         text-transform: uppercase;
         letter-spacing: 1px;
-        box-shadow: 0 4px 14px rgba(6, 182, 212, 0.3);
+        box-shadow: none;
+        font-family: 'Rajdhani', sans-serif;
       }
       
       .btn-save:hover {
-        background: linear-gradient(135deg, #0891b2, #0e7490);
-        box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4);
-        transform: translateY(-1px);
+        background: rgba(0, 242, 255, 0.15);
+        border-color: rgba(0, 242, 255, 0.5);
+        color: #fff;
+        box-shadow: 0 0 12px rgba(0, 242, 255, 0.1);
       }
     </style>
   `;
@@ -1253,6 +1316,7 @@ export const UserManagementPage = async () => {
 
   let roleText = 'Teknisyen';
   if (role === 'ADMIN') roleText = 'Admin';
+  else if (role === 'USER') roleText = 'Kullanıcı';
   else if (role === 'MALZEME_YONETIMI') roleText = 'Malzeme Sorumlusu';
   else if (role === 'TAMİR') roleText = 'Atölye Sorumlusu';
   else if (role === 'GUEST') roleText = 'Misafir';
@@ -1748,7 +1812,7 @@ const granularOptions = {
           const actualWhId = subId.replace('wh_', '');
           subCb.checked = (user.allowedWarehouses || []).includes(actualWhId);
         } else if (subId.startsWith('team_Team_')) {
-          subCb.checked = (user.allowedWarehouses || []).includes(subId) || userPerms[tabId] === true || (typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId]);
+          subCb.checked = (user.allowedWarehouses || []).includes(subId) || (typeof userPerms[tabId] === 'object' && !!userPerms[tabId][subId]);
         } else if (subId.startsWith('tsicat_')) {
           const actualCatId = subId.replace('tsicat_', '');
           subCb.checked = (user.allowedTsiCategories || []).includes(actualCatId);
@@ -2023,7 +2087,14 @@ const granularOptions = {
         }
       });
     } else {
-      if (role === 'TECHNICIAN') {
+      if (role === 'USER') {
+        defaultTabs = ['dashboard', 'tasks', 'siparis', 'turbines', 'tickets-page', 'tsi-library'];
+        defaultSubs = {
+          'tasks': ['completeTask'],
+          'siparis': ['createOrder'],
+          'tickets-page': ['createTicket', 'replyTicket']
+        };
+      } else if (role === 'TECHNICIAN') {
         defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'visual-bom', 'tickets-page', 'tsi-library', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
         defaultSubs = {
           'tasks': ['completeTask'],

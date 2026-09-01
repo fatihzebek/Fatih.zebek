@@ -37,22 +37,31 @@ function calculateManHours(workSessions: any[], dateStr?: string) {
     }
 
     // Road travel:
-    if (ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE' || ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'YOL') {
+    if (ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE' || ws.type === 'TÜRBİNDEN TÜRBİNE' || ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'YOL') {
       totalRoadHours += durationH;
     }
 
     // Overtime
-    const ot = DateTimeUtils.calculateOvertimeHours(
-      sDate,
-      ws.startTime,
-      ws.endTime,
-      ws.isOffDay || false
-    );
-    const overtimeH = Math.min(durationH, ot);
-    const normalH = Math.max(0, durationH - overtimeH);
+    let wsNormalManHours = 0;
+    let wsOvertimeManHours = 0;
+    const pList = Array.isArray(ws.personnel) ? ws.personnel : [ws.personnel || ''];
 
-    totalNormalManHours += normalH * personnelCount;
-    totalOvertimeManHours += overtimeH * personnelCount;
+    pList.forEach((name: string) => {
+      const ot = DateTimeUtils.calculateOvertimeHours(
+        sDate,
+        ws.startTime,
+        ws.endTime,
+        ws.isOffDay || false,
+        name
+      );
+      const overtimeH = Math.min(durationH, ot);
+      const normalH = Math.max(0, durationH - overtimeH);
+      wsNormalManHours += normalH;
+      wsOvertimeManHours += overtimeH;
+    });
+
+    totalNormalManHours += wsNormalManHours;
+    totalOvertimeManHours += wsOvertimeManHours;
     totalManHours += durationH * personnelCount;
   });
 
@@ -66,6 +75,12 @@ function calculateManHours(workSessions: any[], dateStr?: string) {
 }
 
 export const renderReportPDF = (report: ServiceReport) => {
+  const getCORSUrl = (url: string) => {
+    if (!url) return '';
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}t=${Date.now()}`;
+  };
+
   const sessions = (report as any).workSessions || [];
   const manHours = calculateManHours(sessions, report.date);
   const checklist = report.checklist || [];
@@ -372,7 +387,7 @@ let ohsHtml = '';
           <tr>
             <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; width: 15%; background: #f5f7fa; font-weight: 700;">Tarih</th>
             <td style="border: 1px solid #bbb; padding: 7px 10px; width: 35%;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; width: 15%; background: #f5f7fa; font-weight: 700;">Bölge / Saha</th>
+            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; width: 15%; background: #f5f7fa; font-weight: 700; white-space: nowrap;">Bölge / Saha</th>
             <td style="border: 1px solid #bbb; padding: 7px 10px; width: 35%;">${report.siteName}</td>
           </tr>
           <tr>
@@ -382,14 +397,54 @@ let ohsHtml = '';
             <td style="border: 1px solid #bbb; padding: 7px 10px;">${report.turbineNo}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Arıza Kodu</th>
-            <td style="border: 1px solid #bbb; padding: 7px 10px; font-weight: 700;">${report.faultCode || '-'}</td>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Personel / Ekip</th>
+            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
+              const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
+              return isPlanli ? 'Planlı Kontrol' : (isMaintenance ? 'Bakım Türü' : 'Arıza Kodu');
+            })()}</th>
+            <td style="border: 1px solid #bbb; padding: 7px 10px; font-weight: 700;">${(() => {
+              const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
+              return isPlanli ? 'Planlı Duruş' : (isMaintenance ? (report.templateName || (report.faultCode !== '-' ? report.faultCode : '') || 'Bakım') : (report.faultCode || '-'));
+            })()}</td>
+            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Ekip</th>
             <td style="border: 1px solid #bbb; padding: 7px 10px; font-weight: 700;">${formatTeamName(report.team)}</td>
           </tr>
           <tr>
-            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">Arıza Tanımı</th>
-            <td colspan="3" style="border: 1px solid #bbb; padding: 7px 10px; font-size: 1.14rem;">${report.faultDesc || '-'}</td>
+            <th style="border: 1px solid #bbb; padding: 7px 10px; text-align: left; background: #f5f7fa; font-weight: 700;">${(() => {
+              const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
+              return isPlanli ? 'Açıklama' : (isMaintenance ? 'Bakım Talimatı' : 'Arıza Tanımı');
+            })()}</th>
+            <td colspan="3" style="border: 1px solid #bbb; padding: 7px 10px; font-size: 1.14rem;">${(() => {
+              const isPlanli = !isMaintenance && (report.faultCode === 'Planlı Duruş' || report.templateName === 'Planlı Duruş' || (report.faultCode && report.faultCode.toLowerCase().includes('planlı')) || (report.templateName && report.templateName.toLowerCase().includes('planlı')));
+              if (isPlanli) {
+                return report.faultDesc || 'Planlı Duruş';
+              }
+              if (isMaintenance) {
+                let code = (report as any).instructionCode || (report as any).templateInstructionCode || '';
+                if (!code) {
+                  const norm = ((report.templateName || '') + ' ' + (report.faultCode || '') + ' ' + (report.faultDesc || '')).toLowerCase();
+                  if (norm.includes('e82/e2') || norm.includes('e82-e2') || (norm.includes('e82') && norm.includes('e2'))) {
+                    if (norm.includes('ana')) code = 'D0847069/8.0-tr/DC';
+                    else code = 'TD-esc-08-de-tr-11-002 Rev004';
+                  } else if (norm.includes('e82')) {
+                    if (norm.includes('ana')) code = 'D0847068/8.0-tr/DC';
+                    else code = 'TD-esc-08-de-tr-14-018 Rev003';
+                  } else if (norm.includes('e70')) {
+                    if (norm.includes('ana')) code = 'D0847062/8.0-tr';
+                    else code = 'TD-esc-08-de-tr-10-052 Rev005';
+                  } else if (norm.includes('e44') || norm.includes('e48') || norm.includes('e-44')) {
+                    if (norm.includes('yaglama') || norm.includes('yağlama')) {
+                      code = 'TD-esc-08-de-tr-11-017 Rev004 Yağlama bakımı E-44, E-48, E-53';
+                    } else if (norm.includes('ana')) {
+                      code = 'TD-esc-08-de-tr-15-090 Rev011 Ana bakım E-44 - E48 (CS48a)';
+                    }
+                  } else if (norm.includes('jenerat')) {
+                    code = 'TD-esc-03-de-tr-15-009 Rev001';
+                  }
+                }
+                return code || (report.faultDesc && report.faultDesc !== 'Genel Görev' ? report.faultDesc : '-');
+              }
+              return report.faultDesc || '-';
+            })()}</td>
           </tr>
         </table>
       </div>
@@ -411,7 +466,7 @@ let ohsHtml = '';
           </tr>
           ${sessions.length > 0 ? sessions.filter((s: any) => s.startTime && s.endTime).map((session: any) => {
             const personnelList = Array.isArray(session.personnel) ? session.personnel.join(', ') : (session.personnel || '-');
-            const typeLabel = session.type === 'TRAVEL' || session.type === 'YOL' ? 'YOL' : 'ÇALIŞMA';
+            const typeLabel = session.type || 'ÇALIŞMA';
             return `
               <tr>
                 <td style="border: 1px solid #bbb; padding: 6px; font-weight: 600;">${typeLabel}</td>
@@ -463,7 +518,7 @@ let ohsHtml = '';
               ${report.imageUrls && report.imageUrls.length > 0 ? `
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
                   ${report.imageUrls.map(url => `
-                    <img src="${url}" style="width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" crossorigin="anonymous">
+                    <img src="${getCORSUrl(url)}" style="width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" crossorigin="anonymous">
                   `).join('')}
                 </div>
               ` : '<span style="color: #999;">Fotoğraf eklenmemiştir.</span>'}
@@ -504,6 +559,23 @@ let ohsHtml = '';
 
       ${ohsHtml}
       ${checklistHtml}
+
+      ${report.imageUrls && report.imageUrls.length > 0 ? `
+      <!-- FOTOĞRAF GALERİSİ -->
+      <div class="report-section" style="margin-bottom: 20px; page-break-inside: avoid;">
+        <div style="background: #e8ecf1; padding: 6px 12px; font-weight: 800; font-size: 1.2rem; border: 1px solid #bbb; border-bottom: none;">
+          İŞLEM VE ARIZA FOTOĞRAFLARI (${report.imageUrls.length} FOTOĞRAF)
+        </div>
+        <div style="border: 1px solid #bbb; padding: 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #fff;">
+          ${report.imageUrls.map((url, idx) => `
+            <div style="border: 1px solid #ddd; border-radius: 4px; overflow: hidden; background: #f8fafc; text-align: center; padding: 4px;">
+              <img src="${getCORSUrl(url)}" style="width: 100%; height: 160px; object-fit: cover; border-radius: 2px;" crossorigin="anonymous">
+              <div style="font-size: 0.8rem; font-weight: 700; color: #555; margin-top: 4px;">Fotoğraf #${idx + 1}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      ` : ''}
 
       <!-- Footer -->
       <div style="margin-top: 30px; padding-top: 15px; border-top: 1px solid #bbb; display: flex; justify-content: space-between; font-size: 1.02rem; color: #999;">

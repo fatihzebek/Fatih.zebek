@@ -15,6 +15,19 @@ const cleanSablonName = (sablonName: string) => {
     .trim();
 };
 
+const formatSiteNameTitle = (name: string) => {
+  if (!name) return '';
+  return name
+    .split(' ')
+    .map(word => {
+      if (!word) return '';
+      const first = word.charAt(0).toLocaleUpperCase('tr-TR');
+      const rest = word.slice(1).toLocaleLowerCase('tr-TR');
+      return first + rest;
+    })
+    .join(' ');
+};
+
 let activeSiteFilter = 'TÜMÜ';
 
 const renderTasksTable = (tasks: Task[], userRole: string) => {
@@ -242,17 +255,11 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             margin-right: 8px;
             display: inline-block;
           }
-          .status-dot.green { background: #14f195; box-shadow: 0 0 8px #14f195; animation: dotPulse 1.8s infinite ease-in-out; }
-          .status-dot.orange { background: #ffaa00; box-shadow: 0 0 8px #ffaa00; animation: dotPulse 1.8s infinite ease-in-out; }
-          .status-dot.purple { background: #d4a0ff; box-shadow: 0 0 8px #d4a0ff; animation: dotPulse 1.8s infinite ease-in-out; }
-          .status-dot.blue { background: #00f3ff; box-shadow: 0 0 8px #00f3ff; animation: dotPulse 1.8s infinite ease-in-out; }
+          .status-dot.green { background: #14f195; box-shadow: 0 0 6px rgba(20, 241, 149, 0.6); }
+          .status-dot.orange { background: #ffaa00; box-shadow: 0 0 6px rgba(255, 170, 0, 0.6); }
+          .status-dot.purple { background: #d4a0ff; box-shadow: 0 0 6px rgba(212, 160, 255, 0.6); }
+          .status-dot.blue { background: #00f3ff; box-shadow: 0 0 6px rgba(0, 243, 255, 0.6); }
           .status-dot.gray { background: rgba(255,255,255,0.45); }
-          
-          @keyframes dotPulse {
-            0% { opacity: 0.45; transform: scale(0.9); }
-            50% { opacity: 1; transform: scale(1.15); }
-            100% { opacity: 0.45; transform: scale(0.9); }
-          }
 
           /* Custom status badge */
           .status-badge {
@@ -336,8 +343,10 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             transition: all 0.3s ease;
             background: rgba(255, 255, 255, 0.01) !important;
             border: 1px solid rgba(255, 255, 255, 0.05) !important;
-            max-width: 650px;
-            white-space: nowrap;
+            max-width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
           }
           .task-type-badge.maintenance {
             background: linear-gradient(135deg, rgba(0, 243, 255, 0.04), rgba(0, 243, 255, 0.01)) !important;
@@ -555,16 +564,16 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
         </div>
 
         <div class="glass-panel tasks-table-panel">
-          <div style="overflow-x: auto;">
-            <table style="table-layout: fixed; width: 100%;">
+          <div style="overflow-x: auto; width: 100%;">
+            <table style="table-layout: auto; width: 100%; min-width: 960px; border-collapse: collapse;">
               <thead>
                 <tr>
-                  <th style="width: 130px; text-align: left;">TARİH</th>
-                  <th style="width: 200px; text-align: left;">SAHA / TÜRBİN</th>
-                  <th style="width: 110px; text-align: left;">EKİP</th>
-                  <th style="text-align: left;">GÖREV TÜRÜ</th>
-                  <th style="width: 210px; text-align: left;">DURUM</th>
-                  <th style="width: 200px; text-align: right; padding-right: 18px !important;">AKSİYON</th>
+                  <th style="width: 110px; min-width: 110px; text-align: left;">TARİH</th>
+                  <th style="width: 120px; min-width: 120px; text-align: left;">SAHA / TÜRBİN</th>
+                  <th style="width: 100px; min-width: 100px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">EKİP</th>
+                  <th style="min-width: 260px; text-align: left;">GÖREV TÜRÜ</th>
+                  <th style="width: 190px; min-width: 190px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">DURUM</th>
+                  <th style="width: 180px; min-width: 180px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">AKSİYON</th>
                 </tr>
               </thead>
               <tbody>
@@ -593,6 +602,19 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                     }
                   }
                   
+                  const rawSiteName = dataService.getAllSites().find(s => s.id === task.siteId || s.name === task.siteId)?.name || task.siteId;
+                  const siteNameTitle = formatSiteNameTitle(rawSiteName);
+                  
+                  const turbines = dataService.getTurbinesBySite(task.siteId);
+                  const turbine = turbines.find(t => 
+                    t.label === task.turbineId || 
+                    `T-${t.no}` === task.turbineId || 
+                    `T${t.no}` === task.turbineId || 
+                    `T${String(t.no).padStart(2, '0')}` === task.turbineId || 
+                    `T-${String(t.no).padStart(2, '0')}` === task.turbineId
+                  );
+                  const serial = turbine ? turbine.id : '';
+
                   return `
                   <tr style="${isReturned ? 'background: rgba(155, 89, 182, 0.03);' : ''} ${isTransferable ? 'cursor: grab;' : ''}"
                       ${isTransferable ? `draggable="true" ondragstart="window.handleTaskDragStart(event, '${task.id}')" ondragend="window.handleTaskDragEnd(event)"` : ''}>
@@ -603,14 +625,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </div>
                     </td>
                     <td>
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;">
-                          <span style="font-weight: 700; color: var(--text-main); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            ${dataService.getAllSites().find(s => s.id === task.siteId)?.name || task.siteId}
+                        <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%;">
+                          <span style="font-weight: 700; color: var(--text-main); font-size: 0.72rem; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;" title="${siteNameTitle}">
+                            ${siteNameTitle}
                           </span>
-                          <span class="turbine-id-badge" style="margin: 0; font-size: 0.72rem; padding: 1px 6px; flex-shrink: 0;">${task.turbineId}</span>
+                          <div style="display: flex; align-items: center; gap: 6px;">
+                            <span class="turbine-id-badge" style="margin: 0; font-size: 0.68rem; padding: 1px 6px; flex-shrink: 0; line-height: 1;">${task.turbineId}</span>
+                            ${serial ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; font-weight: 600;">${serial}</span>` : ''}
+                          </div>
                         </div>
                     </td>
-                    <td>
+                    <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
                       <span class="team-badge">
                         <i class="fa-solid fa-user-group"></i>
                         ${formatTeamName(task.personnel)}
@@ -619,19 +644,19 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                     <td>
                         <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : 'maintenance')}">
                           ${isFault ? `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                               <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
                               <span style="font-weight: 900; font-size: 0.76rem; color: #ff6b6b; letter-spacing: 0.3px; flex-shrink: 0;">${task.rawFaultCode}</span>
                               <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
                               <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
                             </div>
                           ` : isReturned ? `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                               <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.82rem; text-shadow: 0 0 8px rgba(179,127,235,0.4); flex-shrink: 0;"></i>
                               <span style="font-weight: 800; font-size: 0.76rem; color: #b37feb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
                             </div>
                           ` : `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                               <i class="fa-solid ${task.secilenSablon.includes('Planlı') ? 'fa-calendar-days' : 'fa-gears'}" style="color: #0891b2; font-size: 0.82rem; text-shadow: 0 0 8px rgba(8,145,178,0.3); flex-shrink: 0;"></i>
                               <span style="font-weight: 800; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
                               ${task.yoneticiNotu && task.secilenSablon.includes('Planlı') ? `
@@ -642,7 +667,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                           `}
                         </div>
                     </td>
-                    <td>
+                    <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
                       <span class="status-badge ${statusClass}">
                         ${isReturned 
                           ? '<span class="status-dot purple"></span> DÜZELTME BEKLİYOR' 
@@ -654,8 +679,9 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                                 ? '<span class="status-dot gray"></span> TAMAMLANDI' 
                                 : `<span class="status-dot orange"></span> ${task.status.toUpperCase()}`))}
                       </span>
-                    <td style="text-align: right; padding-right: 18px !important;">
-                       <div class="action-btn-container">
+                    </td>
+                    <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
+                       <div class="action-btn-container" style="justify-content: center !important;">
                          ${task.status === 'Tamamlandı' ? `
                            <button class="action-btn-main detail-btn" onclick="alert('Bu görev tamamlanmıştır.')"><i class="fa-solid fa-eye" style="margin-right: 5px; font-size: 0.65rem;"></i> DETAY</button>
                          ` : hasCompleteTaskPerm ? `
@@ -773,7 +799,7 @@ export const TasksPage = async () => {
             const allTeams = Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`);
             
             let filteredTeams = allTeams;
-            if (userRole !== 'ADMIN') {
+            if (userRole !== 'ADMIN' && userRole !== 'USER') {
               if (connectedTeams.size > 0) {
                 filteredTeams = allTeams.filter((t: string) => connectedTeams.has(t));
               }
@@ -905,8 +931,8 @@ export const TasksPage = async () => {
     const finalTasks = combined.filter(t => {
       const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
       
-      // Adminler her zaman görünür olsun
-      if (userRole === 'ADMIN') return true;
+      // Adminler ve Ofis Kullanıcıları her zaman görünür olsun
+      if (userRole === 'ADMIN' || userRole === 'USER') return true;
 
       const userTeam = (window as any).currentUserTeam || '';
       const managedTeams = (currentUser?.managedTeams || []).map((mt: string) => mt.toUpperCase().trim());
@@ -926,8 +952,7 @@ export const TasksPage = async () => {
                            isDaresShared ||
                            taskPersonnel.includes(searchTeam) || 
                            searchTeam.includes(taskPersonnel) || 
-                           managedTeams.some((mt: string) => taskPersonnel.includes(mt)) ||
-                           (t as any).isReturnedReport;
+                           managedTeams.some((mt: string) => taskPersonnel.includes(mt));
 
       // Ekibe doğrudan atanmış görevleri, allowedSites kısıtlamasından bağımsız olarak göster
       if (isMyTeamTask) return true;

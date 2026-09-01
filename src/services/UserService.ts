@@ -5,7 +5,7 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  role: 'ADMIN' | 'TECHNICIAN' | 'GUEST' | 'MALZEME_YONETIMI' | 'TAMİR';
+  role: 'ADMIN' | 'TECHNICIAN' | 'GUEST' | 'MALZEME_YONETIMI' | 'TAMİR' | 'USER';
   password?: string;
   allowedTabs: Record<string, any>; // Granular permissions: { tabId: { subPermission: boolean } }
   allowedSites: string[]; // Site IDs
@@ -131,7 +131,7 @@ class UserService {
         const docSnap = await getDocFromServer(docRef).catch(() => getDoc(docRef));
         if (docSnap.exists()) {
           const profile = docSnap.data() as UserProfile;
-          if (profile.uid === 'uQpDmHp0kaeOEqOc5AUmKMyKp5h1' || profile.email?.toLowerCase().includes('fatih.zebek')) {
+          if (profile.uid === 'uQpDmHp0kaeOEqOc5AUmKMyKp5h1' || profile.email?.toLowerCase().includes('fatih.zebek') || profile.email?.toLowerCase().includes('emir.unver')) {
             profile.role = 'ADMIN';
           }
           localStorage.setItem(cacheKey, JSON.stringify(profile));
@@ -171,7 +171,13 @@ class UserService {
 
   async getAllUsers(): Promise<UserProfile[]> {
     const querySnapshot = await getDocs(this.collectionRef);
-    return querySnapshot.docs.map(doc => doc.data() as UserProfile);
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data() as UserProfile;
+      if (data.uid === 'uQpDmHp0kaeOEqOc5AUmKMyKp5h1' || data.email?.toLowerCase().includes('fatih.zebek') || data.email?.toLowerCase().includes('emir.unver')) {
+        data.role = 'ADMIN';
+      }
+      return data;
+    });
   }
 
   async updatePermissions(uid: string, data: { allowedTabs?: any, allowedSites?: string[], allowedWarehouses?: string[], password?: string, team?: string, managedTeams?: string[], allowedTsiCategories?: string[] }) {

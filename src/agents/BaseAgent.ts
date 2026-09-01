@@ -59,11 +59,10 @@ export abstract class BaseAgent {
     }
     this.heartbeatInterval = setInterval(async () => {
       try {
-        const agentRef = doc(db, 'agent_registry', this.id);
-        await updateDoc(agentRef, {
+        await setDoc(doc(db, 'agent_registry', this.id), {
           lastSeen: Date.now(),
           status: this.status
-        });
+        }, { merge: true });
       } catch (error) {
         console.warn(`[Agent: ${this.name}] Heartbeat gönderilemedi:`, error);
       }
@@ -75,8 +74,7 @@ export abstract class BaseAgent {
    */
   async setStatus(newStatus: AgentStatus) {
     this.status = newStatus;
-    const agentRef = doc(db, 'agent_registry', this.id);
-    await updateDoc(agentRef, { status: newStatus });
+    await setDoc(doc(db, 'agent_registry', this.id), { status: newStatus }, { merge: true });
   }
 
   /**

@@ -1,8 +1,11 @@
 import { warehouseState, getUserProfile } from './WarehouseState';
+import { ensureSingleModalInBody } from './WarehouseModals';
 import { db } from '../../firebase';
 import { doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { warehouseService } from '../../services/WarehouseService';
 import { excelService } from '../../services/ExcelService';
+import { soundService } from '../../services/SoundService';
+import { emailService } from '../../services/EmailService';
 
 export const changeManualAuditPage = (page: number) => {
    warehouseState.currentAuditPage = page;
@@ -270,7 +273,10 @@ export const clearDraftAudit = async () => {
         }
       }
       localStorage.removeItem(`draft_audit_${warehouseState.currentWarehouse.id}`);
+      localStorage.removeItem(`draft_audit_start_time_${warehouseState.currentWarehouse.id}`);
       warehouseState.draftData = {};
+      warehouseState.auditResults = [];
+      (window as any).currentDraftData = {};
       if ((window as any).selectWarehouseAndNavigate) {
         (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
       }
@@ -280,6 +286,7 @@ export const clearDraftAudit = async () => {
 export const saveManualAudit = async (btn: HTMLButtonElement) => {
   const manualResults: any[] = [];
   const shelfUpdates: any[] = [];
+  const criticalLimitUpdates: any[] = [];
   let hasError = false;
   let firstErrorItemId = '';
 
@@ -316,6 +323,14 @@ export const saveManualAudit = async (btn: HTMLButtonElement) => {
      
      if (shelfVal.trim() !== originalShelf) {
        shelfUpdates.push({ itemId: item.id, shelfNo: shelfVal.trim() });
+     }
+
+     const currentLimit = item.criticalLimit !== undefined ? item.criticalLimit : (item.minStock || 0);
+     if (draftItem && draftItem.criticalLimit !== undefined && draftItem.criticalLimit !== '') {
+       const newLimit = parseInt(draftItem.criticalLimit);
+       if (!isNaN(newLimit) && newLimit !== currentLimit) {
+         criticalLimitUpdates.push({ itemId: item.id, criticalLimit: newLimit });
+       }
      }
 
      if (qtyVal !== '') {
@@ -357,53 +372,88 @@ export const saveManualAudit = async (btn: HTMLButtonElement) => {
     return;
   }
 
-  if (manualResults.length === 0 && shelfUpdates.length === 0) {
+  if (manualResults.length === 0 && shelfUpdates.length === 0 && criticalLimitUpdates.length === 0) {
     alert('Herhangi bir sayım veya konum bilgisi girilmedi!');
     return;
   }
 
-  const confirmBtn = confirm('Sayımı tamamlamak ve stokları güncellemek istediğinize emin misiniz?');
+  const confirmBtn = confirm('Sayımı tamamlayıp Sayım Raporunu yöneticilere (Fatih Zebek, Hurşit Akter, Emir Ünver) iletmek istediğinize emin misiniz?');
   if (!confirmBtn) return;
 
   const originalText = btn.innerText;
-  btn.innerText = 'Kaydediliyor...';
+  btn.innerText = 'Rapor İletiliyor...';
   btn.disabled = true;
 
   try {
     const totalDiff = manualResults.reduce((sum, r) => sum + r.diff, 0);
+    const discrepancies = manualResults.filter(r => r.diff !== 0);
+    const compliantCount = manualResults.filter(r => r.diff === 0).length;
+    const surplusCount = manualResults.filter(r => r.diff > 0).length;
+    const deficitCount = manualResults.filter(r => r.diff < 0).length;
+
     const userProfile = getUserProfile();
     const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
-    
+    const userEmail = userProfile?.email || '';
+    const team = userProfile?.team || '';
+    const warehouseName = warehouseState.currentWarehouse.name || warehouseState.currentWarehouse.id;
+    const warehouseId = warehouseState.currentWarehouse.id;
+
     if (manualResults.length > 0) {
-        await warehouseService.saveAudit(warehouseState.currentWarehouse.id, {
+        await warehouseService.saveAudit(warehouseId, {
           user: user,
+          userEmail: userEmail,
+          team: team,
           totalItems: manualResults.length,
           totalDiff: totalDiff,
-          results: manualResults
-        });
+          discrepantItems: discrepancies.length,
+          surplusItems: surplusCount,
+          deficitItems: deficitCount,
+          results: manualResults,
+          status: 'PENDING_APPROVAL'
+        }, false);
     }
 
     if (shelfUpdates.length > 0) {
         await Promise.all(
           shelfUpdates.map(update =>
-            warehouseService.updateMaterial(warehouseState.currentWarehouse.id, update.itemId, { shelfNo: update.shelfNo })
+            warehouseService.updateMaterial(warehouseId, update.itemId, { shelfNo: update.shelfNo })
           )
         );
     }
 
-    try {
-      const draftDocRef = doc(db, 'warehouses', warehouseState.currentWarehouse.id, 'active_audit', 'draft');
-      await deleteDoc(draftDocRef);
-    } catch (e) {
-      console.error("Failed to clear Firestore draft on save:", e);
+    if (criticalLimitUpdates.length > 0) {
+        await Promise.all(
+          criticalLimitUpdates.map(update =>
+            warehouseService.updateMaterial(warehouseId, update.itemId, { criticalLimit: update.criticalLimit })
+          )
+        );
     }
 
-    localStorage.removeItem(`draft_audit_${warehouseState.currentWarehouse.id}`);
-    localStorage.removeItem(`draft_audit_start_time_${warehouseState.currentWarehouse.id}`);
+    // Send email report to Fatih Zebek, Hurşit Akter, Emir Ünver
+    try {
+      await emailService.sendAuditReportEmail({
+        warehouseName: warehouseName,
+        warehouseId: warehouseId,
+        user: user,
+        date: new Date().toLocaleDateString('tr-TR'),
+        time: new Date().toLocaleTimeString('tr-TR'),
+        totalItems: manualResults.length,
+        compliantItems: compliantCount,
+        surplusItems: surplusCount,
+        deficitItems: deficitCount,
+        totalDiff: totalDiff,
+        discrepancies: discrepancies
+      });
+    } catch (mailErr) {
+      console.error("Failed to send audit report email:", mailErr);
+    }
 
-    alert('Değişiklikler başarıyla kaydedildi!');
+    alert('Sayım Raporu yöneticilere (Fatih Zebek, Hurşit Akter, Emir Ünver) e-posta olarak iletildi!\n\nYöneticiler sayımı onaylayana kadar sayım ekranındaki verileriniz korunmaktadır. Düzeltme gerekirse sayıları güncelleyip tekrar rapor gönderebilirsiniz.');
+    btn.innerText = originalText;
+    btn.disabled = false;
+
     if ((window as any).selectWarehouseAndNavigate) {
-      (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
+      (window as any).selectWarehouseAndNavigate(warehouseId, 'SAYIM_GECMISI');
     }
   } catch (err) {
     console.error(err);
@@ -419,25 +469,59 @@ export const finishAudit = async () => {
      return;
    }
 
-   const confirmBtn = confirm('Sayımı tamamlamak ve stokları güncellemek istediğinize emin misiniz?');
+   const confirmBtn = confirm('Sayımı tamamlayıp Sayım Raporunu yöneticilere (Fatih Zebek, Hurşit Akter, Emir Ünver) iletmek istediğinize emin misiniz?');
    if (!confirmBtn) return;
 
    try {
      const totalDiff = warehouseState.auditResults.reduce((sum, r) => sum + r.diff, 0);
+     const discrepancies = warehouseState.auditResults.filter(r => r.diff !== 0);
+     const compliantCount = warehouseState.auditResults.filter(r => r.diff === 0).length;
+     const surplusCount = warehouseState.auditResults.filter(r => r.diff > 0).length;
+     const deficitCount = warehouseState.auditResults.filter(r => r.diff < 0).length;
+
      const userProfile = getUserProfile();
      const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
-     
-     await warehouseService.saveAudit(warehouseState.currentWarehouse.id, {
+     const userEmail = userProfile?.email || '';
+     const team = userProfile?.team || '';
+     const warehouseName = warehouseState.currentWarehouse.name || warehouseState.currentWarehouse.id;
+     const warehouseId = warehouseState.currentWarehouse.id;
+
+     await warehouseService.saveAudit(warehouseId, {
        user: user,
+       userEmail: userEmail,
+       team: team,
        totalItems: warehouseState.auditResults.length,
        totalDiff: totalDiff,
-       results: warehouseState.auditResults
-     });
+       discrepantItems: discrepancies.length,
+       surplusItems: surplusCount,
+       deficitItems: deficitCount,
+       results: warehouseState.auditResults,
+       status: 'PENDING_APPROVAL'
+     }, false);
 
-     alert('Sayım başarıyla kaydedildi ve stoklar güncellendi!');
+     // Send email report to managers
+     try {
+       await emailService.sendAuditReportEmail({
+         warehouseName: warehouseName,
+         warehouseId: warehouseId,
+         user: user,
+         date: new Date().toLocaleDateString('tr-TR'),
+         time: new Date().toLocaleTimeString('tr-TR'),
+         totalItems: warehouseState.auditResults.length,
+         compliantItems: compliantCount,
+         surplusItems: surplusCount,
+         deficitItems: deficitCount,
+         totalDiff: totalDiff,
+         discrepancies: discrepancies
+       });
+     } catch (mailErr) {
+       console.error("Failed to send QR audit report email:", mailErr);
+     }
+
+     alert('Sayım Raporu yöneticilere iletildi!\n\nYöneticiler sayımı onaylayana kadar sayım ekranındaki verileriniz korunmaktadır.');
      (window as any).closeQRModal();
      if ((window as any).selectWarehouseAndNavigate) {
-       (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
+       (window as any).selectWarehouseAndNavigate(warehouseId, 'SAYIM_GECMISI');
      }
    } catch (error) {
      console.error(error);
@@ -464,9 +548,14 @@ export const loadSayimGecmisi = async () => {
    if (container) {
      container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Yükleniyor...</div>';
      try {
+       const currentUser = getUserProfile();
+       const isApprover = currentUser?.email === 'fatih.zebek@demirerholding.com' || currentUser?.email === 'hursit.akter@demirerholding.com' || currentUser?.email === 'emir.unver@demirerholding.com' || currentUser?.role === 'ADMIN' || (currentUser?.email?.includes('fatih.zebek') ?? false);
+
        const activeWhId = warehouseState.currentWarehouse.id || 'MTA';
        const audits = await warehouseService.getAuditHistory(activeWhId);
        (window as any).__cachedAudits = audits;
+       const latestPendingAudit = audits.find(a => a.status !== 'APPROVED');
+
        if (audits.length === 0) {
          container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
        } else {
@@ -474,6 +563,9 @@ export const loadSayimGecmisi = async () => {
            const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : audit.date;
            const diffColor = audit.totalDiff < 0 ? '#EF4444' : (audit.totalDiff > 0 ? '#F59E0B' : '#14F195');
            const totalDiffText = audit.totalDiff > 0 ? '+' + audit.totalDiff : audit.totalDiff;
+           const isApproved = audit.status === 'APPROVED';
+           const isRevisionRequested = audit.status === 'REVISION_REQUESTED';
+           const isLatestPending = !isApproved && (audit.id === latestPendingAudit?.id);
            
            const sortedResults = [...audit.results].map(r => {
               let shelfNo = r.shelfNo || '';
@@ -496,17 +588,55 @@ export const loadSayimGecmisi = async () => {
            });
 
            return `
-             <div class="audit-history-card" style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
-               <div style="display: flex; justify-content: space-between; align-items: center;">
+             <div class="audit-history-card" style="background-color: #0A0E17; border: 1px solid ${isApproved ? '#1E293B' : (isRevisionRequested ? 'rgba(239, 68, 68, 0.4)' : (isLatestPending ? 'rgba(245, 158, 11, 0.4)' : 'rgba(255,255,255,0.06)'))}; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+               <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
                  <div onclick="window.toggleAuditDetails('${audit.id}')" style="cursor: pointer; flex-grow: 1; display: flex; align-items: center; gap: 10px;">
                    <i id="audit-toggle-icon-${audit.id}" class="fa-solid fa-chevron-down" style="color: #64748B; font-size: 0.85rem; transition: transform 0.2s;"></i>
                    <div>
-                     <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem;">${date}</div>
-                     <div style="font-size: 0.8rem; color: #64748B;">Sayan: ${audit.user || 'Bilinmeyen'} | Toplam Kalem: ${audit.results?.length || 0}</div>
+                     <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                       <span>${date}</span>
+                       ${isApproved ? `
+                         <span style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
+                           <i class="fa-solid fa-check-double"></i> Onaylandı ${audit.approvedBy ? `(${audit.approvedBy})` : ''}
+                         </span>
+                       ` : isLatestPending ? `
+                         ${isRevisionRequested ? `
+                           <span style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
+                             <i class="fa-solid fa-triangle-exclamation"></i> Düzeltme İstendi (${audit.revisionRequestedBy || 'Yönetici'})
+                           </span>
+                         ` : `
+                           <span style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.35); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
+                             <i class="fa-solid fa-clock"></i> Onay Bekliyor (En Son Sayım)
+                           </span>
+                         `}
+                       ` : `
+                         <span style="background: rgba(148, 163, 184, 0.1); color: #94A3B8; border: 1px solid rgba(148, 163, 184, 0.2); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 700;">
+                           <i class="fa-solid fa-box-archive"></i> Eski Sayım (Arşiv)
+                         </span>
+                       `}
+                     </div>
+                     <div style="font-size: 0.8rem; color: #64748B; margin-top: 2px;">
+                       Sayan: ${audit.user || 'Bilinmeyen'} ${audit.team ? `(${audit.team})` : ''} | Toplam Kalem: ${audit.results?.length || 0}
+                     </div>
+                     ${audit.revisionNote ? `
+                       <div style="margin-top: 6px; padding: 6px 10px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #F59E0B; border-radius: 4px; font-size: 0.78rem; color: #FCD34D;">
+                         <strong>📢 Yönetici Talimatı (${audit.revisionRequestedBy}):</strong> "${audit.revisionNote}"
+                       </div>
+                     ` : ''}
                    </div>
                  </div>
-                 <div style="display: flex; align-items: center; gap: 0.75rem;">
+                 <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                    <div style="font-family: monospace; font-size: 0.95rem; font-weight: 700; color: ${diffColor}; padding: 0.25rem 0.5rem; background: rgba(255,255,255,0.02); border-radius: 4px;">Fark: ${totalDiffText}</div>
+                   
+                   ${(isLatestPending && isApprover) ? `
+                     <button onclick="window.openAuditRevisionModal('${audit.id}')" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.4); padding: 5px 11px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" title="Ekibe düzeltme ve yeniden sayım talebi ilet">
+                       <i class="fa-solid fa-rotate-left"></i> Düzeltme İste
+                     </button>
+                     <button onclick="window.approveAndApplyAuditStock('${audit.id}')" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.76rem; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 0 10px rgba(20,241,149,0.25); font-family: 'Rajdhani', sans-serif;" title="Sayımı onayla ve depo stoklarını güncelle">
+                       <i class="fa-solid fa-bolt"></i> Stokları Güncelle & Onayla
+                     </button>
+                   ` : ''}
+
                    <button onclick="window.downloadSingleAuditExcel('${audit.id}')" style="background: transparent; border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)'" onmouseout="this.style.background='transparent'">
                      <i class="fa-solid fa-file-excel"></i> Excel
                    </button>
@@ -655,31 +785,64 @@ export const importAuditToInventory = async (auditId: string) => {
 };
 
 export const showAuditInput = (item: any) => {
-   const resultsDiv = document.getElementById('qr-reader-results')!;
+   const modal = ensureSingleModalInBody('qr-modal');
+   const resultsDiv = (modal ? modal.querySelector('#qr-reader-results') : document.getElementById('qr-reader-results')) as HTMLElement;
+   if (!resultsDiv) return;
+
+   const existingDraft = warehouseState.draftData[item.id];
+   const currentDraftQty = existingDraft ? existingDraft.qty : '';
+   const currentDraftNote = existingDraft ? existingDraft.note : '';
+   const existingMinStock = existingDraft && existingDraft.criticalLimit !== undefined 
+     ? existingDraft.criticalLimit 
+     : (item.criticalLimit !== undefined ? item.criticalLimit : (item.minStock !== undefined ? item.minStock : ''));
+
    resultsDiv.innerHTML = `
-     <div style="background: #1E293B; border-radius: 8px; padding: 1rem; margin-top: 1rem;">
-       <h4 style="color: #FFFFFF; margin: 0 0 0.5rem 0;">${item.name}</h4>
-       <div style="color: #94A3B8; font-size: 0.9rem; margin-bottom: 1rem;">Sistem Stoğu: <strong>${item.quantity}</strong></div>
+     <div style="background: #1E293B; border-radius: 12px; padding: 1.25rem; margin-top: 1rem; border: 1px solid #14F195; box-shadow: 0 4px 20px rgba(20, 241, 149, 0.15);">
+       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+         <div style="text-align: left;">
+           <h4 style="color: #FFFFFF; margin: 0 0 0.25rem 0; font-size: 1.05rem;">${item.name || item.description || ''}</h4>
+           <div style="color: #94A3B8; font-size: 0.85rem;">SAP No: <strong style="color: #14F195;">${item.sapNo}</strong></div>
+         </div>
+         <div style="text-align: right; background: #0A0E17; border: 1px solid #334155; padding: 0.35rem 0.65rem; border-radius: 6px;">
+           <div style="font-size: 0.7rem; color: #94A3B8; text-transform: uppercase;">Sistem Stoğu</div>
+           <div style="font-size: 1rem; font-weight: 700; color: #14F195;">${item.quantity} ${item.unit && item.unit !== 'undefined' && item.unit !== 'null' ? item.unit : 'Adet'}</div>
+         </div>
+       </div>
        
-       <div style="margin-bottom: 1rem;">
-         <label style="display: block; font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.5rem;">Fiziksel Sayım (Adet)</label>
-         <input type="number" id="audit-qty-input" placeholder="Sayım miktarı..." style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #334155; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none;" />
+       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem; text-align: left;">
+         <div>
+           <label style="display: block; font-size: 0.85rem; color: #E2E8F0; margin-bottom: 0.4rem; font-weight: 600;">Fiziksel Sayım Miktarı</label>
+           <input type="number" id="audit-qty-input" value="${currentDraftQty}" placeholder="Sayılan adet..." style="width: 100%; height: 44px; background-color: #0A0E17; border: 2px solid #14F195; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none; font-size: 1.1rem; font-weight: 700;" autofocus />
+         </div>
+         <div>
+           <label style="display: block; font-size: 0.85rem; color: #94A3B8; margin-bottom: 0.4rem; font-weight: 600;">Kritik Stok Limiti <span style="font-size: 0.7rem; color: #64748B;">(Opsiyonel)</span></label>
+           <input type="number" id="audit-min-stock-input" min="0" value="${existingMinStock !== '' && existingMinStock !== undefined ? existingMinStock : ''}" placeholder="${item.minStock || item.criticalLimit ? `Mevcut: ${item.minStock || item.criticalLimit}` : 'Limit belirle...'}" style="width: 100%; height: 44px; background-color: #0A0E17; border: 1px solid #334155; border-radius: 8px; color: #F59E0B; padding: 0 1rem; outline: none; font-size: 1.05rem; font-weight: 700;" />
+         </div>
        </div>
 
-       <div id="audit-note-container" style="display: none; margin-bottom: 1rem;">
-         <label style="display: block; font-size: 0.85rem; color: #EF4444; margin-bottom: 0.5rem;">Fark Açıklaması (Zorunlu)</label>
-         <input type="text" id="audit-note-input" placeholder="Neden eksik/fazla?" style="width: 100%; height: 42px; background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none;" />
+       <div id="audit-note-container" style="display: ${currentDraftQty !== '' && parseFloat(currentDraftQty) !== item.quantity ? 'block' : 'none'}; margin-bottom: 0.85rem; text-align: left;">
+         <label style="display: block; font-size: 0.85rem; color: #EF4444; margin-bottom: 0.4rem; font-weight: 600;">Fark Açıklaması (Zorunlu)</label>
+         <input type="text" id="audit-note-input" value="${currentDraftNote}" placeholder="Neden eksik/fazla? Açıklama yazınız..." style="width: 100%; height: 40px; background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none; font-size: 0.85rem;" />
        </div>
 
-       <button id="save-audit-item-btn" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: #14F195; border: none; color: #0A0E17; font-weight: 600; cursor: pointer;">Kaydet ve Devam Et</button>
-       <button onclick="window.finishAudit()" style="width: 100%; margin-top: 0.5rem; padding: 0.75rem; border-radius: 8px; background: #3B82F6; border: none; color: white; font-weight: 600; cursor: pointer;">Sayımı Bitir</button>
+       <button id="save-audit-item-btn" style="width: 100%; padding: 0.85rem; border-radius: 8px; background: #14F195; border: none; color: #0A0E17; font-weight: 800; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; transition: all 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+         <i class="fa-solid fa-check"></i> Kaydet ve Devam Et (Yeni QR)
+       </button>
+       <button onclick="window.closeQRModal()" style="width: 100%; margin-top: 0.5rem; padding: 0.65rem; border-radius: 8px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #E2E8F0; font-weight: 600; cursor: pointer; font-size: 0.85rem; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(255,255,255,0.12)'" onmouseout="this.style.backgroundColor='rgba(255,255,255,0.06)'">
+         <i class="fa-solid fa-xmark" style="margin-right: 4px;"></i> Kapat / Sayıma Dön
+       </button>
      </div>
    `;
 
    const qtyInput = document.getElementById('audit-qty-input') as HTMLInputElement;
+   const minStockInput = document.getElementById('audit-min-stock-input') as HTMLInputElement;
    const noteContainer = document.getElementById('audit-note-container')!;
    const noteInput = document.getElementById('audit-note-input') as HTMLInputElement;
    const saveBtn = document.getElementById('save-audit-item-btn')!;
+
+   if (qtyInput) {
+     setTimeout(() => { qtyInput.focus(); qtyInput.select(); }, 100);
+   }
 
    qtyInput.addEventListener('input', () => {
      const val = parseFloat(qtyInput.value);
@@ -690,26 +853,312 @@ export const showAuditInput = (item: any) => {
      }
    });
 
-   saveBtn.addEventListener('click', () => {
-     const qty = parseFloat(qtyInput.value);
-     if (isNaN(qty)) return alert('Geçerli bir miktar girin.');
+   const handleSaveAndNext = async () => {
+     const qtyStr = qtyInput.value.trim();
+     if (qtyStr === '') return alert('Lütfen geçerli bir miktar girin.');
+     const qty = parseFloat(qtyStr);
+     if (isNaN(qty) || qty < 0) return alert('Lütfen geçerli pozitif bir miktar girin.');
+     
      const diff = qty - item.quantity;
      if (diff !== 0 && !noteInput.value.trim()) {
-       return alert('Lütfen fark açıklamasını girin!');
+       return alert('Sistem stoğu ile girdiğiniz adet farklı! Lütfen fark açıklamasını girin.');
      }
 
-     warehouseState.auditResults.push({
+     const shelfVal = item.shelfNo || '';
+     const noteVal = diff !== 0 ? noteInput.value.trim() : '';
+
+     const minStockStr = minStockInput ? minStockInput.value.trim() : '';
+     let parsedMinStock: number | undefined = undefined;
+     if (minStockStr !== '') {
+       const parsed = parseInt(minStockStr);
+       if (!isNaN(parsed) && parsed >= 0) {
+         parsedMinStock = parsed;
+       }
+     }
+
+     // Update critical limit immediately in Firestore & memory so all devices see it instantly
+     if (parsedMinStock !== undefined && warehouseState.currentWarehouse?.id) {
+       item.criticalLimit = parsedMinStock;
+       item.minStock = parsedMinStock;
+       const invItem = warehouseState.inventoryItems?.find((i: any) => i.id === item.id);
+       if (invItem) {
+         invItem.criticalLimit = parsedMinStock;
+         invItem.minStock = parsedMinStock;
+       }
+       try {
+         await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, item.id, {
+           criticalLimit: parsedMinStock
+         });
+       } catch (critErr) {
+         console.error("Failed to update critical limit immediately:", critErr);
+       }
+     }
+
+     // 1. Update draftData in memory
+     warehouseState.draftData[item.id] = {
+       qty: String(qty),
+       note: noteVal,
+       shelf: shelfVal,
+       ...(parsedMinStock !== undefined ? { criticalLimit: parsedMinStock } : (existingDraft?.criticalLimit !== undefined ? { criticalLimit: existingDraft.criticalLimit } : {}))
+     };
+
+     // 2. Persist to localStorage & Firestore shared draft
+     if (warehouseState.currentWarehouse?.id) {
+       localStorage.setItem(`draft_audit_${warehouseState.currentWarehouse.id}`, JSON.stringify(warehouseState.draftData));
+       
+       let localStartTime = localStorage.getItem(`draft_audit_start_time_${warehouseState.currentWarehouse.id}`);
+       if (!localStartTime) {
+          localStartTime = new Date().toISOString();
+          localStorage.setItem(`draft_audit_start_time_${warehouseState.currentWarehouse.id}`, localStartTime);
+       }
+
+       try {
+         const userProfile = getUserProfile();
+         const user = userProfile ? userProfile.displayName || userProfile.email : 'Bilinmeyen Kullanıcı';
+         const draftDocRef = doc(db, 'warehouses', warehouseState.currentWarehouse.id, 'active_audit', 'draft');
+         await setDoc(draftDocRef, {
+           draftData: warehouseState.draftData,
+           updatedBy: user,
+           lastUpdated: serverTimestamp(),
+           startTime: localStartTime
+         });
+       } catch (e) {
+         console.error("Failed to save draft to Firestore:", e);
+       }
+     }
+
+     // 3. Keep auditResults in sync
+     const existingResIdx = warehouseState.auditResults.findIndex(r => r.itemId === item.id);
+     const resData = {
        itemId: item.id,
        sapNo: item.sapNo,
-       description: item.name,
+       description: item.name || item.description || '',
        systemQty: item.quantity,
        physicalQty: qty,
        diff: diff,
-       note: diff !== 0 ? noteInput.value.trim() : ''
-     });
+       note: noteVal,
+       shelfNo: shelfVal
+     };
+     if (existingResIdx >= 0) {
+       warehouseState.auditResults[existingResIdx] = resData;
+     } else {
+       warehouseState.auditResults.push(resData);
+     }
 
+     // 4. Update the background table & summary bar
+     renderManualAuditTable();
+     updateManualSummaryBar();
+
+     // Play success confirmation tone
+     soundService.playSuccessSound();
+
+     // 5. Restart scanner for next QR code
      if ((window as any).startScanner) (window as any).startScanner();
+   };
+
+   saveBtn.addEventListener('click', handleSaveAndNext);
+
+   // Allow Enter key to quickly save and scan next
+   qtyInput.addEventListener('keydown', (e) => {
+     if (e.key === 'Enter') {
+       if (noteContainer.style.display === 'block' && !noteInput.value.trim()) {
+         noteInput.focus();
+       } else {
+         handleSaveAndNext();
+       }
+     }
    });
+
+   minStockInput.addEventListener('keydown', (e) => {
+     if (e.key === 'Enter') {
+       if (noteContainer.style.display === 'block' && !noteInput.value.trim()) {
+         noteInput.focus();
+       } else {
+         handleSaveAndNext();
+       }
+     }
+   });
+
+   noteInput.addEventListener('keydown', (e) => {
+     if (e.key === 'Enter') {
+       handleSaveAndNext();
+     }
+   });
+};
+
+export const approveAndApplyAuditStock = async (auditId: string) => {
+  const audit = (window as any).__cachedAudits?.find((a: any) => a.id === auditId);
+  if (!audit) {
+    alert("Sayım kaydı bulunamadı.");
+    return;
+  }
+
+  const warehouseName = warehouseState.currentWarehouse?.name || warehouseState.currentWarehouse?.id || 'Depo';
+  const confirmApprove = confirm(`Bu sayım sonuçlarını onaylayıp ${warehouseName} stoklarını güncellemek istediğinize emin misiniz?\n\nToplam ${audit.results?.length || 0} kalemin fiziksel sayım miktarları doğrudan envanter stoklarına yansıtılacaktır.`);
+  if (!confirmApprove) return;
+
+  try {
+    const userProfile = getUserProfile();
+    const approver = userProfile ? userProfile.displayName || userProfile.email : 'Yönetici';
+    const activeWhId = warehouseState.currentWarehouse.id || 'MTA';
+
+    (window as any).showToast?.('İşlem Yapılıyor', 'Stoklar güncelleniyor ve sayım onaylanıyor...', 'info');
+    await warehouseService.approveAuditAndApplyStock(activeWhId, auditId, approver);
+
+    // Completely clear shared draft for this warehouse so next count starts fresh
+    try {
+      const draftDocRef = doc(db, 'warehouses', activeWhId, 'active_audit', 'draft');
+      await deleteDoc(draftDocRef);
+    } catch (e) {
+      console.error("Failed to clear Firestore draft on approval:", e);
+    }
+
+    localStorage.removeItem(`draft_audit_${activeWhId}`);
+    localStorage.removeItem(`draft_audit_start_time_${activeWhId}`);
+    warehouseState.draftData = {};
+    warehouseState.auditResults = [];
+    (window as any).currentDraftData = {};
+
+    alert('Sayım başarıyla onaylandı ve depo stokları güncellendi!\n\nSayım ekranı bir sonraki yeni sayım için sıfırlandı.');
+    if ((window as any).selectWarehouseAndNavigate) {
+      (window as any).selectWarehouseAndNavigate(activeWhId, 'SAYIM_GECMISI');
+    }
+  } catch (err: any) {
+    console.error(err);
+    alert('Onaylama sırasında hata oluştu: ' + (err?.message || err));
+  }
+};
+
+export const openAuditRevisionModal = (auditId: string) => {
+  const audit = (window as any).__cachedAudits?.find((a: any) => a.id === auditId);
+  if (!audit) {
+    alert("Sayım kaydı bulunamadı.");
+    return;
+  }
+
+  // Remove existing modal if any
+  const existing = document.getElementById('audit-revision-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'audit-revision-modal';
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(10, 14, 23, 0.85); backdrop-filter: blur(5px); z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 1rem;';
+
+  const date = audit.timestamp?.seconds ? new Date(audit.timestamp.seconds * 1000).toLocaleString('tr-TR') : audit.date;
+  const userDisplay = audit.user || 'Sayımı Yapan Ekip';
+  const warehouseName = warehouseState.currentWarehouse?.name || warehouseState.currentWarehouse?.id || 'Depo';
+
+  modal.innerHTML = `
+    <div style="background: #111827; border: 1px solid #F59E0B; border-radius: 12px; max-width: 580px; width: 100%; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 158, 11, 0.2); color: #FFF; font-family: 'Rajdhani', sans-serif;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1E293B; padding-bottom: 0.75rem; margin-bottom: 1rem;">
+        <h3 style="margin: 0; font-size: 1.15rem; color: #F59E0B; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-rotate-left"></i> Sayım Düzeltme & Kontrol Talebi
+        </h3>
+        <i class="fa-solid fa-xmark" onclick="document.getElementById('audit-revision-modal').remove()" style="cursor: pointer; color: #64748B; font-size: 1.25rem;"></i>
+      </div>
+
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 14px; margin-bottom: 1rem; font-size: 0.85rem;">
+        <div style="color: #94A3B8;">🏢 Depo: <strong style="color: #FFF;">${warehouseName}</strong></div>
+        <div style="color: #94A3B8; margin-top: 3px;">👤 Sayımı Yapan Ekip: <strong style="color: #2563EB;">${userDisplay}</strong> ${audit.userEmail ? `<span style="color: #64748B;">(${audit.userEmail})</span>` : ''}</div>
+        <div style="color: #94A3B8; margin-top: 3px;">📅 Sayım Tarihi: <strong style="color: #E2E8F0;">${date}</strong></div>
+      </div>
+
+      <div style="margin-bottom: 0.75rem;">
+        <label style="display: block; font-size: 0.85rem; font-weight: 700; color: #F59E0B; margin-bottom: 6px;">
+          📝 Düzeltme Notu / Ekibe Talimat:
+        </label>
+        <textarea id="audit-revision-note" rows="4" placeholder="Örn: A-2 rafındaki IGBT modüllerini ve kontaktörleri tekrar kontrol edin, 3 adet eksik görünüyor..." style="width: 100%; box-sizing: border-box; background: #0A0E17; border: 1px solid #334155; border-radius: 8px; color: #FFF; padding: 10px; font-size: 0.9rem; resize: vertical; outline: none; font-family: sans-serif;"></textarea>
+      </div>
+
+      <!-- Quick Template Tags -->
+      <div style="margin-bottom: 1.25rem;">
+        <div style="font-size: 0.75rem; color: #64748B; font-weight: bold; margin-bottom: 4px;">⚡ Hızlı Şablonlar:</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" onclick="document.getElementById('audit-revision-note').value += 'Eksik çıkan malzemeleri ve kutuları depoda tekrar kontrol edip sayıları güncelleyiniz. '" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #94A3B8; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer;">
+            + Eksik Çıkanları Kontrol Edin
+          </button>
+          <button type="button" onclick="document.getElementById('audit-revision-note').value += 'A ve B raflarındaki kutuları tekrar sayarak farkları düzeltiniz. '" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #94A3B8; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer;">
+            + Rafları Tekrar Sayın
+          </button>
+          <button type="button" onclick="document.getElementById('audit-revision-note').value += 'Sayımlarda büyük fark tespit edilmiştir. Lütfen fiziksel sayımı baştan kontrol ediniz. '" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #94A3B8; padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer;">
+            + Yeniden Kontrol Edin
+          </button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button onclick="document.getElementById('audit-revision-modal').remove()" style="background: transparent; border: 1px solid #475569; color: #94A3B8; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer;">
+          İptal
+        </button>
+        <button id="btn-submit-audit-revision" onclick="window.submitAuditRevision('${audit.id}')" style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #0A0E17; border: none; padding: 8px 18px; border-radius: 6px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);">
+          <i class="fa-solid fa-paper-plane"></i> Düzeltme Talebini E-Posta ile Gönder
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('audit-revision-note')?.focus();
+};
+
+export const submitAuditRevision = async (auditId: string) => {
+  const noteInput = document.getElementById('audit-revision-note') as HTMLTextAreaElement;
+  const note = noteInput ? noteInput.value.trim() : '';
+
+  if (!note) {
+    alert('Lütfen ekibe iletilecek düzeltme notunu / talimatını yazınız!');
+    noteInput?.focus();
+    return;
+  }
+
+  const audit = (window as any).__cachedAudits?.find((a: any) => a.id === auditId);
+  if (!audit) {
+    alert('Sayım kaydı bulunamadı.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-submit-audit-revision') as HTMLButtonElement;
+  if (btn) {
+    btn.innerText = 'Gönderiliyor...';
+    btn.disabled = true;
+  }
+
+  try {
+    const userProfile = getUserProfile();
+    const managerName = userProfile ? userProfile.displayName || userProfile.email : 'Yönetici';
+    const activeWhId = warehouseState.currentWarehouse.id || 'MTA';
+    const warehouseName = warehouseState.currentWarehouse?.name || warehouseState.currentWarehouse?.id || 'Depo';
+
+    // 1. Update Firestore status to REVISION_REQUESTED
+    await warehouseService.requestAuditRevision(activeWhId, auditId, managerName, note);
+
+    // 2. Send official email to the team & managers
+    const discrepancies = audit.results?.filter((r: any) => r.diff !== 0) || [];
+    await emailService.sendAuditRevisionEmail({
+      warehouseName: warehouseName,
+      warehouseId: activeWhId,
+      user: audit.user || 'Sayım Ekibi',
+      userEmail: audit.userEmail || '',
+      managerName: managerName,
+      note: note,
+      date: new Date().toLocaleString('tr-TR'),
+      discrepancies: discrepancies
+    });
+
+    document.getElementById('audit-revision-modal')?.remove();
+    alert(`Düzeltme talebi başarıyla kaydedildi ve ekibe (${audit.user}) e-posta ile iletildi!`);
+
+    if ((window as any).selectWarehouseAndNavigate) {
+      (window as any).selectWarehouseAndNavigate(activeWhId, 'SAYIM_GECMISI');
+    }
+  } catch (err: any) {
+    console.error(err);
+    alert('Gönderilirken hata oluştu: ' + (err?.message || err));
+    if (btn) {
+      btn.innerText = 'Düzeltme Talebini E-Posta ile Gönder';
+      btn.disabled = false;
+    }
+  }
 };
 
 // Register methods to window
@@ -720,8 +1169,12 @@ export const showAuditInput = (item: any) => {
 (window as any).onManualQtyChange = onManualQtyChange;
 (window as any).saveDraftAudit = saveDraftAudit;
 (window as any).clearDraftAudit = clearDraftAudit;
+(window as any).showAuditInput = showAuditInput;
 (window as any).saveManualAudit = saveManualAudit;
 (window as any).finishAudit = finishAudit;
 (window as any).deleteAuditRecord = deleteAuditRecord;
 (window as any).loadSayimGecmisi = loadSayimGecmisi;
 (window as any).importAuditToInventory = importAuditToInventory;
+(window as any).approveAndApplyAuditStock = approveAndApplyAuditStock;
+(window as any).openAuditRevisionModal = openAuditRevisionModal;
+(window as any).submitAuditRevision = submitAuditRevision;

@@ -11,20 +11,36 @@ export class WarehouseAgent extends BaseAgent {
   }
 
   /**
-   * Küresel SAP Sözlüğünü public klasöründen asenkron olarak yükler ve önbelleğe alır.
+   * Küresel SAP Sözlüğünü public klasöründen veya dahili veriden asenkron olarak yükler ve önbelleğe alır.
    */
   private async loadSapDictionary(): Promise<void> {
-    if (this.sapDictionary) return;
+    if (this.sapDictionary && Object.keys(this.sapDictionary).length > 0) return;
     
     try {
-      console.log('[WarehouseAgent] Küresel SAP Sözlüğü yükleniyor...');
       const response = await fetch('/sap_dictionary.json');
-      if (!response.ok) throw new Error('Sözlük dosyası bulunamadı.');
-      this.sapDictionary = await response.json();
-      console.log(`[WarehouseAgent] Sözlük yüklendi. (Anahtar Sayısı: ${Object.keys(this.sapDictionary || {}).length})`);
+      if (response.ok) {
+        this.sapDictionary = await response.json();
+      }
     } catch (err) {
-      console.error('[WarehouseAgent] SAP Sözlüğü yüklenemedi:', err);
-      this.sapDictionary = {}; // Fallback empty
+      console.warn('[WarehouseAgent] fetch sap_dictionary failed, trying dynamic import:', err);
+    }
+
+    if (!this.sapDictionary || Object.keys(this.sapDictionary).length === 0) {
+      try {
+        const matModule = await import('../data/materials.json');
+        const rawList = (matModule.default || matModule) as Array<{ n: string; d: string }>;
+        this.sapDictionary = {};
+        if (Array.isArray(rawList)) {
+          for (const item of rawList) {
+            if (item && item.n) {
+              this.sapDictionary[String(item.n).trim()] = item.d;
+            }
+          }
+        }
+      } catch (err2) {
+        console.error('[WarehouseAgent] All SAP loading fallbacks failed:', err2);
+        this.sapDictionary = {};
+      }
     }
   }
 
@@ -50,29 +66,64 @@ export class WarehouseAgent extends BaseAgent {
   }
 
   /**
-   * SAP numarası girildiğinde Küresel Sözlükten malzeme bilgilerini getirir.
+   * SAP numarası girildiğinde Küresel Sözlükten malzeme bilgilerini akıllı eşleme ile getirir.
    */
   async resolveSapNumber(sapNo: string): Promise<{ sapNo: string; name: string | null; found: boolean }> {
     this.setStatus('busy');
-    console.log(`[WarehouseAgent] SAP No sorgulanıyor: ${sapNo}`);
-    
     try {
       await this.loadSapDictionary();
-      
-      // Look up ignoring case and padding
-      const cleanSap = String(sapNo).trim();
-      const materialName = this.sapDictionary ? this.sapDictionary[cleanSap] : null;
-      
-      this.setStatus('online');
-      return { 
-        sapNo: cleanSap, 
-        name: materialName || null, 
-        found: !!materialName 
-      };
+      if (!this.sapDictionary) return { sapNo, name: null, found: false };
+
+      const cleanSap = String(sapNo || '').trim();
+      if (!cleanSap) return { sapNo: '', name: null, found: false };
+
+      const upperSap = cleanSap.toUpperCase();
+
+      // 1. Doğrudan Birebir Eşleşme
+      if (this.sapDictionary[cleanSap]) {
+        return { sapNo: cleanSap, name: this.sapDictionary[cleanSap], found: true };
+      }
+      if (this.sapDictionary[upperSap]) {
+        return { sapNo: cleanSap, name: this.sapDictionary[upperSap], found: true };
+      }
+
+      // 2. Akıllı Önek ve Sıfır Temizleme (Örn: T70711 -> 70711, R70711 -> 70711, 0070711 -> 70711)
+      const digitsMatch = cleanSap.match(/\d+/);
+      if (digitsMatch) {
+        const digits = digitsMatch[0];
+        const unpaddedDigits = digits.replace(/^0+/, '');
+
+        if (this.sapDictionary[digits]) {
+          return { sapNo: cleanSap, name: this.sapDictionary[digits], found: true };
+        }
+        if (unpaddedDigits && this.sapDictionary[unpaddedDigits]) {
+          return { sapNo: cleanSap, name: this.sapDictionary[unpaddedDigits], found: true };
+        }
+        if (unpaddedDigits && this.sapDictionary[`R${unpaddedDigits}`]) {
+          return { sapNo: cleanSap, name: this.sapDictionary[`R${unpaddedDigits}`], found: true };
+        }
+        if (unpaddedDigits && this.sapDictionary[`T${unpaddedDigits}`]) {
+          return { sapNo: cleanSap, name: this.sapDictionary[`T${unpaddedDigits}`], found: true };
+        }
+      }
+
+      // 3. Karakter Temizlenmiş Eşleşme
+      const strippedClean = upperSap.replace(/[^A-Z0-9]/g, '');
+      if (strippedClean.length >= 3) {
+        for (const key in this.sapDictionary) {
+          const normKey = key.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (normKey === strippedClean) {
+            return { sapNo: cleanSap, name: this.sapDictionary[key], found: true };
+          }
+        }
+      }
+
+      return { sapNo: cleanSap, name: null, found: false };
     } catch (error) {
-      this.setStatus('error');
-      console.log(`[WarehouseAgent] SAP sorgulama hatası: ${error}`);
-      throw error;
+      console.error('[WarehouseAgent] resolveSapNumber error:', error);
+      return { sapNo, name: null, found: false };
+    } finally {
+      this.setStatus('online');
     }
   }
 

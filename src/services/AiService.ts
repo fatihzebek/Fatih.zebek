@@ -213,6 +213,62 @@ class AiService {
   }
 
   /**
+   * Gerçek İnsan Gibi Konuşan Akıllı Saha & Lojistik Sesli Asistanı
+   */
+  async askHumanLikeAgent(userQuestion: string, contextData: string): Promise<string> {
+    if (!this.model) {
+      return "Anemon deposunda şu an stok yok, diğer yakın depolara bakmamı ister misiniz?";
+    }
+
+    try {
+      const prompt = `
+      Sen Demirer Holding'in samimi, çok akıllı, çözüm odaklı uzman saha sesli asistanısın. 
+      Tıpkı gerçek bir iş arkadaşı ve deneyimli bir Lojistik Sorumlusu gibi konuşursun. 
+      Tutumun: Samimi, empati kuran, "Kolay gelsin", "Hiç merak etmeyin", "Hemen bakıyorum", "İstersen sevk talebini başlatayım" gibi doğal Türkçe ifadeler kullanan gerçek bir insan gibisin.
+      
+      Sistem Canlı Veri Bilgisi:
+      ${contextData}
+      
+      Teknisyenin Söylediği: "${userQuestion}"
+      
+      Lütfen 2-4 cümlelik son derece doğal, yardımsever ve tam olarak yukarıdaki canlı verilere dayanan insan gibi bir sesli yanıt üret.
+      Eğer stok bir depoda yok ama diğer yakın depolarda varsa, nazikçe diğer depoları ve adetlerini söyleyip "İsterseniz sevk talebini (MSF) hemen başlatayım mı?" diye sor.
+      `;
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (e: any) {
+      console.warn('[AiService] askHumanLikeAgent error:', e);
+      return contextData;
+    }
+  }
+
+  /**
+   * Genişletilmiş Yapay Zeka Sesli Saha Asistanı Sorgu Yanıtlayıcısı
+   */
+  async askAgent(userQuestion: string, systemPrompt?: string): Promise<string> {
+    if (!this.model) {
+      return "Yapay Zeka API anahtarı yapılandırılmadığı için genel sohbet yanıtı verilemiyor.";
+    }
+
+    try {
+      const prompt = `
+      ${systemPrompt || 'Sen Demirer Holding rüzgar santrali teknik ve saha sesli asistanısın. Teknisyene kısa, nazik, anlaşılır Türkçe yanıt ver.'}
+      
+      Kullanıcı/Teknisyen Sorduğu: "${userQuestion}"
+      
+      Lütfen 2-3 cümleyi geçmeyen, doğrudan ve sesli okunmaya uygun kısa Türkçe bir yanıt ver.
+      `;
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (e: any) {
+      console.warn('[AiService] askAgent error:', e);
+      return "Sorunuza şu an yanıt verilemiyor. Lütfen arıza veya depo stok sorgularını deneyin.";
+    }
+  }
+
+  /**
    * PDF dokümanına dayalı olarak teknisyenin sorusunu cevaplandırır.
    */
   async askLibraryAgent(docData: any, userQuestion: string): Promise<string> {

@@ -38,12 +38,8 @@ class TicketService {
    * Listen to all tickets (for Admin) or tickets created by a specific user.
    */
   subscribeToTickets(isAdmin: boolean, userUid: string, callback: (tickets: Ticket[]) => void): () => void {
-    let q = query(this.ticketsCol, orderBy('updatedAt', 'desc'));
-    
-    if (!isAdmin) {
-      // Remove orderBy to prevent requiring a composite index. We will sort locally.
-      q = query(this.ticketsCol, where('createdByUid', '==', userUid));
-    }
+    // Return all tickets for everyone, sorting is done locally
+    const q = query(this.ticketsCol);
 
     return onSnapshot(q, (snapshot) => {
       const tickets: Ticket[] = [];
@@ -71,10 +67,13 @@ class TicketService {
    */
   async getTicketsOnce(isAdmin: boolean, userUid: string): Promise<Ticket[]> {
      try {
-       const q = isAdmin ? this.ticketsCol : query(this.ticketsCol, where('createdByUid', '==', userUid));
-       const snap = await getDocs(q);
+       const snap = await getDocs(this.ticketsCol);
        const results = snap.docs.map(d => ({ id: d.id, ...d.data() } as Ticket));
-       return results.sort((a,b) => (b.updatedAt?.toMillis() || 0) - (a.updatedAt?.toMillis() || 0));
+       return results.sort((a,b) => {
+         const timeA = typeof a.updatedAt?.toMillis === 'function' ? a.updatedAt.toMillis() : 0;
+         const timeB = typeof b.updatedAt?.toMillis === 'function' ? b.updatedAt.toMillis() : 0;
+         return timeB - timeA;
+       });
      } catch(e) {
        console.error(e);
        return [];

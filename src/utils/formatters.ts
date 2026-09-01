@@ -18,6 +18,11 @@ export const formatDisplayName = (name: string): string => {
     return 'Hurşit AKTER';
   }
 
+  // Specific mapping for Fatih ZEBEK
+  if (cleanLower.includes('fatih.check') || cleanLower.includes('fatih.zebek') || cleanLower.includes('fatih zebek')) {
+    return 'Fatih ZEBEK';
+  }
+
   // Handle email addresses
   if (clean.includes('@')) {
     const prefix = clean.split('@')[0];
@@ -80,6 +85,11 @@ export const formatTeamName = (teamStr: string): string => {
   // Specific mapping for Hurşit AKTER
   if (clean.includes('hursit.akter') || clean.includes('hurşit akter')) {
     return 'Hurşit AKTER';
+  }
+
+  // Specific mapping for Fatih ZEBEK
+  if (clean.includes('fatih.check') || clean.includes('fatih.zebek') || clean.includes('fatih zebek')) {
+    return 'Fatih ZEBEK';
   }
 
   // Handle email prefix if it contains @

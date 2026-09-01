@@ -34,7 +34,7 @@ export const db = initializeFirestore(app, {
 });
 
 if (typeof window !== 'undefined') {
-  const cacheVersion = 'v1.0.5';
+  const cacheVersion = 'v1.0.7';
   if (localStorage.getItem('firestore_cache_ver') !== cacheVersion) {
     clearIndexedDbPersistence(db)
       .then(() => {

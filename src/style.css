@@ -136,7 +136,7 @@ body {
 /* Layout */
 .app-container {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 235px 1fr;
   height: 100vh;
   overflow: hidden;
   transition: var(--transition-smooth);
@@ -149,6 +149,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 235px;
+  box-sizing: border-box;
   z-index: 1001;
   transition: var(--transition-smooth);
 }
@@ -162,6 +164,22 @@ body {
   display: flex;
   flex-direction: column;
   scroll-behavior: smooth;
+}
+
+/* Modern Ultra-Fast Page Transition Animation */
+#page-inner-content {
+  animation: pageFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0.85;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ============================================================
@@ -898,6 +916,21 @@ html {
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
+.logo-badge-wrapper {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-logo:hover .logo-badge-wrapper {
+  border-color: rgba(0, 243, 255, 0.45) !important;
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.25) !important;
+  transform: translateY(-2px) scale(1.05);
+}
+
+@keyframes logo-turbine-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .nav-menu {
   list-style: none;
   flex-grow: 1;
@@ -925,17 +958,20 @@ html {
 }
 
 .nav-item {
-  padding: 0.6rem 1rem;
-  margin: 0.15rem 0.5rem;
+  padding: 0.55rem 0.75rem;
+  margin: 0.15rem 0.4rem;
   border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.65rem;
   color: var(--text-muted);
   font-weight: 500;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-left: 2px solid transparent;
 }
 

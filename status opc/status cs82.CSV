@@ -1,0 +1,2899 @@
+,0,0,Turbine in operation,T1
+,0,1,Turbine starting,T1
+,0,2,Turbine operational,T1
+,0,3,Start lead-up,T1
+,0,5,Calibration of  load control,T1
+,0,6,Power self-supply,T1
+,0,8,Turbine in operation during maintenance,T1
+Turbine stopped,1,1,Control cabinet,T1
+Turbine stopped,1,3,SCADA (ENERCON),T1
+Turbine stopped,1,4,Nacelle,T1
+Turbine stopped,1,5,Outside temperature,T1
+Turbine stopped,1,6,Farm control,T1
+Turbine stopped,1,7,SCADA (customer),T4
+Turbine stopped,1,8,Remote display,T1
+Turbine stopped,1,9,Timeout manual operation,T1
+Turbine stopped,1,13,SCADA (high-speed stop),T1
+Turbine stopped,1,14,Power gradient,T1
+Turbine stopped,1,15,External,T1
+Turbine stopped,1,16,SCADA (bird and bat protection),T1
+Turbine stopped,1,17,External data interface,T4
+Turbine stopped,1,18,SCADA (bird and bat protection external),T1
+Turbine stopped,1,19,Power setpoint too low,T1
+Turbine stopped,1,21,Nacelle position (sector 1),T1
+Turbine stopped,1,22,Nacelle position (sector 2),T1
+Turbine stopped,1,23,Nacelle position (sector 3),T1
+Turbine stopped,1,24,Nacelle position (sector 4),T1
+Turbine stopped,1,25,Nacelle position (sector 5),T1
+Turbine stopped,1,26,Nacelle position (sector 6),T1
+Turbine stopped,1,27,Nacelle position (sector 7),T1
+Turbine stopped,1,28,Nacelle position (sector 8),T1
+Turbine stopped,1,30,FCU (normal stop),T1
+Turbine stopped,1,31,FCU (high-speed stop),T1
+Turbine stopped,1,41,SCADA (bat protection),T1
+Turbine stopped,1,42,SCADA (bat protection external),T1
+Turbine stopped,1,43,SCADA (bird protection),T1
+Turbine stopped,1,44,SCADA (bird protection external),T1
+Turbine stopped,1,51,Noise optimisation 1,T1
+Turbine stopped,1,52,Noise optimisation 2,T1
+Turbine stopped,1,53,Noise optimisation 3,T1
+Turbine stopped,1,54,Noise optimisation 4,T1
+Turbine stopped,1,71,Insulation measurement,T1
+Turbine stopped,1,194,Supply by energy storage,T1
+Lack of wind,2,1,Wind speed too low,T1
+Lack of wind,2,2,Rotor speed to low,T1
+Lack of wind,2,11,Max. start wind speed reached,T6
+Storm,3,1,Peak wind speed,T1
+Storm,3,2,Average wind speed,T1
+Storm,3,3,Maximum blade angle,T1
+Storm,3,4,Average blade angle,T1
+Storm,3,12,Average windspeed  (10min),T1
+Shadow shutdown,4,0,Active,T1
+Shadow shutdown,4,1,Internal,T1
+Shadow shutdown,4,2,External,T1
+Blade de-icing,5,1,Automatic by Power curve,T1
+Blade de-icing,5,2,Manual,T1
+Blade de-icing,5,3,SCADA,T1
+Blade de-icing,5,4,Automatic by LABKO ice detector,T1
+Blade de-icing,5,41,Automatic by Eologix,T1
+Blade de-icing,5,42,Automatic by Fos4x,T1
+Blade de-icing,5,43,Automatic by Woelfel,T1
+Blade de-icing,5,91,Set rated power of blade heating!,T6
+Blade de-icing,5,92,Power measurement of blade heating,T1
+Blade de-icing,5,93,Power measurement not possible,T1
+Unauthorized access,7,81,I/O-board control cabinet,T1
+Unauthorized access,7,83,I/O-board 1 nacelle,T1
+Unauthorized access,7,84,I/O-board 2 nacelle,T1
+Maintenance,8,0,,T6
+Generator heating,9,1,Isometer,T1
+Generator heating,9,2,Isometer (analogue),T1
+Generator heating,9,3,Hygrostat inverter,T1
+Generator heating,9,4,Hygrostat rectifier,T1
+Generator heating,9,5,Hygrostat UPS,T1
+Generator heating,9,6,Preventive after mains failure,T1
+Generator heating,9,8,Manual,T1
+Generator heating,9,19,Power setpoint too low,T1
+Generator heating,9,72,Duration too long (72h),T6
+Emergency stop actuated,10,1,tower,T6
+Emergency stop actuated,10,2,Nacelle,T6
+Rotor brake activated manual,11,0,,T6
+Rotor brake activated manual,11,1,Control cabinet,T6
+Rotor brake activated manual,11,2,Nacelle,T6
+Rotor lock,12,1,Activated (switch),T6
+Rotor lock,12,2,Completely set (sensor),T6
+Rotor lock,12,11,Sensor 1 malfunction,T6
+Rotor lock,12,12,Sensor 2 malfunction,T6
+Rotor lock,12,13,Sensor 3 malfunction,T6
+Ice detection,14,1,Labko ice  detector,T1
+Ice detection,14,11,Rotor (power measurement),T1
+Ice detection,14,12,Anemometer (power measurement),T1
+Ice detection,14,13,Rotor (blade angle),T1
+Ice detection,14,14,Anemometer (blade angle),T1
+Ice detection,14,15,Farm ice-foundation level reached,T1
+Ice detection,14,16,Turbine stopped preventive,T1
+Ice detection,14,17,SCADA (external),T1
+Ice detection,14,20,Abandon nacelle positioning,T1
+Ice detection,14,40,Unk. Syst.: Ice detected,T1
+Ice detection,14,41,Eologix: Ice detected,T1
+Ice detection,14,42,FOS4X: Ice detected,T1
+Ice detection,14,43,Woelfel: Ice detected,T1
+Turbine moist,15,1,Inverter 1,T1
+Turbine moist,15,2,Inverter 2,T1
+Turbine moist,15,3,Inverter 3,T1
+Turbine moist,15,4,Inverter 4,T1
+Turbine moist,15,5,Inverter 5,T1
+Turbine moist,15,6,Inverter 6,T1
+Turbine moist,15,7,Inverter 7,T1
+Turbine moist,15,8,Inverter 8,T1
+Turbine moist,15,9,Inverter 9,T1
+Turbine moist,15,10,Inverter 10,T1
+Turbine moist,15,11,Inverter 11,T1
+Turbine moist,15,12,Inverter 12,T1
+Turbine moist,15,13,Inverter 13,T1
+Turbine moist,15,14,Inverter 14,T1
+Turbine moist,15,19,Several inverters,T1
+Turbine moist,15,100,UPS,T1
+Turbine moist,15,111,Rectifier,T1
+Overspeed-switch test,16,0,Test in process,T6
+Overspeed-switch test,16,1,Blade A,T6
+Overspeed-switch test,16,2,Blade B,T6
+Overspeed-switch test,16,3,Blade C,T6
+Overspeed-switch test,16,4,Blade A+B,T6
+Overspeed-switch test,16,5,Blade A+C,T6
+Overspeed-switch test,16,6,Blade B+C,T6
+Overspeed-switch test,16,7,Blade A+B+C,T6
+Overspeed-switch test,16,92,Timeout,T6
+Test safety system,17,0,,T1
+Fault wind measurement,20,21,Difference wind speed 1 and 2,T6
+Fault wind measurement,20,22,Difference wind direction 1 and 2,T6
+Fault wind measurement,20,40,Unknown anemometer,T6
+Fault wind measurement,20,42,No signal from wind vane,T6
+Fault wind measurement,20,43,10V perm. signal from wind vane,T6
+Fault wind measurement,20,44,Wind vane locked,T6
+Fault wind measurement,20,45,Overflow wind direction,T6
+Fault wind measurement,20,51,Anemometer faulty,T6
+Fault wind measurement,20,52,No signal from anemometer,T6
+Fault wind measurement,20,55,Overflow windspeed,T6
+Fault wind measurement,20,62,Wind direction > 165° right,T6
+Fault wind measurement,20,63,Wind direction > 165° left,T6
+Fault wind measurement,20,64,Constant wind direction,T6
+Fault wind measurement,20,65,Overflow wind direction,T6
+Fault wind measurement,20,71,Wind speed to low,T6
+Fault wind measurement,20,72,No wind speed,T6
+Fault wind measurement,20,75,Overflow wind speed,T6
+Fault wind measurement,20,140,Unknown anemometer 1,T6
+Fault wind measurement,20,162,Wind direction 1 > 165° right,T6
+Fault wind measurement,20,163,Wind direction 1 > 165° left,T6
+Fault wind measurement,20,164,Constant wind direction 1,T6
+Fault wind measurement,20,165,Overflow wind direction 1,T6
+Fault wind measurement,20,171,Wind speed 1 too low,T6
+Fault wind measurement,20,172,No wind speed 1,T6
+Fault wind measurement,20,175,Overflow wind speed 1,T6
+Fault wind measurement,20,240,Unknown anemometer 2,T6
+Fault wind measurement,20,262,Wind direction 2 > 165° right,T6
+Fault wind measurement,20,263,Wind direction 2 > 165° left,T6
+Fault wind measurement,20,264,Constant wind direction 2,T6
+Fault wind measurement,20,265,Overflow wind direction 2,T6
+Fault wind measurement,20,271,Wind speed 2 too low,T6
+Fault wind measurement,20,272,No wind speed 2,T6
+Fault wind measurement,20,275,Overflow wind speed 2,T6
+Cable twisted,21,1,Left (2-3 turns),T1
+Cable twisted,21,2,Right (2-3 turns),T1
+Cable twisted,21,3,Left (>3 turns),T1
+Cable twisted,21,4,Right (>3 turns),T1
+Cable twisted,21,5,Left (>1.8 turns at >20m/s),T1
+Cable twisted,21,6,Right (>1.8 turns at >20m/s),T1
+Cable twisted,21,21,Left (manual),T1
+Cable twisted,21,22,Right (manual),T1
+Cable twisted,21,23,Left (manually: control cabinet),T1
+Cable twisted,21,24,Right (manually: control cabinet),T1
+Fault yaw control,22,1,Limit switch left,T6
+Fault yaw control,22,2,Limit switch right,T6
+Fault yaw control,22,3,Untwist time too long,T6
+Fault yaw control,22,9,Yaw lock by mains / UPS,T6
+Fault yaw control,22,10,Yaw lock activated,T6
+Fault yaw control,22,11,Yaw lock by yaw inverter,T6
+Fault yaw control,22,12,Limit switch left and right,T6
+Fault yaw control,22,14,Lateral alignment of nacelle active,T6
+Fault yaw control,22,15,Block function nacelle pos. activated,T6
+Fault yaw control,22,16,Blocking of nac. pos.: error angle range,T6
+Fault yaw control,22,17,Blocking of nac. pos.: error in memory,T6
+Fault yaw control,22,21,Cable twisted to often,T6
+Fault yaw control,22,35,Uncontrolled yawing,T6
+Fault yaw control,22,40,No yawing,T6
+Fault yaw control,22,47,No pulses from yaw sensor 1 + 2,T6
+Fault yaw control,22,48,To less pulses from yaw sensor 1 + 2,T6
+Fault yaw control,22,49,To much pulses from yaw sensor 1 + 2,T6
+Fault yaw control,22,50,Malfunction yaw sensor 1 + 2,T6
+Fault yaw control,22,51,No change of yaw angle,T6
+Fault yaw control,22,52,Change of yaw angle faulty,T6
+Fault yaw control,22,55,Change of yaw angle > 90° / 10sec.,T6
+Fault yaw control,22,56,Change of yaw angle > 180° / min.,T6
+Fault yaw control,22,67,Malfunction azimut tension,T6
+Fault yaw control,22,101,Angle encoder: timeout data transmiss.,T6
+Fault yaw control,22,102,Angle encoder: unknown,T6
+Fault yaw control,22,104,Angle encoder: initialization not possible,T6
+Fault yaw control,22,105,Angle encoder: confirm limit switch pos.,T6
+Fault yaw control,22,106,Perform north orientation,T6
+Fault yaw control,22,107,Angle encoder: confirm checksums,T6
+Fault yaw control,22,110,Angle encoder: wrong rotation dir. (ri.),T6
+Fault yaw control,22,111,Angle encoder: wrong limit switch (ri.),T6
+Fault yaw control,22,112,Angle encoder: no reaction limit sw. left,T6
+Fault yaw control,22,113,Angle encoder: limit sw. left not closed,T6
+Fault yaw control,22,120,Angle encoder: wrong rotation dir. (le.),T6
+Fault yaw control,22,121,Angle encoder: wrong limit switch (le.),T6
+Fault yaw control,22,122,Angle encoder: no reaction limit sw. right,T6
+Fault yaw control,22,123,Angle encoder: limit sw. right not closed,T6
+Fault yaw control,22,141,Limit switch test: no reaction LS left,T6
+Fault yaw control,22,142,Limit switch test: no reaction LS right,T6
+Fault yaw control,22,143,Limit switch test: no react. LS left + right,T6
+Fault yaw control,22,144,Limit switch test: LS left + right mixed-up,T6
+Fault yaw control,22,146,Limit switch test: LS does not close,T6
+Fault yaw control,22,147,Limit switch test: undefined state,T6
+Fault yaw control,22,202,Angle encoder: error initializing,T6
+Fault yaw control,22,203,Angle encoder: angle skip,T6
+Fault yaw control,22,222,NOCN: ROM CRC error,T6
+Fault yaw control,22,224,NOCN: EEPROM error,T6
+Fault yaw control,22,225,NOCN: EEPROM CRC error,T6
+Fault yaw control,22,226,NOCN: error cam switch,T6
+Fault yaw control,22,227,NOCN: error sensor,T6
+Fault yaw control,22,229,NOCN: unknown error,T6
+Fault yaw control,22,234,NOCN S3: error cam switch,T6
+Fault yaw control,22,235,NOCN S3: CRC error parameter,T6
+Fault yaw control,22,236,NOCN S3: Supply error,T6
+Fault yaw control,22,237,NOCN S3: error sensor,T6
+Fault yaw control,22,239,NOCN S3: unknown error,T6
+Faulty yaw inverter,25,99,Inverter deactivated too often,T6
+Faulty yaw inverter,25,101,Cross short circuit system 1,T6
+Faulty yaw inverter,25,102,Overcurrent U system 1,T6
+Faulty yaw inverter,25,103,Overcurrent V system 1,T6
+Faulty yaw inverter,25,104,Overcurrent W system 1,T6
+Faulty yaw inverter,25,105,Earth contact system 1,T6
+Faulty yaw inverter,25,106,Current measurement system 1,T6
+Faulty yaw inverter,25,107,Overvoltage DC-link system 1,T6
+Faulty yaw inverter,25,108,IGBT-driver system 1,T6
+Faulty yaw inverter,25,109,Charging error system 1,T6
+Faulty yaw inverter,25,110,Overload chopper system 1,T6
+Faulty yaw inverter,25,111,Thermoswitch heatsink IGBT system 1,T6
+Faulty yaw inverter,25,112,Thermoswitch heats. rectif. system 1,T6
+Faulty yaw inverter,25,113,Overtemp. heatsink IGBT system 1,T6
+Faulty yaw inverter,25,114,Overtemp. heatsink rectif. system 1,T6
+Faulty yaw inverter,25,115,Fuse F1 - F3,T6
+Faulty yaw inverter,25,116,Output prot. circuit breaker system 1,T6
+Faulty yaw inverter,25,119,No data from slave (serial),T6
+Faulty yaw inverter,25,122,Supply motor control 1,T6
+Faulty yaw inverter,25,125,EEPROM faulty motor control 1,T6
+Faulty yaw inverter,25,126,Overtemp. brake/motor 1 system 1,T6
+Faulty yaw inverter,25,127,Overtemp. brake/motor 3 system 1,T6
+Faulty yaw inverter,25,128,Overtemp. brake/motor 5 system 1,T6
+Faulty yaw inverter,25,132,Wrong rotation direction system 1,T6
+Faulty yaw inverter,25,133,Brake force to low system 1,T6
+Faulty yaw inverter,25,134,Overspeed system 1,T6
+Faulty yaw inverter,25,135,No output current system 1,T6
+Faulty yaw inverter,25,136,Yawing moment to low system 1,T6
+Faulty yaw inverter,25,137,Difference phase-current system 1,T6
+Faulty yaw inverter,25,138,Difference motortemperature system 1,T6
+Faulty yaw inverter,25,139,Undef 1,T6
+Faulty yaw inverter,25,201,Cross short circuit system 2,T6
+Faulty yaw inverter,25,202,Overcurrent U system 2,T6
+Faulty yaw inverter,25,203,Overcurrent V system 2,T6
+Faulty yaw inverter,25,204,Overcurrent W system 2,T6
+Faulty yaw inverter,25,205,Earth contact system 2,T6
+Faulty yaw inverter,25,206,Current measurement system 2,T6
+Faulty yaw inverter,25,207,Overvoltage DC-link system 2,T6
+Faulty yaw inverter,25,208,IGBT-driver system 2,T6
+Faulty yaw inverter,25,209,Charging error system 2,T6
+Faulty yaw inverter,25,210,Overload chopper system 2,T6
+Faulty yaw inverter,25,211,Thermoswitch heatsink IGBT system 2,T6
+Faulty yaw inverter,25,213,Overtemp. heatsink IGBT system 2,T6
+Faulty yaw inverter,25,216,Output prot. circuit breaker system 2,T6
+Faulty yaw inverter,25,219,No data from master (serial),T6
+Faulty yaw inverter,25,222,Supply motor control 2,T6
+Faulty yaw inverter,25,225,EEPROM faulty motor control 2,T6
+Faulty yaw inverter,25,226,Overtemp. brake/motor 2 system 2,T6
+Faulty yaw inverter,25,227,Overtemp. brake/motor 4 system 2,T6
+Faulty yaw inverter,25,228,Overtemp. brake/motor 6 system 2,T6
+Faulty yaw inverter,25,230,Program incompatible master / slave,T6
+Faulty yaw inverter,25,232,Wrong rotation direction system 2,T6
+Faulty yaw inverter,25,233,Brake force to low system 2,T6
+Faulty yaw inverter,25,234,Overspeed system 2,T6
+Faulty yaw inverter,25,235,No output current system 2,T6
+Faulty yaw inverter,25,236,Yawing moment to low system 2,T6
+Faulty yaw inverter,25,237,Difference phase-current system 2,T6
+Faulty yaw inverter,25,238,Difference motortemperature system 2,T6
+Faulty yaw inverter,25,239,Undef 2,T6
+Fault fan inverter,26,141,Key transfer system,T1
+Fault fan inverter,26,142,Key transfer system,T6
+Fault fan inverter,26,151,Error cooling concept,T1
+Fault fan inverter,26,153,Wrong cooling concept,T1
+Anemometer Interface,29,21,Windspeed invariable,T6
+Anemometer Interface,29,22,Wind direction invariable,T6
+Anemometer Interface,29,31,Error data transmission us-sensor,T6
+Anemometer Interface,29,32,Timeout data transmission us-sensor,T6
+Anemometer Interface,29,33,Incorrect data from us-sensor,T6
+Anemometer Interface,29,41,Fault 1 ultra sonic sensor,T6
+Anemometer Interface,29,42,Fault 2 ultra sonic sensor,T6
+Anemometer Interface,29,43,Fault 3 ultra sonic sensor,T6
+Anemometer Interface,29,44,Fault 4 ultra sonic sensor,T6
+Anemometer Interface,29,45,Fault 5 ultra sonic sensor,T6
+Anemometer Interface,29,110,Wrong configuration,T6
+Anemometer Interface,29,111,wrong ultrasonic anemometer,T6
+Anemometer Interface,29,121,Anem. 1: wind speed invariable,T6
+Anemometer Interface,29,122,Anem. 1: wind direction invariable,T6
+Anemometer Interface,29,131,Anem. 1: error data transmiss. us-sensor,T6
+Anemometer Interface,29,132,Anem. 1: timeout data transm. us-sensor,T6
+Anemometer Interface,29,133,Anem. 1: incorrect data from us-sensor,T6
+Anemometer Interface,29,141,Anem. 1 (THIES 2D) fault,T6
+Anemometer Interface,29,143,Anem. 1 (THIES 2D compact) fault,T6
+Anemometer Interface,29,144,Anem. 1 (THIES 2D) - static malfunction,T6
+Anemometer Interface,29,145,Anem. 1 (THIES 2D compact) - stat. malf.,T6
+Anemometer Interface,29,148,WMG 1 (THIES) - wrong telegram,T6
+Anemometer Interface,29,152,Anem. 1 (GILL) error meas. section,T6
+Anemometer Interface,29,153,Anem. 1 (GILL) error ROM,T6
+Anemometer Interface,29,154,Anem. 1 (GILL) error hardware,T6
+Anemometer Interface,29,156,Anem. 1 (GILL) voltage too high,T6
+Anemometer Interface,29,160,Anem. 1 (VAISALA) error sensor 1,T6
+Anemometer Interface,29,161,Anem. 1 (VAISALA) error sensor 2,T6
+Anemometer Interface,29,162,Anem. 1 (VAISALA) error sensor 3,T6
+Anemometer Interface,29,164,Anem. 1 (VAISALA) voltage too high,T6
+Anemometer Interface,29,165,Anem. 1 (VAISALA) voltage too low,T6
+Anemometer Interface,29,168,Anem. 1 (VAISALA) error averaging,T6
+Anemometer Interface,29,169,Anem. 1 (VAISALA) error meas. section,T6
+Anemometer Interface,29,192,Anem. 1 (NMEA) fault,T6
+Anemometer Interface,29,221,Anem. 2: wind speed invariable,T6
+Anemometer Interface,29,222,Anem. 2: wind direction invariable,T6
+Anemometer Interface,29,231,Anem. 2: error data transmiss. us-sensor,T6
+Anemometer Interface,29,232,Anem. 2: timeout data transm. us-sensor,T6
+Anemometer Interface,29,233,Anem. 2: incorrect data from us-sensor,T6
+Anemometer Interface,29,241,Anem. 2 (THIES 2D) fault,T6
+Anemometer Interface,29,243,Anem. 2 (THIES 2D compact) fault,T6
+Anemometer Interface,29,244,Anem. 2 (THIES 2D) - static malfunction,T6
+Anemometer Interface,29,245,Anem. 2 (THIES 2D compact) - stat. malf.,T6
+Anemometer Interface,29,248,WMG 2 (THIES) - wrong telegram,T6
+Anemometer Interface,29,252,Anem. 2 (GILL) error meas. section,T6
+Anemometer Interface,29,253,Anem. 2 (GILL) error ROM,T6
+Anemometer Interface,29,254,Anem. 2 (GILL) error hardware,T6
+Anemometer Interface,29,256,Anem. 2 (GILL) voltage too high,T6
+Anemometer Interface,29,260,Anem. 2 (VAISALA) error sensor 1,T6
+Anemometer Interface,29,261,Anem. 2 (VAISALA) error sensor 2,T6
+Anemometer Interface,29,262,Anem. 2 (VAISALA) error sensor 3,T6
+Anemometer Interface,29,264,Anem. 2 (VAISALA) voltage too high,T6
+Anemometer Interface,29,265,Anem. 2 (VAISALA) voltage too low,T6
+Anemometer Interface,29,268,Anem. 2 (VAISALA) error averaging,T6
+Anemometer Interface,29,269,Anem. 2 (VAISALA) error meas. section,T6
+Anemometer Interface,29,292,Anem. 2 (NMEA) fault,T6
+Vibration sensor,30,0,,T6
+Tower oscillation monitoring,31,1,Transversal oscillations,T6
+Tower oscillation monitoring,31,2,Longitudinal oscillations,T6
+Tower oscillation monitoring,31,3,Transversal sensor malfunction,T6
+Tower oscillation monitoring,31,4,Longitudinal sensor malfunction,T6
+Tower oscillation monitoring,31,5,Transversal oscillations (CAN-Sensor),T6
+Tower oscillation monitoring,31,6,Longitudinal oscillations (CAN-Sensor),T6
+Tower oscillation monitoring,31,11,Transversal oscillation (max.),T6
+Tower oscillation monitoring,31,12,Longitudinal oscillation (max.),T6
+Tower oscillation monitoring,31,15,Transversal oscill. (max.)  (CAN-Sensor),T6
+Tower oscillation monitoring,31,16,Longitudinal oscill. (max.) (CAN-Sensor),T6
+Tower oscillation monitoring,31,23,Signal of transversal sensor too small,T6
+Tower oscillation monitoring,31,81,Resonance frequency measurement,T1
+Tower oscillation monitoring,31,83,Resonance freq. measurem. I/O1 nac.,T1
+CAN acceleration sensor,32,1,Timeout data transmission,T6
+CAN acceleration sensor,32,2,Error initialization,T6
+CAN acceleration sensor,32,3,Confirm initialization,T6
+CAN acceleration sensor,32,4,Parameter error,T6
+CAN acceleration sensor,32,5,Faulty values in memory,T6
+CAN acceleration sensor,32,6,Error default parameters,T6
+CAN acceleration sensor,32,7,Error turbine specific parameters,T6
+CAN acceleration sensor,32,8,Unknown state,T6
+CAN acceleration sensor,32,10,No acceleration signal,T6
+CAN acceleration sensor,32,24,NVA115: fault safety relay,T6
+CAN acceleration sensor,32,25,NVA115: CRC error parameter,T6
+CAN acceleration sensor,32,26,NVA115: supply error,T6
+CAN acceleration sensor,32,27,NVA115: sensor error,T6
+CAN acceleration sensor,32,29,NVA115: unknown error,T6
+CAN acceleration sensor,32,43,Main safety circuit opened,T6
+CAN acceleration sensor,32,44,MSC1 is not responding,T6
+CAN acceleration sensor,32,45,MSC2 is not responding,T6
+CAN acceleration sensor,32,46,MSC1 and MSC2 are not responding,T6
+CAN acceleration sensor,32,47,MSC1 and MSC2 are interchanged,T6
+CAN acceleration sensor,32,99,Wrong type,T6
+CAN acceleration sensor,32,100,Unknown type,T6
+Rotor overspeed,40,1,Measurement pitch control,T6
+Rotor overspeed,40,2,Measurement I/O-board,T6
+Rotor overspeed switch,41,1,Blade A,T6
+Rotor overspeed switch,41,2,Blade B,T6
+Rotor overspeed switch,41,3,Blade C,T6
+Rotor overspeed switch,41,4,Blade A+B,T6
+Rotor overspeed switch,41,5,Blade A+C,T6
+Rotor overspeed switch,41,6,Blade B+C,T6
+Rotor overspeed switch,41,7,Blade A+B+C,T6
+Pitch control error,42,1,Speed after stop too high,T6
+Pitch control error,42,2,Blade angle > 50°,T6
+Pitch control error,42,3,Transformer overtemperature,T6
+Pitch control error,42,4,Pitch speed too low during stop,T6
+Pitch control error,42,5,Blade angle > 100°,T6
+Pitch control error,42,6,Blade angle > 100°,T6
+Pitch control error,42,10,Contact. „get blade out of limit switch“ on,T6
+Pitch control error,42,40,Control algorithm not ready,T6
+Pitch control error,42,41,Control algorithm not parameterized,T6
+Pitch control error,42,42,Control algorithm wrongly parameterized,T6
+Pitch control error,42,45,Aerodynamic tables incomplete,T6
+Pitch control error,42,46,Stationary blade angle not calculated,T6
+Pitch control error,42,47,Strong gust control not parameterized,T6
+Pitch control error,42,48,Observer overflow detected,T6
+Pitch control error,42,50,Tower oscillation signal frozen,T6
+Pitch control error,42,51,Tower oscillation signal contains spikes,T6
+Pitch control error,42,52,Tower oscillation power too high,T6
+Pitch control error,42,100,No change of blade angle A,T6
+Pitch control error,42,101,Limit switch -2° blade A,T6
+Pitch control error,42,102,Limit switch 90° blade A,T6
+Pitch control error,42,103,Limit switch 95° blade A,T6
+Pitch control error,42,104,Limit switch 97° blade A,T6
+Pitch control error,42,105,Angle monitoring 3° blade A,T6
+Pitch control error,42,106,Angle monitoring 56° blade A,T6
+Pitch control error,42,107,Angle error blade A,T6
+Pitch control error,42,108,56° -mark blade A not programmed,T6
+Pitch control error,42,109,State error blade A,T6
+Pitch control error,42,110,Undervoltage L1 power stage blade A,T6
+Pitch control error,42,111,Undervoltage L2 power stage blade A,T6
+Pitch control error,42,112,Undervoltage L3 power stage blade A,T6
+Pitch control error,42,119,Phase sequence error power stage A,T6
+Pitch control error,42,122,Supply power stage blade A,T6
+Pitch control error,42,125,Undervoltage DC-link blade A,T6
+Pitch control error,42,128,Overvoltage DC-lonk blade A,T6
+Pitch control error,42,131,Overtemperature heatsink blade A,T6
+Pitch control error,42,134,Overtemperature motor blade A,T6
+Pitch control error,42,138,Motor current to high blade A,T6
+Pitch control error,42,139,Motor current after stop to high blade A,T6
+Pitch control error,42,140,Overcurrent armature motor A,T6
+Pitch control error,42,143,Overcurrent field motor A,T6
+Pitch control error,42,145,Overcurrent brake motor A,T6
+Pitch control error,42,150,Charging error DC-link blade A,T6
+Pitch control error,42,168,Unknown turbine type blade A,T6
+Pitch control error,42,180,Malfunction angle encoder 1 blade A,T6
+Pitch control error,42,181,Unknown angle encoder 1 blade A,T6
+Pitch control error,42,182,Angle jump encoder 1 blade A,T6
+Pitch control error,42,183,Update P+F-angle encoder necessary blade A,T6
+Pitch control error,42,185,Malfunction angle encoder 2 blade A,T6
+Pitch control error,42,186,Unknown angle encoder 2 blade A,T6
+Pitch control error,42,187,Angle encoders identical blade A,T6
+Pitch control error,42,188,Difference angle encoder 1 / 2 blade A,T6
+Pitch control error,42,189,Blade angle ≥ 1 turn blade A,T6
+Pitch control error,42,190,Internal fault CAN3 Blade A,T6
+Pitch control error,42,191,Internal error CAN4 blade A,T6
+Pitch control error,42,193,Hardware update needed contr. board A,T6
+Pitch control error,42,194,Software update necessary pitch bl. A,T6
+Pitch control error,42,196,Failure angle measurement Blade A,T6
+Pitch control error,42,197,No angle change blade A,T6
+Pitch control error,42,198,Internal error EPROM blade A,T6
+Pitch control error,42,199,Internal error blade A,T6
+Pitch control error,42,200,No change of blade angle B,T6
+Pitch control error,42,201,Limit switch -2° blade B,T6
+Pitch control error,42,202,Limit switch 90° blade B,T6
+Pitch control error,42,203,Limit switch 95° blade B,T6
+Pitch control error,42,204,Limit switch 97° blade B,T6
+Pitch control error,42,205,Angle monitoring 3° blade B,T6
+Pitch control error,42,206,Angle monitoring 56° blade B,T6
+Pitch control error,42,207,Angle error blade B,T6
+Pitch control error,42,208,56° -mark blade B not programmed,T6
+Pitch control error,42,209,State error blade B,T6
+Pitch control error,42,210,Undervoltage L1 power stage blade B,T6
+Pitch control error,42,211,Undervoltage L2 power stage blade B,T6
+Pitch control error,42,212,Undervoltage L3 power stage blade B,T6
+Pitch control error,42,219,Phase sequence error power stage B,T6
+Pitch control error,42,222,Supply power stage blade B,T6
+Pitch control error,42,225,Undervoltage DC-link blade B,T6
+Pitch control error,42,228,Overvoltage DC-lonk blade B,T6
+Pitch control error,42,231,Overtemperature heatsink blade B,T6
+Pitch control error,42,234,Overtemperature motor blade B,T6
+Pitch control error,42,238,Motor current to high blade B,T6
+Pitch control error,42,239,Motor current after stop too high blade B,T6
+Pitch control error,42,240,Overcurrent armature motor B,T6
+Pitch control error,42,243,Overcurrent field motor B,T6
+Pitch control error,42,245,Overcurrent brake motor B,T6
+Pitch control error,42,250,Charging error DC-link blade B,T6
+Pitch control error,42,268,Unknown turbine type blade B,T6
+Pitch control error,42,280,Malfunction angle encoder 1 blade B,T6
+Pitch control error,42,281,Unknown angle encoder 1 blade B,T6
+Pitch control error,42,282,Angle jump encoder 1 blade B,T6
+Pitch control error,42,283,Update P+F-angle encoder necessary  blade B,T6
+Pitch control error,42,285,Malfunction angle encoder 2 blade B,T6
+Pitch control error,42,286,Unknown angle encoder 2 blade B,T6
+Pitch control error,42,287,Angle encoders identical blade B,T6
+Pitch control error,42,288,Difference angle encoder 1 / 2 blade B,T6
+Pitch control error,42,289,Blade angle ≥ 1 turn blade B,T6
+Pitch control error,42,290,Internal fault CAN3 Blade B,T6
+Pitch control error,42,291,Internal error CAN4 blade B,T6
+Pitch control error,42,293,Hardware update needed contr. board B,T6
+Pitch control error,42,294,Software update necessary pitch bl. B,T6
+Pitch control error,42,296,Failure angle measurement Blade B,T6
+Pitch control error,42,297,No angle change blade B,T6
+Pitch control error,42,298,Internal error EPROM blade B,T6
+Pitch control error,42,299,Internal error blade B,T6
+Pitch control error,42,300,No change of blade angle C,T6
+Pitch control error,42,301,Limit switch -2° blade C,T6
+Pitch control error,42,302,Limit switch 90° blade C,T6
+Pitch control error,42,303,Limit switch 95° blade C,T6
+Pitch control error,42,304,Limit switch 97° blade C,T6
+Pitch control error,42,305,Angle monitoring 3° blade C,T6
+Pitch control error,42,306,Angle monitoring 56° blade C,T6
+Pitch control error,42,307,Angle error blade C,T6
+Pitch control error,42,308,56° -mark blade C not programmed,T6
+Pitch control error,42,309,State error blade C,T6
+Pitch control error,42,310,Undervoltage L1 power stage blade C,T6
+Pitch control error,42,311,Undervoltage L2 power stage blade C,T6
+Pitch control error,42,312,Undervoltage L3 power stage blade C,T6
+Pitch control error,42,319,Phase sequence error power stage C,T6
+Pitch control error,42,322,Supply power stage blade C,T6
+Pitch control error,42,325,Undervoltage DC-link blade C,T6
+Pitch control error,42,328,Overvoltage DC-lonk blade C,T6
+Pitch control error,42,331,Overtemperature heatsink blade C,T6
+Pitch control error,42,334,Overtemperature motor blade C,T6
+Pitch control error,42,338,Motor current to high blade C,T6
+Pitch control error,42,339,Motor current after stop too high blade C,T6
+Pitch control error,42,340,Overcurrent armature motor C,T6
+Pitch control error,42,343,Overcurrent field motor C,T6
+Pitch control error,42,345,Overcurrent brake motor C,T6
+Pitch control error,42,350,Charging error DC-link blade C,T6
+Pitch control error,42,368,Unknown turbine type blade C,T6
+Pitch control error,42,380,Malfunction angle encoder 1 blade C,T6
+Pitch control error,42,381,Unknown angle encoder 1 blade C,T6
+Pitch control error,42,382,Angle jump encoder 1 blade C,T6
+Pitch control error,42,383,Update P+F-angle encoder necessary blade C,T6
+Pitch control error,42,385,Malfunction angle encoder 2 blade C,T6
+Pitch control error,42,386,Unknown angle encoder 2 blade C,T6
+Pitch control error,42,387,Angle encoders identical blade C,T6
+Pitch control error,42,388,Difference angle encoder 1 / 2 blade C,T6
+Pitch control error,42,389,Blade angle ≥ 1 turn blade C,T6
+Pitch control error,42,390,Internal fault CAN3 Blade C,T6
+Pitch control error,42,391,Internal error CAN4 blade C,T6
+Pitch control error,42,393,Hardware update needed contr. board C,T6
+Pitch control error,42,394,Software update necessary pitch bl. C,T6
+Pitch control error,42,396,Failure angle measurement Blade C,T6
+Pitch control error,42,397,No angle change blade C,T6
+Pitch control error,42,398,Internal error EPROM blade C,T6
+Pitch control error,42,399,Internal error blade C,T6
+Fault main safety circuit,43,0,,T6
+Fault main safety circuit,43,1,Interruption,T6
+Fault main safety circuit,43,2,Error feedback,T6
+Fault main safety circuit,43,11,Interruption MSC 1,T6
+Fault main safety circuit,43,12,Error feedback MSC 1,T6
+Fault main safety circuit,43,13,Interrupted by rotor brake,T6
+Fault main safety circuit,43,21,Interruption MSC 2,T6
+Fault main safety circuit,43,22,Error feedback MSC 2,T6
+Fault main safety circuit,43,31,Interruption MSC 1 + 2,T6
+Fault main safety circuit,43,81,MSC test: MSC 1 tower does not open,T6
+Fault main safety circuit,43,82,MSC test: MSC 2 tower does not open,T6
+Fault main safety circuit,43,83,MSC test: MSC 1 nacelle does not open,T6
+Fault main safety circuit,43,84,MSC test: MSC 2 nacelle does not open,T6
+Fault emergency stop capacitor,44,101,Undervoltage 175V capacitor A,T6
+Fault emergency stop capacitor,44,102,Undervoltage 75V capacitor A,T6
+Fault emergency stop capacitor,44,103,Overvoltage 175V capacitor A,T6
+Fault emergency stop capacitor,44,104,Overvoltage 75V capacitor A,T6
+Fault emergency stop capacitor,44,105,Capacitor test 175V blade A,T6
+Fault emergency stop capacitor,44,106,Capacitor test 75V blade A,T6
+Fault emergency stop capacitor,44,110,Unbalance 75V / 175V blade A,T6
+Fault emergency stop capacitor,44,130,CVM 1 test failed,T6
+Fault emergency stop capacitor,44,131,CVM 2 test failed,T6
+Fault emergency stop capacitor,44,132,CVM 1 under / overvoltage detected,T6
+Fault emergency stop capacitor,44,133,CVM 2 under / overvoltage detected,T6
+Fault emergency stop capacitor,44,150,Test CVM-module 1 Blatt A,T6
+Fault emergency stop capacitor,44,181,Undervoltage 175V capacitor A,T6
+Fault emergency stop capacitor,44,182,Undervoltage 75V capacitor A,T6
+Fault emergency stop capacitor,44,201,Undervoltage 175V capacitor B,T6
+Fault emergency stop capacitor,44,202,Undervoltage 75V capacitor B,T6
+Fault emergency stop capacitor,44,203,Overvoltage 175V capacitor B,T6
+Fault emergency stop capacitor,44,204,Overvoltage 75V capacitor B,T6
+Fault emergency stop capacitor,44,205,Capacitor test 175V blade B,T6
+Fault emergency stop capacitor,44,206,Capacitor test 75V blade B,T6
+Fault emergency stop capacitor,44,210,Unbalance 75V / 175V blade B,T6
+Fault emergency stop capacitor,44,250,Test CVM-module 1 Blatt B,T6
+Fault emergency stop capacitor,44,281,Undervoltage 175V capacitor B,T6
+Fault emergency stop capacitor,44,282,Undervoltage 75V capacitor B,T6
+Fault emergency stop capacitor,44,301,Undervoltage 175V capacitor C,T6
+Fault emergency stop capacitor,44,302,Undervoltage 75V capacitor C,T6
+Fault emergency stop capacitor,44,303,Overvoltage 175V capacitor C,T6
+Fault emergency stop capacitor,44,304,Overvoltage 75V capacitor C,T6
+Fault emergency stop capacitor,44,305,Capacitor test 175V blade C,T6
+Fault emergency stop capacitor,44,306,Capacitor test 75V blade C,T6
+Fault emergency stop capacitor,44,310,Unbalance 75V / 175V blade C,T6
+Fault emergency stop capacitor,44,350,Test CVM-module 1 Blatt C,T6
+Fault emergency stop capacitor,44,381,Undervoltage 175V capacitor C,T6
+Fault emergency stop capacitor,44,382,Undervoltage 75V capacitor C,T6
+Capacitor charging error,45,100,Timeout blade A,T6
+Capacitor charging error,45,101,No quick charging capacitor A,T6
+Capacitor charging error,45,105,Capacitor A not chargeable,T6
+Capacitor charging error,45,106,Quick charge current to high cap. A,T6
+Capacitor charging error,45,107,OWG mixed blade A,T6
+Capacitor charging error,45,110,No trickle charge 75V capacitor A,T6
+Capacitor charging error,45,111,No trickle charge 175V capacitor A,T6
+Capacitor charging error,45,112,Trickle charge curr. to high 75V cap. A,T6
+Capacitor charging error,45,113,Trickle charge curr. to high 175V cap. A,T6
+Capacitor charging error,45,200,Timeout blade B,T6
+Capacitor charging error,45,201,No quick charging capacitor B,T6
+Capacitor charging error,45,205,Capacitor B not chargeable,T6
+Capacitor charging error,45,206,Quick charge current to high cap. B,T6
+Capacitor charging error,45,207,OWG mixed blade B,T6
+Capacitor charging error,45,210,No trickle charge 75V capacitor B,T6
+Capacitor charging error,45,211,No trickle charge 175V capacitor B,T6
+Capacitor charging error,45,212,Trickle charge curr. to high 75V cap. B,T6
+Capacitor charging error,45,213,Trickle charge curr. to high 175V cap. B,T6
+Capacitor charging error,45,300,Timeout blade C,T6
+Capacitor charging error,45,301,No quick charging capacitor C,T6
+Capacitor charging error,45,305,Capacitor C not chargeable,T6
+Capacitor charging error,45,306,Quick charge current to high cap. C,T6
+Capacitor charging error,45,307,OWG mixed blade C,T6
+Capacitor charging error,45,310,No trickle charge 75V capacitor C,T6
+Capacitor charging error,45,311,No trickle charge 175V capacitor C,T6
+Capacitor charging error,45,312,Trickle charge curr. to high 75V cap. C,T6
+Capacitor charging error,45,313,Trickle charge curr. to high 175V cap. C,T6
+Fault capacitor test,46,101,Load capacitor blade A,T6
+Fault capacitor test,46,150,CVM-module blade A,T6
+Fault capacitor test,46,151,CVM-module measurement fault blade A,T6
+Fault capacitor test,46,152,CVM-module BSC blade A,T6
+Fault capacitor test,46,155,CVM-module incorrect detected blade A,T6
+Fault capacitor test,46,201,Load capacitor blade B,T6
+Fault capacitor test,46,250,CVM-module blade B,T6
+Fault capacitor test,46,251,CVM-module measurement fault blade B,T6
+Fault capacitor test,46,252,CVM-module BSC blade B,T6
+Fault capacitor test,46,255,CVM-module incorrect detected bladeB,T6
+Fault capacitor test,46,301,Load capacitor blade C,T6
+Fault capacitor test,46,350,CVM-module blade C,T6
+Fault capacitor test,46,351,CVM-module measurement fault blade C,T6
+Fault capacitor test,46,352,CVM-module BSCblade C,T6
+Fault capacitor test,46,355,CVM-module incorrect detected blade C,T6
+Fault security system,47,1,Blade A,T6
+Fault security system,47,2,Blade B,T6
+Fault security system,47,3,Blade C,T6
+Fault security system,47,4,Blade A+B,T6
+Fault security system,47,5,Blade A+C,T6
+Fault security system,47,6,Blade B+C,T6
+Fault security system,47,7,Blade A+B+C,T6
+Fault security system,47,10,Main security circuit,T6
+Fault security system,47,11,Limit switch not reached blade A,T6
+Fault security system,47,12,Limit switch not reached blade B,T6
+Fault security system,47,13,Limit switch not reached blade C,T6
+Fault security system,47,14,Limit switch not reached blade A+B,T6
+Fault security system,47,15,Limit switch not reached blade A+C,T6
+Fault security system,47,16,Limit switch not reached blade B+C,T6
+Fault security system,47,17,Limit switch not reached blade A+B+C,T6
+Fault security system,47,100,Emergency stop speed too low,T6
+Speed sensor error,48,3,Measurement I/O-board,T6
+Speed sensor error,48,4,Measurement pitch control,T6
+Speed sensor error,48,5,Diff. I/O-board / pitch control,T6
+Speed sensor error,48,10,Acceleration measurement,T6
+Speed sensor error,48,13,No index from speed sensor,T6
+Speed sensor error,48,14,Wrong rotating direction,T6
+Speed sensor error,48,21,Intermittent speed pulses,T6
+Speed sensor error,48,22,Double speed pulses,T6
+Blade load control,49,1,No enable Signal from MPU,T6
+Blade load control,49,2,Deactivated,T6
+Blade load control,49,3,Load difference,T6
+Blade load control,49,10,Different moments of mass,T6
+Blade load control,49,11,Parameter fault mass moments,T6
+Blade load control,49,12,Timeout matching,T6
+Blade load control,49,65,Error Sensor signal,T6
+Blade load control,49,101,Routh calibration not poss. blade A,T6
+Blade load control,49,102,Fine calibration not poss. blade A,T6
+Blade load control,49,103,Calibration terminated blade A,T6
+Blade load control,49,104,Error old calibration blade A,T6
+Blade load control,49,105,Error load sensor blade A,T6
+Blade load control,49,106,Wrong turbine type blade A,T6
+Blade load control,49,107,Power too high with deact. load contr. A,T6
+Blade load control,49,120,Underflow measurement blade A,T6
+Blade load control,49,121,Overflow measurement blade A,T6
+Blade load control,49,130,Error load measurement blade A,T6
+Blade load control,49,131,Error load measurement 1 blade A,T6
+Blade load control,49,132,Error load measurement 2 blade A,T6
+Blade load control,49,195,Load measurement negative blade A,T6
+Blade load control,49,199,Internal error blade A,T6
+Blade load control,49,201,Rough calibration not poss. blade B,T6
+Blade load control,49,202,Fine calibration not poss. blade B,T6
+Blade load control,49,203,Calibration terminated blade B,T6
+Blade load control,49,204,Error old calibration blade B,T6
+Blade load control,49,205,Error load sensor blade B,T6
+Blade load control,49,206,Wrong turbine type blade B,T6
+Blade load control,49,207,Power too high with deact. load contr. B,T6
+Blade load control,49,220,Underflow measurement blade B,T6
+Blade load control,49,221,Overflow measurement blade B,T6
+Blade load control,49,230,Error load measurement blade B,T6
+Blade load control,49,231,Error load measurement 1 blade B,T6
+Blade load control,49,232,Error load measurement 2 blade B,T6
+Blade load control,49,295,Load measurement negative blade B,T6
+Blade load control,49,299,Internal error blade B,T6
+Blade load control,49,301,Rough calibration not poss. blade C,T6
+Blade load control,49,302,Fine calibration not poss. blade C,T6
+Blade load control,49,303,Calibration terminated blade C,T6
+Blade load control,49,304,Error old calibration blade C,T6
+Blade load control,49,305,Error load sensor blade C,T6
+Blade load control,49,306,Wrong turbine type blade C,T6
+Blade load control,49,307,Power too high with deact. load contr. C,T6
+Blade load control,49,320,Underflow measurement blade C,T6
+Blade load control,49,321,Overflow measurement blade C,T6
+Blade load control,49,330,Error load measurement blade C,T6
+Blade load control,49,331,Error load measurement 1 blade C,T6
+Blade load control,49,332,Error load measurement 2 blade C,T6
+Blade load control,49,395,Load measurement negative blade C,T6
+Blade load control,49,399,Internal error blade C,T6
+Monitoring sensor,50,5,Tower monitoring,T6
+Monitoring sensor,50,14,Noises in spinner,T6
+Monitoring sensor,50,20,Rotor hub,T6
+Monitoring sensor,50,32,Nacelle platform,T6
+Monitoring sensor,50,40,Rotor blade damage det.: unknown sys.,T6
+Monitoring sensor,50,42,Rotor blade damage detected: fos4x,T6
+Monitoring sensor,50,43,Rotor blade damage detected: Woelfel,T6
+Monitoring sensor,50,51,Permitted max wind speed exceeded,T6
+Monitoring sensor,50,52,Permitted max wind speed exceeded,T1
+Monitoring sensor,50,61,Lightning strike (Phoenix),T6
+Monitoring sensor,50,62,Lightning strike detector faulty (Phoenix),T6
+Monitoring sensor,50,66,Lightning strike: alert (Phoenix),T6
+Monitoring sensor,50,67,Lightning strike detector faulty (Phoenix),T6
+Monitoring sensor,50,70,Lightning stike blade A,T6
+Monitoring sensor,50,71,Lightning stike blade B,T6
+Monitoring sensor,50,72,Lightning stike blade C,T6
+Monitoring sensor,50,122,Bearing bolt connection blade A,T6
+Monitoring sensor,50,161,Lightning strike blade A,T6
+Monitoring sensor,50,162,Lightning strike detector faulty blade A,T6
+Monitoring sensor,50,222,Bearing bolt connection blade B,T6
+Monitoring sensor,50,261,Lightning strike blade B,T6
+Monitoring sensor,50,262,Lightning strike detector faulty blade B,T6
+Monitoring sensor,50,322,Bearing bolt connection blade C,T6
+Monitoring sensor,50,361,Lightning strike blade C,T6
+Monitoring sensor,50,362,Lightning strike detector faulty blade C,T6
+Fault  blade heating,55,3,Power contactor not switchable,T6
+Fault  blade heating,55,70,Supply switched off (nacelle),T6
+Fault  blade heating,55,102,Heating not switchable to off blade A,T6
+Fault  blade heating,55,104,Heating 2 not switchable to off blade A,T6
+Fault  blade heating,55,140,Overtemperature Heater 1 Blade A,T6
+Fault  blade heating,55,141,Overtemperature Heater 2 Blade A,T6
+Fault  blade heating,55,152,Not deactivatable Blade A (Gazeheating),T6
+Fault  blade heating,55,202,Heating not switchable to off blade B,T6
+Fault  blade heating,55,204,Heating 2 not switchable to off blade B,T6
+Fault  blade heating,55,240,Overtemperature Heater 1 Blade B,T6
+Fault  blade heating,55,241,Overtemperature Heater 2 Blade B,T6
+Fault  blade heating,55,252,Not deactivatable Blade B (Gazeheating),T6
+Fault  blade heating,55,302,Heating not switchable to off blade C,T6
+Fault  blade heating,55,304,Heating 2 not switchable to off blade C,T6
+Fault  blade heating,55,340,Overtemperature Heater 1 Blade C,T6
+Fault  blade heating,55,341,Overtemperature Heater 2 Blade C,T6
+Fault  blade heating,55,352,Not deactivatable Blade C (Gazeheating),T6
+Fault lubrication system,58,6,Timeout Störung (Rotor),T6
+Mains failure,60,1,Monitoring electric supply company,T3
+Mains failure,60,2,Start delay,T3
+Mains failure,60,3,Start-up blocking POC (SCADA),T3
+Mains failure,60,4,Start-up blocking POC (VCS),T3
+Mains failure,60,9,Undervoltage L1+L2+L3,T3
+Mains failure,60,10,Overrvoltage L1+L2+L3,T3
+Mains failure,60,11,Undervoltage L1,T3
+Mains failure,60,12,Undervoltage L2,T3
+Mains failure,60,13,Undervoltage L3,T3
+Mains failure,60,14,Overrvoltage L1,T3
+Mains failure,60,15,Overrvoltage L2,T3
+Mains failure,60,16,Overrvoltage L3,T3
+Mains failure,60,17,Underfrequency,T3
+Mains failure,60,18,Overfrequency,T3
+Mains failure,60,19,Phase sequence error,T3
+Mains failure,60,21,Undervoltage L1 (restart),T3
+Mains failure,60,22,Undervoltage L2 (restart),T3
+Mains failure,60,23,Undervoltage L3 (restart),T3
+Mains failure,60,24,Overvoltage L1 (restart),T3
+Mains failure,60,25,Overvoltage L2 (restart),T3
+Mains failure,60,26,Overvoltage L3 (restart),T3
+Mains failure,60,27,Underfrequency (restart),T3
+Mains failure,60,28,Overfrequency (restart),T3
+Mains failure,60,29,Start-up blocking (normal start),T3
+Mains failure,60,30,Start-up blocking (restart),T3
+Mains failure,60,40,Overrvoltage (hardware),T3
+Mains failure,60,1501,Underfrequency f< decoupling protect.,T3
+Mains failure,60,1502,Overfrequency f> decoupling protect.,T3
+Mains failure,60,1503,Underfrequency f<< decoupling protect.,T3
+Mains failure,60,1504,Overfrequency f>> decoupling protect.,T3
+Mains failure,60,1505,Undervoltage U< L1 decoupling protect.,T3
+Mains failure,60,1506,Undervoltage U< L2 decoupling protect.,T3
+Mains failure,60,1507,Undervoltage U< L3 decoupling protect.,T3
+Mains failure,60,1508,Undervoltage U< L1+L2+L3 dec. prot.,T3
+Mains failure,60,1509,Undervoltage U<< L1 decoupling protect.,T3
+Mains failure,60,1510,Undervoltage U<< L2 decoupling protect.,T3
+Mains failure,60,1511,Undervoltage U<< L3 decoupling protect.,T3
+Mains failure,60,1512,Undervoltage U<< L1+L2+L3 dec. prot.,T3
+Mains failure,60,1513,Overvoltage U> L1 decoupling protect.,T3
+Mains failure,60,1514,Overvoltage U> L2 decoupling protect.,T3
+Mains failure,60,1515,Overvoltage U> L3 decoupling protect.,T3
+Mains failure,60,1516,Overvoltage U> L1+L2+L3 dec. prot.,T3
+Mains failure,60,1517,Overvoltage U>> L1 decoupling protect.,T3
+Mains failure,60,1518,Overvoltage U>> L2 decoupling protect.,T3
+Mains failure,60,1519,Overvoltage U>> L3 decoupling protect.,T3
+Mains failure,60,1520,Overvoltage U>> L1+L2+L3 dec. prot.,T3
+Mains failure,60,1533,FSC opened by decoupling protect.,T3
+Mains breakdown,61,0,,T3
+Feeding fault,62,0,,T6
+Feeding fault,62,1,Total power to low,T6
+Feeding fault,62,2,Total power to high,T6
+Feeding fault,62,3,Load shedding,T6
+Feeding fault,62,4,Inverter overload,T6
+Feeding fault,62,7,Diff. P-set / P-actual,T6
+Feeding fault,62,9,Diff. P(inverter) / P(transducer),T6
+Feeding fault,62,30,Feeding security circuit faulty,T6
+Feeding fault,62,31,System circuit breaker off,T6
+Feeding fault,62,41,System circuit breaker on,T6
+Feeding fault,62,51,Configuration error sys. circuit breaker,T6
+Feeding fault,62,55,Over temperature system connection,T6
+Feeding fault,62,61,Inverter DC link charged negative,T6
+Feeding fault,62,62,Inverter DC link charged positive,T6
+Feeding fault,62,101,To low power inverter 1,T6
+Feeding fault,62,102,To low power inverter 2,T6
+Feeding fault,62,103,To low power inverter 3,T6
+Feeding fault,62,104,To low power inverter 4,T6
+Feeding fault,62,105,To low power inverter 5,T6
+Feeding fault,62,106,To low power inverter 6,T6
+Feeding fault,62,107,To low power inverter 7,T6
+Feeding fault,62,108,To low power inverter 8,T6
+Feeding fault,62,109,To low power inverter 9,T6
+Feeding fault,62,110,To low power inverter 10,T6
+Feeding fault,62,111,To low power inverter 11,T6
+Feeding fault,62,112,To low power inverter 12,T6
+Feeding fault,62,113,To low power inverter 13,T6
+Feeding fault,62,114,To low power inverter 14,T6
+Feeding fault,62,201,To much power inverter 1,T6
+Feeding fault,62,202,To much power inverter 2,T6
+Feeding fault,62,203,To much power inverter 3,T6
+Feeding fault,62,204,To much power inverter 4,T6
+Feeding fault,62,205,To much power inverter 5,T6
+Feeding fault,62,206,To much power inverter 6,T6
+Feeding fault,62,207,To much power inverter 7,T6
+Feeding fault,62,208,To much power inverter 8,T6
+Feeding fault,62,209,To much power inverter 9,T6
+Feeding fault,62,210,To much power inverter 10,T6
+Feeding fault,62,211,To much power inverter 11,T6
+Feeding fault,62,212,To much power inverter 12,T6
+Feeding fault,62,213,To much power inverter 13,T6
+Feeding fault,62,214,To much power inverter 14,T6
+Feeding fault,62,301,Mains contactor inverter 1 off,T6
+Feeding fault,62,302,Mains contactor inverter 2 off,T6
+Feeding fault,62,303,Mains contactor inverter 3 off,T6
+Feeding fault,62,304,Mains contactor inverter 4 off,T6
+Feeding fault,62,305,Mains contactor inverter 5 off,T6
+Feeding fault,62,306,Mains contactor inverter 6 off,T6
+Feeding fault,62,307,Mains contactor inverter 7 off,T6
+Feeding fault,62,308,Mains contactor inverter 8 off,T6
+Feeding fault,62,309,Mains contactor inverter 9 off,T6
+Feeding fault,62,310,Mains contactor inverter 10 off,T6
+Feeding fault,62,311,Mains contactor inverter 11 off,T6
+Feeding fault,62,312,Mains contactor inverter 12 off,T6
+Feeding fault,62,313,Mains contactor inverter 13 off,T6
+Feeding fault,62,314,Mains contactor inverter 14 off,T6
+Feeding fault,62,319,Mains contactor off several inverter,T6
+Feeding fault,62,401,Chopper deactivated inverter 1,T6
+Feeding fault,62,402,Chopper deactivated inverter 2,T6
+Feeding fault,62,403,Chopper deactivated inverter 3,T6
+Feeding fault,62,404,Chopper deactivated inverter 4,T6
+Feeding fault,62,405,Chopper deactivated inverter 5,T6
+Feeding fault,62,406,Chopper deactivated inverter 6,T6
+Feeding fault,62,407,Chopper deactivated inverter 7,T6
+Feeding fault,62,408,Chopper deactivated inverter 8,T6
+Feeding fault,62,409,Chopper deactivated inverter 9,T6
+Feeding fault,62,410,Chopper deactivated inverter 10,T6
+Feeding fault,62,411,Chopper deactivated inverter 11,T6
+Feeding fault,62,412,Chopper deactivated inverter 12,T6
+Feeding fault,62,413,Chopper deactivated inverter 13,T6
+Feeding fault,62,414,Chopper deactivated inverter 14,T6
+Feeding fault,62,419,Chopper deactivated several inv.,T6
+Feeding fault,62,501,No zero crossing inverter 1,T6
+Feeding fault,62,502,No zero crossing inverter 2,T6
+Feeding fault,62,503,No zero crossing inverter 3,T6
+Feeding fault,62,504,No zero crossing inverter 4,T6
+Feeding fault,62,505,No zero crossing inverter 5,T6
+Feeding fault,62,506,No zero crossing inverter 6,T6
+Feeding fault,62,507,No zero crossing inverter 7,T6
+Feeding fault,62,508,No zero crossing inverter 8,T6
+Feeding fault,62,509,No zero crossing inverter 9,T6
+Feeding fault,62,510,No zero crossing inverter 10,T6
+Feeding fault,62,511,No zero crossing inverter 11,T6
+Feeding fault,62,512,No zero crossing inverter 12,T6
+Feeding fault,62,513,No zero crossing inverter 13,T6
+Feeding fault,62,514,No zero crossing inverter 14,T6
+Feeding fault,62,519,No zero crossing several inv.,T6
+Feeding fault,62,601,Diff. phase current inverter 1,T6
+Feeding fault,62,602,Diff. phase current inverter 2,T6
+Feeding fault,62,603,Diff. phase current inverter 3,T6
+Feeding fault,62,604,Diff. phase current inverter 4,T6
+Feeding fault,62,605,Diff. phase current inverter 5,T6
+Feeding fault,62,606,Diff. phase current inverter 6,T6
+Feeding fault,62,607,Diff. phase current inverter 7,T6
+Feeding fault,62,608,Diff. phase current inverter 8,T6
+Feeding fault,62,609,Diff. phase current inverter 9,T6
+Feeding fault,62,610,Diff. phase current inverter 10,T6
+Feeding fault,62,611,Diff. phase current inverter 11,T6
+Feeding fault,62,612,Diff. phase current inverter 12,T6
+Feeding fault,62,613,Diff. phase current inverter 13,T6
+Feeding fault,62,614,Diff. phase current inverter 14,T6
+Feeding fault,62,619,Diff. phase current several inv.,T6
+Feeding fault,62,701,Overload chopper inverter 1,T6
+Feeding fault,62,702,Overload chopper inverter 2,T6
+Feeding fault,62,703,Overload chopper inverter 3,T6
+Feeding fault,62,704,Overload chopper inverter 4,T6
+Feeding fault,62,705,Overload chopper inverter 5,T6
+Feeding fault,62,706,Overload chopper inverter 6,T6
+Feeding fault,62,707,Overload chopper inverter 7,T6
+Feeding fault,62,708,Overload chopper inverter 8,T6
+Feeding fault,62,709,Overload chopper inverter 9,T6
+Feeding fault,62,710,Overload chopper inverter 10,T6
+Feeding fault,62,711,Overload chopper inverter 11,T6
+Feeding fault,62,712,Overload chopper inverter 12,T6
+Feeding fault,62,713,Overload chopper inverter 13,T6
+Feeding fault,62,714,Overload chopper inverter 14,T6
+Feeding fault,62,719,Overload chopper several inv.,T6
+Feeding fault,62,801,Current measurement inverter 1,T6
+Feeding fault,62,802,Current measurement inverter 2,T6
+Feeding fault,62,803,Current measurement inverter 3,T6
+Feeding fault,62,804,Current measurement inverter 4,T6
+Feeding fault,62,805,Current measurement inverter 5,T6
+Feeding fault,62,806,Current measurement inverter 6,T6
+Feeding fault,62,807,Current measurement inverter 7,T6
+Feeding fault,62,808,Current measurement inverter 8,T6
+Feeding fault,62,809,Current measurement inverter 9,T6
+Feeding fault,62,810,Current measurement inverter 10,T6
+Feeding fault,62,811,Current measurement inverter 11,T6
+Feeding fault,62,812,Current measurement inverter 12,T6
+Feeding fault,62,813,Current measurement inverter 13,T6
+Feeding fault,62,814,Current measurement inverter 14,T6
+Feeding fault,62,819,Current measurement several inv.,T6
+Feeding fault,62,901,External shut down inverter 1,T6
+Feeding fault,62,902,External shut down inverter 2,T6
+Feeding fault,62,903,External shut down inverter 3,T6
+Feeding fault,62,904,External shut down inverter 4,T6
+Feeding fault,62,905,External shut down inverter 5,T6
+Feeding fault,62,906,External shut down inverter 6,T6
+Feeding fault,62,907,External shut down inverter 7,T6
+Feeding fault,62,908,External shut down inverter 8,T6
+Feeding fault,62,909,External shut down inverter 9,T6
+Feeding fault,62,910,External shut down inverter 10,T6
+Feeding fault,62,911,External shut down inverter 11,T6
+Feeding fault,62,912,External shut down inverter 12,T6
+Feeding fault,62,913,External shut down inverter 13,T6
+Feeding fault,62,914,External shut down inverter 14,T6
+Feeding fault,62,919,External shut down several inv.,T6
+Feeding fault,62,1001,No double step-up-chopper inverter 1,T6
+Feeding fault,62,1002,No double step-up-chopper inverter 2,T6
+Feeding fault,62,1003,No double step-up-chopper inverter 3,T6
+Feeding fault,62,1004,No double step-up-chopper inverter 4,T6
+Feeding fault,62,1005,No double step-up-chopper inverter 5,T6
+Feeding fault,62,1006,No double step-up-chopper inverter 6,T6
+Feeding fault,62,1007,No double step-up-chopper inverter 7,T6
+Feeding fault,62,1008,No double step-up-chopper inverter 8,T6
+Feeding fault,62,1009,No double step-up-chopper inverter 9,T6
+Feeding fault,62,1010,No double step-up-chopper inverter 10,T6
+Feeding fault,62,1011,No double step-up-chopper inverter 11,T6
+Feeding fault,62,1012,No double step-up-chopper inverter 12,T6
+Feeding fault,62,1013,No double step-up-chopper inverter 13,T6
+Feeding fault,62,1014,No double step-up-chopper inverter 14,T6
+Feeding fault,62,1019,No double step-up-chopper several inv.,T6
+Feeding fault,62,1301,Pulse inhibit inverter 1,T6
+Feeding fault,62,1302,Pulse inhibit inverter 2,T6
+Feeding fault,62,1303,Pulse inhibit inverter 3,T6
+Feeding fault,62,1304,Pulse inhibit inverter 4,T6
+Feeding fault,62,1305,Pulse inhibit inverter 5,T6
+Feeding fault,62,1306,Pulse inhibit inverter 6,T6
+Feeding fault,62,1307,Pulse inhibit inverter 7,T6
+Feeding fault,62,1308,Pulse inhibit inverter 8,T6
+Feeding fault,62,1309,Pulse inhibit inverter 9,T6
+Feeding fault,62,1310,Pulse inhibit inverter 10,T6
+Feeding fault,62,1311,Pulse inhibit inverter 11,T6
+Feeding fault,62,1312,Pulse inhibit inverter 12,T6
+Feeding fault,62,1313,Pulse inhibit inverter 13,T6
+Feeding fault,62,1314,Pulse inhibit inverter 14,T6
+Feeding fault,62,1319,pulse inhibit several inv.,T6
+Feeding fault,62,1401,Fault EC fan inverter 1,T6
+Feeding fault,62,1402,Fault EC fan inverter 2,T6
+Feeding fault,62,1403,Fault EC fan inverter 3,T6
+Feeding fault,62,1404,Fault EC fan inverter 4,T6
+Feeding fault,62,1405,Fault EC fan inverter 5,T6
+Feeding fault,62,1406,Fault EC fan inverter 6,T6
+Feeding fault,62,1407,Fault EC fan inverter 7,T6
+Feeding fault,62,1408,Fault EC fan inverter 8,T6
+Feeding fault,62,1409,Fault EC fan inverter 9,T6
+Feeding fault,62,1410,Fault EC fan inverter 10,T6
+Feeding fault,62,1411,Fault EC fan inverter 11,T6
+Feeding fault,62,1412,Fault EC fan inverter 12,T6
+Feeding fault,62,1413,Fault EC fan inverter 13,T6
+Feeding fault,62,1414,Fault EC fan inverter 14,T6
+Feeding fault,62,1419,Fault EC fan several inverters,T6
+Feeding fault,62,1901,Collective fault message inverter 1,T6
+Feeding fault,62,1902,Collective fault message inverter 2,T6
+Feeding fault,62,1903,Collective fault message inverter 3,T6
+Feeding fault,62,1904,Collective fault message inverter 4,T6
+Feeding fault,62,1905,Collective fault message inverter 5,T6
+Feeding fault,62,1906,Collective fault message inverter 6,T6
+Feeding fault,62,1907,Collective fault message inverter 7,T6
+Feeding fault,62,1908,Collective fault message inverter 8,T6
+Feeding fault,62,1909,Collective fault message inverter 9,T6
+Feeding fault,62,1910,Collective fault message inverter 10,T6
+Feeding fault,62,1911,Collective fault message inverter 11,T6
+Feeding fault,62,1912,Collective fault message inverter 12,T6
+Feeding fault,62,1913,Collective fault message inverter 13,T6
+Feeding fault,62,1914,Collective fault message inverter 14,T6
+Feeding fault,62,1919,Collective fault several inverters,T6
+Overcurrent inverter,64,101,L1 inverter 1,T6
+Overcurrent inverter,64,102,L1 inverter 2,T6
+Overcurrent inverter,64,103,L1 inverter 3,T6
+Overcurrent inverter,64,104,L1 inverter 4,T6
+Overcurrent inverter,64,105,L1 inverter 5,T6
+Overcurrent inverter,64,106,L1 inverter 6,T6
+Overcurrent inverter,64,107,L1 inverter 7,T6
+Overcurrent inverter,64,108,L1 inverter 8,T6
+Overcurrent inverter,64,109,L1 inverter 9,T6
+Overcurrent inverter,64,110,L1 inverter 10,T6
+Overcurrent inverter,64,111,L1 inverter 11,T6
+Overcurrent inverter,64,112,L1 inverter 12,T6
+Overcurrent inverter,64,113,L1 inverter 13,T6
+Overcurrent inverter,64,114,L1 inverter 14,T6
+Overcurrent inverter,64,119,L1 several inverters,T6
+Overcurrent inverter,64,201,L2 inverter 1,T6
+Overcurrent inverter,64,202,L2 inverter 2,T6
+Overcurrent inverter,64,203,L2 inverter 3,T6
+Overcurrent inverter,64,204,L2 inverter 4,T6
+Overcurrent inverter,64,205,L2 inverter 5,T6
+Overcurrent inverter,64,206,L2 inverter 6,T6
+Overcurrent inverter,64,207,L2 inverter 7,T6
+Overcurrent inverter,64,208,L2 inverter 8,T6
+Overcurrent inverter,64,209,L2 inverter 9,T6
+Overcurrent inverter,64,210,L2 inverter 10,T6
+Overcurrent inverter,64,211,L2 inverter 11,T6
+Overcurrent inverter,64,212,L2 inverter 12,T6
+Overcurrent inverter,64,213,L2 inverter 13,T6
+Overcurrent inverter,64,214,L2 inverter 14,T6
+Overcurrent inverter,64,219,L2 several inverters,T6
+Overcurrent inverter,64,301,L3 inverter 1,T6
+Overcurrent inverter,64,302,L3 inverter 2,T6
+Overcurrent inverter,64,303,L3 inverter 3,T6
+Overcurrent inverter,64,304,L3 inverter 4,T6
+Overcurrent inverter,64,305,L3 inverter 5,T6
+Overcurrent inverter,64,306,L3 inverter 6,T6
+Overcurrent inverter,64,307,L3 inverter 7,T6
+Overcurrent inverter,64,308,L3 inverter 8,T6
+Overcurrent inverter,64,309,L3 inverter 9,T6
+Overcurrent inverter,64,310,L3 inverter 10,T6
+Overcurrent inverter,64,311,L3 inverter 11,T6
+Overcurrent inverter,64,312,L3 inverter 12,T6
+Overcurrent inverter,64,313,L3 inverter 13,T6
+Overcurrent inverter,64,314,L3 inverter 14,T6
+Overcurrent inverter,64,319,L3 several inverters,T6
+Overcurrent inverter,64,401,Step-up-chopper inverter 1,T6
+Overcurrent inverter,64,402,Step-up-chopper inverter 2,T6
+Overcurrent inverter,64,403,Step-up-chopper inverter 3,T6
+Overcurrent inverter,64,404,Step-up-chopper inverter 4,T6
+Overcurrent inverter,64,405,Step-up-chopper inverter 5,T6
+Overcurrent inverter,64,406,Step-up-chopper inverter 6,T6
+Overcurrent inverter,64,407,Step-up-chopper inverter 7,T6
+Overcurrent inverter,64,408,Step-up-chopper inverter 8,T6
+Overcurrent inverter,64,409,Step-up-chopper inverter 9,T6
+Overcurrent inverter,64,410,Step-up-chopper inverter 10,T6
+Overcurrent inverter,64,411,Step-up-chopper inverter 11,T6
+Overcurrent inverter,64,412,Step-up-chopper inverter 12,T6
+Overcurrent inverter,64,413,Step-up-chopper inverter 13,T6
+Overcurrent inverter,64,414,Step-up-chopper inverter 14,T6
+Overcurrent inverter,64,419,Step-up-chopper several inverters,T6
+Overcurrent inverter,64,501,I-Rectifier inverter 1,T6
+Overcurrent inverter,64,502,I-Rectifier inverter 2,T6
+Overcurrent inverter,64,503,I-Rectifier inverter 3,T6
+Overcurrent inverter,64,504,I-Rectifier inverter 4,T6
+Overcurrent inverter,64,505,I-Rectifier inverter 5,T6
+Overcurrent inverter,64,506,I-Rectifier inverter 6,T6
+Overcurrent inverter,64,507,I-Rectifier inverter 7,T6
+Overcurrent inverter,64,508,I-Rectifier inverter 8,T6
+Overcurrent inverter,64,509,I-Rectifier inverter 9,T6
+Overcurrent inverter,64,510,I-Rectifier inverter 10,T6
+Overcurrent inverter,64,511,I-Rectifier inverter 11,T6
+Overcurrent inverter,64,512,I-Rectifier inverter 12,T6
+Overcurrent inverter,64,513,I-Rectifier inverter 13,T6
+Overcurrent inverter,64,514,I-Rectifier inverter 14,T6
+Overcurrent inverter,64,519,I-Rectifier several inverters,T6
+Overcurrent inverter,64,601,Cross short circuit inverter 1,T6
+Overcurrent inverter,64,602,Cross short circuit inverter 2,T6
+Overcurrent inverter,64,603,Cross short circuit inverter 3,T6
+Overcurrent inverter,64,604,Cross short circuit inverter 4,T6
+Overcurrent inverter,64,605,Cross short circuit inverter 5,T6
+Overcurrent inverter,64,606,Cross short circuit inverter 6,T6
+Overcurrent inverter,64,607,Cross short circuit inverter 7,T6
+Overcurrent inverter,64,608,Cross short circuit inverter 8,T6
+Overcurrent inverter,64,609,Cross short circuit inverter 9,T6
+Overcurrent inverter,64,610,Cross short circuit inverter 10,T6
+Overcurrent inverter,64,611,Cross short circuit inverter 11,T6
+Overcurrent inverter,64,612,Cross short circuit inverter 12,T6
+Overcurrent inverter,64,613,Cross short circuit inverter 13,T6
+Overcurrent inverter,64,614,Cross short circuit inverter 14,T6
+Overcurrent inverter,64,619,Cross short circuit several inverters,T6
+Overcurrent inverter,64,701,Collective fault message inv. 1,T6
+Overcurrent inverter,64,702,Collective fault message inv. 2,T6
+Overcurrent inverter,64,703,Collective fault message inv. 3,T6
+Overcurrent inverter,64,704,Collective fault message inv. 4,T6
+Overcurrent inverter,64,705,Collective fault message inv. 5,T6
+Overcurrent inverter,64,706,Collective fault message inv. 6,T6
+Overcurrent inverter,64,707,Collective fault message inv. 7,T6
+Overcurrent inverter,64,708,Collective fault message inv. 8,T6
+Overcurrent inverter,64,709,Collective fault message inv. 9,T6
+Overcurrent inverter,64,710,Collective fault message inv. 10,T6
+Overcurrent inverter,64,711,Collective fault message inv. 11,T6
+Overcurrent inverter,64,712,Collective fault message inv. 12,T6
+Overcurrent inverter,64,713,Collective fault message inv. 13,T6
+Overcurrent inverter,64,714,Collective fault message inv. 14,T6
+Overcurrent inverter,64,719,Collective fault message several inv.,T6
+Overcurrent inverter,64,801,Step-up-chopper faulty inverter 1,T6
+Overcurrent inverter,64,802,Step-up-chopper faulty inverter 2,T6
+Overcurrent inverter,64,803,Step-up-chopper faulty inverter 3,T6
+Overcurrent inverter,64,804,Step-up-chopper faulty inverter 4,T6
+Overcurrent inverter,64,805,Step-up-chopper faulty inverter 5,T6
+Overcurrent inverter,64,806,Step-up-chopper faulty inverter 6,T6
+Overcurrent inverter,64,807,Step-up-chopper faulty inverter 7,T6
+Overcurrent inverter,64,808,Step-up-chopper faulty inverter 8,T6
+Overcurrent inverter,64,809,Step-up-chopper faulty inverter 9,T6
+Overcurrent inverter,64,810,Step-up-chopper faulty inverter 10,T6
+Overcurrent inverter,64,811,Step-up-chopper faulty inverter 11,T6
+Overcurrent inverter,64,812,Step-up-chopper faulty inverter 12,T6
+Overcurrent inverter,64,813,Step-up-chopper faulty inverter 13,T6
+Overcurrent inverter,64,814,Step-up-chopper faulty inverter 14,T6
+Overvoltage inverter,65,101,DC-link inverter 1,T6
+Overvoltage inverter,65,102,DC-link inverter 2,T6
+Overvoltage inverter,65,103,DC-link inverter 3,T6
+Overvoltage inverter,65,104,DC-link inverter 4,T6
+Overvoltage inverter,65,105,DC-link inverter 5,T6
+Overvoltage inverter,65,106,DC-link inverter 6,T6
+Overvoltage inverter,65,107,DC-link inverter 7,T6
+Overvoltage inverter,65,108,DC-link inverter 8,T6
+Overvoltage inverter,65,109,DC-link inverter 9,T6
+Overvoltage inverter,65,110,DC-link inverter 10,T6
+Overvoltage inverter,65,111,DC-link inverter 11,T6
+Overvoltage inverter,65,112,DC-link inverter 12,T6
+Overvoltage inverter,65,113,DC-link inverter 13,T6
+Overvoltage inverter,65,114,DC-link inverter 14,T6
+Overvoltage inverter,65,119,DC-link several inverters,T6
+Overvoltage inverter,65,201,Unbalance U(DC-link) inv. 1,T6
+Overvoltage inverter,65,202,Unbalance U(DC-link) inv. 2,T6
+Overvoltage inverter,65,203,Unbalance U(DC-link) inv. 3,T6
+Overvoltage inverter,65,204,Unbalance U(DC-link) inv. 4,T6
+Overvoltage inverter,65,205,Unbalance U(DC-link) inv. 5,T6
+Overvoltage inverter,65,206,Unbalance U(DC-link) inv. 6,T6
+Overvoltage inverter,65,207,Unbalance U(DC-link) inv. 7,T6
+Overvoltage inverter,65,208,Unbalance U(DC-link) inv. 8,T6
+Overvoltage inverter,65,209,Unbalance U(DC-link) inv. 9,T6
+Overvoltage inverter,65,210,Unbalance U(DC-link) inv. 10,T6
+Overvoltage inverter,65,211,Unbalance U(DC-link) inv. 11,T6
+Overvoltage inverter,65,212,Unbalance U(DC-link) inv. 12,T6
+Overvoltage inverter,65,213,Unbalance U(DC-link) inv. 13,T6
+Overvoltage inverter,65,214,Unbalance U(DC-link) inv. 14,T6
+Overvoltage inverter,65,219,Unbalance U(DC-link) several inv.,T6
+Overvoltage inverter,65,301,Unbalance U(rectif.) inv. 1,T6
+Overvoltage inverter,65,302,Unbalance U(rectif.) inv. 2,T6
+Overvoltage inverter,65,303,Unbalance U(rectif.) inv. 3,T6
+Overvoltage inverter,65,304,Unbalance U(rectif.) inv. 4,T6
+Overvoltage inverter,65,305,Unbalance U(rectif.) inv. 5,T6
+Overvoltage inverter,65,306,Unbalance U(rectif.) inv. 6,T6
+Overvoltage inverter,65,307,Unbalance U(rectif.) inv. 7,T6
+Overvoltage inverter,65,308,Unbalance U(rectif.) inv. 8,T6
+Overvoltage inverter,65,309,Unbalance U(rectif.) inv. 9,T6
+Overvoltage inverter,65,310,Unbalance U(rectif.) inv. 10,T6
+Overvoltage inverter,65,311,Unbalance U(rectif.) inv. 11,T6
+Overvoltage inverter,65,312,Unbalance U(rectif.) inv. 12,T6
+Overvoltage inverter,65,313,Unbalance U(rectif.) inv. 13,T6
+Overvoltage inverter,65,314,Unbalance U(rectif.) inv. 14,T6
+Overvoltage inverter,65,319,Unbalance U(rectif.) several inv.,T6
+Overvoltage inverter,65,401,Malfunc. U(DC-link) measurem. inv. 1,T6
+Overvoltage inverter,65,402,Malfunc. U(DC-link) measurem. inv. 2,T6
+Overvoltage inverter,65,403,Malfunc. U(DC-link) measurem. inv. 3,T6
+Overvoltage inverter,65,404,Malfunc. U(DC-link) measurem. inv. 4,T6
+Overvoltage inverter,65,405,Malfunc. U(DC-link) measurem. inv. 5,T6
+Overvoltage inverter,65,406,Malfunc. U(DC-link) measurem. inv. 6,T6
+Overvoltage inverter,65,407,Malfunc. U(DC-link) measurem. inv. 7,T6
+Overvoltage inverter,65,408,Malfunc. U(DC-link) measurem. inv. 8,T6
+Overvoltage inverter,65,409,Malfunc. U(DC-link) measurem. inv. 9,T6
+Overvoltage inverter,65,410,Malfunc. U(DC-link) measurem. inv. 10,T6
+Overvoltage inverter,65,411,Malfunc. U(DC-link) measurem. inv. 11,T6
+Overvoltage inverter,65,412,Malfunc. U(DC-link) measurem. inv. 12,T6
+Overvoltage inverter,65,413,Malfunc. U(DC-link) measurem. inv. 13,T6
+Overvoltage inverter,65,414,Malfunc. U(DC-link) measurem. inv. 14,T6
+Overvoltage inverter,65,419,Malfunc. U(DC-link) meas. several inv.,T6
+Overvoltage inverter,65,501,Malfunc. U(rectif.) measurem. inv. 1,T6
+Overvoltage inverter,65,502,Malfunc. U(rectif.) measurem. inv. 2,T6
+Overvoltage inverter,65,503,Malfunc. U(rectif.) measurem. inv. 3,T6
+Overvoltage inverter,65,504,Malfunc. U(rectif.) measurem. inv. 4,T6
+Overvoltage inverter,65,505,Malfunc. U(rectif.) measurem. inv. 5,T6
+Overvoltage inverter,65,506,Malfunc. U(rectif.) measurem. inv. 6,T6
+Overvoltage inverter,65,507,Malfunc. U(rectif.) measurem. inv. 7,T6
+Overvoltage inverter,65,508,Malfunc. U(rectif.) measurem. inv. 8,T6
+Overvoltage inverter,65,509,Malfunc. U(rectif.) measurem. inv. 9,T6
+Overvoltage inverter,65,510,Malfunc. U(rectif.) measurem. inv. 10,T6
+Overvoltage inverter,65,511,Malfunc. U(rectif.) measurem. inv. 11,T6
+Overvoltage inverter,65,512,Malfunc. U(rectif.) measurem. inv. 12,T6
+Overvoltage inverter,65,513,Malfunc. U(rectif.) measurem. inv. 13,T6
+Overvoltage inverter,65,514,Malfunc. U(rectif.) measurem. inv. 14,T6
+Overvoltage inverter,65,519,Malfunc. U(rectif.) measurem. sev. inv.,T6
+Fault rectifier,66,1,Overcurrent phase U1,T6
+Fault rectifier,66,2,Overcurrent phase V1,T6
+Fault rectifier,66,3,Overcurrent phase W1,T6
+Fault rectifier,66,4,Overcurrent phase U2,T6
+Fault rectifier,66,5,Overcurrent phase V2,T6
+Fault rectifier,66,6,Overcurrent phase W2,T6
+Fault rectifier,66,7,Overcurrent phase U/V/W1,T6
+Fault rectifier,66,8,Overcurrent phase U/V/W2,T6
+Fault rectifier,66,11,Overvoltage rectifier 1,T6
+Fault rectifier,66,12,Overvoltage rectifier 2,T6
+Fault rectifier,66,13,Overvoltage rectifier,T6
+Fault rectifier,66,14,Rectifier 1 off,T6
+Fault rectifier,66,15,Rectifier 2 off,T6
+Fault rectifier,66,21,Isometer system 1,T6
+Fault rectifier,66,22,Isometer system 2,T6
+Fault rectifier,66,23,Isometer system 1+2,T6
+Fault rectifier,66,27,Malfunction isometer system 1,T6
+Fault rectifier,66,28,Malfunction isometer system 2,T6
+Fault rectifier,66,31,Malfunction UGR-measurement system 1,T6
+Fault rectifier,66,32,Malfunction UGR-measurement system 2,T6
+Fault rectifier,66,34,Difference phase current system 1,T6
+Fault rectifier,66,35,Difference phase current system 2,T6
+Fault rectifier,66,36,Difference phase voltage system 1,T6
+Fault rectifier,66,37,Difference phase voltage system 2,T6
+Fault rectifier,66,41,Earth contact system 1,T6
+Fault rectifier,66,42,Earth contact system 2,T6
+Fault rectifier,66,43,Earth contact system 1+2,T6
+Fault rectifier,66,44,Malfunc. earth contact monit. sys. 1,T6
+Fault rectifier,66,45,Malfunc. earth contact monit. sys. 2,T6
+Fault rectifier,66,46,Malfunc. earth contact monit. sys. 1+1,T6
+Fault rectifier,66,51,Overtemperature rectifier 1,T6
+Fault rectifier,66,52,Overtemperature rectifier 2,T6
+Fault rectifier,66,53,Thermoswitch rectifier 1,T6
+Fault rectifier,66,54,Thermoswitch rectifier 2,T6
+Fault rectifier,66,87,Fan defective rectifier 1,T6
+Fault rectifier,66,88,Fan defective rectifier 2,T6
+Fault rectifier,66,89,Fan defective,T6
+Fault rectifier,66,90,Wrong control board version,T6
+Fault rectifier,66,91,Configuration error rectifier 1,T6
+Fault rectifier,66,92,Configuration error rectifier 2,T6
+Fault rectifier,66,95,Overvoltage during gen. heat. rectifier 1,T6
+Fault rectifier,66,96,Overvoltage during gen. heat. rectifier 2,T6
+Over temperature,67,101,Heatsink L1 inverter 1,T6
+Over temperature,67,102,Heatsink L1 inverter 2,T6
+Over temperature,67,103,Heatsink L1 inverter 3,T6
+Over temperature,67,104,Heatsink L1 inverter 4,T6
+Over temperature,67,105,Heatsink L1 inverter 5,T6
+Over temperature,67,106,Heatsink L1 inverter 6,T6
+Over temperature,67,107,Heatsink L1 inverter 7,T6
+Over temperature,67,108,Heatsink L1 inverter 8,T6
+Over temperature,67,109,Heatsink L1 inverter 9,T6
+Over temperature,67,110,Heatsink L1 inverter 10,T6
+Over temperature,67,111,Heatsink L1 inverter 11,T6
+Over temperature,67,112,Heatsink L1 inverter 12,T6
+Over temperature,67,113,Heatsink L1 inverter 13,T6
+Over temperature,67,114,Heatsink L1 inverter 14,T6
+Over temperature,67,119,Heatsink L1 several inverters,T6
+Over temperature,67,201,Heatsink L2 inverter 1,T6
+Over temperature,67,202,Heatsink L2 inverter 2,T6
+Over temperature,67,203,Heatsink L2 inverter 3,T6
+Over temperature,67,204,Heatsink L2 inverter 4,T6
+Over temperature,67,205,Heatsink L2 inverter 5,T6
+Over temperature,67,206,Heatsink L2 inverter 6,T6
+Over temperature,67,207,Heatsink L2 inverter 7,T6
+Over temperature,67,208,Heatsink L2 inverter 8,T6
+Over temperature,67,209,Heatsink L2 inverter 9,T6
+Over temperature,67,210,Heatsink L2 inverter 10,T6
+Over temperature,67,211,Heatsink L2 inverter 11,T6
+Over temperature,67,212,Heatsink L2 inverter 12,T6
+Over temperature,67,213,Heatsink L2 inverter 13,T6
+Over temperature,67,214,Heatsink L2 inverter 1,T6
+Over temperature,67,219,Heatsink L2 several inverters,T6
+Over temperature,67,301,Heatsink L3 inverter 1,T6
+Over temperature,67,302,Heatsink L3 inverter 2,T6
+Over temperature,67,303,Heatsink L3 inverter 3,T6
+Over temperature,67,304,Heatsink L3 inverter 4,T6
+Over temperature,67,305,Heatsink L3 inverter 5,T6
+Over temperature,67,306,Heatsink L3 inverter 6,T6
+Over temperature,67,307,Heatsink L3 inverter 7,T6
+Over temperature,67,308,Heatsink L3 inverter 8,T6
+Over temperature,67,309,Heatsink L3 inverter 9,T6
+Over temperature,67,310,Heatsink L3 inverter 10,T6
+Over temperature,67,311,Heatsink L3 inverter 11,T6
+Over temperature,67,312,Heatsink L3 inverter 12,T6
+Over temperature,67,313,Heatsink L3 inverter 13,T6
+Over temperature,67,314,Heatsink L3 inverter 14,T6
+Over temperature,67,319,Heatsink L3 several inverters,T6
+Over temperature,67,401,Heatsink step-up-chopper inv. 1,T6
+Over temperature,67,402,Heatsink step-up-chopper inv. 2,T6
+Over temperature,67,403,Heatsink step-up-chopper inv. 3,T6
+Over temperature,67,404,Heatsink step-up-chopper inv. 4,T6
+Over temperature,67,405,Heatsink step-up-chopper inv. 5,T6
+Over temperature,67,406,Heatsink step-up-chopper inv. 6,T6
+Over temperature,67,407,Heatsink step-up-chopper inv. 7,T6
+Over temperature,67,408,Heatsink step-up-chopper inv. 8,T6
+Over temperature,67,409,Heatsink step-up-chopper inv. 9,T6
+Over temperature,67,410,Heatsink step-up-chopper inv. 10,T6
+Over temperature,67,411,Heatsink step-up-chopper inv. 11,T6
+Over temperature,67,412,Heatsink step-up-chopper inv. 12,T6
+Over temperature,67,413,Heatsink step-up-chopper inv. 13,T6
+Over temperature,67,414,Heatsink step-up-chopper inv. 14,T6
+Over temperature,67,419,Heatsink step-up-chopper several inv.,T6
+Over temperature,67,501,Thermoswitch heatsink inv. 1,T6
+Over temperature,67,502,Thermoswitch heatsink inv. 2,T6
+Over temperature,67,503,Thermoswitch heatsink inv. 3,T6
+Over temperature,67,504,Thermoswitch heatsink inv. 4,T6
+Over temperature,67,505,Thermoswitch heatsink inv. 5,T6
+Over temperature,67,506,Thermoswitch heatsink inv. 6,T6
+Over temperature,67,507,Thermoswitch heatsink inv. 7,T6
+Over temperature,67,508,Thermoswitch heatsink inv. 8,T6
+Over temperature,67,509,Thermoswitch heatsink inv. 9,T6
+Over temperature,67,510,Thermoswitch heatsink inv. 10,T6
+Over temperature,67,511,Thermoswitch heatsink inv. 11,T6
+Over temperature,67,512,Thermoswitch heatsink inv. 12,T6
+Over temperature,67,513,Thermoswitch heatsink inv. 13,T6
+Over temperature,67,514,Thermoswitch heatsink inv. 14,T6
+Over temperature,67,519,Thermo switch heatsink several inv.,T6
+Over temperature,67,601,Power choke inverter 1,T6
+Over temperature,67,602,Power choke inverter 2,T6
+Over temperature,67,603,Power choke inverter 3,T6
+Over temperature,67,604,Power choke inverter 4,T6
+Over temperature,67,605,Power choke inverter 5,T6
+Over temperature,67,606,Power choke inverter 6,T6
+Over temperature,67,607,Power choke inverter 7,T6
+Over temperature,67,608,Power choke inverter 8,T6
+Over temperature,67,609,Power choke inverter 9,T6
+Over temperature,67,610,Power choke inverter 10,T6
+Over temperature,67,611,Power choke inverter 11,T6
+Over temperature,67,612,Power choke inverter 12,T6
+Over temperature,67,613,Power choke inverter 13,T6
+Over temperature,67,614,Power choke inverter 14,T6
+Over temperature,67,619,Power choke several inverters,T6
+Over temperature,67,701,Heatsink chopper inverter 1,T6
+Over temperature,67,702,Heatsink chopper inverter 2,T6
+Over temperature,67,703,Heatsink chopper inverter 3,T6
+Over temperature,67,704,Heatsink chopper inverter 4,T6
+Over temperature,67,705,Heatsink chopper inverter 5,T6
+Over temperature,67,706,Heatsink chopper inverter 6,T6
+Over temperature,67,707,Heatsink chopper inverter 7,T6
+Over temperature,67,708,Heatsink chopper inverter 8,T6
+Over temperature,67,709,Heatsink chopper inverter 9,T6
+Over temperature,67,710,Heatsink chopper inverter 10,T6
+Over temperature,67,711,Heatsink chopper inverter 11,T6
+Over temperature,67,712,Heatsink chopper inverter 12,T6
+Over temperature,67,713,Heatsink chopper inverter 13,T6
+Over temperature,67,714,Heatsink chopper inverter 14,T6
+Over temperature,67,719,Heatsink chopper several inverters,T6
+Acoustic sensor,69,1,Inverter 1,T6
+Acoustic sensor,69,2,Inverter 2,T6
+Acoustic sensor,69,3,Inverter 3,T6
+Acoustic sensor,69,4,Inverter 4,T6
+Acoustic sensor,69,5,Inverter 5,T6
+Acoustic sensor,69,6,Inverter 6,T6
+Acoustic sensor,69,7,Inverter 7,T6
+Acoustic sensor,69,8,Inverter 8,T6
+Acoustic sensor,69,9,Inverter 9,T6
+Acoustic sensor,69,10,Inverter 10,T6
+Acoustic sensor,69,11,Inverter 11,T6
+Acoustic sensor,69,12,Inverter 12,T6
+Acoustic sensor,69,13,Inverter 13,T6
+Acoustic sensor,69,14,Inverter 14,T6
+Acoustic sensor,69,19,Several Inverters,T6
+Generator over temperature,70,2,Rotor,T6
+Generator over temperature,70,3,Stator (measurement),T6
+Generator over temperature,70,4,Stator (measurement winding overhang),T6
+Generator over temperature,70,5,Rotor (measurement blade A),T6
+Generator over temperature,70,6,Rotor (measurement blade B),T6
+Generator over temperature,70,11,Stator (slot 1),T6
+Generator over temperature,70,12,Stator (slot 2),T6
+Generator over temperature,70,13,Stator (winding overhang front),T6
+Generator over temperature,70,14,Stator (winding overhang rear),T6
+Generator over temperature,70,19,Monitoring coil connection,T6
+Insulation monitoring,71,101,Insulation fault Phase U1,T6
+Insulation monitoring,71,102,Insulation fault Phase V1,T6
+Insulation monitoring,71,103,Insulation fault Phase W1,T6
+Insulation monitoring,71,104,Insulation fault Phase U2,T6
+Insulation monitoring,71,105,Insulation fault Phase V2,T6
+Insulation monitoring,71,106,Insulation fault Phase W2,T6
+Insulation monitoring,71,121, Isometer System 1,T6
+Insulation monitoring,71,122, Isometer System 2,T6
+Insulation monitoring,71,123, Isometer System 1 + 2,T6
+Insulation monitoring,71,201,Insulation fault Phase U1 Sys.2,T6
+Insulation monitoring,71,202,Insulation fault Phase V1 Sys.2,T6
+Insulation monitoring,71,203,Insulation fault Phase W1 Sys.2,T6
+Insulation monitoring,71,204,Insulation fault Phase U2 Sys.2,T6
+Insulation monitoring,71,205,Insulation fault Phase V2 Sys.2,T6
+Insulation monitoring,71,206,Insulation fault Phase W2 Sys.2,T6
+Air gap monitoring,72,101,Sensor 1 blade A,T6
+Air gap monitoring,72,102,Sensor 2 blade A,T6
+Air gap monitoring,72,110,Both sensors blade A,T6
+Air gap monitoring,72,120,Several sensors,T6
+Air gap monitoring,72,121,Sensor 1 blade A (< idle speed),T6
+Air gap monitoring,72,122,Sensor 2 blade A (< idle speed),T6
+Air gap monitoring,72,125,Sensor 1 blade A (< idle speed + heat.),T6
+Air gap monitoring,72,126,Sensor 2 blade A (< idle speed + heat.),T6
+Air gap monitoring,72,130,Both sensors blade A (< idle speed),T6
+Air gap monitoring,72,131,Sensor 1 blade A (standstill),T6
+Air gap monitoring,72,132,Sensor 2 blade A (standstill),T6
+Air gap monitoring,72,135,Sensor 1 blade A (standstill + heating),T6
+Air gap monitoring,72,136,Sensor 2 blade A (standstill + heating),T6
+Air gap monitoring,72,140,Both sensors blade A (standstill),T6
+Air gap monitoring,72,141,Sensor 1 faulty blade A,T6
+Air gap monitoring,72,142,Sensor 2 faulty blade A,T6
+Air gap monitoring,72,150,Both sensors faulty blade A,T6
+Air gap monitoring,72,201,Sensor 1 blade B,T6
+Air gap monitoring,72,202,Sensor 2 blade B,T6
+Air gap monitoring,72,210,Both sensors,T6
+Air gap monitoring,72,220,Several sensors blade B,T6
+Air gap monitoring,72,221,Sensor 1 blade B (< idle speed),T6
+Air gap monitoring,72,222,Sensor 2 blade B (< idle speed),T6
+Air gap monitoring,72,225,Sensor 1 blade B (< idle speed + heat.),T6
+Air gap monitoring,72,226,Sensor 2 blade B (< idle speed + heat.),T6
+Air gap monitoring,72,230,Both sensors blade B (< idle speed),T6
+Air gap monitoring,72,231,Sensor 1 blade B (standstill),T6
+Air gap monitoring,72,232,Sensor 2 blade B (standstill),T6
+Air gap monitoring,72,235,Sensor 1 blade B (standstill + heating),T6
+Air gap monitoring,72,236,Sensor 2 blade B (standstill + heating),T6
+Air gap monitoring,72,240,Both sensors blade B (standstill),T6
+Air gap monitoring,72,241,Sensor 1 faulty blade B,T6
+Air gap monitoring,72,242,Sensor 2 faulty blade B,T6
+Air gap monitoring,72,250,Both sensors faulty blade B,T6
+Air gap monitoring,72,301,Sensor 1 blade C,T6
+Air gap monitoring,72,302,Sensor 2 blade C,T6
+Air gap monitoring,72,310,Both sensors blade C,T6
+Air gap monitoring,72,320,Several sensors,T6
+Air gap monitoring,72,321,Sensor 1 blade C (< idle speed),T6
+Air gap monitoring,72,322,Sensor 2 blade C (< idle speed),T6
+Air gap monitoring,72,325,Sensor 1 blade C (< idle speed + heat.),T6
+Air gap monitoring,72,326,Sensor 2 blade C (< idle speed + heat.),T6
+Air gap monitoring,72,330,Both sensors blade C (< idle speed),T6
+Air gap monitoring,72,331,Sensor 1 blade C (standstill),T6
+Air gap monitoring,72,332,Sensor 2 blade C (standstill),T6
+Air gap monitoring,72,335,Sensor 1 blade C (standstill + heating),T6
+Air gap monitoring,72,336,Sensor 2 blade C (standstill + heating),T6
+Air gap monitoring,72,340,Both sensors blade C (standstill),T6
+Air gap monitoring,72,341,Sensor 1 faulty blade C,T6
+Air gap monitoring,72,342,Sensor 2 faulty blade C,T6
+Air gap monitoring,72,350,Both sensors faulty blade C,T6
+Torque monitoring,73,2,Peak load,T6
+Torque monitoring,73,12,Signal to small,T6
+Torque monitoring,73,13,Signal to big,T6
+Torque monitoring,73,14,Transversal oscillation too small,T6
+Torque monitoring,73,31,Vibrations (average),T6
+Torque monitoring,73,32,Vibrations (peak),T6
+Bearing temperature,76,1,Overtemp. front bearing,T6
+Bearing temperature,76,2,Overtemp. rear bearing,T6
+Fault Excitation,80,1,Fault current,T6
+Fault Excitation,80,2,Rotor monitoring,T6
+Fault Excitation,80,10,Overtemperature heatsink,T6
+Fault Excitation,80,15,Overtemperature  output choke,T6
+Fault Excitation,80,20,Charging error,T6
+Fault Excitation,80,21,Overvoltage DC-link,T6
+Fault Excitation,80,22,Excit. current to low during test,T6
+Fault Excitation,80,23,Excit. current to high during trial,T6
+Fault Excitation,80,24,Overcurrent (Software),T6
+Fault Excitation,80,25,Overcurrent (hardware),T6
+Fault Excitation,80,26,Excitation switched off,T6
+Fault Excitation,80,30,Undervoltage DC-link,T6
+Fault Excitation,80,31,DC-supply malfunction,T6
+Fault Excitation,80,42,Excit. current too low during operation,T6
+Fault Excitation,80,49,No current during generator heating,T6
+Fault Excitation,80,50,Thermo switch diode DC-link,T6
+Fault Excitation,80,51,Thermo switch IGBT,T6
+Fault Excitation,80,52,Thermo switch rectifier,T6
+Fault Excitation,80,53,Fault parameter ID,T6
+Fault Excitation,80,61,IGBT-driver 1 faulty,T6
+Fault Excitation,80,62,IGBT-driver 2 faulty,T6
+Fault Excitation,80,85,Over temperature IGBT,T6
+Fault Excitation,80,86,Over temperature rectifier,T6
+Fault Excitation,80,87,Over temperature dU/dt filter x9.3-4,T6
+Fault Excitation,80,88,Over temperature diode DC-link,T6
+Fault self-excitation,83,1,Voltage set value too low,T6
+Fault self-excitation,83,2,Excitation current too low,T6
+Fault self-excitation,83,3,DC-link voltage too low,T6
+Fault self-excitation,83,4,No supply by rectifier,T6
+Fault self-excitation,83,5,Timeout,T6
+Prot. circuit-breaker tripped,90,6,Rotor brake,T6
+Prot. circuit-breaker tripped,90,9,Power supply pitch,T6
+Prot. circuit-breaker tripped,90,10,Power supply excitation,T6
+Prot. circuit-breaker tripped,90,16,Pitch transformer,T6
+Prot. circuit-breaker tripped,90,31,System circuit breaker,T6
+Prot. circuit-breaker tripped,90,41,Generator filter 1,T6
+Prot. circuit-breaker tripped,90,42,Generator filter 2,T6
+Prot. circuit-breaker tripped,90,51,Yaw drive 1,T6
+Prot. circuit-breaker tripped,90,52,Yaw drive 2,T6
+Prot. circuit-breaker tripped,90,53,Yaw drive 3,T6
+Prot. circuit-breaker tripped,90,54,Yaw drive 4,T6
+Prot. circuit-breaker tripped,90,55,Yaw drive 5,T6
+Prot. circuit-breaker tripped,90,56,Yaw drive 6,T6
+Prot. circuit-breaker tripped,90,61,Yaw drives system 1,T6
+Prot. circuit-breaker tripped,90,62,Yaw drives system 2,T6
+Prot. circuit-breaker tripped,90,63,Yaw inverter,T6
+Prot. circuit-breaker tripped,90,89,Rectifier fan,T6
+Prot. circuit-breaker tripped,90,101,Coolant pump transformer,T6
+Prot. circuit-breaker tripped,90,105,Radiator fan transformer,T6
+Prot. circuit-breaker tripped,90,109,Coolant pump inverters,T6
+Prot. circuit-breaker tripped,90,110,Radiator fan inverters / transformer,T6
+Prot. circuit-breaker tripped,90,111,Generator filter system 1,T6
+Prot. circuit-breaker tripped,90,112,Generator filter system 2,T6
+Prot. circuit-breaker tripped,90,151,Rectifier fan system 1,T6
+Prot. circuit-breaker tripped,90,152,Rectifier fan system 2,T6
+Prot. circuit-breaker tripped,90,301,Mains filter inverter 1,T6
+Prot. circuit-breaker tripped,90,302,Mains filter inverter 2,T6
+Prot. circuit-breaker tripped,90,303,Mains filter inverter 3,T6
+Prot. circuit-breaker tripped,90,304,Mains filter inverter 4,T6
+Prot. circuit-breaker tripped,90,305,Mains filter inverter 5,T6
+Prot. circuit-breaker tripped,90,306,Mains filter inverter 6,T6
+Prot. circuit-breaker tripped,90,307,Mains filter inverter 7,T6
+Prot. circuit-breaker tripped,90,308,Mains filter inverter 8,T6
+Prot. circuit-breaker tripped,90,309,Mains filter inverter 9,T6
+Prot. circuit-breaker tripped,90,310,Mains filter inverter 10,T6
+Prot. circuit-breaker tripped,90,311,Mains filter inverter 11,T6
+Prot. circuit-breaker tripped,90,312,Mains filter inverter 12,T6
+Prot. circuit-breaker tripped,90,313,Mains filter inverter 13,T6
+Prot. circuit-breaker tripped,90,314,Mains filter inverter 14,T6
+Prot. circuit-breaker tripped,90,319,Mains filter several inverters,T6
+Prot. circuit-breaker tripped,90,401,Fan power cabinet 1,T6
+Prot. circuit-breaker tripped,90,402,Fan power cabinet 2,T6
+Prot. circuit-breaker tripped,90,403,Fan power cabinet 3,T6
+Prot. circuit-breaker tripped,90,404,Fan power cabinet 4,T6
+Prot. circuit-breaker tripped,90,405,Fan power cabinet 5,T6
+Prot. circuit-breaker tripped,90,406,Fan power cabinet 6,T6
+Prot. circuit-breaker tripped,90,407,Fan power cabinet 7,T6
+Prot. circuit-breaker tripped,90,408,Fan power cabinet 8,T6
+Prot. circuit-breaker tripped,90,409,Fan power cabinet 9,T6
+Prot. circuit-breaker tripped,90,410,Fan power cabinet 10,T6
+Prot. circuit-breaker tripped,90,411,Fan power cabinet 11,T6
+Prot. circuit-breaker tripped,90,412,Fan power cabinet 12,T6
+Prot. circuit-breaker tripped,90,413,Fan power cabinet 13,T6
+Prot. circuit-breaker tripped,90,414,Fan power cabinet 14,T6
+Prot. circuit-breaker tripped,90,419,Fan several power cabinets,T6
+Semiconductor fuse blown,91,11,Rectifier system 1,T6
+Semiconductor fuse blown,91,12,Rectifier system 2,T6
+Semiconductor fuse blown,91,13,Rectifier system 1+2,T6
+Semiconductor fuse blown,91,14,Excitation,T6
+Semiconductor fuse blown,91,31,System circuit breaker,T6
+Semiconductor fuse blown,91,101,Inverter 1,T6
+Semiconductor fuse blown,91,102,Inverter 2,T6
+Semiconductor fuse blown,91,103,Inverter 3,T6
+Semiconductor fuse blown,91,104,Inverter 4,T6
+Semiconductor fuse blown,91,105,Inverter 5,T6
+Semiconductor fuse blown,91,106,Inverter 6,T6
+Semiconductor fuse blown,91,107,Inverter 7,T6
+Semiconductor fuse blown,91,108,Inverter 8,T6
+Semiconductor fuse blown,91,109,Inverter 9,T6
+Semiconductor fuse blown,91,110,Inverter 10,T6
+Semiconductor fuse blown,91,111,Inverter 11,T6
+Semiconductor fuse blown,91,112,Inverter 12,T6
+Semiconductor fuse blown,91,113,Inverter 13,T6
+Semiconductor fuse blown,91,114,Inverter 14,T6
+Semiconductor fuse blown,91,119,Several inverters,T6
+Low voltage earth fault detection,92,0,Earth fault sensor actuated,T6
+Low voltage earth fault detection,92,1,Earth fault feeding system,T6
+Low voltage earth fault detection,92,10,Earth fault control system,T6
+Fault temperature measurement,95,3,Bearing front,T6
+Fault temperature measurement,95,4,Bearing rear,T6
+Fault temperature measurement,95,100,Transformer pitch,T6
+Fault temperature measurement,95,111,Motor blade A,T6
+Fault temperature measurement,95,121,Motor blade B,T6
+Fault temperature measurement,95,131,Motor blade C,T6
+Fault temperature measurement,95,141,Heatsink picht box A,T6
+Fault temperature measurement,95,151,Heatsink picht box B,T6
+Fault temperature measurement,95,161,Heatsink picht box C,T6
+Fault temperature measurement,95,241,Emergency stop capacitor blade A,T6
+Fault temperature measurement,95,251,Emergency stop capacitor blade B,T6
+Fault temperature measurement,95,261,Emergency stop capacitor blade C,T6
+Fault temperature measurement,95,305,Rotor 1 + 2,T6
+Fault temperature measurement,95,315,Stator 1 + 2,T6
+Fault temperature measurement,95,317,Stator several temperatures,T6
+Fault temperature measurement,95,411,Heatsink rectifier 1,T6
+Fault temperature measurement,95,412,Heatsink rectifier 2,T6
+Fault temperature measurement,95,505,Outside 1 + 2 (hub height,T6
+Fault temperature measurement,95,611,Heatsink excitation,T6
+Fault temperature measurement,95,701,Rectifier yaw inverter,T6
+Fault temperature measurement,95,711,Heatsink yaw inverter 1,T6
+Fault temperature measurement,95,712,Heatsink yaw inverter 2,T6
+Fault temperature measurement,95,741,Yaw brake/- motor 1,T6
+Fault temperature measurement,95,742,Yaw brake/- motor 2,T6
+Fault temperature measurement,95,743,Yaw brake/- motor 3,T6
+Fault temperature measurement,95,744,Yaw brake/-motor 4,T6
+Fault temperature measurement,95,745,Yaw brake/-motor 5,T6
+Fault temperature measurement,95,746,Yaw brake/-motor 6,T6
+Fault temperature measurement,95,800,Outside (ground and nacelle),T6
+Fault temperature measurement,95,820,Coolant inverter,T6
+Fault temperature measurement,95,901,Transformer temp. < room temp.,T6
+Fault temperature measurement,95,910,Transformer,T6
+Fault temperature measurement,95,911,Transformer: PT100 and KTY connected,T6
+Error temperature-measurem. inverter,96,101,L1+ inverter 1,T6
+Error temperature-measurem. inverter,96,102,L1+ inverter 2,T6
+Error temperature-measurem. inverter,96,103,L1+ inverter 3,T6
+Error temperature-measurem. inverter,96,104,L1+ inverter 4,T6
+Error temperature-measurem. inverter,96,105,L1+ inverter 5,T6
+Error temperature-measurem. inverter,96,106,L1+ inverter 6,T6
+Error temperature-measurem. inverter,96,107,L1+ inverter 7,T6
+Error temperature-measurem. inverter,96,108,L1+ inverter 8,T6
+Error temperature-measurem. inverter,96,109,L1+ inverter 9,T6
+Error temperature-measurem. inverter,96,110,L1+ inverter 10,T6
+Error temperature-measurem. inverter,96,111,L1+ inverter 11,T6
+Error temperature-measurem. inverter,96,112,L1+ inverter 12,T6
+Error temperature-measurem. inverter,96,113,L1+ inverter 13,T6
+Error temperature-measurem. inverter,96,114,L1+ inverter 14,T6
+Error temperature-measurem. inverter,96,119,L1+ several inverters,T6
+Error temperature-measurem. inverter,96,201,L1- inverter 1,T6
+Error temperature-measurem. inverter,96,202,L1- inverter 2,T6
+Error temperature-measurem. inverter,96,203,L1- inverter 3,T6
+Error temperature-measurem. inverter,96,204,L1- inverter 4,T6
+Error temperature-measurem. inverter,96,205,L1- inverter 5,T6
+Error temperature-measurem. inverter,96,206,L1- inverter 6,T6
+Error temperature-measurem. inverter,96,207,L1- inverter 7,T6
+Error temperature-measurem. inverter,96,208,L1- inverter 8,T6
+Error temperature-measurem. inverter,96,209,L1- inverter 9,T6
+Error temperature-measurem. inverter,96,210,L1- inverter 10,T6
+Error temperature-measurem. inverter,96,211,L1- inverter 11,T6
+Error temperature-measurem. inverter,96,212,L1- inverter 12,T6
+Error temperature-measurem. inverter,96,213,L1- inverter 13,T6
+Error temperature-measurem. inverter,96,214,L1- inverter 14,T6
+Error temperature-measurem. inverter,96,219,L1- several inverters,T6
+Error temperature-measurem. inverter,96,301,L2+ inverter 1,T6
+Error temperature-measurem. inverter,96,302,L2+ inverter 2,T6
+Error temperature-measurem. inverter,96,303,L2+ inverter 3,T6
+Error temperature-measurem. inverter,96,304,L2+ inverter 4,T6
+Error temperature-measurem. inverter,96,305,L2+ inverter 5,T6
+Error temperature-measurem. inverter,96,306,L2+ inverter 6,T6
+Error temperature-measurem. inverter,96,307,L2+ inverter 7,T6
+Error temperature-measurem. inverter,96,308,L2+ inverter 8,T6
+Error temperature-measurem. inverter,96,309,L2+ inverter 9,T6
+Error temperature-measurem. inverter,96,310,L2+ inverter 10,T6
+Error temperature-measurem. inverter,96,311,L2+ inverter 11,T6
+Error temperature-measurem. inverter,96,312,L2+ inverter 12,T6
+Error temperature-measurem. inverter,96,313,L2+ inverter 13,T6
+Error temperature-measurem. inverter,96,314,L2+ inverter 14,T6
+Error temperature-measurem. inverter,96,319,L2+ several inverters,T6
+Error temperature-measurem. inverter,96,401,L2- inverter 1,T6
+Error temperature-measurem. inverter,96,402,L2- inverter 2,T6
+Error temperature-measurem. inverter,96,403,L2- inverter 3,T6
+Error temperature-measurem. inverter,96,404,L2- inverter 4,T6
+Error temperature-measurem. inverter,96,405,L2- inverter 5,T6
+Error temperature-measurem. inverter,96,406,L2- inverter 6,T6
+Error temperature-measurem. inverter,96,407,L2- inverter 7,T6
+Error temperature-measurem. inverter,96,408,L2- inverter 8,T6
+Error temperature-measurem. inverter,96,409,L2- inverter 9,T6
+Error temperature-measurem. inverter,96,410,L2- inverter 10,T6
+Error temperature-measurem. inverter,96,411,L2- inverter 11,T6
+Error temperature-measurem. inverter,96,412,L2- inverter 12,T6
+Error temperature-measurem. inverter,96,413,L2- inverter 13,T6
+Error temperature-measurem. inverter,96,414,L2- inverter 14,T6
+Error temperature-measurem. inverter,96,419,L2- several inverters,T6
+Error temperature-measurem. inverter,96,501,L3+ inverter 1,T6
+Error temperature-measurem. inverter,96,502,L3+ inverter 2,T6
+Error temperature-measurem. inverter,96,503,L3+ inverter 3,T6
+Error temperature-measurem. inverter,96,504,L3+ inverter 4,T6
+Error temperature-measurem. inverter,96,505,L3+ inverter 5,T6
+Error temperature-measurem. inverter,96,506,L3+ inverter 6,T6
+Error temperature-measurem. inverter,96,507,L3+ inverter 7,T6
+Error temperature-measurem. inverter,96,508,L3+ inverter 8,T6
+Error temperature-measurem. inverter,96,509,L3+ inverter 9,T6
+Error temperature-measurem. inverter,96,510,L3+ inverter 10,T6
+Error temperature-measurem. inverter,96,511,L3+ inverter 11,T6
+Error temperature-measurem. inverter,96,512,L3+ inverter 12,T6
+Error temperature-measurem. inverter,96,513,L3+ inverter 13,T6
+Error temperature-measurem. inverter,96,514,L3+ inverter 14,T6
+Error temperature-measurem. inverter,96,519,L3+ several inverters,T6
+Error temperature-measurem. inverter,96,601,L3- inverter 1,T6
+Error temperature-measurem. inverter,96,602,L3- inverter 2,T6
+Error temperature-measurem. inverter,96,603,L3- inverter 3,T6
+Error temperature-measurem. inverter,96,604,L3- inverter 4,T6
+Error temperature-measurem. inverter,96,605,L3- inverter 5,T6
+Error temperature-measurem. inverter,96,606,L3- inverter 6,T6
+Error temperature-measurem. inverter,96,607,L3- inverter 7,T6
+Error temperature-measurem. inverter,96,608,L3- inverter 8,T6
+Error temperature-measurem. inverter,96,609,L3- inverter 9,T6
+Error temperature-measurem. inverter,96,610,L3- inverter 10,T6
+Error temperature-measurem. inverter,96,611,L3- inverter 11,T6
+Error temperature-measurem. inverter,96,612,L3- inverter 12,T6
+Error temperature-measurem. inverter,96,613,L3- inverter 13,T6
+Error temperature-measurem. inverter,96,614,L3- inverter 14,T6
+Error temperature-measurem. inverter,96,619,L3- several inverters,T6
+Error temperature-measurem. inverter,96,701,Step-up-chopper 1 inverter 1,T6
+Error temperature-measurem. inverter,96,702,Step-up-chopper 1 inverter 2,T6
+Error temperature-measurem. inverter,96,703,Step-up-chopper 1 inverter 3,T6
+Error temperature-measurem. inverter,96,704,Step-up-chopper 1 inverter 4,T6
+Error temperature-measurem. inverter,96,705,Step-up-chopper 1 inverter 5,T6
+Error temperature-measurem. inverter,96,706,Step-up-chopper 1 inverter 6,T6
+Error temperature-measurem. inverter,96,707,Step-up-chopper 1 inverter 7,T6
+Error temperature-measurem. inverter,96,708,Step-up-chopper 1 inverter 8,T6
+Error temperature-measurem. inverter,96,709,Step-up-chopper 1 inverter 9,T6
+Error temperature-measurem. inverter,96,710,Step-up-chopper 1 inverter 10,T6
+Error temperature-measurem. inverter,96,711,Step-up-chopper 1 inverter 11,T6
+Error temperature-measurem. inverter,96,712,Step-up-chopper 1 inverter 12,T6
+Error temperature-measurem. inverter,96,713,Step-up-chopper 1 inverter 13,T6
+Error temperature-measurem. inverter,96,714,Step-up-chopper 1 inverter 14,T6
+Error temperature-measurem. inverter,96,719,Step-up-chopper 1 several inverters,T6
+Error temperature-measurem. inverter,96,801,Step-up-chopper 2 inverter 1,T6
+Error temperature-measurem. inverter,96,802,Step-up-chopper 2 inverter 2,T6
+Error temperature-measurem. inverter,96,803,Step-up-chopper 2 inverter 3,T6
+Error temperature-measurem. inverter,96,804,Step-up-chopper 2 inverter 4,T6
+Error temperature-measurem. inverter,96,805,Step-up-chopper 2 inverter 5,T6
+Error temperature-measurem. inverter,96,806,Step-up-chopper 2 inverter 6,T6
+Error temperature-measurem. inverter,96,807,Step-up-chopper 2 inverter 7,T6
+Error temperature-measurem. inverter,96,808,Step-up-chopper 2 inverter 8,T6
+Error temperature-measurem. inverter,96,809,Step-up-chopper 2 inverter 9,T6
+Error temperature-measurem. inverter,96,810,Step-up-chopper 2 inverter 10,T6
+Error temperature-measurem. inverter,96,811,Step-up-chopper 2 inverter 11,T6
+Error temperature-measurem. inverter,96,812,Step-up-chopper 2 inverter 12,T6
+Error temperature-measurem. inverter,96,813,Step-up-chopper 2 inverter 13,T6
+Error temperature-measurem. inverter,96,814,Step-up-chopper 2 inverter 14,T6
+Error temperature-measurem. inverter,96,819,Step-up-chopper 2 several inverters,T6
+Error temperature-measurem. inverter,96,901,Chopper inverter 1,T6
+Error temperature-measurem. inverter,96,902,Chopper inverter 2,T6
+Error temperature-measurem. inverter,96,903,Chopper inverter 3,T6
+Error temperature-measurem. inverter,96,904,Chopper inverter 4,T6
+Error temperature-measurem. inverter,96,905,Chopper inverter 5,T6
+Error temperature-measurem. inverter,96,906,Chopper inverter 6,T6
+Error temperature-measurem. inverter,96,907,Chopper inverter 7,T6
+Error temperature-measurem. inverter,96,908,Chopper inverter 8,T6
+Error temperature-measurem. inverter,96,909,Chopper inverter 9,T6
+Error temperature-measurem. inverter,96,910,Chopper inverter 10,T6
+Error temperature-measurem. inverter,96,911,Chopper inverter 11,T6
+Error temperature-measurem. inverter,96,912,Chopper inverter 12,T6
+Error temperature-measurem. inverter,96,913,Chopper inverter 13,T6
+Error temperature-measurem. inverter,96,914,Chopper inverter 14,T6
+Error temperature-measurem. inverter,96,919,Chopper several inverters,T6
+Fault air cooling,100,202,Overtemperature tower fan,T6
+Fault water cooling generator,101,11,High pressure,T6
+Fault water cooling inverter,105,1,Pressure too low,T6
+Fault water cooling inverter,105,4,Pressure sensor faulty,T6
+Fault water cooling inverter,105,5,No flow rate,T6
+Fault water cooling inverter,105,6,Flow control meter faulty,T6
+Fault water cooling inverter,105,10,Over temperature coolant pump,T6
+Smoke detector,112,11,Transformer,T6
+Smoke detector,112,13,E-module,T6
+Smoke detector,112,21,Nacelle (main carrier),T6
+Smoke detector,112,22,Nacelle (Hatch),T6
+Smoke detector,112,23,Nacelle (Spinner),T6
+Fire protection system,113,11,Tower: fire,T6
+Fire protection system,113,13,Extinguishing system tower: activated,T6
+Fire protection system,113,14,Extinguishing system tower: maintenan.,T6
+Fire protection system,113,21,Nacelle: fire,T6
+Medium voltage switchgear,120,10,Ambient temperature to low,T1
+Medium voltage switchgear,120,101,SF6-pressure low,T6
+Medium voltage switchgear,120,102,SF6-pressure low,T6
+Fault Transformer,122,101,Overtemperature (measurement),T6
+Fault Transformer,122,102,Overtemperature (thermoswitch),T6
+Fault Transformer,122,103,Overpressure,T6
+Fault Transformer,122,105,Oillevel,T6
+Fault Transformer,122,110,Fuse transformer monitoring,T6
+Fault Transformer,122,115,Over temperature coolant pump,T6
+Fault Transformer,122,116,Over temperature cooling fan,T6
+Fault charge circuit,130,10,Charging error,T6
+Fault charge circuit,130,11,Circuit-breaker tripped,T6
+Fault charge circuit,130,12,Semiconductor fuse blown,T6
+Fault charge circuit,130,20,Charging error,T6
+Multi-transducer DM5S,140,103,Configuration not possible,T6
+Multi-transducer DM5S,140,104,Data transmission fault,T6
+Eologix,141,1,Fault: System not available,T1
+Eologix,141,2,Availability signal not received,T1
+Eologix,141,31,Ice detection not available,T6
+Fos4X,142,1,Fault: System not available,T1
+Fos4X,142,2,Availability signal not received,T1
+Fos4X,142,31,Ice detection not available,T6
+Woelfel,143,1,Fault: System not available,T1
+Woelfel,143,2,Availability signal not received,T1
+Woelfel,143,31,Ice detection not available,T6
+Initialize EEPROM,150,1,MPU,T6
+Initialize EEPROM,150,2,I/O-Board,T6
+Initialize EEPROM,150,3,Display,T6
+Initialize EEPROM,150,4,Power control,T6
+Initialize EEPROM,150,33,Power Control,T6
+Initialize EEPROM,150,37,Decoupling Protection,T6
+Initialize EEPROM,150,81,I/O-board control cabinet,T6
+Initialize EEPROM,150,82,I/O-board 2 control cabinet,T6
+Initialize EEPROM,150,83,I/O-board 1 nacelle,T6
+Initialize EEPROM,150,84,I/O-board 2 nacelle,T6
+Hardware incompatible,151,33,Power Control CPU1,T6
+Hardware incompatible,151,37,Decoupling Protection CPU1,T6
+Hardware incompatible,151,133,Power Control CPU2,T6
+Hardware incompatible,151,137,Decoupling Protection CPU2,T6
+Program incompatible,152,10,UPS CPU1,T6
+Program incompatible,152,11,UPS CPU2,T6
+Program incompatible,152,13,Load control Blade A,T6
+Program incompatible,152,14,Load control Blade B,T6
+Program incompatible,152,15,Load control blade C,T6
+Program incompatible,152,17,Blade A,T6
+Program incompatible,152,18,Blade B,T6
+Program incompatible,152,19,Blade C,T6
+Program incompatible,152,25,Excitation,T6
+Program incompatible,152,30,Farm-Control-Interface,T6
+Program incompatible,152,33,Power Control,T6
+Program incompatible,152,37,Decoupling Protection,T6
+Program incompatible,152,51,Yaw inverter 1,T6
+Program incompatible,152,52,Yaw inverter 2,T6
+Program incompatible,152,56,Fan inverter,T6
+Program incompatible,152,61,Anemometer Interface,T6
+Program incompatible,152,62,Anemometer Interface 2,T6
+Program incompatible,152,68,Ice Detection Interface,T6
+Program incompatible,152,83,I/O-board 1 nacelle,T6
+Program incompatible,152,84,I/O-board 2 nacelle,T6
+Program incompatible,152,91,Isolation monitoring,T6
+Program incompatible,152,97,Rectifier 1,T6
+Program incompatible,152,98,Rectifier 2,T6
+Program incompatible,152,110,Display,T6
+Program incompatible,152,118,Energy Storage UPS,T6
+Program incompatible,152,121,Bus-Interface,T6
+Program incompatible,152,133,Power Control CPU2,T6
+Program incompatible,152,137,Decoupling Protection CPU2,T6
+Program incompatible,152,201,Inverter Control 1 CPU 1,T6
+Program incompatible,152,202,Inverter Control 2 CPU 1,T6
+Program incompatible,152,203,Inverter Control 3 CPU 1,T6
+Program incompatible,152,204,Inverter Control 4 CPU 1,T6
+Program incompatible,152,205,Inverter Control 5 CPU 1,T6
+Program incompatible,152,206,Inverter Control 6 CPU 1,T6
+Program incompatible,152,207,Inverter Control 7 CPU 1,T6
+Program incompatible,152,208,Inverter Control 8 CPU 1,T6
+Program incompatible,152,209,Inverter Control 9 CPU 1,T6
+Program incompatible,152,210,Inverter Control 10 CPU 1,T6
+Program incompatible,152,211,Inverter Control 11 CPU 1,T6
+Program incompatible,152,212,Inverter Control 12 CPU 1,T6
+Program incompatible,152,213,Inverter Control 13 CPU 1,T6
+Program incompatible,152,214,Inverter Control 14 CPU 1,T6
+Program incompatible,152,219,Several Inverter Controls,T6
+Program incompatible,152,301,Inverter Control 1 CPU 2,T6
+Program incompatible,152,302,Inverter Control 2 CPU 2,T6
+Program incompatible,152,303,Inverter Control 3 CPU 2,T6
+Program incompatible,152,304,Inverter Control 4 CPU 2,T6
+Program incompatible,152,305,Inverter Control 5 CPU 2,T6
+Program incompatible,152,306,Inverter Control 6 CPU 2,T6
+Program incompatible,152,307,Inverter Control 7 CPU 2,T6
+Program incompatible,152,308,Inverter Control 8 CPU 2,T6
+Program incompatible,152,309,Inverter Control 9 CPU 2,T6
+Program incompatible,152,310,Inverter Control 10 CPU 2,T6
+Program incompatible,152,311,Inverter Control 11 CPU 2,T6
+Program incompatible,152,312,Inverter Control 12 CPU 2,T6
+Program incompatible,152,313,Inverter Control 13 CPU 2,T6
+Program incompatible,152,314,Inverter Control 14 CPU 2,T6
+Program incompatible,152,401,Inverter Control 1 CPU 1 <> CPU 2,T6
+Program incompatible,152,402,Inverter Control 2 CPU 1 <> CPU 2,T6
+Program incompatible,152,403,Inverter Control 3 CPU 1 <> CPU 2,T6
+Program incompatible,152,404,Inverter Control 4 CPU 1 <> CPU 2,T6
+Program incompatible,152,405,Inverter Control 5 CPU 1 <> CPU 2,T6
+Program incompatible,152,406,Inverter Control 6 CPU 1 <> CPU 2,T6
+Program incompatible,152,407,Inverter Control 7 CPU 1 <> CPU 2,T6
+Program incompatible,152,408,Inverter Control 8 CPU 1 <> CPU 2,T6
+Program incompatible,152,409,Inverter Control 9 CPU 1 <> CPU 2,T6
+Program incompatible,152,410,Inverter Control 10 CPU 1 <> CPU 2,T6
+Program incompatible,152,411,nverter Control 11 CPU 1 <> CPU 2,T6
+Program incompatible,152,412,nverter Control 12 CPU 1 <> CPU 2,T6
+Program incompatible,152,413,nverter Control 13 CPU 1 <> CPU 2,T6
+Program incompatible,152,414,nverter Control 14 CPU 1 <> CPU 2,T6
+Program incompatible,152,633,FACTS-Betrieb,T6
+Unknown turbine-id,153,33,Power Control,T6
+Unknown turbine-id,153,37,Decoupling Protection,T6
+Initial version missing,154,81,I/O-board 1 control cabinet,T6
+Initial version missing,154,82,I/O-board 2 control cabinet,T6
+Initial version missing,154,83,I/O-board 1 nacelle,T6
+Initial version missing,154,84,I/O-board 2 nacelle,T6
+166 Wrong boot block address (7),155,37,Decoupling Protection,T6
+166 Wrong boot block address (7),155,62,Anemometer Interface 2,T6
+Wrong boot block version,156,37,Decoupling Protection,T6
+Wrong boot block version,156,62,Anemometer Interface 2,T6
+Wrong boot block version,156,219,Several Inverter Controls,T6
+Serial number,158,1,invalid,T6
+Serial number,158,2,I/O-board and display different,T6
+Serial number,158,3,I/O contr. cab. and nacelle 1 different,T6
+Serial number changed,159,10,Angle encoder blade A,T6
+Serial number changed,159,11,Angle encoder blade B,T6
+Serial number changed,159,12,Angle encoder blade C,T6
+Serial number changed,159,13,Blade load control A,T6
+Serial number changed,159,14,Blade load control B,T6
+Serial number changed,159,15,Blade load control C,T6
+Serial number changed,159,17,Control board blade A,T6
+Serial number changed,159,18,Control board blade B,T6
+Serial number changed,159,19,Control board blade C,T6
+Fault UPS,192,1,UPS not activated,T6
+Fault UPS,192,2,Low output voltage,T6
+Fault UPS,192,3,Charging error,T6
+Fault UPS,192,4,Malfunction output contactor,T6
+Fault UPS,192,10,Acoustic sensor,T6
+Fault UPS,192,11,Error supply voltage,T6
+Fault UPS,192,12,Error message from IGBT-driver,T6
+Fault UPS,192,13,Malfunction current measurement,T6
+Fault UPS,192,20,Collective fault message overcurrent,T6
+Fault UPS,192,21,Overcurrent I-Rectifier,T6
+Fault UPS,192,22,Overcurrent hardware L1,T6
+Fault UPS,192,23,Overcurrent hardware L2,T6
+Fault UPS,192,24,Overcurrent hardware L3,T6
+Fault UPS,192,25,Overcurrent software L1,T6
+Fault UPS,192,26,Overcurrent software L2,T6
+Fault UPS,192,27,Overcurrent software L3,T6
+Fault UPS,192,30,Cross short cicuit,T6
+Fault UPS,192,40,Overvoltage U (DC-link),T6
+Fault UPS,192,41,Undervoltage U (DC-link),T6
+Fault UPS,192,42,Unsymmetrie U (DC-link),T6
+Fault UPS,192,45,Undervoltage output L1,T6
+Fault UPS,192,46,Undervoltage output L2,T6
+Fault UPS,192,47,Undervoltage output L3,T6
+Fault UPS,192,50,Hardware-reset CPU1,T6
+Fault UPS,192,51,Hardware-reset CPU2,T6
+Fault UPS,192,60,Temperature switch heatsink,T6
+Fault UPS,192,61,Overtemperature heatsink 1,T6
+Fault UPS,192,62,Overtemperature heatsink 2,T6
+Fault UPS,192,68,Overtemperature Transformer,T6
+Fault UPS,192,70,Program incompatible CPU1 - CPU2,T6
+Fault UPS,192,71,Fault internal databus CPU1,T6
+Fault UPS,192,72,Fault internal databus CPU2,T6
+Fault UPS,192,73,No data from Power Control to UPS,T6
+Fault UPS,192,74,No data from UPS to Power Control,T6
+Fault UPS,192,80,Fuse U (DC-Link) blown,T6
+Fault UPS,192,82,Prot. circuit-breaker fan tripped,T6
+Fault UPS,192,83,Fault bypass,T6
+Fault UPS,192,92,Fault turbine supply after bypass,T6
+Fault UPS,192,93,Malfunction input mains contactor,T6
+Fault UPS,192,201,Timeout three-phase operation,T6
+Fault UPS,192,202,Timeout fault output voltage,T6
+Fault UPS,192,203,Fault L1 UPS:  FSC interrupted,T6
+Energy Storage UPS,194,1,Emergency stop actuated,T6
+Energy Storage UPS,194,2,Error 24V supply voltage,T6
+Energy Storage UPS,194,3,Error main contactor,T6
+Energy Storage UPS,194,4,Voltage measurement disturbed,T6
+Inverter bus error,202,10,UPS,T6
+Inverter bus error,202,101,Inverter control 1 CPU 1,T6
+Inverter bus error,202,102,Inverter control 2 CPU 1,T6
+Inverter bus error,202,103,Inverter control 3 CPU 1,T6
+Inverter bus error,202,104,Inverter control 4 CPU 1,T6
+Inverter bus error,202,105,Inverter control 5 CPU 1,T6
+Inverter bus error,202,106,Inverter control 6 CPU 1,T6
+Inverter bus error,202,107,Inverter control 7 CPU 1,T6
+Inverter bus error,202,108,Inverter control 8 CPU 1,T6
+Inverter bus error,202,109,Inverter control 9 CPU 1,T6
+Inverter bus error,202,110,Inverter control 10 CPU 1,T6
+Inverter bus error,202,111,Inverter control 11 CPU 1,T6
+Inverter bus error,202,112,Inverter control 12 CPU 1,T6
+Inverter bus error,202,113,Inverter control 13 CPU 1,T6
+Inverter bus error,202,114,Inverter control 14 CPU 1,T6
+Inverter bus error,202,119,Several Inverter Controls,T6
+Inverter bus error,202,201,Inverter control 1 CPU 2,T6
+Inverter bus error,202,202,Inverter control 2 CPU 2,T6
+Inverter bus error,202,203,Inverter control 3 CPU 2,T6
+Inverter bus error,202,204,Inverter control 4 CPU 2,T6
+Inverter bus error,202,205,Inverter control 5 CPU 2,T6
+Inverter bus error,202,206,Inverter control 6 CPU 2,T6
+Inverter bus error,202,207,Inverter control 7 CPU 2,T6
+Inverter bus error,202,208,Inverter control 8 CPU 2,T6
+Inverter bus error,202,209,Inverter control 9 CPU 2,T6
+Inverter bus error,202,210,Inverter control 10 CPU 2,T6
+Inverter bus error,202,211,Inverter control 11 CPU 2,T6
+Inverter bus error,202,212,Inverter control 12 CPU 2,T6
+Inverter bus error,202,213,Inverter control 13 CPU 2,T6
+Inverter bus error,202,214,Inverter control 14 CPU 2,T6
+Inverter bus error,202,301,Inverter control 1 CPU 1+2,T6
+Inverter bus error,202,302,Inverter control 2 CPU 1+2,T6
+Inverter bus error,202,303,Inverter control 3 CPU 1+2,T6
+Inverter bus error,202,304,Inverter control 4 CPU 1+2,T6
+Inverter bus error,202,305,Inverter control 5 CPU 1+2,T6
+Inverter bus error,202,306,Inverter control 6 CPU 1+2,T6
+Inverter bus error,202,307,Inverter control 7 CPU 1+2,T6
+Inverter bus error,202,308,Inverter control 8 CPU 1+2,T6
+Inverter bus error,202,309,Inverter control 9 CPU 1+2,T6
+Inverter bus error,202,310,Inverter control 10 CPU 1+2,T6
+Inverter bus error,202,311,Inverter control 11 CPU 1+2,T6
+Inverter bus error,202,312,Inverter control 12 CPU 1+2,T6
+Inverter bus error,202,313,Inverter control 13 CPU 1+2,T6
+Inverter bus error,202,314,Inverter control 14 CPU 1+2,T6
+Data bus error all inverters,204,0,,T6
+Data bus error all inverters,204,33,Ethernet: No link,T6
+No data from power control,206,101,Inverter control 1 CPU1 CAN1,T6
+No data from power control,206,102,Inverter control 2 CPU1 CAN1,T6
+No data from power control,206,103,Inverter control 3 CPU1 CAN1,T6
+No data from power control,206,104,Inverter control 4 CPU1 CAN1,T6
+No data from power control,206,105,Inverter control 5 CPU1 CAN1,T6
+No data from power control,206,106,Inverter control 6 CPU1 CAN1,T6
+No data from power control,206,107,Inverter control 7 CPU1 CAN1,T6
+No data from power control,206,108,Inverter control 8 CPU1 CAN1,T6
+No data from power control,206,109,Inverter control 9 CPU1 CAN1,T6
+No data from power control,206,110,Inverter control 10 CPU1 CAN1,T6
+No data from power control,206,111,Inverter control 11 CPU1 CAN1,T6
+No data from power control,206,112,Inverter control 12 CPU1 CAN1,T6
+No data from power control,206,113,Inverter control 13 CPU1 CAN1,T6
+No data from power control,206,114,Inverter control 14 CPU1 CAN1,T6
+No data from power control,206,119,Several inverter control CPU1 CAN1,T6
+No data from power control,206,201,Inverter control 1 CPU2 CAN1,T6
+No data from power control,206,202,Inverter control 2 CPU2 CAN1,T6
+No data from power control,206,203,Inverter control 3 CPU2 CAN1,T6
+No data from power control,206,204,Inverter control 4 CPU2 CAN1,T6
+No data from power control,206,205,Inverter control 5 CPU2 CAN1,T6
+No data from power control,206,206,Inverter control 6 CPU2 CAN1,T6
+No data from power control,206,207,Inverter control 7 CPU2 CAN1,T6
+No data from power control,206,208,Inverter control 8 CPU2 CAN1,T6
+No data from power control,206,209,Inverter control 9 CPU2 CAN1,T6
+No data from power control,206,210,Inverter control 10 CPU2 CAN1,T6
+No data from power control,206,211,Inverter control 11 CPU2 CAN1,T6
+No data from power control,206,212,Inverter control 12 CPU2 CAN1,T6
+No data from power control,206,213,Inverter control 13 CPU2 CAN1,T6
+No data from power control,206,214,Inverter control 14 CPU2 CAN1,T6
+No data from power control,206,219,Several inverter control CPU2 CAN1,T6
+No data from power control,206,301,Inverter control 1 CPU1 CAN2,T6
+No data from power control,206,302,Inverter control 2 CPU1 CAN2,T6
+No data from power control,206,303,Inverter control 3 CPU1 CAN2,T6
+No data from power control,206,304,Inverter control 4 CPU1 CAN2,T6
+No data from power control,206,305,Inverter control 5 CPU1 CAN2,T6
+No data from power control,206,306,Inverter control 6 CPU1 CAN2,T6
+No data from power control,206,307,Inverter control 7 CPU1 CAN2,T6
+No data from power control,206,308,Inverter control 8 CPU1 CAN2,T6
+No data from power control,206,309,Inverter control 9 CPU1 CAN2,T6
+No data from power control,206,310,Inverter control 10 CPU1 CAN2,T6
+No data from power control,206,311,Inverter control 11 CPU1 CAN2,T6
+No data from power control,206,312,Inverter control 12 CPU1 CAN2,T6
+No data from power control,206,313,Inverter control 13 CPU1 CAN2,T6
+No data from power control,206,314,Inverter control 14 CPU1 CAN2,T6
+No data from power control,206,319,Several inverter control CPU1 CAN2,T6
+No data from power control,206,401,Inverter control 1 CPU2 CAN2,T6
+No data from power control,206,402,Inverter control 2 CPU2 CAN2,T6
+No data from power control,206,403,Inverter control 3 CPU2 CAN2,T6
+No data from power control,206,404,Inverter control 4 CPU2 CAN2,T6
+No data from power control,206,405,Inverter control 5 CPU2 CAN2,T6
+No data from power control,206,406,Inverter control 6 CPU2 CAN2,T6
+No data from power control,206,407,Inverter control 7 CPU2 CAN2,T6
+No data from power control,206,408,Inverter control 8 CPU2 CAN2,T6
+No data from power control,206,409,Inverter control 9 CPU2 CAN2,T6
+No data from power control,206,410,Inverter control 10 CPU2 CAN2,T6
+No data from power control,206,411,Inverter control 11 CPU2 CAN2,T6
+No data from power control,206,412,Inverter control 12 CPU2 CAN2,T6
+No data from power control,206,413,Inverter control 13 CPU2 CAN2,T6
+No data from power control,206,414,Inverter control 14 CPU2 CAN2,T6
+No data from power control,206,419,Several inverter control CPU2 CAN2,T6
+Fault inverter control,207,101,No data from CPU 1 inv. contr. 1,T6
+Fault inverter control,207,102,No data from CPU 1 inv. contr. 2,T6
+Fault inverter control,207,103,No data from CPU 1 inv. contr. 3,T6
+Fault inverter control,207,104,No data from CPU 1 inv. contr. 4,T6
+Fault inverter control,207,105,No data from CPU 1 inv. contr. 5,T6
+Fault inverter control,207,106,No data from CPU 1 inv. contr. 6,T6
+Fault inverter control,207,107,No data from CPU 1 inv. contr. 7,T6
+Fault inverter control,207,108,No data from CPU 1 inv. contr. 8,T6
+Fault inverter control,207,109,No data from CPU 1 inv. contr. 9,T6
+Fault inverter control,207,110,No data from CPU 1 inv. contr. 10,T6
+Fault inverter control,207,111,No data from CPU 1 inv. contr. 11,T6
+Fault inverter control,207,112,No data from CPU 1 inv. contr. 12,T6
+Fault inverter control,207,113,No data from CPU 1 inv. contr. 13,T6
+Fault inverter control,207,114,No data from CPU 1 inv. contr. 14,T6
+Fault inverter control,207,201,No data from CPU 2 inv. contr. 1,T6
+Fault inverter control,207,202,No data from CPU 2 inv. contr. 2,T6
+Fault inverter control,207,203,No data from CPU 2 inv. contr. 3,T6
+Fault inverter control,207,204,No data from CPU 2 inv. contr. 4,T6
+Fault inverter control,207,205,No data from CPU 2 inv. contr. 5,T6
+Fault inverter control,207,206,No data from CPU 2 inv. contr. 6,T6
+Fault inverter control,207,207,No data from CPU 2 inv. contr. 7,T6
+Fault inverter control,207,208,No data from CPU 2 inv. contr. 8,T6
+Fault inverter control,207,209,No data from CPU 2 inv. contr. 9,T6
+Fault inverter control,207,210,No data from CPU 2 inv. contr. 10,T6
+Fault inverter control,207,211,No data from CPU 2 inv. contr. 11,T6
+Fault inverter control,207,212,No data from CPU 2 inv. contr. 12,T6
+Fault inverter control,207,213,No data from CPU 2 inv. contr. 13,T6
+Fault inverter control,207,214,No data from CPU 2 inv. contr. 14,T6
+Fault inverter control,207,401,FPGA inverter 1,T6
+Fault inverter control,207,402,FPGA inverter 2,T6
+Fault inverter control,207,403,FPGA inverter 3,T6
+Fault inverter control,207,404,FPGA inverter 4,T6
+Fault inverter control,207,405,FPGA inverter 5,T6
+Fault inverter control,207,406,FPGA inverter 6,T6
+Fault inverter control,207,407,FPGA inverter 7,T6
+Fault inverter control,207,408,FPGA inverter 8,T6
+Fault inverter control,207,414,FPGA inverter 14,T6
+Fault inverter control,207,419,FPGA several inverters,T6
+Processor reset,220,10,UPS CPU1,T6
+Processor reset,220,11,UPS CPU2,T6
+Processor reset,220,13,Blade load control A,T6
+Processor reset,220,14,Blade load control B,T6
+Processor reset,220,15,Blade load control C,T6
+Processor reset,220,17,Blade A,T6
+Processor reset,220,18,Blade B,T6
+Processor reset,220,19,Blade C,T6
+Processor reset,220,25,Excitation,T6
+Processor reset,220,30,Farm-Control-Interface,T6
+Processor reset,220,33,Power Control,T6
+Processor reset,220,37,Decoupling Protection,T6
+Processor reset,220,51,Yaw inverter 1,T6
+Processor reset,220,52,Yaw inverter 2,T6
+Processor reset,220,56,Fan inverter,T6
+Processor reset,220,61,Anemometer Interface,T6
+Processor reset,220,62,Anemometer Interface 2,T6
+Processor reset,220,68,Ice Detection Interface,T6
+Processor reset,220,82,I/O-board 2 control cabinet,T6
+Processor reset,220,83,I/O-board 1 nacelle,T6
+Processor reset,220,84,I/O-board 2 nacelle,T6
+Processor reset,220,91,Isolation monitoring,T6
+Processor reset,220,97,Rectifier 1,T6
+Processor reset,220,98,Rectifier 2,T6
+Processor reset,220,110,Display,T6
+Processor reset,220,118,Energy Storage UPS,T6
+Processor reset,220,121,Bus-Interface,T6
+Processor reset,220,201,Inverter control 1 CPU 1,T6
+Processor reset,220,202,Inverter control 2 CPU 1,T6
+Processor reset,220,203,Inverter control 3 CPU 1,T6
+Processor reset,220,204,Inverter control 4 CPU 1,T6
+Processor reset,220,205,Inverter control 5 CPU 1,T6
+Processor reset,220,206,Inverter control 6 CPU 1,T6
+Processor reset,220,207,Inverter control 7 CPU 1,T6
+Processor reset,220,208,Inverter control 8 CPU 1,T6
+Processor reset,220,209,Inverter control 9 CPU 1,T6
+Processor reset,220,210,Inverter control 10 CPU 1,T6
+Processor reset,220,211,Inverter control 11 CPU 1,T6
+Processor reset,220,212,Inverter control 12 CPU 1,T6
+Processor reset,220,213,Inverter control 13 CPU 1,T6
+Processor reset,220,214,Inverter control 1 CPU 14,T6
+Processor reset,220,219,Several Inverter Controls,T6
+Processor reset,220,301,Inverter control 1 CPU 2,T6
+Processor reset,220,302,Inverter control 2 CPU 2,T6
+Processor reset,220,303,Inverter control 3 CPU 2,T6
+Processor reset,220,304,Inverter control 4 CPU 2,T6
+Processor reset,220,305,Inverter control 5 CPU 2,T6
+Processor reset,220,306,Inverter control 6 CPU 2,T6
+Processor reset,220,307,Inverter control 7 CPU 2,T6
+Processor reset,220,308,Inverter control 8 CPU 2,T6
+Processor reset,220,309,Inverter control 9 CPU 2,T6
+Processor reset,220,310,Inverter control 10 CPU 2,T6
+Processor reset,220,311,Inverter control 11 CPU 2,T6
+Processor reset,220,312,Inverter control 12 CPU 2,T6
+Processor reset,220,313,Inverter control 13 CPU 2,T6
+Processor reset,220,314,Inverter control 14 CPU 2,T6
+Watchdog reset,221,10,UPS CPU1,T6
+Watchdog reset,221,11,UPS CPU2,T6
+Watchdog reset,221,13,Blade load control A,T6
+Watchdog reset,221,14,Blade load control B,T6
+Watchdog reset,221,15,Blade load control C,T6
+Watchdog reset,221,17,Blade A,T6
+Watchdog reset,221,18,Blade B,T6
+Watchdog reset,221,19,Blade C,T6
+Watchdog reset,221,25,Excitation,T6
+Watchdog reset,221,30,Farm-Control-Interface,T6
+Watchdog reset,221,33,Power Control,T6
+Watchdog reset,221,37,Decoupling Protection,T6
+Watchdog reset,221,51,Yaw inverter 1,T6
+Watchdog reset,221,52,Yaw inverter 2,T6
+Watchdog reset,221,56,Fan inverter,T6
+Watchdog reset,221,61,Anemometer Interface,T6
+Watchdog reset,221,62,Anemometer Interface 2,T6
+Watchdog reset,221,68,Ice Detection Interface,T6
+Watchdog reset,221,81,I/O-board control cabinet,T6
+Watchdog reset,221,82,I/O-board 2 control cabinet,T6
+Watchdog reset,221,83,I/O-board 1 nacelle,T6
+Watchdog reset,221,84,I/O-board 2 nacelle,T6
+Watchdog reset,221,91,Isolation monitoring,T6
+Watchdog reset,221,97,Rectifier 1,T6
+Watchdog reset,221,98,Rectifier 2,T6
+Watchdog reset,221,110,Display,T6
+Watchdog reset,221,118,Energy Storage UPS,T6
+Watchdog reset,221,121,Bus-Interface,T6
+Watchdog reset,221,201,Inverter control 1 CPU 1,T6
+Watchdog reset,221,202,Inverter control 2 CPU 1,T6
+Watchdog reset,221,203,Inverter control 3 CPU 1,T6
+Watchdog reset,221,204,Inverter control 4 CPU 1,T6
+Watchdog reset,221,205,Inverter control 5 CPU 1,T6
+Watchdog reset,221,206,Inverter control 6 CPU 1,T6
+Watchdog reset,221,207,Inverter control 7 CPU 1,T6
+Watchdog reset,221,208,Inverter control 8 CPU 1,T6
+Watchdog reset,221,209,Inverter control 9 CPU 1,T6
+Watchdog reset,221,210,Inverter control 10 CPU 1,T6
+Watchdog reset,221,211,Inverter control 11 CPU 1,T6
+Watchdog reset,221,212,Inverter control 12 CPU 1,T6
+Watchdog reset,221,213,Inverter control 13 CPU 1,T6
+Watchdog reset,221,214,Inverter control 14 CPU 1,T6
+Watchdog reset,221,219,Several Inverter Controls,T6
+Watchdog reset,221,301,Inverter control 1 CPU 2,T6
+Watchdog reset,221,302,Inverter control 2 CPU 2,T6
+Watchdog reset,221,303,Inverter control 3 CPU 2,T6
+Watchdog reset,221,304,Inverter control 4 CPU 2,T6
+Watchdog reset,221,305,Inverter control 5 CPU 2,T6
+Watchdog reset,221,306,Inverter control 6 CPU 2,T6
+Watchdog reset,221,307,Inverter control 7 CPU 2,T6
+Watchdog reset,221,308,Inverter control 8 CPU 2,T6
+Watchdog reset,221,309,Inverter control 9 CPU 2,T6
+Watchdog reset,221,310,Inverter control 10 CPU 2,T6
+Watchdog reset,221,311,Inverter control 11 CPU 2,T6
+Watchdog reset,221,312,Inverter control 12 CPU 2,T6
+Watchdog reset,221,313,Inverter control 13 CPU 2,T6
+Watchdog reset,221,314,Inverter control 14 CPU 2,T6
+Turbine reset,222,1,Power failure,T6
+Turbine reset,222,2,Quit button,T6
+Turbine reset,222,3,Scada system,T6
+Turbine reset,222,4,Quit button nacelle,T6
+Turbine reset,222,5,Remote display,T6
+Turbine reset,222,6,Automatic,T6
+Turbine reset,222,7,SCADA: hardware reset,T6
+Turbine reset,222,11,Automatic: hardware reset,T1
+Turbine reset,222,12,Remote display: hardware reset,T1
+Software update,223,81,I/O-board control cabinet,T6
+Software update,223,82,I/O-board 2 control cabinet,T6
+Software update,223,83,I/O-board 1 nacelle,T6
+Software update,223,84,I/O-board 2 nacelle,T6
+Software update,223,110,Display,T6
+Timeout warning message,228,9,Generator heating,T6
+Timeout warning message,228,14,Formation of ice,T6
+Timeout warning message,228,20,Fault wind measurement,T6
+Timeout warning message,228,22,Fault yaw control,T6
+Timeout warning message,228,25,Fault yaw inverter,T6
+Timeout warning message,228,26,Fault fan inverter,T6
+Timeout warning message,228,29,Anemometer Interface,T6
+Timeout warning message,228,31,Tower oscillation,T6
+Timeout warning message,228,46,Fault capacitor test,T6
+Timeout warning message,228,47,Fault safety system,T6
+Timeout warning message,228,48,Speed sensor error,T6
+Timeout warning message,228,49,Fault blade load control,T6
+Timeout warning message,228,50,Monitoring sensor,T6
+Timeout warning message,228,55,Bladeheating faulty,T6
+Timeout warning message,228,58,Fault lubrication system,T6
+Timeout warning message,228,60,Mains failure,T6
+Timeout warning message,228,62,Feeding fault,T6
+Timeout warning message,228,65,Overvoltage inverter,T6
+Timeout warning message,228,66,Fault rectifier,T6
+Timeout warning message,228,72,Air gap monitoring,T6
+Timeout warning message,228,80,Fault Excitation,T6
+Timeout warning message,228,90,Prot. circuit-breaker tripped,T6
+Timeout warning message,228,95,Fault temperature-measurement,T6
+Timeout warning message,228,100,Fault air cooling,T6
+Timeout warning message,228,101,Fault water cooling,T6
+Timeout warning message,228,112,Smoke detector,T6
+Timeout warning message,228,113,Fire protection system,T6
+Timeout warning message,228,155,Wrong bootblock-address,T6
+Timeout warning message,228,157,Program not current,T6
+Timeout warning message,228,190,Hazard light,T6
+Timeout warning message,228,192,Fault UPS,T6
+Timeout warning message,228,202,Inverter bus error,T6
+Timeout warning message,228,222,Turbine reset,T6
+Timeout warning message,228,230,Power limitation (10h),T6
+Timeout warning message,228,232,General warning,T6
+Timeout warning message,228,233,General warning message,T6
+Timeout warning message,228,235,Tower door,T6
+Timeout warning message,228,306,No data from,T6
+Timeout warning message,228,450,Malfunction battery,T6
+Too many warnings,229,0,,T6
+General status,231,3,Timeout start preparation,T6
+General status,231,12,Rotor blocked,T6
+General status,231,60,Malfunction feedback supply UPS,T6
+General status,231,83,DIP switch position I/O-board 1 nacelle,T6
+General status,231,110,Two displays active,T6
+General status,231,122,Set apparent power transformer!,T6
+General status,231,157,Software update incomplete,T6
+General status,231,171,Isometer: limit and mode analysis,T6
+General status,231,172,Isometer: mode adaptation,T6
+General status,231,173,Isometer: temperature analysis,T6
+General status,231,174,Isometer: adjustment temp. compens.,T6
+Event management,240,0,switched on,T5
+Event management,240,1,switched off,T5
+Event management,240,2,switched off,T5
+Event management,240,3,Grid failure,T5
+Event management,240,4,No response from turbine,T5
+Event management,240,5,Transmission error,T5
+Event management,240,6,Initialization error,T5
+Event management,240,7,General error,T5
+Event management,240,48,No data (WEAKON),T5
+Event management,240,103,Summer time,T5
+Event management,240,104,Winter time,T5
+Event management,240,242,Temporary communication failure,T5
+Event management,240,243,No response from turbine,T5
+Event management,240,244,Common device,T5
+Event management,240,245,Check sum,T5
+Event management,240,246,Timeout receivebuffer,T5
+Event management,240,247,Timeout device,T5
+Event management,240,248,Frame,T5
+Event management,240,249,Overflow device,T5
+Event management,240,250,Parity,T5
+Event management,240,251,Overflow receivebuffer,T5
+Event management,240,252,Error transmission buffer overflow,T5
+Event management,240,253,Error in parameter sender address,T5
+Event management,240,254,Error in sender address parameter,T5
+Turbine control bus error (Bus-Off),300,10,UPS,T6
+Turbine control bus error (Bus-Off),300,17,Blade A,T6
+Turbine control bus error (Bus-Off),300,18,Blade B,T6
+Turbine control bus error (Bus-Off),300,19,Blade C,T6
+Turbine control bus error (Bus-Off),300,25,Excitation,T6
+Turbine control bus error (Bus-Off),300,30,Farm-Control-Interface,T6
+Turbine control bus error (Bus-Off),300,51,Yaw inverter 1,T6
+Turbine control bus error (Bus-Off),300,52,Yaw inverter 2,T6
+Turbine control bus error (Bus-Off),300,56,Fan inverter,T6
+Turbine control bus error (Bus-Off),300,61,Anemometer Interface,T6
+Turbine control bus error (Bus-Off),300,81,I/O-board 1 control cabinet,T6
+Turbine control bus error (Bus-Off),300,82,I/O-board 2 control cabinet,T6
+Turbine control bus error (Bus-Off),300,83,I/O-board 1 nacelle,T6
+Turbine control bus error (Bus-Off),300,84,I/O-board 2 nacelle,T6
+Turbine control bus error (Bus-Off),300,91,Isolation monitoring,T6
+Turbine control bus error (Bus-Off),300,97,Rectifier 1,T6
+Turbine control bus error (Bus-Off),300,98,Rectifier 2,T6
+Turbine control bus error (Bus-Off),300,110,Display,T6
+Turbine control bus error (Bus-Off),300,118,Energy Storage UPS,T6
+Turbine control bus error (Bus-Off),300,121,Bus-Interface,T6
+Feeding control bus error (Bus-Off),301,33,Power control,T6
+Feeding control bus error (Bus-Off),301,81,I/O-board 1 control cabinet,T6
+Feeding control bus error (Bus-Off),301,110,Display,T6
+Data bus error CAN2 (Bus-Off),302,13,Blade load control A,T6
+Data bus error CAN2 (Bus-Off),302,14,Blade load control B,T6
+Data bus error CAN2 (Bus-Off),302,15,Blade load control C,T6
+Data bus error CAN2 (Bus-Off),302,17,Blade A,T6
+Data bus error CAN2 (Bus-Off),302,18,Blade B,T6
+Data bus error CAN2 (Bus-Off),302,19,Blade C,T6
+Data bus error CAN2 (Bus-Off),302,33,Power Control,T6
+Data bus error CAN2 (Bus-Off),302,83,I/O-board 1 nacelle,T6
+Data bus error CAN2 (Bus-Off),302,84,I/O-board 2 nacelle,T6
+Data bus error CAN2 (Bus-Off),302,101,Blade control A (CAN2),T6
+Data bus error CAN2 (Bus-Off),302,102,Angle encoder A,T6
+Data bus error CAN2 (Bus-Off),302,201,Blade control B (CAN2),T6
+Data bus error CAN2 (Bus-Off),302,202,Angle encoder B,T6
+Data bus error CAN2 (Bus-Off),302,301,Blade control C (CAN2),T6
+Data bus error CAN2 (Bus-Off),302,302,Angle encoder C,T6
+Data ring error blade control (CAN3),303,17,Bus-Off blade A,T6
+Data ring error blade control (CAN3),303,18,Bus-Off blade B,T6
+Data ring error blade control (CAN3),303,19,Bus-Off blade C,T6
+Data ring error blade control (CAN3),303,20,Wrong dataset received blade A,T6
+Data ring error blade control (CAN3),303,21,Wrong dataset received blade B,T6
+Data ring error blade control (CAN3),303,22,Wrong dataset received blade C,T6
+Turbine control bus error (Timeout),304,17,Blade A,T6
+Turbine control bus error (Timeout),304,18,Blade B,T6
+Turbine control bus error (Timeout),304,19,Blade C,T6
+Turbine control bus error (Timeout),304,25,Excitation,T6
+Turbine control bus error (Timeout),304,30,Farm-Control-Interface,T6
+Turbine control bus error (Timeout),304,33,Power Control,T6
+Turbine control bus error (Timeout),304,37,Decoupling Protection,T6
+Turbine control bus error (Timeout),304,51,Yaw inverter 1,T6
+Turbine control bus error (Timeout),304,52,Yaw inverter 2,T6
+Turbine control bus error (Timeout),304,56,Fan inverter,T6
+Turbine control bus error (Timeout),304,61,Anemometer Interface,T6
+Turbine control bus error (Timeout),304,62,Anemometer-Interface 2,T6
+Turbine control bus error (Timeout),304,68,Ice Detection Interface,T6
+Turbine control bus error (Timeout),304,81,I/O-board control cabinet,T6
+Turbine control bus error (Timeout),304,82,I/O-board 2 control cabinet,T6
+Turbine control bus error (Timeout),304,83,I/O-board 1 nacelle,T6
+Turbine control bus error (Timeout),304,84,I/O-board 2 nacelle,T6
+Turbine control bus error (Timeout),304,91,Isolation monitoring,T6
+Turbine control bus error (Timeout),304,97,Rectifier 1,T6
+Turbine control bus error (Timeout),304,98,Rectifier 2,T6
+Turbine control bus error (Timeout),304,110,Display,T6
+Turbine control bus error (Timeout),304,117,Smart Energize,T6
+Turbine control bus error (Timeout),304,118,Energy Storage UPS,T6
+Turbine control bus error (Timeout),304,121,Bus-Interface,T6
+Turbine control bus error (Timeout),304,217,Blade A (PDO1 to PDO4),T6
+Turbine control bus error (Timeout),304,218,Blade B (PDO1 to PDO4),T6
+Turbine control bus error (Timeout),304,219,Blade C (PDO1 to PDO4),T6
+No data from I/O-Board 1,305,17,Blade A,T6
+No data from I/O-Board 1,305,18,Blade B,T6
+No data from I/O-Board 1,305,19,Blade C,T6
+No data from I/O-Board 1,305,25,Excitation,T6
+No data from I/O-Board 1,305,30,Farm-Control-Interface,T6
+No data from I/O-Board 1,305,33,Power Control,T6
+No data from I/O-Board 1,305,37,Decoupling Protection,T6
+No data from I/O-Board 1,305,51,Yaw inverter 1,T6
+No data from I/O-Board 1,305,52,Yaw inverter 2,T6
+No data from I/O-Board 1,305,61,Anemometer Interface,T6
+No data from I/O-Board 1,305,81,I/O-board control cabinet,T6
+No data from I/O-Board 1,305,82,I/O-board 2 control cabinet,T6
+No data from I/O-Board 1,305,83,I/O-board 1 nacelle,T6
+No data from I/O-Board 1,305,84,I/O-board 2 nacelle,T6
+No data from I/O-Board 1,305,91,Isolation monitoring,T6
+No data from I/O-Board 1,305,97,Rectifier 1,T6
+No data from I/O-Board 1,305,98,Rectifier 2,T6
+No data from I/O-Board 1,305,110,Display,T6
+No data from I/O-Board 1,305,118,Energy Storage UPS,T6
+No data from I/O-Board 1,305,121,Bus-Interface,T6
+No data from,306,30,VCS for FCI (master),T6
+No data from,306,31,VCS for FCI ( turbine),T6
+No data from,306,37,Decoupling Prot. for Power Control,T6
+No data from,306,51,Yaw inverter 1 for I/O2 nacelle,T6
+No data from,306,52,Yaw inverter 2 for I/O2 nacelle,T6
+No data from,306,61,Anemometer interf. for I/O2 nacelle,T6
+No data from,306,62,Anemometer Interf. 2 for I/O2 nacelle,T6
+No data from,306,83,I/O1 nacelle for fan inverter,T6
+No data from,306,133,CPU2 for CPU1 Power Control,T6
+No data from,306,137,CPU2 for CPU1 Decoupling Protection,T6
+No data from,306,184,I/O2 nacelle for yaw inverter 1,T6
+No data from,306,284,I/O2 nacelle for yaw inverter 2,T6
+No data from,306,302,Labko Ice Detector for I/O 1 Nacelle,T6
+Data bus error blade control (timeout),307,10,Angle encoder blade A,T6
+Data bus error blade control (timeout),307,11,Angle encoder blade B,T6
+Data bus error blade control (timeout),307,12,Angle encoder blade C,T6
+Data bus error blade control (timeout),307,13,Blade load control A,T6
+Data bus error blade control (timeout),307,14,Blade load control B,T6
+Data bus error blade control (timeout),307,15,Blade load control C,T6
+Data bus error blade control (timeout),307,17,Blade A,T6
+Data bus error blade control (timeout),307,18,Blade B,T6
+Data bus error blade control (timeout),307,19,Blade C,T6
+Data bus error blade control (timeout),307,20,Angle encoder 2 blade A,T6
+Data bus error blade control (timeout),307,21,Angle encoder 2 blade B,T6
+Data bus error blade control (timeout),307,22,Angle encoder 2 blade C,T6
+Data bus error blade control (timeout),307,60,Single blade control blade A,T6
+Data bus error blade control (timeout),307,61,Single blade control blade B,T6
+Data bus error blade control (timeout),307,62,Single blade control blade C,T6
+Data bus error blade control (CAN4),308,17,Bus-Off blade A,T6
+Data bus error blade control (CAN4),308,18,Bus-Off blade B,T6
+Data bus error blade control (CAN4),308,19,Bus-Off blade C,T6
+Unknown node-ID,310,1,Unknown ID 1,T6
+Unknown node-ID,310,2,Unknown ID 2,T6
+Unknown node-ID,310,3,Unknown ID 3,T6
+Unknown node-ID,310,4,Unknown ID 4,T6
+Unknown node-ID,310,5,Unknown ID 5,T6
+Unknown node-ID,310,6,Unknown ID 6,T6
+Unknown node-ID,310,7,Unknown ID 7,T6
+Unknown node-ID,310,8,Unknown ID 8,T6
+Unknown node-ID,310,9,Unknown ID 9,T6
+Unknown node-ID,310,10,Unknown ID 10,T6
+Unknown node-ID,310,11,Unknown ID 11,T6
+Unknown node-ID,310,12,Unknown ID 12,T6
+Unknown node-ID,310,13,Unknown ID 13,T6
+Unknown node-ID,310,14,Unknown ID 14,T6
+Unknown node-ID,310,15,Unknown ID 15,T6
+Unknown node-ID,310,16,Unknown ID 16,T6
+Unknown node-ID,310,17,Unknown ID 17,T6
+Unknown node-ID,310,18,Unknown ID 18,T6
+Unknown node-ID,310,19,Unknown ID 19,T6
+Unknown node-ID,310,20,Unknown ID 20,T6
+Unknown node-ID,310,21,Unknown ID 21,T6
+Unknown node-ID,310,22,Unknown ID 22,T6
+Unknown node-ID,310,23,Unknown ID 23,T6
+Unknown node-ID,310,24,Unknown ID 24,T6
+Unknown node-ID,310,25,Unknown ID 25,T6
+Unknown node-ID,310,26,Unknown ID 26,T6
+Unknown node-ID,310,27,Unknown ID 27,T6
+Unknown node-ID,310,28,Unknown ID 28,T6
+Unknown node-ID,310,29,Unknown ID 29,T6
+Unknown node-ID,310,30,Unknown ID 30,T6
+Unknown node-ID,310,31,Unknown ID 31,T6
+Unknown node-ID,310,32,Unknown ID 32,T6
+Unknown node-ID,310,33,Unknown ID 33,T6
+Unknown node-ID,310,34,Unknown ID 34,T6
+Unknown node-ID,310,35,Unknown ID 35,T6
+Unknown node-ID,310,36,Unknown ID 36,T6
+Unknown node-ID,310,37,Unknown ID 37,T6
+Unknown node-ID,310,38,Unknown ID 38,T6
+Unknown node-ID,310,39,Unknown ID 39,T6
+Unknown node-ID,310,40,Unknown ID 40,T6
+Unknown node-ID,310,41,Unknown ID 41,T6
+Unknown node-ID,310,42,Unknown ID 42,T6
+Unknown node-ID,310,43,Unknown ID 43,T6
+Unknown node-ID,310,44,Unknown ID 44,T6
+Unknown node-ID,310,45,Unknown ID 45,T6
+Unknown node-ID,310,46,Unknown ID 46,T6
+Unknown node-ID,310,47,Unknown ID 47,T6
+Unknown node-ID,310,48,Unknown ID 48,T6
+Unknown node-ID,310,49,Unknown ID 49,T6
+Unknown node-ID,310,50,Unknown ID 50,T6
+Unknown node-ID,310,51,Unknown ID 51,T6
+Unknown node-ID,310,52,Unknown ID 52,T6
+Unknown node-ID,310,53,Unknown ID 53,T6
+Unknown node-ID,310,54,Unknown ID 54,T6
+Unknown node-ID,310,55,Unknown ID 55,T6
+Unknown node-ID,310,56,Unknown ID 56,T6
+Unknown node-ID,310,57,Unknown ID 57,T6
+Unknown node-ID,310,58,Unknown ID 58,T6
+Unknown node-ID,310,59,Unknown ID 59,T6
+Unknown node-ID,310,60,Unknown ID 60,T6
+Unknown node-ID,310,61,Unknown ID 61,T6
+Unknown node-ID,310,62,Unknown ID 62,T6
+Unknown node-ID,310,63,Unknown ID 63,T6
+Unknown node-ID,310,64,Unknown ID 64,T6
+Unknown node-ID,310,65,Unknown ID 65,T6
+Unknown node-ID,310,66,Unknown ID 66,T6
+Unknown node-ID,310,67,Unknown ID 67,T6
+Unknown node-ID,310,68,Unknown ID 68,T6
+Unknown node-ID,310,69,Unknown ID 69,T6
+Unknown node-ID,310,70,Unknown ID 70,T6
+Unknown node-ID,310,71,Unknown ID 71,T6
+Unknown node-ID,310,72,Unknown ID 72,T6
+Unknown node-ID,310,73,Unknown ID 73,T6
+Unknown node-ID,310,74,Unknown ID 74,T6
+Unknown node-ID,310,75,Unknown ID 75,T6
+Unknown node-ID,310,76,Unknown ID 76,T6
+Unknown node-ID,310,77,Unknown ID 77,T6
+Unknown node-ID,310,78,Unknown ID 78,T6
+Unknown node-ID,310,79,Unknown ID 79,T6
+Unknown node-ID,310,80,Unknown ID 80,T6
+Unknown node-ID,310,81,Unknown ID 81,T6
+Unknown node-ID,310,82,Unknown ID 82,T6
+Unknown node-ID,310,83,Unknown ID 83,T6
+Unknown node-ID,310,84,Unknown ID 84,T6
+Unknown node-ID,310,85,Unknown ID 85,T6
+Unknown node-ID,310,86,Unknown ID 86,T6
+Unknown node-ID,310,87,Unknown ID 87,T6
+Unknown node-ID,310,88,Unknown ID 88,T6
+Unknown node-ID,310,89,Unknown ID 89,T6
+Unknown node-ID,310,90,Unknown ID 90,T6
+Unknown node-ID,310,91,Unknown ID 91,T6
+Unknown node-ID,310,92,Unknown ID 92,T6
+Unknown node-ID,310,93,Unknown ID 93,T6
+Unknown node-ID,310,94,Unknown ID 94,T6
+Unknown node-ID,310,95,Unknown ID 95,T6
+Unknown node-ID,310,96,Unknown ID 96,T6
+Unknown node-ID,310,97,Unknown ID 97,T6
+Unknown node-ID,310,98,Unknown ID 98,T6
+Unknown node-ID,310,99,Unknown ID 99,T6
+Unknown node-ID,310,100,Unknown ID 100,T6
+Unknown node-ID,310,101,Unknown ID 101,T6
+Unknown node-ID,310,102,Unknown ID 102,T6
+Unknown node-ID,310,103,Unknown ID 103,T6
+Unknown node-ID,310,104,Unknown ID 104,T6
+Unknown node-ID,310,105,Unknown ID 105,T6
+Unknown node-ID,310,106,Unknown ID 106,T6
+Unknown node-ID,310,107,Unknown ID 107,T6
+Unknown node-ID,310,108,Unknown ID 108,T6
+Unknown node-ID,310,109,Unknown ID 109,T6
+Unknown node-ID,310,110,Unknown ID 110,T6
+Unknown node-ID,310,111,Unknown ID 111,T6
+Unknown node-ID,310,112,Unknown ID 112,T6
+Unknown node-ID,310,113,Unknown ID 113,T6
+Unknown node-ID,310,114,Unknown ID 114,T6
+Unknown node-ID,310,115,Unknown ID 115,T6
+Unknown node-ID,310,116,Unknown ID 116,T6
+Unknown node-ID,310,117,Unknown ID 117,T6
+Unknown node-ID,310,118,Unknown ID 118,T6
+Unknown node-ID,310,119,Unknown ID 119,T6
+Unknown node-ID,310,120,Unknown ID 120,T6
+Unknown node-ID,310,121,Unknown ID 121,T6
+Unknown node-ID,310,122,Unknown ID 122,T6
+Unknown node-ID,310,123,Unknown ID 123,T6
+Unknown node-ID,310,124,Unknown ID 124,T6
+Unknown node-ID,310,125,Unknown ID 125,T6
+Unknown node-ID,310,126,Unknown ID 126,T6
+Unknown node-ID,310,127,Unknown ID 127,T6
+Invalid index,315,17,Blade A,T6
+Invalid index,315,18,Blade B,T6
+Invalid index,315,19,Blade C,T6
+Invalid index,315,25,Excitation,T6
+Invalid index,315,30,Farm-Control-Interface,T6
+Invalid index,315,33,Power Control,T6
+Invalid index,315,37,Decoupling Protection,T6
+Invalid index,315,51,Yaw inverter 1,T6
+Invalid index,315,52,Yaw inverter 2,T6
+Invalid index,315,56,Fan inverter,T6
+Invalid index,315,61,Anemometer Interface,T6
+Invalid index,315,62,Anemometer Interface 2,T6
+Invalid index,315,68,Ice Detection Interface,T6
+Invalid index,315,82,I/O-board 2 control cabinet,T6
+Invalid index,315,83,I/O-board 1 nacelle,T6
+Invalid index,315,84,I/O-board 2 nacelle,T6
+Invalid index,315,91,Insulation monitoring,T6
+Invalid index,315,97,Rectifier 1,T6
+Invalid index,315,98,Rectifier 2,T6
+Invalid index,315,110,Display,T6
+Invalid index,315,118,Energy Storage UPS,T6
+Error CAN1-interrupt,318,81,I/O-board 1 control cabinet,T6
+Error CAN1-interrupt,318,82,I/O-board 2 control cabinet,T6
+Error CAN1-interrupt,318,83,I/O-board 1 nacelle,T6
+Error CAN1-interrupt,318,84,I/O-board 2 nacelle,T6
+Error CAN2-interrupt,319,81,I/O-board 1 control cabinet,T6
+Malfunction IIC-bus,320,81,I/O-board 1 control cabinet,T6
+Malfunction IIC-bus,320,82,I/O-board 2 control cabinet,T6
+Malfunction IIC-bus,320,83,I/O-board 1 nacelle,T6
+Malfunction IIC-bus,320,84,I/O-board 2 nacelle,T6
+Checksum error flash,325,10,UPS CPU1,T6
+Checksum error flash,325,11,UPS CPU2,T6
+Checksum error flash,325,13,Blade load control A,T6
+Checksum error flash,325,14,Blade load control B,T6
+Checksum error flash,325,15,Blade load control C,T6
+Checksum error flash,325,17,Blade A,T6
+Checksum error flash,325,18,Blade B,T6
+Checksum error flash,325,19,Blade C,T6
+Checksum error flash,325,25,Excitation,T6
+Checksum error flash,325,30,Farm-Control-Interface,T6
+Checksum error flash,325,33,Power Control,T6
+Checksum error flash,325,37,Decoupling Protection,T6
+Checksum error flash,325,51,Yaw inverter 1,T6
+Checksum error flash,325,52,Yaw inverter 2,T6
+Checksum error flash,325,56,Fan inverter,T6
+Checksum error flash,325,61,Anemometer Interface,T6
+Checksum error flash,325,62,Anemometer Interface 2,T6
+Checksum error flash,325,68,Ice Detection Interface,T6
+Checksum error flash,325,81,I/O-board 1 control cabinet,T6
+Checksum error flash,325,82,I/O-board 2 control cabinet,T6
+Checksum error flash,325,83,I/O-board 1 nacelle,T6
+Checksum error flash,325,84,I/O-board 2 nacelle,T6
+Checksum error flash,325,91,Insulation monitoring,T6
+Checksum error flash,325,97,Rectifier 1,T6
+Checksum error flash,325,98,Rectifier 2,T6
+Checksum error flash,325,110,Display,T6
+Checksum error flash,325,118,Energy Storage UPS,T6
+Checksum error flash,325,201,Inverter Control 1 CPU 1,T6
+Checksum error flash,325,202,Inverter Control 2 CPU 1,T6
+Checksum error flash,325,203,Inverter Control 3 CPU 1,T6
+Checksum error flash,325,204,Inverter Control 4 CPU 1,T6
+Checksum error flash,325,205,Inverter Control 5 CPU 1,T6
+Checksum error flash,325,206,Inverter Control 6 CPU 1,T6
+Checksum error flash,325,207,Inverter Control 7 CPU 1,T6
+Checksum error flash,325,208,Inverter Control 8 CPU 1,T6
+Checksum error flash,325,209,Inverter Control 9 CPU 1,T6
+Checksum error flash,325,210,Inverter Control 10 CPU 1,T6
+Checksum error flash,325,211,Inverter Control 11 CPU 1,T6
+Checksum error flash,325,212,Inverter Control 12 CPU 1,T6
+Checksum error flash,325,213,Inverter Control 13 CPU 1,T6
+Checksum error flash,325,214,Inverter Control 14 CPU 1,T6
+Checksum error flash,325,219,Several Inverter Controls,T6
+Checksum error flash,325,301,Inverter Control 1 CPU 2,T6
+Checksum error flash,325,302,Inverter Control 2 CPU 2,T6
+Checksum error flash,325,303,Inverter Control 3 CPU 2,T6
+Checksum error flash,325,304,Inverter Control 4 CPU 2,T6
+Checksum error flash,325,305,Inverter Control 5 CPU 2,T6
+Checksum error flash,325,306,Inverter Control 6 CPU 2,T6
+Checksum error flash,325,307,Inverter Control 7 CPU 2,T6
+Checksum error flash,325,308,Inverter Control 8 CPU 2,T6
+Checksum error flash,325,309,Inverter Control 9 CPU 2,T6
+Checksum error flash,325,310,Inverter Control 10 CPU 2,T6
+Checksum error flash,325,311,Inverter Control 11 CPU 2,T6
+Checksum error flash,325,312,Inverter Control 12 CPU 2,T6
+Checksum error flash,325,313,Inverter Control 13 CPU 2,T6
+Checksum error flash,325,314,Inverter Control 14 CPU 2,T6
+Checksum error,326,68,Ice Detection Interface,T6
+Checksum error,326,81,Parameter memory I/O-board contr. cab,T6
+Checksum error,326,83,Parameter memory I/O-board 1 nacelle,T6
+Checksum error,326,84,Parameter memory I/O-board 2 nacelle,T6
+Parameter out of range,327,17,Blade A,T6
+Parameter out of range,327,18,Blade B,T6
+Parameter out of range,327,19,Blade C,T6
+Parameter out of range,327,33,Power Control,T6
+Parameter out of range,327,37,Decoupling Protection,T6
+Parameter out of range,327,68,Ice Detection Interface,T6
+Parameter out of range,327,81,I/O-board 1 control cabinet,T6
+Parameter out of range,327,83,I/O-board 1 nacelle,T6
+Parameter out of range,327,84,I/O-board 2 nacelle,T6
+Fault EEPROM,328,10,UPS,T6
+Fault EEPROM,328,13,Blade load control A,T6
+Fault EEPROM,328,14,Blade load control B,T6
+Fault EEPROM,328,15,Blade load control C,T6
+Fault EEPROM,328,17,Blade A,T6
+Fault EEPROM,328,18,Blade B,T6
+Fault EEPROM,328,19,Blade C,T6
+Fault EEPROM,328,25,Excitation,T6
+Fault EEPROM,328,30,Farm-Control-Interface,T6
+Fault EEPROM,328,33,Power Control,T6
+Fault EEPROM,328,37,Decoupling Protection,T6
+Fault EEPROM,328,51,Yaw inverter 1,T6
+Fault EEPROM,328,52,Yaw inverter 2,T6
+Fault EEPROM,328,56,Fan inverter,T6
+Fault EEPROM,328,61,Anemometer Interface,T6
+Fault EEPROM,328,62,Anemometer Interface 2,T6
+Fault EEPROM,328,81,I/O-board 1 control cabinet,T6
+Fault EEPROM,328,82,I/O-board 2 control cabinet,T6
+Fault EEPROM,328,83,I/O-board 1 nacelle,T6
+Fault EEPROM,328,84,I/O-board 2 nacelle,T6
+Fault EEPROM,328,97,Rectifier 1,T6
+Fault EEPROM,328,98,Rectifier 2,T6
+Fault EEPROM,328,110,Display,T6
+Fault EEPROM,328,118,Energy Storage UPS,T6
+Fault EEPROM,328,201,Inverter Control 1 CPU 1,T6
+Fault EEPROM,328,202,Inverter Control 2 CPU 1,T6
+Fault EEPROM,328,203,Inverter Control 3 CPU 1,T6
+Fault EEPROM,328,204,Inverter Control 4 CPU 1,T6
+Fault EEPROM,328,205,Inverter Control 5 CPU 1,T6
+Fault EEPROM,328,206,Inverter Control 6 CPU 1,T6
+Fault EEPROM,328,207,Inverter Control 7 CPU 1,T6
+Fault EEPROM,328,208,Inverter Control 8 CPU 1,T6
+Fault EEPROM,328,209,Inverter Control 9 CPU 1,T6
+Fault EEPROM,328,210,Inverter Control 10 CPU 1,T6
+Fault EEPROM,328,211,Inverter Control 11 CPU 1,T6
+Fault EEPROM,328,212,Inverter Control 12 CPU 1,T6
+Fault EEPROM,328,213,Inverter Control 13 CPU 1,T6
+Fault EEPROM,328,214,Inverter Control 14 CPU 1,T6
+Fault EEPROM,328,219,Several Inverter Controls,T6
+Fault EEPROM,328,301,Inverter Control 1 CPU 2,T6
+Fault EEPROM,328,302,Inverter Control 2 CPU 2,T6
+Fault EEPROM,328,303,Inverter Control 3 CPU 2,T6
+Fault EEPROM,328,304,Inverter Control 4 CPU 2,T6
+Fault EEPROM,328,305,Inverter Control 5 CPU 2,T6
+Fault EEPROM,328,306,Inverter Control 6 CPU 2,T6
+Fault EEPROM,328,307,Inverter Control 7 CPU 2,T6
+Fault EEPROM,328,308,Inverter Control 8 CPU 2,T6
+Fault EEPROM,328,309,Inverter Control 9 CPU 2,T6
+Fault EEPROM,328,310,Inverter Control 10 CPU 2,T6
+Fault EEPROM,328,311,Inverter Control 11 CPU 2,T6
+Fault EEPROM,328,312,Inverter Control 12 CPU 2,T6
+Fault EEPROM,328,313,Inverter Control 13 CPU 2,T6
+Fault EEPROM,328,314,Inverter Control 14 CPU 2,T6
+Malfunktion real-time-clock,330,81,I/O-board 1 control cabinet,T6
+Malfunktion real-time-clock,330,82,I/O-board 2 control cabinet,T6
+Malfunktion real-time-clock,330,83,I/O-board 1 nacelle,T6
+Malfunktion real-time-clock,330,84,I/O-board 2 nacelle,T6
+Error +12V processor,402,2,Excitation,T6
+Error +12V processor,402,13,Blade load control A,T6
+Error +12V processor,402,14,Blade load control B,T6
+Error +12V processor,402,15,Blade load control C,T6
+Error +12V processor,402,17,Blade A,T6
+Error +12V processor,402,18,Blade B,T6
+Error +12V processor,402,19,Blade C,T6
+Error +12V processor,402,33,Power Control,T6
+Error +12V processor,402,37,Decoupling Protection,T6
+Error +12V processor,402,61,Anemometer Interface,T6
+Error +12V processor,402,62,Anemometer Interface 2,T6
+Error +12V processor,402,97,Rectifier 1,T6
+Error +12V processor,402,98,Rectifier 2,T6
+Error +12V processor,402,201,Inverter Control 1,T6
+Error +12V processor,402,202,Inverter Control 2,T6
+Error +12V processor,402,203,Inverter Control 3,T6
+Error +12V processor,402,204,Inverter Control 4,T6
+Error +12V processor,402,205,Inverter Control 5,T6
+Error +12V processor,402,206,Inverter Control 6,T6
+Error +12V processor,402,207,Inverter Control 7,T6
+Error +12V processor,402,208,Inverter Control 8,T6
+Error +12V processor,402,209,Inverter Control 9,T6
+Error +12V processor,402,210,Inverter Control 10,T6
+Error +12V processor,402,211,Inverter Control 11,T6
+Error +12V processor,402,212,Inverter Control 12,T6
+Error +12V processor,402,213,Inverter Control 13,T6
+Error +12V processor,402,214,Inverter Control 14,T6
+Error +12V processor,402,219,Several Inverter Controls,T6
+Error -12V processor,403,3,Excitation,T6
+Error -12V processor,403,17,Blade A,T6
+Error -12V processor,403,18,Blade B,T6
+Error -12V processor,403,19,Blade C,T6
+Error -12V processor,403,33,Power Control,T6
+Error -12V processor,403,37,Decoupling Protection,T6
+Error -12V processor,403,61,Anemometer Interface,T6
+Error -12V processor,403,62,Anemometer Interface 2,T6
+Error -12V processor,403,97,Rectifier 1,T6
+Error -12V processor,403,98,Rectifier 2,T6
+Error -12V processor,403,201,Inverter Control 1,T6
+Error -12V processor,403,202,Inverter Control 2,T6
+Error -12V processor,403,203,Inverter Control 3,T6
+Error -12V processor,403,204,Inverter Control 4,T6
+Error -12V processor,403,205,Inverter Control 5,T6
+Error -12V processor,403,206,Inverter Control 6,T6
+Error -12V processor,403,207,Inverter Control 7,T6
+Error -12V processor,403,208,Inverter Control 8,T6
+Error -12V processor,403,209,Inverter Control 9,T6
+Error -12V processor,403,210,Inverter Control 10,T6
+Error -12V processor,403,211,Inverter Control 11,T6
+Error -12V processor,403,212,Inverter Control 12,T6
+Error -12V processor,403,213,Inverter Control 13,T6
+Error -12V processor,403,214,Inverter Control 14,T6
+Error -12V processor,403,219,Several Inverter Controls,T6
+Error +15V processor,404,97,Rectifier 1,T6
+Error +15V processor,404,98,Rectifier 2,T6
+Error +15V processor,404,201,Inverter Control 1,T6
+Error +15V processor,404,202,Inverter Control 2,T6
+Error +15V processor,404,203,Inverter Control 3,T6
+Error +15V processor,404,204,Inverter Control 4,T6
+Error +15V processor,404,205,Inverter Control 5,T6
+Error +15V processor,404,206,Inverter Control 6,T6
+Error +15V processor,404,207,Inverter Control 7,T6
+Error +15V processor,404,208,Inverter Control 8,T6
+Error +15V processor,404,209,Inverter Control 9,T6
+Error +15V processor,404,210,Inverter Control 10,T6
+Error +15V processor,404,211,Inverter Control 11,T6
+Error +15V processor,404,212,Inverter Control 12,T6
+Error +15V processor,404,213,Inverter Control 13,T6
+Error +15V processor,404,214,Inverter Control 14,T6
+Error +15V processor,404,219,Several Inverter Controls,T6
+Error –15V processor,405,201,Inverter Control 1,T6
+Error –15V processor,405,202,Inverter Control 2,T6
+Error –15V processor,405,203,Inverter Control 3,T6
+Error –15V processor,405,204,Inverter Control 4,T6
+Error –15V processor,405,205,Inverter Control 5,T6
+Error –15V processor,405,206,Inverter Control 6,T6
+Error –15V processor,405,207,Inverter Control 7,T6
+Error –15V processor,405,208,Inverter Control 8,T6
+Error –15V processor,405,209,Inverter Control 9,T6
+Error –15V processor,405,210,Inverter Control 10,T6
+Error –15V processor,405,211,Inverter Control 11,T6
+Error –15V processor,405,212,Inverter Control 12,T6
+Error –15V processor,405,213,Inverter Control 13,T6
+Error –15V processor,405,214,Inverter Control 14,T6
+Error –15V processor,405,219,Several Inverter Controls,T6
+Error +4V ref. processor,411,97,Rectifier 1,T6
+Error +4V ref. processor,411,98,Rectifier 2,T6
+Error +5V ref. processor,412,17,Blade A,T6
+Error +5V ref. processor,412,18,Blade B,T6
+Error +5V ref. processor,412,19,Blade C,T6
+Error -5V ref. processor,413,0,,T6
+Error +10V ref. processor,414,201,Inverter control 1,T6
+Error +10V ref. processor,414,202,Inverter control 2,T6
+Error +10V ref. processor,414,203,Inverter control 3,T6
+Error +10V ref. processor,414,204,Inverter control 4,T6
+Error +10V ref. processor,414,205,Inverter control 5,T6
+Error +10V ref. processor,414,206,Inverter control 6,T6
+Error +10V ref. processor,414,207,Inverter control 7,T6
+Error +10V ref. processor,414,208,Inverter control 8,T6
+Error +10V ref. processor,414,209,Inverter control 9,T6
+Error +10V ref. processor,414,210,Inverter control 10,T6
+Error +10V ref. processor,414,211,Inverter control 11,T6
+Error +10V ref. processor,414,212,Inverter control 12,T6
+Error +10V ref. processor,414,213,Inverter control 13,T6
+Error +10V ref. processor,414,214,Inverter control 14,T6
+Error +10V ref. processor,414,219,Several Inverter Controls,T6
+Error -10V ref. processor,415,0,,T6
+Error -10V ref. processor,421,17,Blade A,T6
+Error -10V ref. processor,421,18,Blade B,T6
+Error -10V ref. processor,421,19,Blade C,T6
+Error +12V sensoric,422,0,,T6
+Error +12V sensoric,422,33,Power control,T6
+Error –12V sensor system,423,17,Blade A,T6
+Error –12V sensor system,423,18,Blade B,T6
+Error –12V sensor system,423,19,Blade C,T6
+Error –12V sensor system,423,33,Power control,T6
+Error –12V sensor system,423,61,Anemometer Interface,T6
+Error –12V sensor system,423,62,Anemometer Interface 2,T6
+Error +15V sensor system,424,17,Blade A,T6
+Error +15V sensor system,424,18,Blade B,T6
+Error +15V sensor system,424,19,Blade C,T6
+Error +15V sensor system,424,33,Power control,T6
+Error +15V sensor system,424,37,Decoupling Protection,T6
+Error +15V sensor system,424,61,Anemometer interface,T6
+Error +15V sensor system,424,62,Anemometer Interface 2,T6
+Error +15V sensor system,424,81,I/O-board 1 control cabinet,T6
+Error +15V sensor system,424,82,I/O-board 2 control cabinet,T6
+Error +15V sensor system,424,83,I/O-board 1 nacelle,T6
+Error +15V sensor system,424,84,I/O-board 2 nacelle,T6
+Error +15V sensor system,424,201,Inverter Control 1,T6
+Error +15V sensor system,424,202,Inverter Control 2,T6
+Error +15V sensor system,424,203,Inverter Control 3,T6
+Error +15V sensor system,424,204,Inverter Control 4,T6
+Error +15V sensor system,424,205,Inverter Control 5,T6
+Error +15V sensor system,424,206,Inverter Control 6,T6
+Error +15V sensor system,424,207,Inverter Control 7,T6
+Error +15V sensor system,424,208,Inverter Control 8,T6
+Error +15V sensor system,424,209,Inverter Control 9,T6
+Error +15V sensor system,424,210,Inverter Control 10,T6
+Error +15V sensor system,424,211,Inverter Control 11,T6
+Error +15V sensor system,424,212,Inverter Control 12,T6
+Error +15V sensor system,424,213,Inverter Control 13,T6
+Error +15V sensor system,424,214,Inverter Control 14,T6
+Error +15V sensor system,424,219,Several Inverter Controls,T6
+Error –15V sensor system,425,13,Blade load control A,T6
+Error –15V sensor system,425,14,Blade load control B,T6
+Error –15V sensor system,425,15,Blade load control C,T6
+Error –15V sensor system,425,33,Power Control,T6
+Error –15V sensor system,425,37,Decoupling Protection,T6
+Error –15V sensor system,425,81,I/O-board 1 control cabinet,T6
+Error –15V sensor system,425,82,I/O-board 2 control cabinet,T6
+Error –15V sensor system,425,83,I/O-board 1 nacelle,T6
+Error –15V sensor system,425,84,I/O-board 2 nacelle,T6
+Error –15V sensor system,425,201,Inverter Control 1,T6
+Error –15V sensor system,425,202,Inverter Control 2,T6
+Error –15V sensor system,425,203,Inverter Control 3,T6
+Error –15V sensor system,425,204,Inverter Control 4,T6
+Error –15V sensor system,425,205,Inverter Control 5,T6
+Error –15V sensor system,425,206,Inverter Control 6,T6
+Error –15V sensor system,425,207,Inverter Control 7,T6
+Error –15V sensor system,425,208,Inverter Control 8,T6
+Error –15V sensor system,425,209,Inverter Control 9,T6
+Error –15V sensor system,425,210,Inverter Control 10,T6
+Error –15V sensor system,425,211,Inverter Control 11,T6
+Error –15V sensor system,425,212,Inverter Control 12,T6
+Error –15V sensor system,425,213,Inverter Control 13,T6
+Error –15V sensor system,425,214,Inverter Control 14,T6
+Error –15V sensor system,425,219,Several Inverter Controls,T6
+Error +20V sensoric,426,81,I/O-board 1 control cabinet,T6
+Error +20V sensoric,426,82,I/O-board 2 control cabinet,T6
+Error +20V sensoric,426,83,I/O-board 1 nacelle,T6
+Error +20V sensoric,426,84,I/O-board 2 nacelle,T6
+Error -20V sensoric,427,0,,T6
+Error +12V relays,428,33,Power Control,T6
+Error +12V relays,428,37,Decoupling Protection,T6
+Error +12V relays,428,81,I/O-board 1 control cabinet,T6
+Error +12V relays,428,82,I/O-board 2 control cabinet,T6
+Error +12V relays,428,83,I/O-board 1 nacelle,T6
+Error +12V relays,428,84,I/O-board 2 nacelle,T6
+Error supply hardware,429,37,Auxiliary supply Decoupling Protection,T6
+Error supply hardware,429,201,Inverter Control 1,T6
+Error supply hardware,429,202,Inverter Control 2,T6
+Error supply hardware,429,203,Inverter Control 3,T6
+Error supply hardware,429,204,Inverter Control 4,T6
+Error supply hardware,429,205,Inverter Control 5,T6
+Error supply hardware,429,206,Inverter Control 6,T6
+Error supply hardware,429,207,Inverter Control 7,T6
+Error supply hardware,429,208,Inverter Control 8,T6
+Error supply hardware,429,209,Inverter Control 9,T6
+Error supply hardware,429,210,Inverter Control 10,T6
+Error supply hardware,429,211,Inverter Control 11,T6
+Error supply hardware,429,212,Inverter Control 12,T6
+Error supply hardware,429,213,Inverter Control 13,T6
+Error supply hardware,429,214,Inverter Control 14,T6
+Error supply hardware,429,219,Several Inverter Controls,T6
+"Error +4,3V ref. sensor system",431,17,Blade A,T6
+"Error +4,3V ref. sensor system",431,18,Blade B,T6
+"Error +4,3V ref. sensor system",431,19,Blade C,T6
+"Error +4,3V ref. sensor system",431,117,Monitoring blade A,T6
+"Error +4,3V ref. sensor system",431,118,Monitoring blade B,T6
+"Error +4,3V ref. sensor system",431,119,Monitoring blade C,T6
+Error +5V ref. Sensoric,432,17,Blade A,T6
+Error +5V ref. Sensoric,432,18,Blade B,T6
+Error +5V ref. Sensoric,432,19,Blade C,T6
+Error +5V ref. Sensoric,432,81,I/O-board 1 control cabinet,T6
+Error +5V ref. Sensoric,432,82,I/O-board 2 control cabinet,T6
+Error +5V ref. Sensoric,432,83,I/O-board 1 nacelle,T6
+Error +5V ref. Sensoric,432,84,I/O-board 2 nacelle,T6
+Error -5V ref. Sensoric,433,0,,T6
+Error +10V ref. Sensoric,434,81,I/O-board 1 control cabinet,T6
+Error +10V ref. Sensoric,434,82,I/O-board 2 control cabinet,T6
+Error +10V ref. Sensoric,434,83,I/O-board 1 nacelle,T6
+Error +10V ref. Sensoric,434,84,I/O-board 2 nacelle,T6
+Error -10V ref. Sensoric,435,0,,T6
+Error supply IGBT-driver,438,201,Inverter Control 1,T6
+Error supply IGBT-driver,438,202,Inverter Control 2,T6
+Error supply IGBT-driver,438,203,Inverter Control 3,T6
+Error supply IGBT-driver,438,204,Inverter Control 4,T6
+Error supply IGBT-driver,438,205,Inverter Control 5,T6
+Error supply IGBT-driver,438,206,Inverter Control 6,T6
+Error supply IGBT-driver,438,207,Inverter Control 7,T6
+Error supply IGBT-driver,438,208,Inverter Control 8,T6
+Error supply IGBT-driver,438,209,Inverter Control 9,T6
+Error supply IGBT-driver,438,210,Inverter Control 10,T6
+Error supply IGBT-driver,438,211,Inverter Control 11,T6
+Error supply IGBT-driver,438,212,Inverter Control 12,T6
+Error supply IGBT-driver,438,213,Inverter Control 13,T6
+Error supply IGBT-driver,438,214,Inverter Control 14,T6
+Error supply IGBT-driver,438,219,Several Inverter Controls,T6
+Error pos. supply current measurem.,441,33,Power Control,T6
+Error pos. supply current measurem.,441,37,Decoupling Protection,T6
+Error neg. supply current measurem.,442,33,Power Control,T6
+Error neg. supply current measurem.,442,37,Decoupling Protection,T6
+Error Battery,450,81,I/O-board 1 control cabinet,T6
+Error Battery,450,82,I/O-board 2 control cabinet,T6
+Error Battery,450,83,I/O-board 1 nacelle,T6
+Error Battery,450,84,I/O-board 2 nacelle,T6
+Error Battery,450,110,Display,T6
+Potential fault sensors,460,81,I/O-Board 1 control cabinet,T6
+Potential fault sensors,460,82,I/O-board 2 control cabinet,T6
+Potential fault sensors,460,83,I/O-Board 1 nacelle,T6
+Potential fault sensors,460,84,I/O-Board 2 nacelle,T6

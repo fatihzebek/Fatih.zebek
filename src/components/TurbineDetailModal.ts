@@ -90,7 +90,9 @@ export const TurbineDetailModal = (): string => {
                  </button>
                  
                  <!-- Add Button -->
-                 <button id="add-note-btn" onclick="window.addTurbineNote()" class="btn-cyber" style="min-width: 100px; height: 42px; font-weight: bold; letter-spacing: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; cursor: pointer;"><i class="fa-solid fa-plus"></i> EKLE</button>
+                 <button id="add-note-btn" onclick="window.addTurbineNote()" style="min-width: 100px; height: 42px; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; letter-spacing: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(-1px)';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.transform='none';">
+                   <i class="fa-solid fa-plus" style="font-size: 0.8rem; color: var(--accent-cyan);"></i> EKLE
+                 </button>
                </div>
                
                <!-- Image Preview Container -->
@@ -108,38 +110,36 @@ export const TurbineDetailModal = (): string => {
               
               <!-- Reminder Input Group -->
               <div class="reminder-input-group" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 1rem; border-radius: 12px;">
-                <div style="display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: start;">
-                  <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                      <input type="text" id="new-turbine-reminder-input" class="cyber-input" placeholder="Hatırlatma notu yazın..." style="flex: 1;">
-                      
-                      <!-- Hidden Image File Input for Reminders -->
-                      <input type="file" id="reminder-image-input" accept="image/*" style="display: none;" onchange="window.handleReminderImageSelect(this)">
-                      
-                      <!-- Trigger Button -->
-                      <button onclick="document.getElementById('reminder-image-input').click()" class="cyber-button secondary" style="padding: 0.5rem 0.85rem; height: 42px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.85rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;" title="Resim Ekle">
-                        <i class="fa-solid fa-camera" style="font-size: 1.1rem; color: var(--accent-cyan);"></i>
-                      </button>
-                    </div>
-                    <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
-                      <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <span style="font-size: 0.75rem; color: var(--text-dim);">Hatırlatma Tarihi:</span>
-                        <input type="date" id="new-turbine-reminder-date" class="cyber-input" style="width: 150px; height: 32px; font-size: 0.8rem; padding: 0.25rem 0.5rem; color: white;">
-                      </div>
-                      <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <span style="font-size: 0.75rem; color: var(--text-dim);">Öncelik:</span>
-                        <select id="new-turbine-reminder-priority" class="cyber-input" style="width: 110px; height: 32px; font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: white;">
-                          <option value="LOW">Düşük</option>
-                          <option value="MEDIUM">Orta</option>
-                          <option value="CRITICAL">Kritik</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                  <button id="add-reminder-btn" onclick="window.addTurbineReminder()" class="btn-cyber" style="min-width: 100px; height: 42px; font-weight: bold; letter-spacing: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; cursor: pointer; align-self: center;">
-                    <i class="fa-solid fa-plus"></i> EKLE
+                <div style="display: flex; gap: 0.5rem; align-items: center; width: 100%;">
+                  <input type="text" id="new-turbine-reminder-input" class="cyber-input" placeholder="Hatırlatma notu yazın..." style="flex: 1;">
+                  
+                  <!-- Hidden Image File Input for Reminders -->
+                  <input type="file" id="reminder-image-input" accept="image/*" style="display: none;" onchange="window.handleReminderImageSelect(this)">
+                  
+                  <!-- Trigger Button -->
+                  <button onclick="document.getElementById('reminder-image-input').click()" class="cyber-button secondary" style="padding: 0.5rem 0.85rem; height: 42px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; font-size: 0.85rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer;" title="Resim Ekle">
+                    <i class="fa-solid fa-camera" style="font-size: 1.1rem; color: var(--accent-cyan);"></i>
+                  </button>
+
+                  <button id="add-reminder-btn" onclick="window.addTurbineReminder()" style="min-width: 100px; height: 42px; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; letter-spacing: 1px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 8px; transition: all 0.25s ease;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='rgba(255,255,255,0.2)'; this.style.transform='translateY(-1px)';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.transform='none';">
+                    <i class="fa-solid fa-plus" style="font-size: 0.8rem; color: var(--accent-cyan);"></i> EKLE
                   </button>
                 </div>
+                <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem;">
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="font-size: 0.75rem; color: var(--text-dim);">Hatırlatma Tarihi:</span>
+                    <input type="date" id="new-turbine-reminder-date" class="cyber-input" style="width: 150px; height: 32px; font-size: 0.8rem; padding: 0.25rem 0.5rem; color: white;">
+                  </div>
+                  <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <span style="font-size: 0.75rem; color: var(--text-dim);">Öncelik:</span>
+                    <select id="new-turbine-reminder-priority" class="cyber-input" style="width: 110px; height: 32px; font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: white;">
+                      <option value="LOW">Düşük</option>
+                      <option value="MEDIUM">Orta</option>
+                      <option value="CRITICAL">Kritik</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
                 
                 <!-- Image Preview Container for Reminders -->
                 <div id="reminder-image-preview-container" class="hidden" style="position: relative; display: inline-block; max-width: 120px; border-radius: 8px; overflow: hidden; border: 1px solid var(--accent-cyan); box-shadow: 0 0 10px rgba(0,242,255,0.2); margin-top: 0.25rem;">

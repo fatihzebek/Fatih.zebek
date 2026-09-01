@@ -11,6 +11,60 @@ if (typeof window !== 'undefined') {
 
 import './style.css'
 import { offlineSyncService } from './services/OfflineSyncService';
+import './components/VoiceAgentModal';
+import { checkAndShowChangelogNotice, showChangelogModal, closeChangelogModal } from './components/ChangelogModal';
+
+function mountVoiceAgentFloatingButton() {
+  // Sesli asistan butonu geçici olarak kaldırıldı
+  return;
+  if (document.getElementById('floating-voice-agent-btn')) return;
+  const btn = document.createElement('button');
+  btn.id = 'floating-voice-agent-btn';
+  btn.onclick = () => (window as any).openVoiceAgentModal?.();
+  btn.style.position = 'fixed';
+  btn.style.bottom = '24px';
+  btn.style.right = '24px';
+  btn.style.zIndex = '9999';
+  btn.style.background = 'linear-gradient(135deg, #14F195 0%, #00F2FE 100%)';
+  btn.style.color = '#0A0E17';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '50px';
+  btn.style.padding = '0.75rem 1.4rem';
+  btn.style.fontWeight = '900';
+  btn.style.fontFamily = "'Rajdhani', sans-serif";
+  btn.style.fontSize = '0.95rem';
+  btn.style.letterSpacing = '1px';
+  btn.style.cursor = 'pointer';
+  btn.style.boxShadow = '0 0 25px rgba(20, 241, 149, 0.5), 0 8px 25px rgba(0, 0, 0, 0.4)';
+  btn.style.display = 'flex';
+  btn.style.alignItems = 'center';
+  btn.style.gap = '10px';
+  btn.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+  
+  btn.innerHTML = `
+    <i class="fa-solid fa-microphone-lines" style="font-size: 1.1rem; animation: pulse 2s infinite;"></i>
+    <span>SESLİ ASİSTAN</span>
+  `;
+
+  btn.onmouseover = () => {
+    btn.style.transform = 'scale(1.06) translateY(-2px)';
+    btn.style.boxShadow = '0 0 35px rgba(20, 241, 149, 0.8), 0 12px 30px rgba(0, 0, 0, 0.5)';
+  };
+  btn.onmouseout = () => {
+    btn.style.transform = 'scale(1) translateY(0)';
+    btn.style.boxShadow = '0 0 25px rgba(20, 241, 149, 0.5), 0 8px 25px rgba(0, 0, 0, 0.4)';
+  };
+
+  document.body.appendChild(btn);
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mountVoiceAgentFloatingButton);
+  } else {
+    mountVoiceAgentFloatingButton();
+  }
+}
 
 // --- SERVICE WORKER AUTO-UPDATE AND CACHE RELOADER ---
 function showUpdateOverlay() {
@@ -118,36 +172,44 @@ async function checkSystemVersion() {
     const serverVersion = data.version;
     const localVersion = localStorage.getItem('app_version');
     
-    if (!localVersion) {
-      localStorage.setItem('app_version', serverVersion);
-      return;
-    }
-    
-    if (localVersion !== serverVersion) {
-      showUpdateOverlay();
+    if (localVersion && localVersion !== serverVersion) {
+      console.log(`[VersionCheck] New version detected! Local: ${localVersion}, Server: ${serverVersion}. Purging caches...`);
       localStorage.setItem('app_version', serverVersion);
       
-      // Force Service Worker to update and download new bundle
+      // Force Service Worker unregistration and clear cache to fetch new assets immediately
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistration().then(reg => {
-          if (reg) {
-            reg.update().catch(() => {});
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (let registration of registrations) {
+            await registration.unregister();
           }
-        }).catch(() => {});
+        } catch(e) {}
       }
       
+      if ('caches' in window) {
+        try {
+          const keys = await caches.keys();
+          for (let key of keys) {
+            await caches.delete(key);
+          }
+        } catch(e) {}
+      }
+      
+      showUpdateOverlay();
       setTimeout(() => {
         window.location.reload();
-      }, 2500);
+      }, 1500);
+    } else if (!localVersion) {
+      localStorage.setItem('app_version', serverVersion);
     }
   } catch (e) {
     console.error("Version check error:", e);
   }
 }
 
-// Check version on load and every 15 seconds for instant detection
+// Check version on load and every 30 seconds for instant live updates
 checkSystemVersion();
-setInterval(checkSystemVersion, 15000);
+setInterval(checkSystemVersion, 30000);
 
 // --- GLOBAL ERROR TRACKER ---
 (window as any).getSystemErrors = () => JSON.parse(localStorage.getItem('system_errors') || '[]');
@@ -211,7 +273,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-dispatches' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management';
 
 interface AppState {
   currentPage: Page
@@ -249,9 +311,11 @@ const Sidebar = () => {
 
   // Filter warehouses based on permissions
   const rawWarehouses = warehouses.filter(w => {
-    if ((profile?.role as any) === 'ADMIN' || (profile?.role as any) === 'MALZEME_YONETIMI' || profile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') return true;
+    if ((profile?.role as any) === 'ADMIN' || (profile?.role as any) === 'MALZEME_YONETIMI' || profile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' || profile?.email?.toLowerCase() === 'emir.unver@demirerholding.com') return true;
     if ((profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') return w.id === 'MTA';
-    return profile?.allowedWarehouses?.includes(w.id);
+    const isWhAllowed = profile?.allowedWarehouses?.some(whId => whId === w.id || whId.includes(w.id) || w.id.includes(whId));
+    const isSiteAllowed = profile?.allowedSites?.some(sId => sId === w.id || sId.includes(w.id) || w.id.includes(sId));
+    return isWhAllowed || isSiteAllowed;
   });
 
   const filteredWarehouses = rawWarehouses.sort((a, b) => {
@@ -268,7 +332,7 @@ const Sidebar = () => {
   // Filter sites and tabs based on permissions
   const filteredSites = (sites || [])
     .filter(s => {
-      if ((profile?.role as any) === 'ADMIN') return true;
+      if ((profile?.role as any) === 'ADMIN' || (profile?.role as any) === 'MALZEME_YONETIMI' || profile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' || profile?.email?.toLowerCase() === 'emir.unver@demirerholding.com') return true;
       return profile?.allowedSites?.includes(s.id);
     })
     .sort((a, b) => {
@@ -285,22 +349,53 @@ const Sidebar = () => {
     const userRole = profile?.role?.toUpperCase();
     const email = profile?.email?.toLowerCase();
     
-    // ADMIN has full access
+    // tickets-page (Saha Destek), image-pool (Resim Havuzu) and saha-siparisleri (Saha Siparişleri) are hidden for TAMİR role
+    if (tab === 'tickets-page' || tab === 'image-pool' || tab === 'saha-siparisleri') {
+      if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') {
+        return false;
+      }
+      return true;
+    }
+
+    // Strict security lock: 'siparis' is ONLY accessible by ADMIN or MALZEME_YONETIMI
+    if (tab === 'siparis') {
+      return userRole === 'ADMIN' || 
+             userRole === 'MALZEME_YONETIMI' || 
+             email === 'hursit.akter@demirerholding.com' || 
+             email === 'emir.unver@demirerholding.com';
+    }
+
+    // Strict super admin lock: 'users' (Kullanıcı Yetkileri) is ONLY accessible by Fatih Zebek
+    if (tab === 'users') {
+      return email === 'fatih.zebek@demirerholding.com' || (email?.includes('fatih.zebek') ?? false);
+    }
+
+    // Strict role locks for Workshop & Repair tabs: ONLY ADMIN, MALZEME_YONETIMI, TAMIR, and Furkan YILDIRIM
+    const workshopAndRepairTabs = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'field-scraps', 'card-passport'];
+    if (workshopAndRepairTabs.includes(tab)) {
+      if (userRole === 'ADMIN') return true;
+      if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') return true;
+      if (email === 'furkan.yildirim@demirerholding.com' || (email?.includes('furkan.yildirim') ?? false)) return true;
+      if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') return true;
+      return false; // Absolute restriction for all other roles
+    }
+
+    // ADMIN has full access for all other tabs
     if (userRole === 'ADMIN') return true;
     
     // Special coordinator override for hursit.akter@demirerholding.com or role MALZEME_YONETIMI
     if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') {
       const allowedForMalzemeYonetimi = [
-        'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
-        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock'
+        'siparis', 'turbines', 'material-pricing', 'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
+        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'
       ];
       if (allowedForMalzemeYonetimi.includes(tab)) return true;
-      return false; // Absolutely restrict from tasks, turbines, etc.
+      return false; // Absolutely restrict from tasks, etc.
     }
 
-    // TAMİR role access
+    // TAMİR role access for other tabs
     if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') {
-      const allowedForTamir = ['workshop', 'workshop-stock', 'warehouses'];
+      const allowedForTamir = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'warehouses'];
       if (allowedForTamir.includes(tab)) return true;
       return false;
     }
@@ -314,10 +409,10 @@ const Sidebar = () => {
         return false;
       }
 
-      if (Array.isArray(tabs) && tabs.length > 0) {
+      if (Array.isArray(tabs)) {
         return tabs.includes(tab);
       }
-      if (typeof tabs === 'object' && Object.keys(tabs).length > 0) {
+      if (typeof tabs === 'object') {
         const val = (tabs as any)[tab];
         if (typeof val === 'object' && val !== null) {
           return !!val.access;
@@ -327,61 +422,168 @@ const Sidebar = () => {
     }
     
     // Default allowed for all logged in users if no custom tab configuration is set
-    if (['dashboard', 'tasks', 'turbines', 'siparis', 'bearing-analysis', 'visual-bom'].includes(tab)) return true;
+    if (['dashboard', 'leave-management'].includes(tab)) return true;
     return false;
   };
 
+(window as any).handleNavDragStart = (e: DragEvent, itemId: string) => {
+  e.dataTransfer?.setData('text/plain', itemId);
+  (window as any)._draggedNavId = itemId;
+  const target = e.currentTarget as HTMLElement;
+  if (target) target.style.opacity = '0.4';
+};
+
+(window as any).handleNavDragEnd = (e: DragEvent) => {
+  const target = e.currentTarget as HTMLElement;
+  if (target) target.style.opacity = '1';
+};
+
+(window as any).handleNavDragOver = (e: DragEvent) => {
+  e.preventDefault();
+  const target = e.currentTarget as HTMLElement;
+  if (target) target.style.borderTop = '2px solid #64ffda';
+};
+
+(window as any).handleNavDragLeave = (e: DragEvent) => {
+  const target = e.currentTarget as HTMLElement;
+  if (target) target.style.borderTop = '';
+};
+
+(window as any).handleNavDrop = (e: DragEvent, targetItemId: string) => {
+  e.preventDefault();
+  const target = e.currentTarget as HTMLElement;
+  if (target) target.style.borderTop = '';
+
+  const draggedId = (window as any)._draggedNavId || e.dataTransfer?.getData('text/plain');
+  if (!draggedId || draggedId === targetItemId) return;
+
+  const draggedEl = document.querySelector(`[data-nav-id="${draggedId}"]`);
+  const targetEl = document.querySelector(`[data-nav-id="${targetItemId}"]`);
+
+  if (draggedEl && targetEl && targetEl.parentNode) {
+    targetEl.parentNode.insertBefore(draggedEl, targetEl);
+    
+    const allNavs = Array.from(document.querySelectorAll('.nav-menu > [data-nav-id]'));
+    const newOrder = allNavs.map(el => el.getAttribute('data-nav-id')).filter(Boolean);
+    localStorage.setItem('custom_sidebar_order', JSON.stringify(newOrder));
+    
+    // Re-render to cleanly place submenus under their triggers
+    (window as any).render();
+  }
+};
+
+(window as any).addCustomSectionHeader = () => {
+  const title = prompt("Yeni Bölüm Başlığı Girin:");
+  if (!title || !title.trim()) return;
+  
+  const cleanTitle = title.trim().toUpperCase();
+  const headerId = 'sec-custom-' + Date.now();
+
+  try {
+    const customHeadersStr = localStorage.getItem('custom_sidebar_headers') || '{}';
+    const customHeaders = JSON.parse(customHeadersStr);
+    customHeaders[headerId] = cleanTitle;
+    localStorage.setItem('custom_sidebar_headers', JSON.stringify(customHeaders));
+
+    const savedOrderStr = localStorage.getItem('custom_sidebar_order');
+    let order: string[] = savedOrderStr ? JSON.parse(savedOrderStr) : [];
+    order.push(headerId);
+    localStorage.setItem('custom_sidebar_order', JSON.stringify(order));
+
+    (window as any).render();
+  } catch(e) {
+    console.error("Failed to add custom section header", e);
+  }
+};
+
+(window as any).deleteCustomSectionHeader = (headerId: string, e: Event) => {
+  e.stopPropagation();
+  if (!confirm("Bu özel başlığı silmek istediğinize emin misiniz?")) return;
+
+  try {
+    const customHeadersStr = localStorage.getItem('custom_sidebar_headers') || '{}';
+    const customHeaders = JSON.parse(customHeadersStr);
+    delete customHeaders[headerId];
+    localStorage.setItem('custom_sidebar_headers', JSON.stringify(customHeaders));
+
+    const savedOrderStr = localStorage.getItem('custom_sidebar_order');
+    if (savedOrderStr) {
+      let order: string[] = JSON.parse(savedOrderStr);
+      order = order.filter(id => id !== headerId);
+      localStorage.setItem('custom_sidebar_order', JSON.stringify(order));
+    }
+
+    (window as any).render();
+  } catch(e) {
+    console.error("Failed to delete custom section header", e);
+  }
+};
+
   const isMaterialManager = profile?.role === 'MALZEME_YONETIMI' || profile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+  const navDragAttr = (id: string) => `data-nav-id="${id}" draggable="true" ondragstart="window.handleNavDragStart(event, '${id}')" ondragend="window.handleNavDragEnd(event)" ondragover="window.handleNavDragOver(event)" ondragleave="window.handleNavDragLeave(event)" ondrop="window.handleNavDrop(event, '${id}')"`;
 
   return `
     <aside class="sidebar">
-      <div class="sidebar-logo">
-        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
-          <div class="turbine-icon-wrapper" style="color: var(--accent-cyan); width: 30px; height: 40px; transform: scale(0.7);">
-            <div class="turbine-tower" style="height: 25px;"></div>
-            <div class="turbine-head" style="bottom: 0px; width: 40px; height: 40px;">
-              <svg class="turbine-blades-svg" viewBox="0 0 100 100">
-                <g transform="translate(50, 50)">
-                  <g id="logo-blade">
-                    <path d="M-2,0 C-2,-10 2,-10 2,0 L1,-38 C1,-40 -1,-40 -1,-38 Z" fill="currentColor" />
-                  </g>
-                  <use href="#logo-blade" transform="rotate(120)" />
-                  <use href="#logo-blade" transform="rotate(240)" />
-                  <circle r="3" fill="currentColor" />
-                </g>
-              </svg>
-            </div>
+      <div class="sidebar-logo" style="position: relative; overflow: hidden; padding: 1rem 1rem 1.4rem 1rem; min-height: 70px;">
+        <!-- Faint Rotating Wind Turbine Watermark in Background -->
+        <div style="position: absolute; right: -10px; top: -14px; width: 76px; height: 76px; opacity: 0.20; color: var(--accent-cyan); pointer-events: none; z-index: 0; display: flex; align-items: center; justify-content: center;">
+          <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
+            <!-- Tower -->
+            <path d="M48 95 L49.4 45 L50.6 45 L52 95 Z" fill="currentColor" />
+            <!-- Rotor Hub -->
+            <circle cx="50" cy="45" r="3.5" fill="currentColor" />
+            <!-- Spinning Blades -->
+            <g style="transform-origin: 50px 45px; animation: logo-turbine-spin 15s linear infinite;">
+              <path d="M49.2 45 L49.6 8 C49.8 6, 50.2 6, 50.4 8 L50.8 45 Z" fill="currentColor" />
+              <g transform="rotate(120, 50, 45)">
+                <path d="M49.2 45 L49.6 8 C49.8 6, 50.2 6, 50.4 8 L50.8 45 Z" fill="currentColor" />
+              </g>
+              <g transform="rotate(240, 50, 45)">
+                <path d="M49.2 45 L49.6 8 C49.8 6, 50.2 6, 50.4 8 L50.8 45 Z" fill="currentColor" />
+              </g>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Brand Logo Row -->
+        <div style="display: flex; align-items: flex-end; gap: 0.6rem; margin-bottom: 1.5rem; position: relative; z-index: 1;">
+          <!-- Official Corporate Blue DH Badge -->
+          <div style="width: 34px; height: 34px; background-color: #1a3b75; display: flex; align-items: center; justify-content: center; border-radius: 3px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);">
+            <span style="font-family: 'Georgia', 'Times New Roman', serif; font-weight: bold; font-size: 1.45rem; color: #fff; line-height: 1; user-select: none;">dh</span>
           </div>
-          <h2 style="font-family: 'Rajdhani', sans-serif; font-weight: 800; letter-spacing: 1px; color: var(--text-main); font-size: ${isMaterialManager ? '1.1rem' : '1.25rem'}; line-height: 1.1;">
-            ${isMaterialManager ? 'MALZEME<br><span style="color: var(--accent-cyan); font-size: 0.9rem;">YÖNETİM SİSTEMİ</span>' : 'DH_<span style="color: var(--accent-cyan);">SERVİS</span>'}
-          </h2>
+          
+          <!-- demirer holding text and its underline aligned to the badge bottom -->
+          <div style="border-bottom: 1.5px solid #1a3b75; padding-bottom: 2px; white-space: nowrap; line-height: 1.1; width: fit-content; position: relative; overflow: visible;">
+            <span style="font-family: 'Georgia', 'Times New Roman', serif; font-size: 0.95rem; color: #fff; letter-spacing: 0.3px; user-select: none;">demirer holding</span>
+            <span style="position: absolute; top: 100%; left: 0; width: 100%; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.68rem; color: var(--accent-cyan); letter-spacing: 2.5px; margin-top: 4px; user-select: none; text-align: center; display: block;">Servis</span>
+          </div>
         </div>
       </div>
       
       <nav class="nav-menu">
         ${isAllowed('dashboard') ? `
-          <li class="nav-item ${state.currentPage === 'dashboard' ? 'active' : ''}" onclick="window.navigate('dashboard')">
-            <i class="fa-solid fa-gauge-high"></i> Dashboard
+          <li class="nav-item ${state.currentPage === 'dashboard' ? 'active' : ''}" ${navDragAttr('dashboard')} onclick="window.navigate('dashboard')">
+            <i class="fa-solid fa-gauge-high" style="color: var(--accent-cyan);"></i> Dashboard
           </li>
         ` : ''}
 
-        ${(isAllowed('tasks') || isAllowed('new-task') || isAllowed('turbines') || isAllowed('warehouses') || isAllowed('reports-archive') || isAllowed('bakim-planlama') || isAllowed('tickets-page') || isAllowed('workshop') || profile?.role === 'TAMİR' || isAllowed('tsi-library')) ? `
-          <div class="nav-section-label">Saha Operasyon Bölümü</div>
+        ${(isAllowed('tasks') || isAllowed('new-task') || isAllowed('turbines') || isAllowed('warehouses') || isAllowed('reports-archive') || isAllowed('bakim-planlama') || isAllowed('tickets-page') || isAllowed('workshop') || profile?.role === 'TAMİR' || isAllowed('tsi-library') || isAllowed('fault-library')) ? `
+          <div class="nav-section-label" ${navDragAttr('sec-saha')}>Saha Operasyon Bölümü</div>
         ` : ''}
 
         ${isAllowed('tasks') ? `
-          <li class="nav-item ${state.currentPage === 'tasks' ? 'active' : ''}" onclick="window.navigate('tasks')">
-            <i class="fa-solid fa-list-check"></i> İş Emirleri
+          <li class="nav-item ${state.currentPage === 'tasks' ? 'active' : ''}" ${navDragAttr('tasks')} onclick="window.navigate('tasks')">
+            <i class="fa-solid fa-list-check" style="color: #60a5fa;"></i> İş Emirleri
           </li>
         ` : ''}
         ${isAllowed('new-task') ? `
-          <li class="nav-item ${state.currentPage === 'new-task' ? 'active' : ''}" onclick="window.navigate('new-task')">
-            <i class="fa-solid fa-plus-circle"></i> Yeni İş Emri
+          <li class="nav-item ${state.currentPage === 'new-task' ? 'active' : ''}" ${navDragAttr('new-task')} onclick="window.navigate('new-task')">
+            <i class="fa-solid fa-plus-circle" style="color: #34d399;"></i> Yeni İş Emri
           </li>
         ` : ''}
         ${isAllowed('turbines') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'turbines' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('regions', 'turbines')">
-            <i class="fa-solid fa-map-location-dot"></i> Servis Bölgeleri
+          <li class="nav-item has-submenu ${state.currentPage === 'turbines' ? 'active' : ''}" ${navDragAttr('turbines')} onclick="window.toggleSubmenuAndNavigate('regions', 'turbines')">
+            <i class="fa-solid fa-map-location-dot" style="color: #c084fc;"></i> Servis Bölgeleri
             <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'turbines' ? 'rotate-180' : ''}"></i>
           </li>
           <ul id="regions-submenu" class="sub-menu ${state.currentPage === 'turbines' ? '' : 'hidden'}">
@@ -392,9 +594,9 @@ const Sidebar = () => {
             `).join('')}
           </ul>
         ` : ''}
-        ${isAllowed('warehouses') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'warehouses' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('warehouses', 'warehouses')">
-            <i class="fa-solid fa-warehouse"></i> Servis Depoları
+        ${(isAllowed('warehouses') && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
+          <li class="nav-item has-submenu ${state.currentPage === 'warehouses' ? 'active' : ''}" ${navDragAttr('warehouses')} onclick="window.toggleSubmenuAndNavigate('warehouses', 'warehouses')">
+            <i class="fa-solid fa-warehouse" style="color: #fb923c;"></i> Servis Depoları
             <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'warehouses' ? 'rotate-180' : ''}"></i>
           </li>
           <ul id="warehouses-submenu" class="sub-menu ${state.currentPage === 'warehouses' ? '' : 'hidden'}">
@@ -412,7 +614,8 @@ const Sidebar = () => {
               ${Array.from({length: 15}, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`).map(teamName => {
                 const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
                 const userTeamCanonical = profile?.team ? formatTeamName(profile.team) : '';
-                const isUserOwnTeam = userTeamCanonical === teamName;
+                const currentTeamCanonical = formatTeamName(teamName);
+                const isUserOwnTeam = !!userTeamCanonical && userTeamCanonical === currentTeamCanonical;
                 const isAllowed = profile?.role === 'ADMIN' || isMaterialManager || isUserOwnTeam || (profile?.allowedWarehouses || []).includes(teamId);
                 if (!isAllowed) return '';
                 
@@ -430,8 +633,8 @@ const Sidebar = () => {
           </ul>
         ` : ''}
         ${isAllowed('reports-archive') ? `
-          <li class="nav-item has-submenu ${state.currentPage === 'reports-archive' ? 'active' : ''}" onclick="window.toggleSubmenuAndNavigate('reports-archive', 'reports-archive')">
-            <i class="fa-solid fa-box-archive"></i> Rapor Arşivi
+          <li class="nav-item has-submenu ${state.currentPage === 'reports-archive' ? 'active' : ''}" ${navDragAttr('reports-archive')} onclick="window.toggleSubmenuAndNavigate('reports-archive', 'reports-archive')">
+            <i class="fa-solid fa-box-archive" style="color: #f87171;"></i> Rapor Arşivi
             <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'reports-archive' ? 'rotate-180' : ''}"></i>
           </li>
           <ul id="reports-archive-submenu" class="sub-menu ${state.currentPage === 'reports-archive' ? '' : 'hidden'}">
@@ -443,153 +646,266 @@ const Sidebar = () => {
           </ul>
         ` : ''}
         ${isAllowed('visual-bom') ? `
-          <li class="nav-item ${state.currentPage === 'visual-bom' ? 'active' : ''}" onclick="window.navigate('visual-bom')">
-            <i class="fa-solid fa-cube"></i> Türbin Dijital İkizi
+          <li class="nav-item ${state.currentPage === 'visual-bom' ? 'active' : ''}" ${navDragAttr('visual-bom')} onclick="window.navigate('visual-bom')">
+            <i class="fa-solid fa-cube" style="color: #38bdf8;"></i> Türbin Dijital İkizi
           </li>
         ` : ''}
         ${isAllowed('bakim-planlama') ? `
-          <li class="nav-item ${state.currentPage === 'bakim-planlama' ? 'active' : ''}" onclick="window.navigate('bakim-planlama')">
-            <i class="fa-solid fa-calendar-check"></i> Bakım Planlama
+          <li class="nav-item has-submenu ${state.currentPage === 'bakim-planlama' ? 'active' : ''}" ${navDragAttr('bakim-planlama')} onclick="window.toggleSubmenuAndNavigate('bakim-planlama', 'bakim-planlama')">
+            <i class="fa-solid fa-calendar-check" style="color: #fbbf24;"></i> Bakım Planlama
+            <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'bakim-planlama' ? 'rotate-180' : ''}"></i>
           </li>
+          <ul id="bakim-planlama-submenu" class="sub-menu ${state.currentPage === 'bakim-planlama' ? '' : 'hidden'}">
+            <li class="sub-item" onclick="window.selectMaintSiteAndNavigate('ALL')">
+              <i class="fa-solid fa-border-all" style="font-size: 0.6rem; opacity: 0.5;"></i> Tüm Sahalar
+            </li>
+            ${filteredSites.map(site => `
+              <li class="sub-item" onclick="window.selectMaintSiteAndNavigate('${site.id}')">
+                <i class="fa-solid fa-charging-station" style="font-size: 0.6rem; opacity: 0.5;"></i> ${site.name}
+              </li>
+            `).join('')}
+          </ul>
         ` : ''}
         ${isAllowed('tickets-page') ? `
-          <li class="nav-item ${state.currentPage === 'tickets-page' ? 'active' : ''}" onclick="window.navigate('tickets-page')">
+          <li class="nav-item ${state.currentPage === 'tickets-page' ? 'active' : ''}" ${navDragAttr('tickets-page')} onclick="window.navigate('tickets-page')">
             <i class="fa-solid fa-headset" style="color: var(--accent-cyan);"></i> Saha Destek
           </li>
         ` : ''}
         ${isAllowed('workshop') || profile?.role === 'TAMİR' ? `
-          <li class="nav-item ${state.currentPage === 'workshop' ? 'active' : ''}" onclick="window.navigate('workshop')">
-            <i class="fa-solid fa-screwdriver-wrench" style="color: #14F195;"></i> Merkez Tamir Atölyesi
+          <li class="nav-item ${state.currentPage === 'workshop' ? 'active' : ''}" ${navDragAttr('workshop')} onclick="window.navigate('workshop')">
+            <i class="fa-solid fa-microchip" style="color: #14F195;"></i> Kart Tamir Merkezi
           </li>
         ` : ''}
         ${isAllowed('tsi-library') ? `
-          <li class="nav-item ${state.currentPage === 'tsi-library' ? 'active' : ''}" onclick="window.navigate('tsi-library')">
+          <li class="nav-item ${state.currentPage === 'tsi-library' ? 'active' : ''}" ${navDragAttr('tsi-library')} onclick="window.navigate('tsi-library')">
             <i class="fa-solid fa-book-bookmark" style="color: var(--accent-cyan);"></i> Servis Teknik Information
           </li>
         ` : ''}
+        
+        ${isAllowed('fault-library') ? `
+          <li class="nav-item ${state.currentPage === 'fault-library' ? 'active' : ''}" ${navDragAttr('fault-library')} onclick="window.navigate('fault-library')">
+            <i class="fa-solid fa-brain" style="color: #00F2FE; filter: drop-shadow(0 0 4px rgba(0, 242, 254, 0.4));"></i> Arıza Kütüphanesi
+          </li>
+        ` : ''}
 
-        ${(isAllowed('siparis') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) ? `
-          <div class="nav-section-label">Depo Yönetimi</div>
+        ${(isAllowed('workshop-tasks') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('workshop-components') || isAllowed('workshop-dispatches') || isAllowed('workshop-returned') || isAllowed('workshop-scrap') || isAllowed('workshop') || profile?.role === 'ADMIN' || (profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') ? `
+          <div class="nav-section-label" ${navDragAttr('sec-workshop')}>Merkez Tamir Atölyesi</div>
         ` : ''}
 
-        ${isAllowed('siparis') ? `
-          <li class="nav-item ${state.currentPage === 'siparis' ? 'active' : ''}" onclick="window.navigate('siparis')">
-            <i class="fa-solid fa-cart-plus"></i> Sipariş Oluştur
-          </li>
-        ` : ''}
-        ${isAllowed('transfers') ? `
-          <li class="nav-item ${state.currentPage === 'transfers' ? 'active' : ''}" onclick="window.navigate('transfers')">
-            <i class="fa-solid fa-truck-ramp-box"></i> Malzeme Transferi
-          </li>
-        ` : ''}
-        ${isAllowed('asset-custody') ? `
-          <li class="nav-item ${state.currentPage === 'asset-custody' ? 'active' : ''}" onclick="window.navigate('asset-custody')">
-            <i class="fa-solid fa-screwdriver-wrench" style="color: #f59e0b;"></i> Malzeme Zimmeti
-          </li>
-        ` : ''}
-        ${(profile?.role === 'ADMIN' || isAllowed('material-analytics')) ? `
-          <li class="nav-item ${state.currentPage === 'material-analytics' ? 'active' : ''}" onclick="window.navigate('material-analytics')">
-            <i class="fa-solid fa-cart-shopping"></i> Malzeme Analizi
+        ${(isAllowed('workshop-tasks') || isAllowed('workshop') || profile?.role === 'ADMIN' || (profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') ? `
+          <li class="nav-item ${state.currentPage === 'workshop-tasks' ? 'active' : ''}" ${navDragAttr('workshop-tasks')} onclick="window.navigate('workshop-tasks')">
+            <i class="fa-solid fa-clipboard-list" style="color: #14F195;"></i> Kart İş Emirleri
           </li>
         ` : ''}
         ${isAllowed('repair-history') ? `
-          <li class="nav-item ${state.currentPage === 'repair-history' ? 'active' : ''}" onclick="window.navigate('repair-history')">
+          <li class="nav-item ${state.currentPage === 'repair-history' ? 'active' : ''}" ${navDragAttr('repair-history')} onclick="window.navigate('repair-history')">
             <i class="fa-solid fa-screwdriver-wrench" style="color: #14F195;"></i> Tamir Hareketleri
           </li>
         ` : ''}
         ${isAllowed('workshop-stock') ? `
-          <li class="nav-item ${state.currentPage === 'workshop-stock' ? 'active' : ''}" onclick="window.navigate('workshop-stock')">
+          <li class="nav-item ${state.currentPage === 'workshop-stock' ? 'active' : ''}" ${navDragAttr('workshop-stock')} onclick="window.navigate('workshop-stock')">
             <i class="fa-solid fa-warehouse" style="color: #3B82F6;"></i> Atölye Tamir Stoğu
           </li>
         ` : ''}
+        ${isAllowed('workshop-components') ? `
+          <li class="nav-item ${state.currentPage === 'workshop-components' ? 'active' : ''}" ${navDragAttr('workshop-components')} onclick="window.navigate('workshop-components')">
+            <i class="fa-solid fa-microchip" style="color: #00f2ff;"></i> Malzeme Stoğu
+          </li>
+        ` : ''}
+        ${isAllowed('workshop-dispatches') ? `
+          <li class="nav-item ${state.currentPage === 'workshop-dispatches' ? 'active' : ''}" ${navDragAttr('workshop-dispatches')} onclick="window.navigate('workshop-dispatches')">
+            <i class="fa-solid fa-truck-fast" style="color: #10B981;"></i> Atölye Sevk Edilenler
+          </li>
+        ` : ''}
+        ${(isAllowed('workshop-returned') || isAllowed('workshop-dispatches')) ? `
+          <li class="nav-item ${state.currentPage === 'workshop-returned' ? 'active' : ''}" ${navDragAttr('workshop-returned')} onclick="window.navigate('workshop-returned')">
+            <i class="fa-solid fa-arrows-spin" style="color: #F59E0B;"></i> Sahadan Geri Gelen Kartlar
+          </li>
+        ` : ''}
+        ${isAllowed('workshop-scrap') ? `
+          <li class="nav-item ${state.currentPage === 'workshop-scrap' ? 'active' : ''}" ${navDragAttr('workshop-scrap')} onclick="window.navigate('workshop-scrap')">
+            <i class="fa-solid fa-dumpster-fire" style="color: #EF4444;"></i> Hurdaya Ayrılanlar
+          </li>
+        ` : ''}
+
+        ${(isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) ? `
+          <div class="nav-section-label" ${navDragAttr('sec-depo')}>Depo Yönetimi</div>
+        ` : ''}
+
+        ${(isAllowed('saha-siparisleri') && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
+          <li class="nav-item ${state.currentPage === 'saha-siparisleri' ? 'active' : ''}" ${navDragAttr('saha-siparisleri')} onclick="window.navigate('saha-siparisleri')">
+            <i class="fa-solid fa-list-check" style="color: #38bdf8;"></i> Saha Siparişleri
+          </li>
+        ` : ''}
+        ${isAllowed('siparis') ? `
+          <li class="nav-item ${state.currentPage === 'siparis' ? 'active' : ''}" ${navDragAttr('siparis')} onclick="window.navigate('siparis')">
+            <i class="fa-solid fa-cart-plus" style="color: #818cf8;"></i> Sipariş Oluştur
+          </li>
+        ` : ''}
+        ${isAllowed('transfers') ? `
+          <li class="nav-item ${state.currentPage === 'transfers' ? 'active' : ''}" ${navDragAttr('transfers')} onclick="window.navigate('transfers')">
+            <i class="fa-solid fa-truck-ramp-box" style="color: #34d399;"></i> Malzeme Transferi
+          </li>
+        ` : ''}
+        ${isAllowed('asset-custody') ? `
+          <li class="nav-item ${state.currentPage === 'asset-custody' ? 'active' : ''}" ${navDragAttr('asset-custody')} onclick="window.navigate('asset-custody')">
+            <i class="fa-solid fa-screwdriver-wrench" style="color: #f59e0b;"></i> Malzeme Zimmeti
+          </li>
+        ` : ''}
+        ${(profile?.role === 'ADMIN' || isAllowed('material-analytics')) ? `
+          <li class="nav-item ${state.currentPage === 'material-analytics' ? 'active' : ''}" ${navDragAttr('material-analytics')} onclick="window.navigate('material-analytics')">
+            <i class="fa-solid fa-cart-shopping" style="color: #f472b6;"></i> Malzeme Analizi
+          </li>
+        ` : ''}
+        ${((isAllowed('field-scraps') && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') || profile?.role === 'ADMIN' || isMaterialManager) ? `
+          <li class="nav-item ${state.currentPage === 'field-scraps' ? 'active' : ''}" ${navDragAttr('field-scraps')} onclick="window.navigate('field-scraps')">
+            <i class="fa-solid fa-dumpster" style="color: #F87171;"></i> Sahalardan Çıkan Hurdalar
+          </li>
+        ` : ''}
         ${isAllowed('global-history') ? `
-          <li class="nav-item ${state.currentPage === 'global-history' ? 'active' : ''}" onclick="window.navigate('global-history')">
-            <i class="fa-solid fa-clock-rotate-left"></i> Depo Hareketleri
+          <li class="nav-item ${state.currentPage === 'global-history' ? 'active' : ''}" ${navDragAttr('global-history')} onclick="window.navigate('global-history')">
+            <i class="fa-solid fa-clock-rotate-left" style="color: #a78bfa;"></i> Depo Hareketleri
           </li>
         ` : ''}
-        ${((isMaterialManager || profile?.role === 'ADMIN' || isAllowed('warehouses')) && profile?.role !== 'TECHNICIAN') ? `
-          <li class="nav-item ${state.currentPage === 'warehouses' ? 'active' : ''}" onclick="window.navigate('warehouses')">
-            <i class="fa-solid fa-warehouse"></i> Depo İzleme
-          </li>
-        ` : ''}
+
         ${isAllowed('image-pool') ? `
-          <li class="nav-item ${state.currentPage === 'image-pool' ? 'active' : ''}" onclick="window.navigate('image-pool')">
-            <i class="fa-solid fa-images" style="color: #0ea5e9;"></i> Resim Havuzu
+          <li class="nav-item ${state.currentPage === 'image-pool' ? 'active' : ''}" ${navDragAttr('image-pool')} onclick="window.navigate('image-pool')">
+            <i class="fa-solid fa-images" style="color: #0ea5e9;"></i> Görsel Ürün Tarama
           </li>
         ` : ''}
 
         ${(isAllowed('analytics') || isAllowed('templates') || profile?.role === 'ADMIN' || isAllowed('purchase-requests') || isAllowed('users') || isAllowed('personnel-management')) ? `
-          <div class="nav-section-label">Yönetim</div>
+          <div class="nav-section-label" ${navDragAttr('sec-yonetim')}>Yönetim</div>
         ` : ''}
 
         ${isAllowed('analytics') ? `
-          <li class="nav-item ${state.currentPage === 'analytics' ? 'active' : ''}" onclick="window.navigate('analytics')">
-            <i class="fa-solid fa-brain"></i> Adam Saat Analizi
+          <li class="nav-item ${state.currentPage === 'analytics' ? 'active' : ''}" ${navDragAttr('analytics')} onclick="window.navigate('analytics')">
+            <i class="fa-solid fa-brain" style="color: #38bdf8;"></i> Adam Saat Analizi
           </li>
         ` : ''}
         ${isAllowed('templates') ? `
-          <li class="nav-item ${state.currentPage === 'templates' ? 'active' : ''}" onclick="window.navigate('templates')">
-            <i class="fa-solid fa-file-invoice"></i> Arıza & Bakım Şablonları
+          <li class="nav-item ${state.currentPage === 'templates' ? 'active' : ''}" ${navDragAttr('templates')} onclick="window.navigate('templates')">
+            <i class="fa-solid fa-file-invoice" style="color: #f472b6;"></i> Arıza & Bakım Şablonları
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('purchase-requests')) ? `
-          <li class="nav-item ${state.currentPage === 'purchase-requests' ? 'active' : ''}" onclick="window.navigate('purchase-requests')">
+          <li class="nav-item ${state.currentPage === 'purchase-requests' ? 'active' : ''}" ${navDragAttr('purchase-requests')} onclick="window.navigate('purchase-requests')">
             <i class="fa-solid fa-file-invoice-dollar" style="color: #fbbf24;"></i> Satın Alma Yönetimi
           </li>
         ` : ''}
-        ${(profile?.role === 'ADMIN') ? `
-          <li class="nav-item ${state.currentPage === 'overtime-approvals' ? 'active' : ''}" onclick="window.navigate('overtime-approvals')">
+        ${(profile?.role === 'ADMIN' || (profile?.managedTeams && profile.managedTeams.length > 0)) ? `
+          <li class="nav-item ${state.currentPage === 'overtime-approvals' ? 'active' : ''}" ${navDragAttr('overtime-approvals')} onclick="window.navigate('overtime-approvals')">
             <i class="fa-solid fa-file-signature" style="color: var(--accent-cyan);"></i> Mesai & Sodexo Onayları
           </li>
-          <li class="nav-item ${state.currentPage === 'online-users' ? 'active' : ''}" onclick="window.navigate('online-users')">
+        ` : ''}
+        ${(profile?.role === 'ADMIN') ? `
+          <li class="nav-item ${state.currentPage === 'online-users' ? 'active' : ''}" ${navDragAttr('online-users')} onclick="window.navigate('online-users')">
             <i class="fa-solid fa-users-viewfinder" style="color: #14F195;"></i> Aktif Kullanıcılar
           </li>
-          
+        ` : ''}
+        
+        ${(profile?.role === 'ADMIN' || isAllowed('kkd-kontrol') || isAllowed('olcu-aletleri') || isAllowed('tork-aletleri')) ? `
           <!-- 🟨 PERİYODİK KONTROLLER SUBMENU -->
-          <li class="nav-item has-submenu ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? 'active' : ''}" onclick="window.toggleSubmenu('periodic-controls')" style="color: #fbbf24; font-weight: 700;">
+          <li class="nav-item has-submenu ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? 'active' : ''}" ${navDragAttr('periodic-controls')} onclick="window.toggleSubmenu('periodic-controls')" style="color: #fbbf24; font-weight: 700;">
             <i class="fa-solid fa-clock-rotate-left" style="color: #fbbf24;"></i> Periyodik Kontroller
             <i class="fa-solid fa-chevron-down submenu-arrow ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? 'rotate-180' : ''}" style="color: #fbbf24; margin-left: auto;"></i>
           </li>
           <ul id="periodic-controls-submenu" class="sub-menu ${(state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') ? '' : 'hidden'}">
-            <li class="sub-item ${state.currentPage === 'kkd-kontrol' ? 'active' : ''}" onclick="window.navigate('kkd-kontrol')">
-              <i class="fa-solid fa-helmet-safety" style="font-size: 0.65rem; opacity: 0.7;"></i> KKD Kontrolü
-            </li>
-            <li class="sub-item ${state.currentPage === 'olcu-aletleri' ? 'active' : ''}" onclick="window.navigate('olcu-aletleri')">
-              <i class="fa-solid fa-gauge" style="font-size: 0.65rem; opacity: 0.7;"></i> Ölçü Aletleri Kalibrasyon
-            </li>
-            <li class="sub-item ${state.currentPage === 'tork-aletleri' ? 'active' : ''}" onclick="window.navigate('tork-aletleri')">
-              <i class="fa-solid fa-wrench" style="font-size: 0.65rem; opacity: 0.7;"></i> Tork Aletleri Kalibrasyon
-            </li>
+            ${(profile?.role === 'ADMIN' || isAllowed('kkd-kontrol')) ? `
+              <li class="sub-item ${state.currentPage === 'kkd-kontrol' ? 'active' : ''}" onclick="window.navigate('kkd-kontrol')">
+                <i class="fa-solid fa-helmet-safety" style="font-size: 0.65rem; opacity: 0.7;"></i> KKD Kontrolü
+              </li>
+            ` : ''}
+            ${(profile?.role === 'ADMIN' || isAllowed('olcu-aletleri')) ? `
+              <li class="sub-item ${state.currentPage === 'olcu-aletleri' ? 'active' : ''}" onclick="window.navigate('olcu-aletleri')">
+                <i class="fa-solid fa-gauge" style="font-size: 0.65rem; opacity: 0.7;"></i> Ölçü Aletleri Kalibrasyon
+              </li>
+            ` : ''}
+            ${(profile?.role === 'ADMIN' || isAllowed('tork-aletleri')) ? `
+              <li class="sub-item ${state.currentPage === 'tork-aletleri' ? 'active' : ''}" onclick="window.navigate('tork-aletleri')">
+                <i class="fa-solid fa-wrench" style="font-size: 0.65rem; opacity: 0.7;"></i> Tork Aletleri Kalibrasyon
+              </li>
+            ` : ''}
           </ul>
         ` : ''}
-        ${(profile?.role === 'ADMIN' || isAllowed('users')) ? `
-          <li class="nav-item ${state.currentPage === 'users' ? 'active' : ''}" onclick="window.navigate('users')">
-            <i class="fa-solid fa-user-gear"></i> Kullanıcı Yetki
+
+        ${(profile?.role === 'ADMIN' || isAllowed('scada-reset-logs')) ? `
+          <li class="nav-item ${state.currentPage === 'scada-reset-logs' ? 'active' : ''}" ${navDragAttr('scada-reset-logs')} onclick="window.navigate('scada-reset-logs')">
+            <i class="fa-solid fa-bolt" style="color: var(--accent-orange);"></i> SCADA Reset Günlükleri
+          </li>
+        ` : ''}
+        
+        ${(profile?.role === 'ADMIN' || isAllowed('parameter-audit')) ? `
+          <li class="nav-item ${state.currentPage === 'parameter-audit' ? 'active' : ''}" ${navDragAttr('parameter-audit')} onclick="window.navigate('parameter-audit')">
+            <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Parametre Denetimi
+          </li>
+        ` : ''}
+        ${((state.userProfile?.email || profile?.email || '').toLowerCase().includes('fatih.zebek')) ? `
+          <li class="nav-item ${state.currentPage === 'users' ? 'active' : ''}" ${navDragAttr('users')} onclick="window.navigate('users')">
+            <i class="fa-solid fa-user-gear" style="color: #f43f5e;"></i> Kullanıcı Yetki
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('personnel-management')) ? `
-          <li class="nav-item ${state.currentPage === 'personnel-management' ? 'active' : ''}" onclick="window.navigate('personnel-management')">
-            <i class="fa-solid fa-people-group"></i> Personel & Şirket Yetki
+          <li class="nav-item ${state.currentPage === 'personnel-management' ? 'active' : ''}" ${navDragAttr('personnel-management')} onclick="window.navigate('personnel-management')">
+            <i class="fa-solid fa-people-group" style="color: #10b981;"></i> Personel & Şirket Yetki
+          </li>
+        ` : ''}
+        ${(profile?.role === 'ADMIN' || isAllowed('leave-management')) ? `
+          <li class="nav-item ${state.currentPage === 'leave-management' ? 'active' : ''}" ${navDragAttr('leave-management')} onclick="window.navigate('leave-management')">
+            <i class="fa-solid fa-calendar-check" style="color: #a78bfa;"></i> İzin Yönetimi
+          </li>
+        ` : ''}
+        ${((state.userProfile?.email || profile?.email || '').toLowerCase().includes('fatih.zebek')) ? `
+          <li class="nav-item ${state.currentPage === 'vehicle-management' ? 'active' : ''}" ${navDragAttr('vehicle-management')} onclick="window.navigate('vehicle-management')">
+            <i class="fa-solid fa-car" style="color: #38bdf8;"></i> Araç & Sürücü Filosu
           </li>
         ` : ''}
 
         ${(isAllowed('bearing-analysis') || profile?.role === 'ADMIN') ? `
-          <div class="nav-section-label">AJANLAR</div>
+          <div class="nav-section-label" ${navDragAttr('sec-ajanlar')}>AJANLAR</div>
         ` : ''}
 
         ${isAllowed('bearing-analysis') ? `
-          <li class="nav-item ${state.currentPage === 'bearing-analysis' ? 'active' : ''}" onclick="window.navigate('bearing-analysis')">
+          <li class="nav-item ${state.currentPage === 'bearing-analysis' ? 'active' : ''}" ${navDragAttr('bearing-analysis')} onclick="window.navigate('bearing-analysis')">
             <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i> Rulman Analiz Ajanı
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN') ? `
-          <li class="nav-item ${state.currentPage === 'predictive-agent' ? 'active' : ''}" onclick="window.navigate('predictive-agent')">
+          <li class="nav-item ${state.currentPage === 'predictive-agent' ? 'active' : ''}" ${navDragAttr('predictive-agent')} onclick="window.navigate('predictive-agent')">
             <i class="fa-solid fa-radar" style="color: var(--accent-red);"></i> Önleyici Bakım Ajanı
           </li>
-          <li class="nav-item ${state.currentPage === 'code-advisor-agent' ? 'active' : ''}" onclick="window.navigate('code-advisor-agent')">
+          <li class="nav-item ${state.currentPage === 'code-advisor-agent' ? 'active' : ''}" ${navDragAttr('code-advisor-agent')} onclick="window.navigate('code-advisor-agent')">
             <i class="fa-solid fa-code" style="color: #14f195;"></i> AI Kod Danışmanı
           </li>
         ` : ''}
+
+        ${(() => {
+          let customHtml = '';
+          try {
+            const customHeadersStr = localStorage.getItem('custom_sidebar_headers') || '{}';
+            const customHeaders = JSON.parse(customHeadersStr);
+            Object.keys(customHeaders).forEach(hId => {
+              customHtml += `
+                <div class="nav-section-label" ${navDragAttr(hId)} style="display: flex; align-items: center; justify-content: space-between; margin-top: 1rem;">
+                  <span>${customHeaders[hId]}</span>
+                  <i class="fa-solid fa-trash" onclick="window.deleteCustomSectionHeader('${hId}', event)" title="Başlığı Sil" style="cursor: pointer; opacity: 0.5; font-size: 0.75rem; padding: 2px 4px;" onmouseover="this.style.color='#ef4444'; this.style.opacity='1';" onmouseout="this.style.color=''; this.style.opacity='0.5';"></i>
+                </div>
+              `;
+            });
+          } catch(e) {}
+          return customHtml;
+        })()}
+
+        ${(() => {
+          const userEmail = (state.userProfile?.email || profile?.email || '').toLowerCase();
+          const isAdmin = (state.userProfile?.role === 'ADMIN' || profile?.role === 'ADMIN') || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver');
+          return isAdmin ? `
+            <li class="nav-item" onclick="window.showChangelogModal()" style="border-left-color: #a855f7; margin-top: 0.5rem;">
+              <i class="fa-solid fa-rocket" style="color: #c084fc;"></i> Sürüm Notları
+            </li>
+          ` : '';
+        })()}
+
       </nav>
 
       <div class="sidebar-footer" style="padding: 1rem; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
@@ -625,11 +941,14 @@ const Sidebar = () => {
         </div>
       </div>
     </aside>
-  `
-}
+  `;
+};
 
 const Topbar = () => {
   const isLight = document.body.classList.contains('light-mode');
+  const userEmail = (state.userProfile?.email || '').toLowerCase();
+  const isFatihBey = userEmail.includes('fatih.zebek');
+
   return `
     <header class="topbar">
       <div style="display: flex; align-items: center; gap: 1rem;">
@@ -639,7 +958,13 @@ const Topbar = () => {
 
       </div>
       
-      <div style="display: flex; align-items: center; gap: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        ${((state.userProfile?.role === 'ADMIN') || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver')) ? `
+          <button onclick="window.showChangelogModal()" class="btn-cyber-outline" style="height: 38px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border-radius: 19px; font-size: 0.75rem; border-color: rgba(168, 85, 247, 0.4); color: #c084fc; background: rgba(168, 85, 247, 0.1); cursor: pointer;" title="Sürüm Notları & Yenilikler">
+            <i class="fa-solid fa-rocket" style="color: #c084fc;"></i>
+            <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 0.5px;">YENİLİKLER</span>
+          </button>
+        ` : ''}
         <button id="topbar-ticket-bell" onclick="window.navigate('tickets-page')" class="btn-cyber-outline" style="width: 38px; height: 38px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 1rem; border-color: rgba(255,255,255,0.1); position: relative;">
           <i class="fa-solid fa-bell"></i>
         </button>
@@ -689,6 +1014,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
   const urlParams = new URLSearchParams(window.location.search);
   const pageParam = urlParams.get('page');
   const snParam = urlParams.get('sn');
+  const idParam = urlParams.get('id');
 
   if (pageParam === 'kkd-sorgu' && snParam) {
     try {
@@ -697,6 +1023,28 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     } catch (err) {
       console.error("Failed to render public KKD query page:", err);
       app.innerHTML = `<div style="color:red; padding:2rem; font-family:sans-serif;">Muayene sorgu sayfası yüklenirken hata oluştu.</div>`;
+    }
+    return;
+  }
+
+  if (pageParam === 'leave-verify' && idParam) {
+    try {
+      const { renderLeavePublicVerifyPage } = await import('./pages/LeaveVerify');
+      app.innerHTML = await renderLeavePublicVerifyPage(idParam);
+    } catch (err) {
+      console.error("Failed to render public leave verify page:", err);
+      app.innerHTML = `<div style="color:red; padding:2rem; font-family:sans-serif;">İzin doğrulama sayfası yüklenirken hata oluştu.</div>`;
+    }
+    return;
+  }
+
+  if (pageParam === 'card-passport' || window.location.pathname === '/card-passport' || window.location.pathname.startsWith('/card-passport')) {
+    try {
+      const { CardPassportPage } = await import('./pages/CardPassport');
+      app.innerHTML = await CardPassportPage();
+    } catch (err) {
+      console.error("Failed to render public card passport page:", err);
+      app.innerHTML = `<div style="color:red; padding:2rem; font-family:sans-serif;">Kart karne sayfası yüklenirken hata oluştu.</div>`;
     }
     return;
   }
@@ -761,7 +1109,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
         state.userProfile = profile;
 
         // Run silent self-healing database audit for admins
-        if (profile.role === 'ADMIN' || profile.role === 'MALZEME_YONETIMI' || profile.email?.toLowerCase() === 'hursit.akter@demirerholding.com') {
+        if (profile.role === 'ADMIN' || profile.role === 'MALZEME_YONETIMI' || profile.email?.toLowerCase() === 'hursit.akter@demirerholding.com' || profile.email?.toLowerCase() === 'emir.unver@demirerholding.com') {
           import('./agents/WarehouseAgent').then(({ warehouseAgent }) => {
             warehouseAgent.runSelfHealingAudit().catch(err => console.error("[Self-Healing] Error:", err));
           }).catch(err => console.error("[Self-Healing] Import failed:", err));
@@ -833,6 +1181,9 @@ const render = async (options: { skipShell?: boolean } = {}) => {
       });
     }
 
+    // --- SÜRÜM NOTLARI & GÜNCELLEME KONTROLÜ ---
+    checkAndShowChangelogNotice();
+
     // --- GLOBAL SESSION LISTENER (ADMIN ONLY) ---
     if (!(window as any)._globalSessionUnsubscribe && state.userProfile.role?.toUpperCase() === 'ADMIN') {
        import('./services/PresenceService').then(({ presenceService }) => {
@@ -876,8 +1227,45 @@ const render = async (options: { skipShell?: boolean } = {}) => {
         <!-- GLOBAL MODALS (Persistent) -->
         <div id="turbine-modal-root"></div>
         <div id="resolve-deficiency-modal-root"></div>
+        
+        <!-- Global Lightbox Modal -->
+        <div id="global-lightbox-modal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 8, 15, 0.95); backdrop-filter: blur(10px); z-index: 99999; display: none; align-items: center; justify-content: center; cursor: zoom-out;" onclick="window.closeImageLightbox()">
+          <button style="position: absolute; top: 1.5rem; right: 1.5rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; color: #fff; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,77,77,0.15)'; this.style.color='#ff4d4d';" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.color='#fff';" onclick="window.closeImageLightbox(); event.stopPropagation();">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+          <img id="global-lightbox-image" src="" style="max-width: 90%; max-height: 85%; object-fit: contain; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.5); transform: scale(0.95); transition: transform 0.2s ease-out; cursor: default;" onclick="event.stopPropagation();">
+        </div>
       `;
       
+      // Restore user's custom drag-and-drop sidebar order if saved
+      try {
+        const savedOrderStr = localStorage.getItem('custom_sidebar_order');
+        if (savedOrderStr) {
+          const savedOrder = JSON.parse(savedOrderStr);
+          const navMenu = document.querySelector('.nav-menu');
+          const hasSectionHeaders = Array.isArray(savedOrder) && savedOrder.some((id: string) => typeof id === 'string' && id.startsWith('sec-'));
+          if (!hasSectionHeaders) {
+            // Remove old stale order that corrupted section headers
+            localStorage.removeItem('custom_sidebar_order');
+          } else if (navMenu && Array.isArray(savedOrder)) {
+            savedOrder.forEach((navId: string) => {
+              const item = navMenu.querySelector(`[data-nav-id="${navId}"]`);
+              if (item) {
+                // Find and keep the next sibling if it is a submenu
+                const next = item.nextElementSibling;
+                const hasSubmenu = next && next.classList.contains('sub-menu');
+                
+                navMenu.appendChild(item);
+                
+                if (hasSubmenu) {
+                  navMenu.appendChild(next);
+                }
+              }
+            });
+          }
+        }
+      } catch(e) {}
+
       // Inject modal HTML only once if not already there
       const modal = document.getElementById('turbine-modal');
       if (modal) {
@@ -896,10 +1284,17 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           el.classList.remove('active');
         });
 
-        // 1. Top-level nav item active classes
-        const currentNav = document.querySelector(`.sidebar .nav-item[onclick*="navigate('${state.currentPage}')"]`);
+        // 1. Top-level nav item active classes (including submenu triggers)
+        const currentNav = document.querySelector(`.sidebar .nav-item[onclick*="navigate('${state.currentPage}')"]`) ||
+                           document.querySelector(`.sidebar .nav-item[onclick*="'${state.currentPage}'"]`);
         if (currentNav) {
           currentNav.classList.add('active');
+        }
+        
+        // Active classes for sidebar sub-items
+        const currentSub = document.querySelector(`.sidebar .sub-item[onclick*="navigate('${state.currentPage}')"]`);
+        if (currentSub) {
+          currentSub.classList.add('active');
         }
 
         // 2. Submenu items active classes
@@ -909,6 +1304,20 @@ const render = async (options: { skipShell?: boolean } = {}) => {
         }
         if (state.currentPage === 'warehouses' && state.selectedWarehouseId) {
           const subItem = document.getElementById('warehouses-submenu')?.querySelector(`.sub-item[onclick*="selectWarehouseAndNavigate('${state.selectedWarehouseId}')"]`);
+          if (subItem) subItem.classList.add('active');
+        }
+        if (state.currentPage === 'reports-archive' && state.selectedReportSiteId) {
+          const subItem = document.getElementById('reports-archive-submenu')?.querySelector(`.sub-item[onclick*="selectReportSiteAndNavigate('${state.selectedReportSiteId}')"]`);
+          if (subItem) subItem.classList.add('active');
+        }
+        if (state.currentPage === 'bakim-planlama') {
+          const currentSiteName = sessionStorage.getItem('activeMaintSiteName') || 'TÜM SAHALAR';
+          let targetSiteId = 'ALL';
+          if (currentSiteName !== 'TÜM SAHALAR') {
+            const siteObj = dataService.getSites().find(s => s.name === currentSiteName);
+            if (siteObj) targetSiteId = siteObj.id;
+          }
+          const subItem = document.getElementById('bakim-planlama-submenu')?.querySelector(`.sub-item[onclick*="selectMaintSiteAndNavigate('${targetSiteId}')"]`);
           if (subItem) subItem.classList.add('active');
         }
 
@@ -936,6 +1345,44 @@ const render = async (options: { skipShell?: boolean } = {}) => {
             if (warehousesArrow) warehousesArrow.classList.remove('rotate-180');
           }
         }
+
+        const reportsSub = document.getElementById('reports-archive-submenu');
+        const reportsArrow = document.querySelector('.nav-item[onclick*="reports-archive"]')?.querySelector('.submenu-arrow');
+        if (reportsSub) {
+          if (state.currentPage === 'reports-archive') {
+            reportsSub.classList.remove('hidden');
+            if (reportsArrow) reportsArrow.classList.add('rotate-180');
+          } else {
+            reportsSub.classList.add('hidden');
+            if (reportsArrow) reportsArrow.classList.remove('rotate-180');
+          }
+        }
+
+        const maintSub = document.getElementById('bakim-planlama-submenu');
+        const maintArrow = document.querySelector('.nav-item[onclick*="bakim-planlama"]')?.querySelector('.submenu-arrow');
+        if (maintSub) {
+          if (state.currentPage === 'bakim-planlama') {
+            maintSub.classList.remove('hidden');
+            if (maintArrow) maintArrow.classList.add('rotate-180');
+          } else {
+            maintSub.classList.add('hidden');
+            if (maintArrow) maintArrow.classList.remove('rotate-180');
+          }
+        }
+
+        const periodicSub = document.getElementById('periodic-controls-submenu');
+        const periodicArrow = document.querySelector('.nav-item[onclick*="periodic-controls"]')?.querySelector('.submenu-arrow');
+        if (periodicSub) {
+          if (state.currentPage === 'kkd-kontrol' || state.currentPage === 'olcu-aletleri' || state.currentPage === 'tork-aletleri') {
+            periodicSub.classList.remove('hidden');
+            if (periodicArrow) periodicArrow.classList.add('rotate-180');
+            const parentLi = document.querySelector('.nav-item[onclick*="periodic-controls"]');
+            if (parentLi) parentLi.classList.add('active');
+          } else {
+            periodicSub.classList.add('hidden');
+            if (periodicArrow) periodicArrow.classList.remove('rotate-180');
+          }
+        }
       };
       
       try {
@@ -960,17 +1407,35 @@ const render = async (options: { skipShell?: boolean } = {}) => {
       }
     }, 200);
 
-    // Cleanup before route change
-    if ((window as any)._currentUnsubscribe) {
-      (window as any)._currentUnsubscribe();
-      (window as any)._currentUnsubscribe = null;
-    }
+    // Cleanup all page-specific active Firestore listeners before route change
+    const globalUnsubs = [
+      '_currentUnsubscribe',
+      '_draftAuditUnsubscribe',
+      'scadaUnsubscribe',
+      '_tasksUnsubscribe',
+      '_inventoryUnsubscribe',
+      '_warehouseTransfersUnsubscribe',
+      'msfListUnsubscribe',
+      '_overtimeUnsubscribe'
+    ];
+    globalUnsubs.forEach(key => {
+      try {
+        const unsub = (window as any)[key];
+        if (typeof unsub === 'function') {
+          unsub();
+        }
+      } catch (e) {
+        console.error(`Failed to unsubscribe listener: ${key}`, e);
+      }
+      (window as any)[key] = null;
+    });
     import('./pages/TsiLibrary').then(m => m.destroyTsiLibrary?.()).catch(() => {});
 
     (window as any).currentWarehouseTab = state.warehouseTab;
     const content = await getContent();
     clearTimeout(loaderTimeout);
     targetContent.innerHTML = content;
+    disableAutocompleteGlobally();
 
     // Removing the setTimeout for switchTab since we now handle it at render time
     // --- PAGE SPECIFIC INITIALIZATION ---
@@ -1044,15 +1509,86 @@ const render = async (options: { skipShell?: boolean } = {}) => {
   }
 }
 
+const getUnderConstructionPage = (pageTitle: string) => {
+  return `
+    <div style="display: flex; align-items: center; justify-content: center; min-height: calc(100vh - 120px); font-family: 'Rajdhani', sans-serif; text-align: center; padding: 2rem;">
+      <div class="glass-panel" style="max-width: 500px; padding: 3.5rem 2.5rem; border: 1px solid rgba(0, 243, 255, 0.25); box-shadow: 0 0 35px rgba(0, 243, 255, 0.15); border-radius: 20px; background: rgba(13, 18, 30, 0.65); backdrop-filter: blur(15px); position: relative; overflow: hidden; width: 100%;">
+        <!-- Glowing background circles -->
+        <div style="position: absolute; top: -10%; left: -10%; width: 120px; height: 120px; background: rgba(0, 243, 255, 0.1); filter: blur(50px); border-radius: 50%;"></div>
+        <div style="position: absolute; bottom: -10%; right: -10%; width: 120px; height: 120px; background: rgba(251, 191, 36, 0.08); filter: blur(50px); border-radius: 50%;"></div>
+        
+        <div style="font-size: 4.5rem; color: #fbbf24; margin-bottom: 2rem; filter: drop-shadow(0 0 15px rgba(251, 191, 36, 0.4));">
+          <i class="fa-solid fa-person-digging fa-bounce"></i>
+        </div>
+        <h2 style="font-size: 2rem; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin: 0 0 1.25rem 0; background: linear-gradient(90deg, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: 'Rajdhani', sans-serif;">
+          ${pageTitle}
+        </h2>
+        <p style="font-size: 1.1rem; color: #a0aec0; line-height: 1.6; margin: 0 0 2rem 0; font-family: 'Inter', sans-serif; font-weight: 500;">
+          Bu modül şu anda yapım aşamasındadır ve güncellenmektedir. Çok yakında hizmete açılacaktır.
+        </p>
+        <div style="font-size: 0.85rem; color: rgba(255,255,255,0.4); padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); font-family: 'Inter', sans-serif;">
+          Gösterdiğiniz sabır için teşekkür ederiz.
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+const pageModulesCache: Record<string, any> = {};
+
+const getModule = async (key: string, fn: () => Promise<any>) => {
+  if (pageModulesCache[key]) return pageModulesCache[key];
+  const mod = await fn();
+  pageModulesCache[key] = mod;
+  return mod;
+};
+
+// Preload all popular page modules in background
+const preloadModulesInBackground = () => {
+  const load = () => {
+    import('./pages/Dashboard').then(m => pageModulesCache['dashboard'] = m).catch(() => {});
+    import('./pages/Tasks').then(m => pageModulesCache['tasks'] = m).catch(() => {});
+    import('./pages/ImagePool').then(m => pageModulesCache['image-pool'] = m).catch(() => {});
+    import('./pages/Inventory').then(m => pageModulesCache['inventory'] = m).catch(() => {});
+    import('./pages/Transfers').then(m => pageModulesCache['transfers'] = m).catch(() => {});
+    import('./pages/GlobalWarehouseHistory').then(m => pageModulesCache['global-history'] = m).catch(() => {});
+    import('./components/FormWizard').then(m => pageModulesCache['new-task'] = m).catch(() => {});
+    import('./pages/FaultLibrary').then(m => pageModulesCache['fault-library'] = m).catch(() => {});
+    import('./pages/TsiLibrary').then(m => pageModulesCache['tsi-library'] = m).catch(() => {});
+    import('./pages/Turbines').then(m => pageModulesCache['turbines'] = m).catch(() => {});
+    import('./pages/MaintenancePlanning').then(m => pageModulesCache['bakim-planlama'] = m).catch(() => {});
+    import('./pages/ReportArchive').then(m => pageModulesCache['reports-archive'] = m).catch(() => {});
+    import('./pages/VisualBOM').then(m => pageModulesCache['visual-bom'] = m).catch(() => {});
+    import('./pages/UserManagement').then(m => pageModulesCache['users'] = m).catch(() => {});
+    import('./pages/PersonnelManagement').then(m => pageModulesCache['personnel-management'] = m).catch(() => {});
+    import('./pages/LeaveManagement').then(m => pageModulesCache['leave-management'] = m).catch(() => {});
+    import('./pages/AssetCustody').then(m => pageModulesCache['asset-custody'] = m).catch(() => {});
+    import('./pages/MaterialManagement').then(m => pageModulesCache['material-analytics'] = m).catch(() => {});
+    import('./pages/WorkshopDashboard').then(m => pageModulesCache['workshop'] = m).catch(() => {});
+    import('./pages/FieldScraps').then(m => pageModulesCache['field-scraps'] = m).catch(() => {});
+    import('./pages/Analytics').then(m => pageModulesCache['analytics'] = m).catch(() => {});
+  };
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(load);
+  } else {
+    setTimeout(load, 400);
+  }
+};
+preloadModulesInBackground();
+
 const getContent = async () => {
   switch (state.currentPage) {
     case 'dashboard': {
-      const { DashboardPage } = await import('./pages/Dashboard');
+      const { DashboardPage } = await getModule('dashboard', () => import('./pages/Dashboard'));
       return await DashboardPage();
     }
     case 'new-task': {
-      const { NewTaskForm } = await import('./components/FormWizard');
+      const { NewTaskForm } = await getModule('new-task', () => import('./components/FormWizard'));
       return await NewTaskForm();
+    }
+    case 'fault-library': {
+      const { FaultLibraryPage } = await getModule('fault-library', () => import('./pages/FaultLibrary'));
+      return await FaultLibraryPage();
     }
     case 'form-ariza': {
       const { FaultFormPage } = await import('./pages/FaultForm');
@@ -1075,8 +1611,9 @@ const getContent = async () => {
       return await VisualBOMPage();
     }
     case 'purchase-requests': {
-      const { PurchaseRequestsPage } = await import('./pages/PurchaseRequests');
-      return await PurchaseRequestsPage();
+      // const { PurchaseRequestsPage } = await import('./pages/PurchaseRequests');
+      // return await PurchaseRequestsPage();
+      return getUnderConstructionPage('Satın Alma Yönetimi');
     }
     case 'turbines': {
       const { TurbinesPage } = await import('./pages/Turbines');
@@ -1091,6 +1628,13 @@ const getContent = async () => {
       return await TasksPage();
     }
     case 'users': {
+      const email = (state.userProfile?.email || '').toLowerCase();
+      if (!email.includes('fatih.zebek')) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Kullanıcı yetkilerini yönetme izni yalnızca Ana Yöneticiye aittir.</p>
+        </div>`;
+      }
       const { UserManagementPage } = await import('./pages/UserManagement');
       return await UserManagementPage();
     }
@@ -1130,17 +1674,52 @@ const getContent = async () => {
       const { RepairHistoryPage } = await import('./pages/RepairHistory');
       return await RepairHistoryPage();
     }
+    case 'workshop-tasks': {
+      const { WorkshopTasksPage } = await import('./pages/WorkshopTasks');
+      return await WorkshopTasksPage();
+    }
     case 'workshop-stock': {
       const { WorkshopStockPage } = await import('./pages/WorkshopStock');
       return await WorkshopStockPage();
+    }
+    case 'workshop-components': {
+      const { WorkshopComponentsPage } = await import('./pages/WorkshopComponents');
+      return await WorkshopComponentsPage();
+    }
+    case 'workshop-dispatches': {
+      (window as any)._workshopDispatchTab = 'DISPATCHED';
+      const { WorkshopDispatchesPage } = await import('./pages/WorkshopDispatches');
+      return await WorkshopDispatchesPage();
+    }
+    case 'workshop-returned': {
+      const { WorkshopReturnedPage } = await import('./pages/WorkshopReturned');
+      return await WorkshopReturnedPage();
+    }
+    case 'workshop-scrap': {
+      const { WorkshopScrapPage } = await import('./pages/WorkshopScrap');
+      return await WorkshopScrapPage();
+    }
+    case 'field-scraps': {
+      const { FieldScrapsPage } = await import('./pages/FieldScraps');
+      return await FieldScrapsPage();
     }
     case 'MALZEME_YONETIMI': {
       const { MaterialManagementPage } = await import('./pages/MaterialManagement');
       return await MaterialManagementPage(state.userProfile);
     }
     case 'material-analytics': {
-      const { MaterialAnalyticsPage } = await import('./pages/MaterialAnalytics');
-      return await MaterialAnalyticsPage();
+      // const { MaterialAnalyticsPage } = await import('./pages/MaterialAnalytics');
+      // return await MaterialAnalyticsPage();
+      return getUnderConstructionPage('Malzeme Analizi');
+    }
+    case 'material-pricing': {
+      const { MaterialPricingPage } = await import('./pages/MaterialPricing');
+      setTimeout(() => {
+        if ((window as any).initMaterialPricing) {
+          (window as any).initMaterialPricing();
+        }
+      }, 50);
+      return await MaterialPricingPage(state.userProfile);
     }
     case 'online-users': {
       const { OnlineUsersPage } = await import('./pages/OnlineUsers');
@@ -1182,8 +1761,60 @@ const getContent = async () => {
       }, 50);
       return await DeviceCalibrationPage('TORK');
     }
+    case 'scada-reset-logs': {
+      const { ScadaResetLogsPage } = await import('./pages/ScadaResetLogs');
+      return await ScadaResetLogsPage();
+    }
+    case 'parameter-audit': {
+      const { ParameterAuditPage } = await import('./pages/ParameterAudit');
+      return await ParameterAuditPage();
+    }
+    case 'leave-management': {
+      const { LeaveManagementPage } = await import('./pages/LeaveManagement');
+      return await LeaveManagementPage();
+    }
+    case 'vehicle-management': {
+      const userEmail = (state.userProfile?.email || '').toLowerCase();
+      if (!userEmail.includes('fatih.zebek')) {
+        return `<div style="padding: 3rem; color: #EF4444; text-align: center; font-weight: bold; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;"><i class="fa-solid fa-lock"></i> Bu modül şu anda geliştirme aşamasında olup sadece yetkili yönetici erişimine açıktır.</div>`;
+      }
+      const { renderVehicleManagement, initVehicleManagementEvents } = await import('./pages/VehicleManagement');
+      setTimeout(() => {
+        initVehicleManagementEvents();
+      }, 50);
+      return renderVehicleManagement(state.userProfile);
+    }
+    case 'saha-siparisleri': {
+      const { SahaSiparisleriPage } = await import('./pages/SahaSiparisleri');
+      setTimeout(() => {
+        if ((window as any).initSahaSiparisleriPage) {
+          (window as any).initSahaSiparisleriPage();
+        }
+      }, 50);
+      return await SahaSiparisleriPage(state.userProfile);
+    }
     case 'siparis': {
+      const userRole = (state.userProfile?.role || '').toUpperCase();
+      const userEmail = (state.userProfile?.email || '').toLowerCase();
+      const isAuthorized = userRole === 'ADMIN' || 
+                           userRole === 'MALZEME_YONETIMI' || 
+                           userEmail === 'hursit.akter@demirerholding.com' || 
+                           userEmail === 'emir.unver@demirerholding.com';
+      if (!isAuthorized) {
+        return `
+          <div class="cyber-card" style="margin: 2rem; padding: 2.5rem; text-align: center; border-color: rgba(239, 68, 68, 0.4); max-width: 600px; margin: 4rem auto;">
+            <i class="fa-solid fa-shield-halved" style="font-size: 3rem; color: #ef4444; margin-bottom: 1rem;"></i>
+            <h2 style="color: #fff; margin-bottom: 0.5rem; font-size: 1.3rem;">Yetkisiz Erişim</h2>
+            <p style="color: #94a3b8; font-size: 0.88rem;">Sipariş Yönetimi ve Satınalma ekranına yalnızca Admin ve Malzeme Yönetimi yetkilileri erişebilir.</p>
+          </div>
+        `;
+      }
       const { SiparisPage } = await import('./pages/Siparis');
+      setTimeout(() => {
+        if ((window as any).initSiparisPage) {
+          (window as any).initSiparisPage();
+        }
+      }, 50);
       return await SiparisPage(state.userProfile);
     }
     case 'bakim-planlama': {
@@ -1234,6 +1865,30 @@ const getContent = async () => {
 (window as any).toggleSidebar = () => {
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) sidebar.classList.toggle('mobile-active');
+};
+
+(window as any).showImageLightbox = (src: string) => {
+  const modal = document.getElementById('global-lightbox-modal');
+  const img = document.getElementById('global-lightbox-image') as HTMLImageElement;
+  if (modal && img) {
+    img.src = src;
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      img.style.transform = 'scale(1)';
+    }, 10);
+  }
+};
+
+(window as any).closeImageLightbox = () => {
+  const modal = document.getElementById('global-lightbox-modal');
+  const img = document.getElementById('global-lightbox-image') as HTMLImageElement;
+  if (modal && img) {
+    img.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      modal.style.display = 'none';
+      img.src = '';
+    }, 200);
+  }
 };
 
 (window as any).showToast = (title: string, message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -1315,6 +1970,12 @@ const getContent = async () => {
   }
 };
 
+(window as any).navigateToVehicleTab = async (tabId: string) => {
+  const { setActiveTab } = await import('./pages/VehicleManagement');
+  setActiveTab(tabId);
+  (window as any).navigate('vehicle-management');
+};
+
 (window as any).toggleSubmenuAndNavigate = (id: string, page: string) => {
   if (state.currentPage !== page) {
     (window as any).navigate(page);
@@ -1327,10 +1988,25 @@ const getContent = async () => {
     } else if (page === 'reports-archive' && state.selectedReportSiteId !== 'TÜMÜ') {
       state.selectedReportSiteId = 'TÜMÜ';
       (window as any).navigate(page);
+    } else if (page === 'bakim-planlama' && sessionStorage.getItem('activeMaintSiteName') !== 'TÜM SAHALAR') {
+      sessionStorage.setItem('activeMaintSiteName', 'TÜM SAHALAR');
+      (window as any).navigate(page);
     } else {
       (window as any).toggleSubmenu(id);
     }
   }
+};
+
+(window as any).selectMaintSiteAndNavigate = (siteId: string) => {
+  if (siteId === 'ALL') {
+    sessionStorage.setItem('activeMaintSiteName', 'TÜM SAHALAR');
+  } else {
+    const siteObj = dataService.getSites().find(s => s.id === siteId);
+    if (siteObj) {
+      sessionStorage.setItem('activeMaintSiteName', siteObj.name);
+    }
+  }
+  (window as any).navigate('bakim-planlama');
 };
 
 (window as any).selectWarehouseAndNavigate = (siteId: string | null, tabName?: string) => {
@@ -1461,39 +2137,43 @@ if (savedTheme === 'light') {
 
 
 // Handle Connectivity Changes
-window.addEventListener('online', () => {
+const updateConnectivityBadge = () => {
   const badge = document.getElementById('connectivity-badge');
   const pageBadge = document.getElementById('offline-status-badge');
+  const isOnline = navigator.onLine;
+
+  let pendingCount = 0;
+  try {
+    const queue = JSON.parse(localStorage.getItem('offline_reports_queue') || '[]');
+    pendingCount = queue.length;
+  } catch (e) {}
+
   if (badge) {
-    badge.className = 'connection-status online';
-    badge.innerHTML = '<div class="status-dot"></div><span>ONLINE MOD</span><i class="fa-solid fa-rotate" id="sync-icon" style="margin-left: auto; font-size: 0.6rem; opacity: 0.5;"></i>';
+    badge.className = `connection-status ${isOnline ? 'online' : 'offline'}`;
+    const pendingTxt = pendingCount > 0 ? ` (${pendingCount} BEKLEYEN)` : '';
+    badge.innerHTML = `<div class="status-dot"></div><span>${isOnline ? 'ONLINE MOD' : 'ÇEVRİMDİŞİ MOD'}${pendingTxt}</span><i class="fa-solid fa-rotate" id="sync-icon" style="margin-left: auto; font-size: 0.6rem; opacity: 0.5;"></i>`;
   }
+
   if (pageBadge) {
-    pageBadge.style.background = 'rgba(0, 230, 118, 0.1)';
-    pageBadge.style.color = 'var(--accent-green)';
-    pageBadge.innerHTML = '<i class="fa-solid fa-wifi" style="margin-right: 4px;"></i>ONLINE MOD';
+    pageBadge.style.background = isOnline ? 'rgba(0, 230, 118, 0.1)' : 'rgba(255, 170, 0, 0.1)';
+    pageBadge.style.color = isOnline ? 'var(--accent-green)' : 'var(--accent-amber)';
+    const icon = isOnline ? 'fa-wifi' : 'fa-plane-slash';
+    const pendingTxt = pendingCount > 0 ? ` (${pendingCount} Rapor Bekliyor)` : '';
+    pageBadge.innerHTML = `<i class="fa-solid ${icon}" style="margin-right: 4px;"></i>${isOnline ? 'ONLINE MOD' : 'ÇEVRİMDİŞİ'}${pendingTxt}`;
   }
-  (window as any).showToast?.('BAĞLANTI KURULDU', 'Sistem tekrar çevrimiçi modda.', 'success');
-  
+};
+
+window.addEventListener('online', () => {
+  updateConnectivityBadge();
+  (window as any).showToast?.('BAĞLANTI KURULDU', 'Sistem çevrimiçi. Veriler senkronize ediliyor...', 'success');
   if ((window as any).syncOfflineReports) {
     (window as any).syncOfflineReports();
   }
 });
 
-
 window.addEventListener('offline', () => {
-  const badge = document.getElementById('connectivity-badge');
-  const pageBadge = document.getElementById('offline-status-badge');
-  if (badge) {
-    badge.className = 'connection-status offline';
-    badge.innerHTML = '<div class="status-dot"></div><span>OFFLINE MOD</span><i class="fa-solid fa-rotate" id="sync-icon" style="margin-left: auto; font-size: 0.6rem; opacity: 0.5;"></i>';
-  }
-  if (pageBadge) {
-    pageBadge.style.background = 'rgba(255, 170, 0, 0.1)';
-    pageBadge.style.color = 'var(--accent-amber)';
-    pageBadge.innerHTML = '<i class="fa-solid fa-plane-slash" style="margin-right: 4px;"></i>OFFLINE MOD';
-  }
-  (window as any).showToast?.('BAĞLANTI KESİLDİ', 'Sistem çevrimdışı modda çalışıyor.', 'info');
+  updateConnectivityBadge();
+  (window as any).showToast?.('BAĞLANTI KESİLDİ', 'Sistem çevrimdışı modda. Raporlar telefona kaydedilecek.', 'info');
 });
 
 (window as any).manualSync = async () => {
@@ -1527,13 +2207,7 @@ const disableAutocompleteGlobally = () => {
   });
 };
 
-// Listen for dynamic DOM mutations
-const autocompleteObserver = new MutationObserver(() => {
-  disableAutocompleteGlobally();
-});
-autocompleteObserver.observe(document.documentElement, { childList: true, subtree: true });
-
-// Fallback: intercept focusin events to enforce autocomplete="off" immediately when focused
+// Intercept focusin events to enforce autocomplete="off" immediately when focused
 document.addEventListener('focusin', (e) => {
   const target = e.target as HTMLInputElement;
   if (target && target.tagName === 'INPUT') {

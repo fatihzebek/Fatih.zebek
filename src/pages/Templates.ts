@@ -152,18 +152,46 @@ export const TemplatesPage = async () => {
       
       .copy-btn:hover { background: var(--accent-cyan); color: #000; }
       .delete-btn:hover { background: var(--accent-red); color: #fff; }
-    </style>
 
-    <div class="templates-container">
-      <header style="margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: flex-end;">
-        <div>
-          <h1 style="font-size: 2.5rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0.5rem;">Şablon Yönetim Merkezi</h1>
-          <p style="color: #8892b0; font-size: 0.9rem; margin: 0;">Türbin modellerine ve bakım tiplerine göre özelleştirilmiş operasyonel şablonlar.</p>
-        </div>
-        <button class="btn-cyber" style="background: var(--accent-green); color: #000; position: relative; z-index: 100;" onclick="window.handleCreateTemplate(event)">
-          <i class="fa-solid fa-plus"></i> YENİ ŞABLON OLUŞTUR
-        </button>
-      </header>
+        button[onclick="window.handleCreateTemplate(event)"].btn-cyber {
+          background: rgba(20, 241, 149, 0.06) !important;
+          border: 1px solid rgba(20, 241, 149, 0.25) !important;
+          color: #14F195 !important;
+          padding: 8px 16px !important;
+          border-radius: 6px !important;
+          font-family: 'Rajdhani', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 0.75rem !important;
+          transition: all 0.2s !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          letter-spacing: 0.5px !important;
+          text-transform: uppercase !important;
+          box-shadow: none !important;
+          cursor: pointer !important;
+          min-height: unset !important;
+          height: 36px !important;
+        }
+        button[onclick="window.handleCreateTemplate(event)"].btn-cyber:hover {
+          background: rgba(20, 241, 149, 0.15) !important;
+          border-color: rgba(20, 241, 149, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(20, 241, 149, 0.12) !important;
+        }
+      </style>
+
+      <div class="templates-container">
+        <header style="margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: flex-end;">
+          <div>
+            <h1 style="font-size: 2.5rem; font-weight: 900; letter-spacing: -1px; margin-bottom: 0.5rem;">Şablon Yönetim Merkezi</h1>
+            <p style="color: #8892b0; font-size: 0.9rem; margin: 0;">Türbin modellerine ve bakım tiplerine göre özelleştirilmiş operasyonel şablonlar.</p>
+          </div>
+          <button class="btn-cyber" style="position: relative; z-index: 100;" onclick="window.handleCreateTemplate(event)">
+            <i class="fa-solid fa-plus"></i> YENİ ŞABLON OLUŞTUR
+          </button>
+        </header>
 
       <div class="template-grid">
         ${templates

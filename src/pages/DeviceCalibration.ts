@@ -1712,7 +1712,7 @@ const normalizeCalibrationDate = (val: any): string => {
           <div class="item-detail">Saha: ${device.siteName || '-'}</div>
           <div class="item-detail">Sorumlu: ${device.assignedPerson || '-'}</div>
           <div class="item-detail">Sonraki Kalibrasyon: ${dateFormatted}</div>
-          <div class="item-sn">S/N: ${device.serialNumber}</div>
+          <div class="item-sn">${device.serialNumber}</div>
         </div>
       </body>
     </html>
@@ -1770,7 +1770,7 @@ const normalizeCalibrationDate = (val: any): string => {
                 <div class="item-detail">Saha: ${d.siteName || '-'}</div>
                 <div class="item-detail">Sorumlu: ${d.assignedPerson || '-'}</div>
                 <div class="item-detail">Sonraki Kal.: ${d.dateFormatted}</div>
-                <div class="item-sn">S/N: ${d.serialNumber}</div>
+                <div class="item-sn">${d.serialNumber}</div>
             </div>
             <img class="qr-img" src="${d.dataUrl}">
         </div>`).join('')}

@@ -1,7 +1,7 @@
 import { formatTeamName } from '../../utils/formatters';
 import { dataService } from '../../services/DataService';
 import { db } from '../../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer, orderBy, getDocs, updateDoc } from 'firebase/firestore';
 import { warehouseState, getUserProfile, getTeamResponsibleSites, getWarehouseSite } from './WarehouseState';
 import { renderTabsHTML } from './WarehouseTabs';
 import { renderModalsHTML } from './WarehouseModals';
@@ -293,17 +293,31 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
           ...teamWarehouses.map(w => w.id)
         ];
         
+        const { repairService } = await import('../../services/RepairService');
+        const [allScraps, allRepairs] = await Promise.all([
+          warehouseService.getFieldScraps().catch(() => []),
+          repairService.getRepairs().catch(() => [])
+        ]);
+
         await Promise.all(allWhIds.map(async (whId) => {
           try {
-            const collRef = collection(db, 'warehouses', whId, 'inventory_v2');
-            const totalSnapshot = await getCountFromServer(collRef);
-            const totalCount = totalSnapshot.data().count;
-            
-            const defectQuery = query(collRef, where('condition', '==', 'DEFECT'));
-            const defectSnapshot = await getCountFromServer(defectQuery);
-            const defectCount = defectSnapshot.data().count;
-            
-            const normalCount = Math.max(0, totalCount - defectCount);
+            let normalCount = 0;
+            let defectCount = 0;
+            const items = await warehouseService.getInventory(whId, true);
+            items.forEach(data => {
+              const qty = Number(data.quantity || 0);
+              const cond = data.condition || 'NEW';
+              const isScrapped = data.status === 'HURDAYA_AYRILDI';
+              const isRepaired = data.status === 'TAMIRE_SEVK_EDILDI';
+              
+              if (qty > 0 && !isScrapped && !isRepaired) {
+                if (cond === 'DEFECT') {
+                  defectCount += qty;
+                } else {
+                  normalCount += qty;
+                }
+              }
+            });
 
             const el = document.getElementById(`wh-count-${whId}`);
             if (el) el.innerText = `Stok: ${normalCount} Adet`;
@@ -351,49 +365,85 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   const isMobileWarehouse = currentWarehouse.id.startsWith('team_');
   warehouseState.isMobileWarehouse = isMobileWarehouse;
 
-  const targetOptions = allWarehouses
-    .filter(w => w.id !== currentWarehouse.id)
-    .map(w => ({ id: w.id, name: w.name }));
-  
-  for (let i = 1; i <= 15; i++) {
-    const teamName = `Team ${String(i).padStart(2, '0')}`;
-    const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
-    if (teamId !== currentWarehouse.id) {
-      targetOptions.push({ id: teamId, name: `${teamName} Deposu` });
+  const isAdminOrManager = userProfile?.role === 'ADMIN' || isMaterialManager;
+  const targetOptions: { id: string, name: string }[] = [];
+
+  if (isMobileWarehouse) {
+    // Ekip kendi zimmet sayfasındaysa: Yalnızca yetkili ana servis depolarına iade yapabilir, diğer ekiplere aktaramaz
+    allWarehouses
+      .filter(w => {
+        if (w.id === currentWarehouse.id) return false;
+        if (isAdminOrManager) return true;
+        const isWhAllowed = userProfile?.allowedWarehouses?.some((whId: string) => whId === w.id || whId.includes(w.id) || w.id.includes(whId));
+        const isSiteAllowed = userProfile?.allowedSites?.some((sId: string) => sId === w.id || sId.includes(w.id) || w.id.includes(sId));
+        return isWhAllowed || isSiteAllowed;
+      })
+      .forEach(w => targetOptions.push({ id: w.id, name: w.name }));
+  } else {
+    // Ana depodayken: SADECE ekiplerin zimmetine sevk yapabilir, diğer ana depolara sevk yapılamaz!
+    for (let i = 1; i <= 15; i++) {
+      const teamName = `Team ${String(i).padStart(2, '0')}`;
+      const teamId = `team_${teamName.replace(/\s+/g, '_')}`;
+      const userTeamCanonical = userProfile?.team ? formatTeamName(userProfile.team) : '';
+      const currentTeamCanonical = formatTeamName(teamName);
+      const isUserOwnTeam = !!userTeamCanonical && userTeamCanonical === currentTeamCanonical;
+      const isAllowed = isAdminOrManager || isUserOwnTeam || (userProfile?.allowedWarehouses || []).includes(teamId);
+
+      if (teamId !== currentWarehouse.id && isAllowed) {
+        targetOptions.push({ id: teamId, name: `${teamName} Deposu` });
+      }
     }
   }
+
   warehouseState.targetOptions = targetOptions;
   (window as any)._warehouseTargetOptions = targetOptions;
 
-  // Fetch initial live inventory items synchronously to prevent statistics/UI flicker
+  // Reset draft reservations state on new page load
+  warehouseState.draftReservations = { bySap: {}, details: [] };
+
+  // Concurrent initial data fetching (Promise.all) for ultra-fast load speed
+  let rawItems: any[] = [];
+  let pendingReturns: any[] = [];
+  let allReports: any[] = [];
+  let allRepairs: any[] = [];
+  let allScraps: any[] = [];
+
   try {
-     const rawItems = await warehouseService.getInventory(currentWarehouse.id, true);
-     warehouseState.inventoryItems = rawItems.map((item: any) => {
-       let resolvedName = item.name || item.description || '';
-       if (!resolvedName || resolvedName === 'Bilinmeyen Malzeme') {
-         const dictMat = inventoryService.getMaterialBySap(item.sapNo);
-         if (dictMat && dictMat.d) {
-           resolvedName = dictMat.d;
-         }
-       }
-       if (!resolvedName) resolvedName = 'Bilinmeyen Malzeme';
-       return { ...item, name: resolvedName };
-     });
-     warehouseState.inventoryWithQRs = warehouseState.inventoryItems.map(item => ({ ...item, qrDataUrl: '' }));
-     (window as any).currentInventoryData = warehouseState.inventoryItems;
+    const { repairService } = await import('../../services/RepairService');
+    const { serviceReportService } = await import('../../services/ServiceReportService');
+
+    const fetches: Promise<any>[] = [
+      warehouseService.getInventory(currentWarehouse.id, true).catch(() => []),
+      repairService.getRepairs().catch(() => []),
+      serviceReportService.getAllReports().catch(() => []),
+      warehouseService.getFieldScraps().catch(() => [])
+    ];
+
+    const [itemsResult, repairsResult, reportsResult, scrapsResult] = await Promise.all(fetches);
+
+    rawItems = itemsResult || [];
+    allRepairs = repairsResult || [];
+    allReports = reportsResult || [];
+    allScraps = scrapsResult || [];
+
+    pendingReturns = allRepairs.filter((r: any) => r.status === 'SENT_BACK' && r.targetWarehouseId === currentWarehouse.id);
   } catch (err) {
-     console.warn("Could not retrieve initial inventory:", err);
+    console.warn("Could not retrieve warehouse initial data concurrently:", err);
   }
 
-  // Real-time notifications and returns
-  let pendingReturns: any[] = [];
-  try {
-     const { repairService } = await import('../../services/RepairService');
-     const allRepairs = await repairService.getRepairs();
-     pendingReturns = allRepairs.filter(r => r.status === 'SENT_BACK' && r.targetWarehouseId === currentWarehouse.id);
-  } catch (err) {
-     console.warn("Could not retrieve pending returns:", err);
-  }
+  warehouseState.inventoryItems = rawItems.map((item: any) => {
+    let resolvedName = item.name || item.description || '';
+    if (!resolvedName || resolvedName === 'Bilinmeyen Malzeme') {
+      const dictMat = inventoryService.getMaterialBySap(item.sapNo);
+      if (dictMat && dictMat.d) {
+        resolvedName = dictMat.d;
+      }
+    }
+    if (!resolvedName) resolvedName = 'Bilinmeyen Malzeme';
+    return { ...item, name: resolvedName };
+  });
+  warehouseState.inventoryWithQRs = warehouseState.inventoryItems.map(item => ({ ...item, qrDataUrl: '' }));
+  (window as any).currentInventoryData = warehouseState.inventoryItems;
   warehouseState.pendingReturns = pendingReturns;
 
   const currentTab = ((window as any).currentWarehouseTab || 'inventory').toUpperCase();
@@ -409,8 +459,6 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
   if (currentWarehouse) {
     try {
-      const { serviceReportService } = await import('../../services/ServiceReportService');
-      const allReports = await serviceReportService.getAllReports();
       const whNameBase = currentWarehouse.name.toLowerCase().replace('depo', '').trim();
       
       reports = allReports.filter((report: any) => {
@@ -474,8 +522,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               serialNo: m.serialNo || '-',
               description: m.description,
               defect: m.defectCount || 0,
-              faultCode: rep.faultCode || '-',
-              faultDesc: rep.faultDesc || '-',
+              faultCode: rep.type === 'BAKIM' ? (rep.templateName || 'Bakım') : (rep.faultCode || '-'),
+              faultDesc: rep.type === 'BAKIM' ? ((rep.faultDesc && rep.faultDesc !== 'Genel Görev') ? rep.faultDesc : '') : (rep.faultDesc || '-'),
               siteName: rep.siteName || '-'
             });
           }
@@ -589,31 +637,38 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             oninput="window.filterInventory()"
             type="text" 
             placeholder="Parça adı veya SAP numarası..." 
-            style="height: 34px; background-color: #111827; border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.8rem; width: 220px; outline: none; transition: all 0.2s;"
+            style="height: 36px; background-color: rgba(10, 14, 23, 0.85); border: 2px solid #14F195; border-radius: 8px; color: #FFFFFF; padding: 0 0.85rem; font-size: 0.85rem; width: 240px; outline: none; transition: all 0.25s; box-shadow: 0 0 12px rgba(20, 241, 149, 0.35);"
+            onfocus="this.style.borderColor='#14F195'; this.style.boxShadow='0 0 20px rgba(20, 241, 149, 0.65)';"
+            onblur="this.style.borderColor='#14F195'; this.style.boxShadow='0 0 12px rgba(20, 241, 149, 0.35)';"
           />
           ${currentWarehouse.id === 'MTA' ? '' : `
             ${isMobileWarehouse ? '' : `
-            <button onclick="window.startFastAudit()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
+            <button onclick="window.startFastAudit()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
               <i class="fa-solid fa-bolt"></i> Hızlı Sayım
             </button>
             `}
-            <button onclick="window.startQRScanner()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
+            <button onclick="window.startQRScanner()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(0, 242, 255, 0.25); background-color: rgba(0, 242, 255, 0.06); color: var(--accent-cyan); font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(0, 242, 255, 0.15)'; this.style.borderColor='rgba(0, 242, 255, 0.5)';" onmouseout="this.style.backgroundColor='rgba(0, 242, 255, 0.06)'; this.style.borderColor='rgba(0, 242, 255, 0.25)';">
               <i class="fa-solid fa-qrcode"></i> QR Tara
             </button>
-            <button onclick="window.downloadInventoryExcel()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
+            <button onclick="window.downloadInventoryExcel()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(0, 242, 255, 0.25); background-color: rgba(0, 242, 255, 0.06); color: var(--accent-cyan); font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(0, 242, 255, 0.15)'; this.style.borderColor='rgba(0, 242, 255, 0.5)';" onmouseout="this.style.backgroundColor='rgba(0, 242, 255, 0.06)'; this.style.borderColor='rgba(0, 242, 255, 0.25)';">
               <i class="fa-solid fa-download"></i> İndir
             </button>
             ${isMobileWarehouse ? '' : `
-            <button onclick="window.printWarehouseQR()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;" title="Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)">
+            <button id="btn-print-warehouse-qr" onclick="window.printWarehouseQR()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(255, 235, 59, 0.25); background-color: rgba(255, 235, 59, 0.06); color: #fded7e; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" title="Seçili veya Tüm Depo Malzeme Etiketlerini QR Olarak Yazdır (Tanex TW-2014)" onmouseover="this.style.backgroundColor='rgba(255, 235, 59, 0.15)'; this.style.borderColor='rgba(255, 235, 59, 0.5)';" onmouseout="this.style.backgroundColor='rgba(255, 235, 59, 0.06)'; this.style.borderColor='rgba(255, 235, 59, 0.25)';">
               <i class="fa-solid fa-qrcode"></i> QR Etiket Bas
             </button>
+            <button id="btn-clear-selections" onclick="window.clearAllMaterialSelections()" style="display: none; height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.35); background-color: rgba(239, 68, 68, 0.1); color: #FCA5A5; font-size: 0.8rem; font-weight: 800; cursor: pointer; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" title="Seçimleri Temizle" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.2)';" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.1)';">
+              <i class="fa-solid fa-xmark"></i> Seçimi Temizle (<span class="clear-count">0</span>)
+            </button>
+            ${isMaterialManager ? `
             <input type="file" id="excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.handleExcelUpload(event)" />
-            <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.8rem; font-weight: 500; cursor: pointer;">
+            <button id="btn-upload-excel" onclick="document.getElementById('excel-upload-input').click()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
               <i class="fa-solid fa-upload"></i> Yükle
             </button>
-            <button onclick="window.openAddNewModal()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: none; background-color: #FFFFFF; color: #000000; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
+            <button onclick="window.openAddNewModal()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(100, 255, 218, 0.25); background-color: rgba(100, 255, 218, 0.06); color: #64ffda; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(100, 255, 218, 0.15)'; this.style.borderColor='rgba(100, 255, 218, 0.5)';" onmouseout="this.style.backgroundColor='rgba(100, 255, 218, 0.06)'; this.style.borderColor='rgba(100, 255, 218, 0.25)';">
               + Yeni Ekle
             </button>
+            ` : ''}
             `}
           `}
         </div>
@@ -657,6 +712,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                     <th style="padding: 0.2rem 0.3rem; font-weight: 700;">MALZEME TANIMI</th>
                     <th style="padding: 0.2rem 0.3rem; font-weight: 700; text-align: center;">MİKTAR</th>
                     <th style="padding: 0.2rem 0.3rem; font-weight: 700; text-align: right;">RAF KONUMU</th>
+                    ${isMaterialManager ? `<th style="padding: 0.2rem 0.3rem; font-weight: 700; text-align: right;">SİL</th>` : ''}
                   </tr>
                 </thead>
                 <tbody id="reservations-tbody">
@@ -768,55 +824,66 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
               <h2 style="color: #FFFFFF; margin: 0; font-size: 1.25rem;">Türbin Bazlı Malzeme Tüketim Analizi</h2>
               <div style="color: #94A3B8; font-size: 0.9rem;">Bu sahaya ait servis raporlarında takılan ve sökülen malzemeler türbin bazında listelenmektedir.</div>
-              <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-                <input type="text" id="warehouse-analytics-sap" class="cyber-input" style="padding: 8px 12px; font-size: 0.85rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(20, 241, 149, 0.3); border-radius: 6px; color: #14F195; width: 250px; font-weight: 600; outline: none;" placeholder="SAP Kodu veya Malzeme Adı..." value="${analyticsSap}" onkeypress="if(event.key==='Enter') window.setWarehouseAnalyticsSap((this as any).value)">
-                <button onclick="window.setWarehouseAnalyticsSap((document.getElementById('warehouse-analytics-sap') as HTMLInputElement).value)" style="padding: 8px 16px; border-radius: 6px; cursor: pointer; background: rgba(20, 241, 149, 0.1); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.3); font-weight: bold; display: flex; align-items: center; gap: 6px;" onmouseover="this.style.background='rgba(20, 241, 149, 0.2)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.1)'">
+              <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; align-items: center;">
+                <input type="text" id="warehouse-analytics-sap" class="cyber-input" style="height: 34px; padding: 0 0.75rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(20, 241, 149, 0.25); border-radius: 6px; color: #14F195; width: 220px; font-weight: 600; outline: none;" placeholder="SAP Kodu veya Malzeme Adı..." value="${analyticsSap}" oninput="window.setWarehouseAnalyticsSap(this.value)" onkeypress="if(event.key==='Enter') window.setWarehouseAnalyticsSap(this.value)">
+                <button onclick="window.setWarehouseAnalyticsSap((document.getElementById('warehouse-analytics-sap') as HTMLInputElement).value)" style="height: 34px; padding: 0 0.85rem; border-radius: 6px; cursor: pointer; background: rgba(20, 241, 149, 0.06); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.25); font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; display: flex; align-items: center; gap: 5px; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
                   <i class="fa-solid fa-search"></i> Filtrele
+                </button>
+                <button id="btn-clear-analytics-sap" onclick="window.setWarehouseAnalyticsSap('')" style="display: ${analyticsSap ? 'inline-flex' : 'none'}; height: 34px; padding: 0 0.75rem; border-radius: 6px; cursor: pointer; background: rgba(239, 68, 68, 0.1); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 700; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; align-items: center; gap: 4px;" title="Filtreyi Temizle">
+                  <i class="fa-solid fa-xmark"></i> Temizle
                 </button>
               </div>
             </div>
             
             <div class="filter-group" style="display: flex; align-items: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); gap: 4px;">
-              <button class="btn-filter ${currentPeriod === 'this-week' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-week')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'this-week' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'this-week' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">BU HAFTA</button>
-              <button class="btn-filter ${currentPeriod === 'this-month' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-month')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'this-month' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'this-month' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">BU AY</button>
-              <button class="btn-filter ${currentPeriod === 'last-month' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('last-month')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'last-month' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'last-month' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">ÖNCEKİ AY</button>
-              <button class="btn-filter ${currentPeriod === 'this-year' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-year')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'this-year' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'this-year' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">BU YIL</button>
-              <button class="btn-filter ${currentPeriod === 'all' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('all')" style="padding: 0.5rem 1rem; border-radius: 6px; background: ${currentPeriod === 'all' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'all' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;">TÜMÜ</button>
+              <button class="btn-filter ${currentPeriod === 'this-week' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-week')" style="padding: 0.35rem 0.75rem; border-radius: 6px; background: ${currentPeriod === 'this-week' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'this-week' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'this-week' ? '#00f2ff' : '#94A3B8'}; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">BU HAFTA</button>
+              <button class="btn-filter ${currentPeriod === 'this-month' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-month')" style="padding: 0.35rem 0.75rem; border-radius: 6px; background: ${currentPeriod === 'this-month' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'this-month' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'this-month' ? '#00f2ff' : '#94A3B8'}; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">BU AY</button>
+              <button class="btn-filter ${currentPeriod === 'last-month' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('last-month')" style="padding: 0.35rem 0.75rem; border-radius: 6px; background: ${currentPeriod === 'last-month' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'last-month' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'last-month' ? '#00f2ff' : '#94A3B8'}; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">ÖNCEKİ AY</button>
+              <button class="btn-filter ${currentPeriod === 'this-year' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('this-year')" style="padding: 0.35rem 0.75rem; border-radius: 6px; background: ${currentPeriod === 'this-year' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'this-year' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'this-year' ? '#00f2ff' : '#94A3B8'}; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">BU YIL</button>
+              <button class="btn-filter ${currentPeriod === 'all' ? 'active' : ''}" onclick="window.setWarehouseAnalyticsPeriod('all')" style="padding: 0.35rem 0.75rem; border-radius: 6px; background: ${currentPeriod === 'all' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'all' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'all' ? '#00f2ff' : '#94A3B8'}; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; cursor: pointer; transition: all 0.2s;">TÜMÜ</button>
               
-              <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+              <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
               
-              <input type="date" id="warehouse-analytics-start" class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #FFF;" value="${customStart}">
+              <input type="date" id="warehouse-analytics-start" class="cyber-input" style="height: 28px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 4px; color: #FFFFFF; font-size: 0.75rem; padding: 0 0.5rem; outline: none;" value="${customStart}">
               <span style="color: #94A3B8; font-size: 0.8rem;">-</span>
-              <input type="date" id="warehouse-analytics-end" class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #FFF;" value="${customEnd}">
-              <button onclick="window.setCustomWarehouseAnalyticsPeriod()" style="padding: 4px 12px; border-radius: 4px; background: ${currentPeriod === 'custom' ? '#3B82F6' : 'transparent'}; color: ${currentPeriod === 'custom' ? '#FFF' : '#94A3B8'}; border: none; cursor: pointer;" title="Tarih aralığına göre filtrele">
+              <input type="date" id="warehouse-analytics-end" class="cyber-input" style="height: 28px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 4px; color: #FFFFFF; font-size: 0.75rem; padding: 0 0.5rem; outline: none;" value="${customEnd}">
+              <button onclick="window.setCustomWarehouseAnalyticsPeriod()" style="padding: 4px 12px; height: 28px; border-radius: 4px; background: ${currentPeriod === 'custom' ? 'rgba(0, 242, 255, 0.08)' : 'transparent'}; border: 1px solid ${currentPeriod === 'custom' ? 'rgba(0, 242, 255, 0.35)' : 'transparent'}; color: ${currentPeriod === 'custom' ? '#00f2ff' : '#94A3B8'}; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" title="Tarih aralığına göre filtrele">
                 <i class="fa-solid fa-filter"></i>
               </button>
               
-              <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+              <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
               
-              <button onclick="window.exportTurbineAnalytics()" style="padding: 0.5rem 1rem; border-radius: 6px; background: #10B981; color: #FFF; border: none; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 0.5rem;" title="Türbin Analizini Excel Olarak İndir">
+              <button onclick="window.exportTurbineAnalytics()" style="height: 32px; padding: 0 0.75rem; border-radius: 6px; background: rgba(20, 241, 149, 0.06); border: 1px solid rgba(20, 241, 149, 0.25); color: #14F195; cursor: pointer; font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; gap: 5px; transition: all 0.2s;" title="Türbin Analizini Excel Olarak İndir" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
                 <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
               </button>
             </div>
           </div>
           
-          <div style="display: flex; flex-direction: column; gap: 1rem;">
-            ${sortedTurbines.length > 0 ? sortedTurbines.map(([turbineId, data], index) => `
-              <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden;">
+          <div id="turbine-analytics-list-container" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div id="turbine-analytics-no-result" style="display: none; text-align: center; padding: 2.5rem; color: #94A3B8; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">
+              <i class="fa-solid fa-search" style="font-size: 1.5rem; color: #64748B; margin-bottom: 0.5rem;"></i>
+              <div>Aranan SAP kodu veya malzeme tanımına ait tüketim kaydı bulunamadı.</div>
+            </div>
+            ${sortedTurbines.length > 0 ? sortedTurbines.map(([turbineId, data], index) => {
+              const isFiltered = !!analyticsSap;
+              const defaultDisplay = isFiltered ? 'block' : 'none';
+              const defaultIconTransform = isFiltered ? 'rotate(180deg)' : 'rotate(0deg)';
+              return `
+              <div class="turbine-analytics-card" id="turbine-card-${index}" data-turbine="${turbineId.toLowerCase()}" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; overflow: hidden;">
                 <!-- Accordion Header -->
                 <div onclick="window.toggleTurbineAccordion('turbine-acc-${index}')" style="padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
                   <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; font-weight: 700; color: #E2E8F0; display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-chevron-down" id="turbine-acc-icon-${index}" style="transition: transform 0.3s; font-size: 0.8rem; color: #94A3B8;"></i>
+                    <i class="fa-solid fa-chevron-down" id="turbine-acc-icon-${index}" style="transition: transform 0.3s; font-size: 0.8rem; color: #94A3B8; transform: ${defaultIconTransform};"></i>
                     ${turbineId}
                   </div>
-                  <div style="display: flex; gap: 1rem;">
+                  <div id="turbine-badges-${index}" style="display: flex; gap: 1rem;">
                     ${data.totalUsed > 0 ? `<span style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">${data.totalUsed} Takılan</span>` : ''}
                     ${data.totalDefect > 0 ? `<span style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">${data.totalDefect} Sökülen</span>` : ''}
                   </div>
                 </div>
                 
                 <!-- Accordion Content -->
-                <div id="turbine-acc-${index}" style="display: none; padding: 0; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+                <div id="turbine-acc-${index}" style="display: ${defaultDisplay}; padding: 0; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
                   <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
                       <thead>
@@ -836,7 +903,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                       </thead>
                       <tbody>
                         ${data.items.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((item: any) => `
-                          <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                          <tr class="turbine-item-row" data-sap="${String(item.sapNo || '').toLowerCase()}" data-desc="${String(item.description || '').toLowerCase()}" data-used="${item.used || 0}" data-defect="${item.defect || 0}" style="border-bottom: 1px solid rgba(255,255,255,0.02); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
                             <td style="padding: 0.75rem 1rem; color: #E2E8F0;">${new Date(item.date).toLocaleDateString('tr-TR')}</td>
                             <td style="padding: 0.75rem 1rem; color: #94A3B8; font-family: monospace;">${item.reportId}</td>
                             <td style="padding: 0.75rem 1rem; color: #F59E0B; font-weight: 600;">${item.matFormNo}</td>
@@ -868,7 +935,8 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                   </div>
                 </div>
               </div>
-            `).join('') : '<div style="text-align: center; padding: 3rem; color: #94A3B8; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">Seçili tarih aralığında bu sahada türbin bazlı malzeme tüketimi bulunamadı.</div>'}
+            `;
+            }).join('') : '<div style="text-align: center; padding: 3rem; color: #94A3B8; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">Seçili tarih aralığında bu sahada türbin bazlı malzeme tüketimi bulunamadı.</div>'}
           </div>
         </div>
       </div>
@@ -889,27 +957,27 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
                 <div style="position: relative;">
                   <i class="fa-solid fa-search" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: #64748B;"></i>
-                  <input type="text" id="manual-audit-search" oninput="window.filterManualAudit(this.value)" placeholder="SAP No veya Tanım ara..." style="width: 250px; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem 0 2.5rem; outline: none; font-size: 0.9rem;" />
+                  <input type="text" id="manual-audit-search" oninput="window.filterManualAudit(this.value)" placeholder="SAP No veya Tanım ara..." style="width: 220px; height: 35px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 6px; color: #FFFFFF; padding: 0 0.85rem 0 2.2rem; outline: none; font-size: 0.8rem;" />
                 </div>
-                <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.85rem; align-items: center; height: 42px; box-sizing: border-box; white-space: nowrap;">
+                <div id="manual-summary-bar" style="display: none; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.8rem; align-items: center; height: 35px; box-sizing: border-box; white-space: nowrap;">
                   <!-- Filled via updateManualSummaryBar -->
                 </div>
               </div>
-              <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0;">
                 ${currentWarehouse.id === 'MTA' ? '' : `
-                <button onclick="window.startFastAudit()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;">
+                <button onclick="window.startFastAudit()" style="height: 35px; padding: 0 0.85rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
                   <i class="fa-solid fa-bolt"></i> Hızlı Sayım (QR)
                 </button>
-                <button onclick="window.startQRScanner()" style="height: 42px; padding: 0 1rem; border-radius: 8px; border: 1px solid #1E293B; background-color: #111827; color: #E2E8F0; font-size: 0.9rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#111827'">
+                <button onclick="window.startQRScanner()" style="height: 35px; padding: 0 0.85rem; border-radius: 6px; border: 1px solid rgba(226, 232, 240, 0.25); background-color: rgba(226, 232, 240, 0.06); color: #E2E8F0; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(226, 232, 240, 0.15)'; this.style.borderColor='rgba(226, 232, 240, 0.5)';" onmouseout="this.style.backgroundColor='rgba(226, 232, 240, 0.06)'; this.style.borderColor='rgba(226, 232, 240, 0.25)';">
                   <i class="fa-solid fa-qrcode"></i> QR Tara
                 </button>
                 `}
                 ${isMaterialManager ? `
-                <button onclick="window.clearDraftAudit()" style="height: 42px; padding: 0 1.25rem; border-radius: 8px; border: 1px solid #1E293B; background-color: transparent; color: #EF4444; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.1)'" onmouseout="this.style.backgroundColor='transparent'">
+                <button onclick="window.clearDraftAudit()" style="height: 35px; padding: 0 1rem; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.25); background-color: rgba(239, 68, 68, 0.06); color: #EF4444; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.15)'; this.style.borderColor='rgba(239, 68, 68, 0.5)';" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.06)'; this.style.borderColor='rgba(239, 68, 68, 0.25)';">
                   <i class="fa-solid fa-trash-can"></i> Taslağı Sil
                 </button>
                 ` : ''}
-                <button onclick="window.saveManualAudit(this)" style="height: 42px; padding: 0 1.25rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap;">
+                <button onclick="window.saveManualAudit(this)" style="height: 35px; padding: 0 1rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
                   <i class="fa-solid fa-save"></i> Tüm Sayımı Kaydet
                 </button>
               </div>
@@ -969,12 +1037,12 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 type="text" 
                 placeholder="SAP No veya Tanım ara..." 
                 oninput="window.filterDepoHareketleri((this as any).value)"
-                style="height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #FFFFFF; padding: 0 1rem; outline: none; font-size: 0.9rem; width: 280px; transition: all 0.2s;"
+                style="height: 35px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 6px; color: #FFFFFF; padding: 0 0.85rem; outline: none; font-size: 0.8rem; width: 220px; transition: all 0.2s;"
                 onfocus="this.style.borderColor='#14F195'"
                 onblur="this.style.borderColor='#1E293B'"
               />
               ${isMaterialManager ? `
-              <button onclick="window.clearAllDepoLogs()" class="btn-cyber" style="background: linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color: #FFF; font-weight: 800; border: none; height: 42px; padding: 0 1.25rem; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+              <button onclick="window.clearAllDepoLogs()" class="btn-cyber" style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.25); color: #EF4444; font-weight: 800; height: 35px; min-height: unset !important; padding: 0 1rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.15)'; this.style.borderColor='rgba(239, 68, 68, 0.5)';" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.06)'; this.style.borderColor='rgba(239, 68, 68, 0.25)';">
                 <i class="fa-solid fa-trash-can"></i> GEÇMİŞİ TEMİZLE
               </button>
               ` : ''}
@@ -1018,16 +1086,31 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 })() : ''}
               </div>
             </div>
-            ${hasWarehouseManagePerm ? `
-            <div style="display: flex; gap: 8px;">
-              <button onclick="window.bulkSendToRepair()" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-weight: 800; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(20, 241, 149, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <div style="position: relative; display: flex; align-items: center;">
+                <i class="fa-solid fa-search" style="position: absolute; left: 10px; color: #64748B; font-size: 0.8rem; pointer-events: none;"></i>
+                <input 
+                  type="text" 
+                  id="defect-search-input" 
+                  class="cyber-input" 
+                  placeholder="SAP No veya Malzeme Adı ara..." 
+                  oninput="window.filterDefectList(this.value)"
+                  style="height: 32px; padding: 0 1.8rem 0 2rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #FFFFFF; width: 230px; outline: none; font-weight: 500;"
+                >
+                <i id="defect-search-clear" onclick="window.clearDefectSearch()" class="fa-solid fa-xmark" style="display: none; position: absolute; right: 8px; color: #94A3B8; cursor: pointer; font-size: 0.85rem; padding: 2px;" title="Aramayı Temizle"></i>
+              </div>
+              <button onclick="window.toggleDefectCompletedFilter()" class="btn-cyber" style="background: ${warehouseState.defectShowCompleted ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${warehouseState.defectShowCompleted ? '#3B82F6' : 'rgba(255, 255, 255, 0.15)'}; color: ${warehouseState.defectShowCompleted ? '#60A5FA' : '#94A3B8'}; font-weight: 700; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; min-height: unset !important; height: 32px !important; font-family: 'Rajdhani', sans-serif;" title="Hurdaya ayrılan veya tamire gönderilen malzemeleri göster/gizle">
+                <i class="fa-solid ${warehouseState.defectShowCompleted ? 'fa-eye-slash' : 'fa-eye'}"></i> ${warehouseState.defectShowCompleted ? 'Tamamlananları Gizle' : 'Tamamlananları Göster'}
+              </button>
+              ${hasWarehouseManagePerm ? `
+              <button onclick="window.bulkSendToRepair()" class="btn-cyber" style="background: rgba(20, 241, 149, 0.06); border: 1px solid rgba(20, 241, 149, 0.25); color: #14F195; font-weight: 800; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; min-height: unset !important; height: 32px !important; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
                 <i class="fa-solid fa-screwdriver-wrench"></i> Seçilenleri Tamire Gönder
               </button>
-              <button onclick="window.bulkScrap()" class="btn-cyber" style="background: linear-gradient(135deg, #EF4444 0%, #dc2626 100%); color: #FFF; font-weight: 800; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);" onmouseover="this.style.filter='brightness(1.1)';" onmouseout="this.style.filter='none';">
+              <button onclick="window.bulkScrap()" class="btn-cyber" style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.25); color: #EF4444; font-weight: 800; padding: 0.35rem 0.75rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; min-height: unset !important; height: 32px !important; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;" onmouseover="this.style.backgroundColor='rgba(239, 68, 68, 0.15)'; this.style.borderColor='rgba(239, 68, 68, 0.5)';" onmouseout="this.style.backgroundColor='rgba(239, 68, 68, 0.06)'; this.style.borderColor='rgba(239, 68, 68, 0.25)';">
                 <i class="fa-solid fa-dumpster"></i> Seçilenleri Hurdaya Ayır
               </button>
+              ` : ''}
             </div>
-            ` : ''}
           </div>
           
           <div style="overflow-x: auto;">
@@ -1055,36 +1138,105 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
               </thead>
               <tbody>
                 ${(() => {
-                  const activeDefects = warehouseState.inventoryItems
-                    .filter(inv => inv.condition === 'DEFECT' && inv.quantity > 0)
+                  const allDefectItems = warehouseState.inventoryItems.filter(inv => inv.condition === 'DEFECT');
+                  const activeDefects = allDefectItems
+                    .filter(inv => {
+                      if (warehouseState.defectShowCompleted) return true;
+                      const qty = Number(inv.quantity || 0);
+                      const isScrapped = inv.status === 'HURDAYA_AYRILDI';
+                      const isRepaired = inv.status === 'TAMIRE_SEVK_EDILDI';
+                      return qty > 0 && !isScrapped && !isRepaired;
+                    })
                     .map(inv => {
-                      const reportItem = defectReportItems.find(rep => 
-                        String(rep.sapNo).trim() === String(inv.sapNo).trim()
-                      );
-                      
-                      let finalReportItem = reportItem;
-                      if (!finalReportItem && currentWarehouse.id === 'MTA') {
-                        for (const report of reports) {
+                      const cleanInvSap = String(inv.sapNo || '').trim();
+                      const cleanInvSerial = String(inv.serialNo || '').trim().toLowerCase();
+                      const noteStr = `${inv.note || ''} ${inv.recoveryNote || ''} ${(inv.recoveryNotes || []).join(' ')} ${(inv as any).reason || ''}`;
+
+                      // 1. Exact match by SAP & Serial Number in defectReportItems
+                      let finalReportItem = (cleanInvSerial && cleanInvSerial !== '-' && cleanInvSerial !== 'undefined' && cleanInvSerial !== 'null')
+                        ? defectReportItems.find(rep => {
+                            const repSap = String(rep.sapNo || '').trim();
+                            const repSerial = String(rep.serialNo || '').trim().toLowerCase();
+                            return repSap === cleanInvSap && repSerial && (repSerial === cleanInvSerial || repSerial.includes(cleanInvSerial) || cleanInvSerial.includes(repSerial));
+                          })
+                        : null;
+
+                      // 2. Match by reportNo / matFormNo in note / reason
+                      if (!finalReportItem) {
+                        finalReportItem = defectReportItems.find(rep => {
+                          if (String(rep.sapNo).trim() !== cleanInvSap) return false;
+                          if (rep.reportId && rep.reportId !== '-' && noteStr.includes(rep.reportId)) return true;
+                          if (rep.matFormNo && rep.matFormNo !== '-' && noteStr.includes(String(rep.matFormNo))) return true;
+                          return false;
+                        });
+                      }
+
+                      // 3. Match from allReports if report not in current period filter
+                      if (!finalReportItem) {
+                        const whNameBase = (currentWarehouse.name || '').toLowerCase().replace('depo', '').trim();
+                        for (const report of allReports) {
                           if (report.materials) {
-                            const mat = report.materials.find((m: any) => String(m.sapNo).trim() === String(inv.sapNo).trim() && m.defectCount > 0);
-                            if (mat) {
-                              finalReportItem = {
-                                reportId: report.reportNo || report.id || '',
-                                reportDocId: report.id || '',
-                                date: report.date,
-                                matFormNo: report.matFormNo || '-',
-                                turbineNo: (report.siteName ? report.siteName + ' ' : '') + (report.turbineNo || report.turbineSerial || 'Bilinmeyen'),
-                                type: report.type || 'ARIZA',
-                                sapNo: mat.sapNo || '-',
-                                serialNo: mat.serialNo || '-',
-                                description: mat.description,
-                                defect: mat.defectCount || 0,
-                                faultCode: report.faultCode || '-',
-                                faultDesc: report.faultDesc || '-'
-                              };
-                              break;
+                            const reportSiteBase = (report.siteName || '').toLowerCase().trim();
+                            const isWhMatch = currentWarehouse.id === 'MTA' || whNameBase.includes(reportSiteBase) || reportSiteBase.includes(whNameBase);
+                            if (isWhMatch) {
+                              const mat = report.materials.find((m: any) => {
+                                if (String(m.sapNo).trim() !== cleanInvSap) return false;
+                                if (cleanInvSerial && cleanInvSerial !== '-' && cleanInvSerial !== 'undefined') {
+                                  const mSerial = String(m.serialNo || '').trim().toLowerCase();
+                                  return mSerial && (mSerial === cleanInvSerial || mSerial.includes(cleanInvSerial) || cleanInvSerial.includes(mSerial));
+                                }
+                                return (m.defectCount > 0 || m.used > 0);
+                              });
+
+                              if (mat) {
+                                finalReportItem = {
+                                  reportId: report.reportNo || report.id || '',
+                                  reportDocId: report.id || '',
+                                  date: report.date,
+                                  matFormNo: report.matFormNo || '-',
+                                  turbineNo: (report.siteName ? report.siteName + ' ' : '') + (report.turbineNo || report.turbineSerial || 'Bilinmeyen'),
+                                  type: report.type || 'ARIZA',
+                                  sapNo: mat.sapNo || '-',
+                                  serialNo: mat.serialNo || inv.serialNo || '-',
+                                  description: mat.description || inv.name,
+                                  defect: mat.defectCount || inv.quantity || 1,
+                                  faultCode: report.type === 'BAKIM' ? (report.templateName || 'Bakım') : (report.faultCode || '-'),
+                                  faultDesc: report.type === 'BAKIM' ? ((report.faultDesc && report.faultDesc !== 'Genel Görev') ? report.faultDesc : '') : (report.faultDesc || '-'),
+                                  siteName: report.siteName || '-'
+                                };
+                                break;
+                              }
                             }
                           }
+                        }
+                      }
+
+                      // 4. Fallback: match by SAP only
+                      if (!finalReportItem) {
+                        finalReportItem = defectReportItems.find(rep => String(rep.sapNo).trim() === cleanInvSap);
+                      }
+
+                      // Check recovery notes as fallback
+                      if (!finalReportItem && (inv.recoveryNote || (inv.recoveryNotes && inv.recoveryNotes.length > 0))) {
+                        const rNote = inv.recoveryNote || inv.recoveryNotes[0] || '';
+                        const turbineMatch = rNote.match(/Türbin:\s*([^,]+)/);
+                        const reportMatch = rNote.match(/Rapor:\s*([^,]+)/);
+                        const serialMatch = rNote.match(/Seri No:\s*([^,]+)/);
+                        if (turbineMatch || reportMatch) {
+                          finalReportItem = {
+                            reportId: reportMatch ? reportMatch[1].trim() : '',
+                            reportDocId: '',
+                            date: inv.lastUpdated,
+                            matFormNo: '-',
+                            turbineNo: turbineMatch ? turbineMatch[1].trim() : '',
+                            type: 'ARIZA',
+                            sapNo: inv.sapNo,
+                            serialNo: serialMatch ? serialMatch[1].trim() : (inv.serialNo || '-'),
+                            description: inv.name || inv.description || '',
+                            defect: inv.quantity || 1,
+                            faultCode: '-',
+                            faultDesc: '-'
+                          };
                         }
                       }
                       
@@ -1102,12 +1254,40 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         }
                       }
                       
+                      const matchingScrap = allScraps.find((sc: any) => 
+                        (sc.itemId && sc.itemId === inv.id) || 
+                        (
+                          sc.warehouseId === currentWarehouse.id && 
+                          String(sc.sapNo).trim() === String(inv.sapNo).trim() && 
+                          finalReportItem?.reportId && finalReportItem.reportId !== '-' &&
+                          sc.reportNo === finalReportItem.reportId
+                        )
+                      );
+
+                      const matchingRepair = allRepairs.find((rep: any) => 
+                        (rep.itemId && rep.itemId === inv.id) ||
+                        (
+                          rep.sourceWarehouseId === currentWarehouse.id &&
+                          String(rep.sapNo).trim() === String(inv.sapNo).trim() &&
+                          finalReportItem?.reportId && finalReportItem.reportId !== '-' &&
+                          (rep.reportNo === finalReportItem.reportId || rep.reportId === finalReportItem.reportId)
+                        )
+                      );
+
+                      const computedStatus = (inv as any).status || 
+                        (matchingScrap ? 'HURDAYA_AYRILDI' : '') || 
+                        (matchingRepair ? 'TAMIRE_SEVK_EDILDI' : '');
+
                       return {
                         id: inv.id,
                         sapNo: inv.sapNo,
-                        description: inv.description,
+                        description: inv.name || inv.description || '',
                         shelfNo: (inv.shelfNo && inv.shelfNo !== 'Tanımsız') ? inv.shelfNo : 'Defect Rafı',
                         quantity: inv.quantity,
+                        status: computedStatus,
+                        scrappedQty: (inv as any).scrappedQty || (matchingScrap ? matchingScrap.quantity : 0),
+                        dispatchedQty: (inv as any).dispatchedQty || (matchingRepair ? matchingRepair.quantity : 0),
+                        dispatchNo: (inv as any).dispatchNo || (matchingRepair ? matchingRepair.dispatchNo : ''),
                         minStock: inv.minStock || 0,
                         imageUrl: inv.imageUrl || '',
                         displayDate,
@@ -1119,7 +1299,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                         serialNo: inv.serialNo || finalReportItem?.serialNo || '-',
                         faultCode: finalReportItem?.faultCode || '-',
                         faultDesc: finalReportItem?.faultDesc || '-',
-                        defect: finalReportItem?.defect || inv.quantity || 1,
+                        defect: (computedStatus === 'HURDAYA_AYRILDI' || computedStatus === 'TAMIRE_SEVK_EDILDI')
+                          ? ((inv as any).scrappedQty || (inv as any).dispatchedQty || finalReportItem?.defect || inv.quantity || 1)
+                          : (Number(inv.quantity) || finalReportItem?.defect || 1),
                         recoveryNotes: inv.recoveryNotes || [],
                         recoveryNote: inv.recoveryNote || '',
                         siteName: finalReportItem?.siteName || '-'
@@ -1130,7 +1312,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                     return `
                       <tr>
                         <td colspan="${hasWarehouseManagePerm ? 13 : 12}" style="text-align: center; padding: 3rem; color: #94A3B8; border: 1px dashed rgba(255,255,255,0.1); border-radius: 8px;">
-                          Bu sahaya ait sökülen (defect) malzeme kaydı bulunamadı.
+                          Bu sahaya ait bekleyen sökülen (defect) malzeme kaydı bulunamadı.
                         </td>
                       </tr>
                     `;
@@ -1157,13 +1339,18 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                   let htmlResult = '';
                   groups.forEach((group: any, key: string) => {
                     const cleanKey = key.replace(/[^a-zA-Z0-9-]/g, '_');
-                    const totalQty = group.items.reduce((sum: number, it: any) => sum + (it.defect || 1), 0);
+                    const activeGroupQty = group.items.filter((it: any) => it.status !== 'HURDAYA_AYRILDI' && it.status !== 'TAMIRE_SEVK_EDILDI').reduce((sum: number, it: any) => sum + (Number(it.quantity) || it.defect || 1), 0);
+                    const isAllProcessed = group.items.length > 0 && group.items.every((it: any) => it.status === 'HURDAYA_AYRILDI' || it.status === 'TAMIRE_SEVK_EDILDI');
                     
                     htmlResult += `
                       <tr id="group-header-${cleanKey}" onclick="window.toggleDefectGroupCollapse('${cleanKey}')" style="cursor: pointer; background: rgba(20, 241, 149, 0.03); border-bottom: 1px solid rgba(255,255,255,0.06); font-weight: bold; transition: background 0.2s;" onmouseover="this.style.background='rgba(20, 241, 149, 0.06)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.03)'">
                         ${hasWarehouseManagePerm ? `
                         <td style="padding: 0.75rem 1rem; text-align: center;" onclick="event.stopPropagation();">
-                          <input type="checkbox" onchange="window.toggleDefectGroup(this, '${cleanKey}')" style="cursor: pointer; width: 16px; height: 16px;">
+                          ${isAllProcessed ? `
+                            <span title="Gruptaki tüm parçaların işlemleri tamamlanmıştır" style="color: #64748B; font-size: 0.85rem;"><i class="fa-solid fa-check-double"></i></span>
+                          ` : `
+                            <input type="checkbox" onchange="window.toggleDefectGroup(this, '${cleanKey}')" style="cursor: pointer; width: 16px; height: 16px;">
+                          `}
                         </td>
                         ` : ''}
                         <td style="padding: 0.75rem 1rem; color: #14F195; white-space: nowrap;">
@@ -1189,7 +1376,9 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                           ` : (key === 'manual' ? '<span style="color: #94A3B8; font-style: italic;">Manuel Depo Kayıtları</span>' : '-')}
                         </td>
                         <td style="padding: 0.75rem 1rem; text-align: center; color: #f87171; font-weight: 800; font-family: monospace; font-size: 0.9rem;">
-                          ${totalQty} Ad.
+                          ${isAllProcessed ? `
+                            <span style="color: #64748B; font-size: 0.75rem; font-weight: 700; background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 4px; white-space: nowrap;"><i class="fa-solid fa-check"></i> Tamamlandı</span>
+                          ` : `${activeGroupQty} Ad.`}
                         </td>
                         <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;" onclick="event.stopPropagation(); window.toggleDefectGroupCollapse('${cleanKey}')">
                           <span class="expand-text" style="font-size: 0.75rem; color: #00f2ff; font-weight: bold; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.2); padding: 3px 8px; border-radius: 4px; transition: all 0.2s;"><i class="fa-solid fa-expand"></i> Göster</span>
@@ -1199,20 +1388,32 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
 
                     group.items.forEach((item: any) => {
                       const cleanNameEscaped = (item.description || 'Bilinmeyen Malzeme').replace(/'/g, "\\'");
+                      const isScrapped = item.status === 'HURDAYA_AYRILDI';
+                      const isSentToRepair = item.status === 'TAMIRE_SEVK_EDILDI';
+                      const isProcessed = isScrapped || isSentToRepair;
                       
                       htmlResult += `
-                        <tr class="defect-row group-row-${cleanKey}" data-site="${item.siteName}" style="display: none; border-bottom: 1px solid rgba(255,255,255,0.02); background: rgba(0, 0, 0, 0.22); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.01)'" onmouseout="this.style.background='rgba(0, 0, 0, 0.22)'">
+                        <tr class="defect-row group-row-${cleanKey}" data-site="${item.siteName}" data-sap="${(item.sapNo || '').toLowerCase()}" data-name="${(item.description || '').toLowerCase()}" data-serial="${(item.serialNo || '').toLowerCase()}" data-turbine="${(item.turbineNo || '').toLowerCase()}" data-report="${(item.reportId || '').toLowerCase()}" data-mcf="${(item.matFormNo || '').toLowerCase()}" data-faultcode="${(item.faultCode || '').toLowerCase()}" data-faultdesc="${(item.faultDesc || '').toLowerCase()}" style="display: none; border-bottom: 1px solid rgba(255,255,255,0.02); background: ${isScrapped ? 'rgba(239, 68, 68, 0.03)' : (isSentToRepair ? 'rgba(20, 241, 149, 0.03)' : 'rgba(0, 0, 0, 0.22)')}; ${isProcessed ? 'opacity: 0.7;' : ''} transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.01)'" onmouseout="this.style.background='${isScrapped ? 'rgba(239, 68, 68, 0.03)' : (isSentToRepair ? 'rgba(20, 241, 149, 0.03)' : 'rgba(0, 0, 0, 0.22)')}'">
                           ${hasWarehouseManagePerm ? `
                           <td style="padding: 0.75rem 1rem; text-align: center;">
-                            <input type="checkbox" class="defect-row-checkbox group-checkbox-${cleanKey}" 
-                              data-id="${item.id}" 
-                              data-sap="${item.sapNo}" 
-                              data-name="${cleanNameEscaped}" 
-                              data-qty="${item.defect}" 
-                              data-serial="${item.serialNo || '-'}" 
-                              data-faultcode="${item.faultCode || '-'}" 
-                              data-faultdesc="${item.faultDesc ? item.faultDesc.replace(/'/g, "\\'") : '-'}" 
-                              style="cursor: pointer; width: 16px; height: 16px;">
+                            ${isScrapped ? `
+                              <span title="Bu malzeme hurdaya ayrılmıştır (tekrar seçilemez)" style="color: #EF4444; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-ban"></i></span>
+                            ` : (isSentToRepair ? `
+                              <span title="Bu malzeme tamir atölyesine sevk edilmiştir (tekrar seçilemez)" style="color: #14F195; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-ban"></i></span>
+                            ` : `
+                              <input type="checkbox" class="defect-row-checkbox group-checkbox-${cleanKey}" 
+                                data-id="${item.id}" 
+                                data-sap="${item.sapNo}" 
+                                data-name="${cleanNameEscaped}" 
+                                data-qty="${item.defect}" 
+                                data-serial="${item.serialNo || '-'}" 
+                                data-faultcode="${item.faultCode || '-'}" 
+                                data-faultdesc="${item.faultDesc ? item.faultDesc.replace(/'/g, "\\'") : '-'}" 
+                                data-turbine="${item.turbineNo || '-'}" 
+                                data-reportno="${item.reportId || '-'}" 
+                                data-mcfno="${item.matFormNo || '-'}" 
+                                style="cursor: pointer; width: 16px; height: 16px;">
+                            `)}
                           </td>
                           ` : ''}
                           <td style="padding: 0.75rem 1rem; color: rgba(255,255,255,0.4); font-size: 0.8rem; padding-left: 2rem; white-space: nowrap;">↳ ${item.displayDate}</td>
@@ -1230,25 +1431,37 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                             ` : '-'}
                           </td>
                           <td style="padding: 0.75rem 1rem; color: #14F195; font-weight: 600;">${item.shelfNo}</td>
-                          <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #f87171; font-family: monospace;">${item.defect}</td>
+                          <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: ${isScrapped ? '#EF4444' : (isSentToRepair ? '#14F195' : '#f87171')}; font-family: monospace;">
+                            ${isScrapped ? `${item.scrappedQty || item.defect || 1} Ad.` : (isSentToRepair ? `${item.dispatchedQty || item.defect || 1} Ad.` : `${item.defect} Ad.`)}
+                          </td>
                           <td style="padding: 0.75rem 1rem; text-align: right; white-space: nowrap;">
                             <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-                              ${(hasWarehouseManagePerm || hasWarehouseDeletePerm) ? `
-                                ${hasWarehouseManagePerm ? `
-                                  <i onclick="window.returnDefectToInventory('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo !== '-' ? item.serialNo : ''}', '${item.turbineNo !== '-' ? item.turbineNo : ''}', '${item.reportId !== '-' ? item.reportId : ''}')" class="fa-solid fa-reply" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sağlam Olarak Stoğa Geri Al"></i>
-                                ` : ''}
-                                ${item.recoveryNotes.length > 0 || item.recoveryNote ? `
-                                  <i onclick="window.showRecoveryInfoList('${item.id}')" class="fa-solid fa-circle-info" style="cursor: pointer; opacity: 0.7; color: #60A5FA; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geri Kazanım Geçmişini Gör"></i>
-                                ` : ''}
-                                ${hasWarehouseManagePerm ? `
-                                  <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
-                                ` : ''}
-                                ${hasWarehouseDeletePerm ? `
-                                  <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
-                                ` : ''}
+                              ${isScrapped ? `
+                                <span style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.75rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;">
+                                  <i class="fa-solid fa-dumpster"></i> Hurdaya Gönderildi
+                                </span>
+                              ` : (isSentToRepair ? `
+                                <span style="background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.35); padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.75rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px;">
+                                  <i class="fa-solid fa-screwdriver-wrench"></i> Tamire Gönderildi ${item.dispatchNo ? `<span style="font-family:monospace; font-size:0.7rem; color:#60A5FA;">[${item.dispatchNo}]</span>` : ''}
+                                </span>
                               ` : `
-                                <span style="color: #64748B; font-size: 0.75rem; font-style: italic;"><i class="fa-solid fa-info-circle"></i> Sadece Bilgi</span>
-                              `}
+                                ${(hasWarehouseManagePerm || hasWarehouseDeletePerm) ? `
+                                  ${hasWarehouseManagePerm ? `
+                                    <i onclick="window.returnDefectToInventory('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo !== '-' ? item.serialNo : ''}', '${item.turbineNo !== '-' ? item.turbineNo : ''}', '${item.reportId !== '-' ? item.reportId : ''}')" class="fa-solid fa-reply" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sağlam Olarak Stoğa Geri Al"></i>
+                                  ` : ''}
+                                  ${item.recoveryNotes.length > 0 || item.recoveryNote ? `
+                                    <i onclick="window.showRecoveryInfoList('${item.id}')" class="fa-solid fa-circle-info" style="cursor: pointer; opacity: 0.7; color: #60A5FA; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geri Kazanım Geçmişini Gör"></i>
+                                  ` : ''}
+                                  ${hasWarehouseManagePerm ? `
+                                    <i id="edit-btn-${item.id}" onclick="window.openDefectEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.reportDocId || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Seri No Düzenle"></i>
+                                  ` : ''}
+                                  ${hasWarehouseDeletePerm ? `
+                                    <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-right: 0.5rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
+                                  ` : ''}
+                                ` : `
+                                  <span style="color: #64748B; font-size: 0.75rem; font-style: italic;"><i class="fa-solid fa-info-circle"></i> Sadece Bilgi</span>
+                                `}
+                              `)}
                             </div>
                           </td>
                         </tr>
@@ -1279,7 +1492,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       <!-- Static Modals Template -->
       ${renderModalsHTML(targetOptions, isMobileWarehouse)}
 
-      <input type="file" id="item-image-upload" accept="image/*" style="display:none;" />
+
 
     </div>
   `;
@@ -1376,6 +1589,8 @@ function setupWarehouseLogic(currentWarehouse: any) {
         }
       }));
 
+
+
       if (paginatedItems.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #94A3B8;">Aramaya uygun malzeme bulunamadı.</td></tr>`;
       } else {
@@ -1387,6 +1602,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
           const cleanName = item.name.replace(/'/g, "");
           const cleanNameEscaped = item.name.replace(/'/g, "\\'");
           
+
           return `
             <tr class="inventory-row" 
                 draggable="true" 
@@ -1396,14 +1612,10 @@ function setupWarehouseLogic(currentWarehouse: any) {
                 data-name="${item.name.toLowerCase()}"
                 style="cursor: grab;"
                 title="Sürükleyip açılan sağ menüdeki depolara bırakarak hızlı transfer başlatabilirsiniz">
-              <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);"><input type="checkbox" class="item-checkbox" value="${item.id}" onclick="window.onItemCheckboxClick(this)" /></td>
+              <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);"><input type="checkbox" class="item-checkbox" value="${item.id}" ${warehouseState.selectedMaterialIds?.has(item.id) ? 'checked' : ''} onclick="window.onItemCheckboxClick(this, '${item.id}')" /></td>
               <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.sapNo}</td>
               <td id="img-cell-${item.id}" style="padding: 1rem; color: #E2E8F0; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 500; display: flex; align-items: center;">
                 ${item.qrDataUrl ? `<div onclick="window.showBigQR('${item.id}', '${item.sapNo}', '${cleanName}', '${item.qrDataUrl}')" style="width:36px; height:36px; border-radius:6px; background-color: #111827; border: 1px solid #1E293B; margin-right:8px; display:flex; align-items:center; justify-content:center; color:#14F195; cursor: pointer; transition: all 0.2s;" title="Büyük QR Gör" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#111827'"><i class="fa-solid fa-qrcode"></i></div>` : ''}
-                ${item.imageUrl 
-                  ? `<div id="img-btn-${item.id}" onclick="window.showBigImage('${item.imageUrl}', '${cleanName}')" style="width:36px; height:36px; border-radius:6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#3B82F6; cursor: pointer; transition: all 0.2s;" title="Görseli Büyüt" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'"><i class="fa-solid fa-image"></i></div>` 
-                  : `<div id="img-btn-${item.id}" onclick="window.triggerImageUpload('${item.id}', '${item.sapNo}')" style="width:36px; height:36px; border-radius:6px; background-color: #1E293B; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#64748B; cursor: pointer; transition: all 0.2s;" title="Görsel Ekle" onmouseover="this.style.backgroundColor='#334155'" onmouseout="this.style.backgroundColor='#1E293B'"><i class="fa-solid fa-image"></i></div>`
-                }
                 <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <span style="word-break: break-word;">${item.name}</span>
@@ -1453,7 +1665,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
               </td>
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
                 <span style="background-color: ${isKritik ? 'rgba(239, 68, 68, 0.1)' : 'rgba(20, 241, 149, 0.1)'}; color: ${isKritik ? '#EF4444' : '#14F195'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                  ${item.quantity} Adet
+                  ${item.quantity} ${item.unit || 'Adet'}
                 </span>
               </td>
               <td style="padding: 1rem; color: ${rezerve > 0 ? '#F59E0B' : '#94A3B8'}; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
@@ -1491,7 +1703,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
                   ${isMobileWarehouse ? `
                     <i onclick="window.openP2PTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-qrcode" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="QR Transfer Kodu Oluştur"></i>
                     <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
-                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
                   ` : `
                     ${item.condition === 'DEFECT' && hasWarehouseManagePerm ? `
                       <i onclick="window.openSendToRepairModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-screwdriver-wrench" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Tamire Gönder"></i>
@@ -1501,7 +1713,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
                     ${hasWarehouseManagePerm ? `
                       <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
                     ` : ''}
-                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0})" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
                     ${hasWarehouseDeletePerm ? `
                       <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
                     ` : ''}
@@ -1515,9 +1727,9 @@ function setupWarehouseLogic(currentWarehouse: any) {
 
       const selectAllCb = document.getElementById('select-all-checkbox') as HTMLInputElement;
       if (selectAllCb) {
-        const itemCbs = document.querySelectorAll('.item-checkbox');
-        if (itemCbs.length > 0) {
-          selectAllCb.checked = Array.from(itemCbs).every((cb: any) => cb.checked);
+        const pageItemIds = paginatedItems.map(i => i.id);
+        if (pageItemIds.length > 0) {
+          selectAllCb.checked = pageItemIds.every(id => warehouseState.selectedMaterialIds?.has(id));
         } else {
           selectAllCb.checked = false;
         }
@@ -1567,6 +1779,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
           </div>
         `;
       }
+      if ((window as any).updateSelectionUI) (window as any).updateSelectionUI();
     } catch (err: any) {
       console.error("renderInventoryTable error:", err);
       tbody.innerHTML = `<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #EF4444; font-weight: bold; background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; border-radius: 6px;">Hata: ${err.message || err}</td></tr>`;
@@ -1635,17 +1848,28 @@ function setupWarehouseLogic(currentWarehouse: any) {
     const tbody = document.getElementById('reservations-tbody');
     if (tbody) {
       const rows: any[] = [];
+
+      console.log("[DEBUG_RESERVATIONS] draftReservations details:", warehouseState.draftReservations?.details);
+      console.log("[DEBUG_RESERVATIONS] inventoryItems reservedQuantity > 0:", 
+        warehouseState.inventoryItems.filter(i => (i.reservedQuantity || 0) > 0 || (i.reservations && Object.keys(i.reservations).length > 0))
+      );
       
       // 1. Task-based reservations
-      warehouseState.draftReservations.details.forEach((d: any) => {
-        d.materials.forEach((m: any) => {
+      (warehouseState.draftReservations?.details || []).forEach((d: any) => {
+        const durumStr = String(d.durum || '').toLowerCase().trim();
+        if (durumStr.includes('tamam') || durumStr.includes('completed')) return;
+
+        (d.materials || []).forEach((m: any) => {
+          const qty = Number(m.used || 0);
+          if (qty <= 0) return;
+
           const invItem = warehouseState.inventoryItems.find((item: any) => String(item.sapNo).trim() === String(m.sapNo).trim());
           const shelf = invItem ? (invItem.shelfNo || '-') : '-';
           rows.push({
             team: d.team,
             sapNo: m.sapNo,
             description: m.description,
-            qty: m.used,
+            qty: qty,
             shelf: shelf
           });
         });
@@ -1653,7 +1877,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
 
       // 2. Transfer-based reservations
       warehouseState.inventoryItems.forEach((item: any) => {
-        if (item.reservations) {
+        if (item.reservations && (item.reservedQuantity || 0) > 0) {
           Object.entries(item.reservations).forEach(([tId, qty]) => {
             const numericQty = Number(qty);
             if (numericQty > 0) {
@@ -1676,6 +1900,15 @@ function setupWarehouseLogic(currentWarehouse: any) {
         }
       });
 
+      const user = (window as any).currentUser || (window as any).appState?.userProfile;
+      const userStr = String(user?.email || user?.name || '').toLowerCase();
+      const isMaterialManagerUser = user?.role === 'ADMIN' || 
+        user?.role === 'MALZEME_YONETIMI' || 
+        user?.role === 'TAMİR' || 
+        userStr.includes('fatih') || 
+        userStr.includes('hursit.akter') || 
+        userStr.includes('emir.unver');
+
       const htmlRows = rows.map((r: any) => `
         <tr style="border-bottom: 1px solid rgba(255,255,255,0.02); color: #E2E8F0;">
           <td style="padding: 0.4rem 0.5rem; font-weight: bold; color: #ff9800;">${r.team}</td>
@@ -1683,16 +1916,71 @@ function setupWarehouseLogic(currentWarehouse: any) {
           <td style="padding: 0.4rem 0.5rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${r.description}">${r.description}</td>
           <td style="padding: 0.4rem 0.5rem; text-align: center; font-weight: 600; color: #14F195;">${r.qty} Adet</td>
           <td style="padding: 0.4rem 0.5rem; text-align: right; color: #94A3B8;">${r.shelf}</td>
+          ${isMaterialManagerUser ? `
+            <td style="padding: 0.4rem 0.5rem; text-align: right;">
+              <i onclick="window.deleteReservationRow('${r.team}', '${r.sapNo}')" class="fa-solid fa-trash" style="color: #EF4444; cursor: pointer; opacity: 0.85; transition: all 0.2s;" onmouseover="this.style.opacity='1'; this.style.transform='scale(1.1)';" onmouseout="this.style.opacity='0.85'; this.style.transform='none';" title="Rezervasyonu Manuel Kaldır"></i>
+            </td>
+          ` : ''}
         </tr>
       `);
 
       tbody.innerHTML = htmlRows.length > 0 ? htmlRows.join('') : `
         <tr>
-          <td colspan="5" style="padding: 1.5rem 0.5rem; text-align: center; color: #64748B;">
+          <td colspan="${isMaterialManagerUser ? '6' : '5'}" style="padding: 1.5rem 0.5rem; text-align: center; color: #64748B;">
             Aktif ekip rezervasyonu bulunmuyor.
           </td>
         </tr>
       `;
+    }
+  };
+
+  // Delete Reservation Row handler for Fatih Zebek
+  (window as any).deleteReservationRow = async (teamName: string, sapNo: string) => {
+    const confirmDelete = confirm(`${teamName} ekibine ait SAP ${sapNo} malzemesinin rezervasyonunu sistemden kaldırmak istediğinize emin misiniz?`);
+    if (!confirmDelete) return;
+
+    try {
+      // 1. Local RAM memory cleanup
+      if (warehouseState.draftReservations?.details) {
+        warehouseState.draftReservations.details = warehouseState.draftReservations.details.filter((d: any) => {
+          const matchTeam = String(d.team).toLowerCase().trim() === String(teamName).toLowerCase().trim();
+          if (!matchTeam) return true;
+          d.materials = (d.materials || []).filter((m: any) => String(m.sapNo).trim() !== String(sapNo).trim());
+          return d.materials.length > 0;
+        });
+      }
+
+      // 2. Clear item reservations map on inventory_v2 in Firestore & RAM
+      const invItem = warehouseState.inventoryItems.find((item: any) => String(item.sapNo).trim() === String(sapNo).trim());
+      if (invItem) {
+        const itemRef = doc(db, 'warehouses', currentWarehouse.id, 'inventory_v2', invItem.id);
+        const updatedReservations = { ...(invItem.reservations || {}) };
+        
+        Object.keys(updatedReservations).forEach(k => {
+          const cleanK = k.replace('team_', '').replace(/_/g, ' ').toLowerCase().trim();
+          if (cleanK === String(teamName).toLowerCase().trim() || k.toLowerCase().includes(String(teamName).toLowerCase().trim())) {
+            delete updatedReservations[k];
+          }
+        });
+
+        invItem.reservations = updatedReservations;
+        invItem.reservedQuantity = 0;
+
+        await updateDoc(itemRef, {
+          reservations: updatedReservations,
+          reservedQuantity: 0
+        });
+      }
+
+      // 3. Re-render table immediately
+      if ((window as any).updateRealTimeReservationsAndStats) {
+        (window as any).updateRealTimeReservationsAndStats();
+      }
+
+      (window as any).showToast?.('Başarılı', `SAP ${sapNo} rezervasyon kaydı silindi.`, 'success');
+    } catch (err: any) {
+      console.error("deleteReservationRow error:", err);
+      alert("Rezervasyon silinirken bir hata oluştu: " + (err.message || err));
     }
   };
 
@@ -1838,62 +2126,182 @@ function setupWarehouseLogic(currentWarehouse: any) {
     (window as any).openTransferModal(item.id, item.sapNo, item.name.replace(/'/g, "\\'"), item.quantity, destWarehouseId);
   };
 
+  // Selection UI Helper
+  (window as any).updateSelectionUI = () => {
+    const selectedCount = warehouseState.selectedMaterialIds?.size || 0;
+    const btnPrintQR = document.getElementById('btn-print-warehouse-qr');
+    if (btnPrintQR) {
+      if (selectedCount > 0) {
+        btnPrintQR.innerHTML = `<i class="fa-solid fa-qrcode"></i> QR Etiket Bas <span style="background: #EAB308; color: #000; font-weight: 800; font-size: 0.72rem; padding: 1px 6px; border-radius: 10px; margin-left: 4px;">${selectedCount} Seçili</span>`;
+        btnPrintQR.style.borderColor = 'rgba(255, 235, 59, 0.8)';
+        btnPrintQR.style.backgroundColor = 'rgba(255, 235, 59, 0.18)';
+        btnPrintQR.style.color = '#FFF59D';
+        btnPrintQR.style.boxShadow = '0 0 10px rgba(255, 235, 59, 0.3)';
+      } else {
+        btnPrintQR.innerHTML = `<i class="fa-solid fa-qrcode"></i> QR Etiket Bas`;
+        btnPrintQR.style.borderColor = 'rgba(255, 235, 59, 0.25)';
+        btnPrintQR.style.backgroundColor = 'rgba(255, 235, 59, 0.06)';
+        btnPrintQR.style.color = '#fded7e';
+        btnPrintQR.style.boxShadow = 'none';
+      }
+    }
+
+    const clearBtn = document.getElementById('btn-clear-selections');
+    if (clearBtn) {
+      clearBtn.style.display = selectedCount > 0 ? 'inline-flex' : 'none';
+      const countSpan = clearBtn.querySelector('.clear-count');
+      if (countSpan) countSpan.textContent = String(selectedCount);
+    }
+  };
+
   // Checkboxes
-  (window as any).onItemCheckboxClick = (cb: HTMLInputElement) => {
+  (window as any).onItemCheckboxClick = (cb: HTMLInputElement, itemId?: string) => {
+     const id = itemId || cb.value;
+     if (!warehouseState.selectedMaterialIds) warehouseState.selectedMaterialIds = new Set<string>();
+     
+     if (cb.checked) {
+       warehouseState.selectedMaterialIds.add(id);
+     } else {
+       warehouseState.selectedMaterialIds.delete(id);
+     }
+
      const selectAllCb = document.getElementById('select-all-checkbox') as HTMLInputElement;
      if (selectAllCb) {
-       const itemCbs = document.querySelectorAll('.item-checkbox');
-       selectAllCb.checked = Array.from(itemCbs).every((c: any) => c.checked);
+       const itemCbs = document.querySelectorAll('.item-checkbox') as NodeListOf<HTMLInputElement>;
+       selectAllCb.checked = itemCbs.length > 0 && Array.from(itemCbs).every((c: any) => c.checked);
      }
+
+     if ((window as any).updateSelectionUI) (window as any).updateSelectionUI();
   };
 
   (window as any).toggleSelectAll = (master: HTMLInputElement) => {
+     if (!warehouseState.selectedMaterialIds) warehouseState.selectedMaterialIds = new Set<string>();
      const itemCbs = document.querySelectorAll('.item-checkbox') as NodeListOf<HTMLInputElement>;
      itemCbs.forEach(cb => {
        cb.checked = master.checked;
+       if (master.checked) {
+         warehouseState.selectedMaterialIds.add(cb.value);
+       } else {
+         warehouseState.selectedMaterialIds.delete(cb.value);
+       }
      });
+
+     if ((window as any).updateSelectionUI) (window as any).updateSelectionUI();
+  };
+
+  (window as any).clearAllMaterialSelections = () => {
+     if (warehouseState.selectedMaterialIds) {
+       warehouseState.selectedMaterialIds.clear();
+     }
+     const itemCbs = document.querySelectorAll('.item-checkbox') as NodeListOf<HTMLInputElement>;
+     itemCbs.forEach(cb => cb.checked = false);
+     const selectAllCb = document.getElementById('select-all-checkbox') as HTMLInputElement;
+     if (selectAllCb) selectAllCb.checked = false;
+     if ((window as any).updateSelectionUI) (window as any).updateSelectionUI();
   };
 
   // Image Upload Trigger
-  (window as any).triggerImageUpload = (itemId: string, sapNo: string) => {
-       const input = document.getElementById('item-image-upload') as HTMLInputElement;
-       if (input) {
-           input.onchange = null;
-           input.onchange = async (e: any) => {
-               const file = e.target.files?.[0];
-               if (!file) return;
-               
-               const path = `inventory/${currentWarehouse.id}/${itemId}_${Date.now()}`;
-               const localPreviewUrl = URL.createObjectURL(file);
-               const item = warehouseState.inventoryItems.find((i: any) => i.id === itemId);
-               
-               const safeName = item ? item.name.replace(/'/g, "") : '';
-               const safeNameForEdit = item ? item.name.replace(/'/g, '\\\'') : '';
-               
-               const imgBtn = document.getElementById(`img-btn-${itemId}`);
-               if (imgBtn) {
-                   imgBtn.outerHTML = `<div id="img-btn-${itemId}" onclick="window.showBigImage('${localPreviewUrl}', '${safeName}')" style="width:36px; height:36px; border-radius:6px; background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3B82F6; margin-right:12px; display:flex; align-items:center; justify-content:center; color:#3B82F6; cursor: pointer; transition: all 0.2s;" title="Görseli Büyüt (Yükleniyor...)" onmouseover="this.style.backgroundColor='#3B82F6'; this.style.color='#FFF'" onmouseout="this.style.backgroundColor='rgba(59, 130, 246, 0.1)'; this.style.color='#3B82F6'"><i class="fa-solid fa-image"></i></div>`;
-               }
-               
-               const editBtn = document.getElementById(`edit-btn-${itemId}`);
-               if (editBtn && item) {
-                   editBtn.setAttribute('onclick', `window.openEditModal('${item.id}', '${item.sapNo}', '${safeNameForEdit}', ${item.quantity}, '${item.shelfNo || ''}', '${localPreviewUrl}', ${item.minStock || 0})`);
-               }
-               input.value = '';
 
-               try {
-                 const { ImageCompressor } = await import('../../utils/imageCompressor');
-                 const { fileService } = await import('../../services/FileService');
-                 const compressedFile = await ImageCompressor.compressImage(file, 800, 800, 0.7).catch(() => file);
-                 const url = await fileService.uploadImage(compressedFile, path);
-                 await warehouseService.updateMaterialImage(currentWarehouse.id, itemId, url, sapNo);
-                 console.log("Arkaplan resim yüklemesi tamamlandı:", url);
-               } catch (err) {
-                 console.error("Arkaplan resim yükleme hatası:", err);
-               }
-           };
-           input.click();
-       }
+
+  // Actions
+  (window as any).syncAllHistoricalDefects = async (btn: HTMLButtonElement) => {
+    if (!confirm("Tüm geçmiş servis raporları taranarak eksik defekt (sökülen) malzeme kayıtları ilgili ekip zimmet depolarına yüklenecektir. Bu işlem birkaç saniye sürebilir. Devam etmek istiyor musunuz?")) return;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Eşitleniyor...';
+    btn.disabled = true;
+    
+    try {
+      const { serviceReportService } = await import('../../services/ServiceReportService');
+      const allReports = await serviceReportService.getAllReports(true);
+      
+      const reportsWithDefects = allReports.filter(r => r.materials && r.materials.some((m: any) => m.defectCount > 0));
+      
+      if (reportsWithDefects.length === 0) {
+        alert("Sökülen malzeme içeren hiçbir servis raporu bulunamadı.");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        return;
+      }
+      
+      // Get all team warehouses
+      const teamWhIds = Array.from({ length: 15 }, (_, i) => `team_Team_${String(i + 1).padStart(2, '0')}`);
+      
+      // Load current inventory for all team warehouses to prevent duplicates
+      const inventories: Record<string, any[]> = {};
+      
+      for (const whId of teamWhIds) {
+        try {
+          const snap = await getDocs(collection(db, 'warehouses', whId, 'inventory_v2'));
+          inventories[whId] = snap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+        } catch (e) {
+          inventories[whId] = [];
+        }
+      }
+      
+      let createdCount = 0;
+      const currentUser = getUserProfile();
+      const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+      
+      const getTeamWarehouseIdFromTeamName = (teamName: string): string => {
+        if (!teamName) return '';
+        const digits = teamName.replace(/\D/g, '');
+        if (digits) {
+          const num = parseInt(digits).toString().padStart(2, '0');
+          return `team_Team_${num}`;
+        }
+        return '';
+      };
+      
+      for (const report of reportsWithDefects) {
+        const teamWhId = getTeamWarehouseIdFromTeamName(report.team);
+        if (!teamWhId) continue;
+        
+        for (const mat of report.materials) {
+          if (mat.sapNo && mat.defectCount > 0) {
+            const sap = String(mat.sapNo).trim();
+            const serial = String(mat.serialNo || '').trim();
+            
+            // Check if this defect record is already in the team's inventory
+            const exists = inventories[teamWhId]?.some(item => 
+              String(item.sapNo).trim() === sap && 
+              item.condition === 'DEFECT' && 
+              String(item.serialNo || '').trim() === serial
+            );
+            
+            if (!exists) {
+              const detailedNote = `(Rapor: ${report.reportNo}, Arıza Kodu: ${report.faultCode || 'Bakım'}, Konum: ${report.siteName} - ${report.turbineNo.toUpperCase().startsWith('T') ? report.turbineNo : 'T' + report.turbineNo})`;
+              await warehouseService.updateStockBySap(teamWhId, sap, mat.defectCount, {
+                user: report.team || 'Sistem',
+                reason: 'Eşitleme: Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
+                reportNo: report.reportNo,
+                materialName: mat.description
+              }, 'DEFECT', undefined, mat.serialNo);
+              
+              if (!inventories[teamWhId]) inventories[teamWhId] = [];
+              inventories[teamWhId].push({
+                sapNo: sap,
+                condition: 'DEFECT',
+                serialNo: serial,
+                quantity: mat.defectCount
+              });
+              
+              createdCount++;
+            }
+          }
+        }
+      }
+      
+      alert(`Senkronizasyon tamamlandı! Toplam ${createdCount} adet eksik defect malzeme kaydı ilgili ekip zimmet depolarına yüklendi.`);
+      if ((window as any).selectWarehouseAndNavigate) {
+         (window as any).selectWarehouseAndNavigate(currentWarehouse.id);
+      }
+    } catch (error: any) {
+      console.error("Defect sync error:", error);
+      alert("Senkronizasyon sırasında hata oluştu: " + error.message);
+    } finally {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
   };
 
   // Actions
@@ -2026,7 +2434,13 @@ function setupWarehouseLogic(currentWarehouse: any) {
        id: cb.getAttribute('data-id')!,
        sapNo: cb.getAttribute('data-sap')!,
        description: cb.getAttribute('data-name')!,
-       quantity: parseInt(cb.getAttribute('data-qty')!)
+       quantity: parseInt(cb.getAttribute('data-qty')!),
+       serialNo: cb.getAttribute('data-serial') || '-',
+       faultCode: cb.getAttribute('data-faultcode') || '-',
+       faultDesc: cb.getAttribute('data-faultdesc') || '-',
+       turbine: cb.getAttribute('data-turbine') || '-',
+       reportNo: cb.getAttribute('data-reportno') || '-',
+       mcfNo: cb.getAttribute('data-mcfno') || '-'
      }));
 
      (window as any).openBulkScrapModal(items);
@@ -2057,6 +2471,13 @@ function setupWarehouseLogic(currentWarehouse: any) {
     checkboxes.forEach(cb => {
       cb.checked = master.checked;
     });
+  };
+
+  (window as any).toggleDefectCompletedFilter = () => {
+    warehouseState.defectShowCompleted = !warehouseState.defectShowCompleted;
+    if ((window as any).selectWarehouseAndNavigate && currentWarehouse) {
+      (window as any).selectWarehouseAndNavigate(currentWarehouse.id, 'DEFECT');
+    }
   };
 
   (window as any).filterDefectListBySite = (btn: HTMLElement, siteName: string) => {
@@ -2150,7 +2571,8 @@ function setupWarehouseLogic(currentWarehouse: any) {
      
      snap.docs.forEach((docSnap: any) => {
        const data = docSnap.data();
-       if (data.workflow?.durum === 'Tamamlandı') return;
+       const durumStr = String(data.workflow?.durum || data.workflow?.status || data.durum || data.status || '').toLowerCase().trim();
+       if (durumStr.includes('tamam') || durumStr.includes('completed')) return;
        
        const materials = data.maintenanceData?.materials || [];
        const usedMaterials: any[] = [];
@@ -2854,5 +3276,172 @@ function setupWarehouseLogic(currentWarehouse: any) {
         icon.style.transform = 'rotate(0deg)';
       }
     }
+  };
+
+  (window as any).setWarehouseAnalyticsPeriod = (period: string) => {
+    localStorage.setItem('warehouse_analytics_period', period);
+    if ((window as any).selectWarehouseAndNavigate && currentWarehouse) {
+      (window as any).selectWarehouseAndNavigate(currentWarehouse.id, 'ANALİZ');
+    }
+  };
+
+  (window as any).setWarehouseAnalyticsSap = (sap: string) => {
+    const rawVal = sap || '';
+    const term = rawVal.trim().toLowerCase();
+    localStorage.setItem('warehouse_analytics_sap', rawVal.trim());
+    
+    const input = document.getElementById('warehouse-analytics-sap') as HTMLInputElement;
+    if (input && input.value !== rawVal) {
+      input.value = rawVal;
+    }
+
+    const clearBtn = document.getElementById('btn-clear-analytics-sap');
+    if (clearBtn) {
+      clearBtn.style.display = term ? 'inline-flex' : 'none';
+    }
+
+    const cards = document.querySelectorAll('.turbine-analytics-card');
+    let visibleCount = 0;
+
+    cards.forEach((card: any, index: number) => {
+      const rows = card.querySelectorAll('.turbine-item-row');
+      const accContent = document.getElementById(`turbine-acc-${index}`);
+      const accIcon = document.getElementById(`turbine-acc-icon-${index}`);
+      const badgesContainer = document.getElementById(`turbine-badges-${index}`);
+
+      let cardMatchCount = 0;
+      let usedSum = 0;
+      let defectSum = 0;
+
+      rows.forEach((row: any) => {
+        const rowSap = (row.dataset.sap || '').toLowerCase();
+        const rowDesc = (row.dataset.desc || '').toLowerCase();
+        const rowUsed = parseInt(row.dataset.used || '0', 10) || 0;
+        const rowDefect = parseInt(row.dataset.defect || '0', 10) || 0;
+
+        const isMatch = !term || rowSap.includes(term) || rowDesc.includes(term);
+        if (isMatch) {
+          row.style.display = '';
+          cardMatchCount++;
+          usedSum += rowUsed;
+          defectSum += rowDefect;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      if (cardMatchCount > 0) {
+        card.style.display = 'block';
+        visibleCount++;
+        if (term) {
+          if (accContent) accContent.style.display = 'block';
+          if (accIcon) accIcon.style.transform = 'rotate(180deg)';
+        } else {
+          if (accContent) accContent.style.display = 'none';
+          if (accIcon) accIcon.style.transform = 'rotate(0deg)';
+        }
+
+        if (badgesContainer) {
+          let badgesHtml = '';
+          if (usedSum > 0) {
+            badgesHtml += `<span style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">${usedSum} Takılan</span> `;
+          }
+          if (defectSum > 0) {
+            badgesHtml += `<span style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700;">${defectSum} Sökülen</span>`;
+          }
+          badgesContainer.innerHTML = badgesHtml;
+        }
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    const noResultEl = document.getElementById('turbine-analytics-no-result');
+    if (noResultEl) {
+      noResultEl.style.display = (visibleCount === 0 && cards.length > 0) ? 'block' : 'none';
+    }
+  };
+
+  (window as any).setCustomWarehouseAnalyticsPeriod = () => {
+    const start = (document.getElementById('warehouse-analytics-start') as HTMLInputElement)?.value;
+    const end = (document.getElementById('warehouse-analytics-end') as HTMLInputElement)?.value;
+    if (start && end) {
+      localStorage.setItem('warehouse_analytics_period', 'custom');
+      localStorage.setItem('warehouse_analytics_start', start);
+      localStorage.setItem('warehouse_analytics_end', end);
+      if ((window as any).selectWarehouseAndNavigate && currentWarehouse) {
+        (window as any).selectWarehouseAndNavigate(currentWarehouse.id, 'ANALİZ');
+      }
+    }
+  };
+
+  (window as any).filterDefectList = (term: string) => {
+    const search = (term || '').trim().toLowerCase();
+    const clearBtn = document.getElementById('defect-search-clear');
+    if (clearBtn) {
+      clearBtn.style.display = search ? 'block' : 'none';
+    }
+
+    const groupHeaders = document.querySelectorAll('tr[id^="group-header-"]');
+    groupHeaders.forEach((header: any) => {
+      const cleanKey = header.id.replace('group-header-', '');
+      const childRows = document.querySelectorAll(`.group-row-${cleanKey}`);
+      const expandText = header.querySelector('.expand-text');
+      const toggleIcon = header.querySelector('.toggle-icon');
+
+      if (!search) {
+        // Reset to collapsed default
+        header.style.display = '';
+        childRows.forEach((row: any) => {
+          row.style.display = 'none';
+        });
+        if (expandText) expandText.innerHTML = '<i class="fa-solid fa-expand"></i> Göster';
+        if (toggleIcon) toggleIcon.style.transform = 'rotate(0deg)';
+      } else {
+        let matchingChildren = 0;
+        childRows.forEach((row: any) => {
+          const sap = (row.getAttribute('data-sap') || '').toLowerCase();
+          const name = (row.getAttribute('data-name') || '').toLowerCase();
+          const serial = (row.getAttribute('data-serial') || '').toLowerCase();
+          const turbine = (row.getAttribute('data-turbine') || '').toLowerCase();
+          const report = (row.getAttribute('data-report') || '').toLowerCase();
+          const mcf = (row.getAttribute('data-mcf') || '').toLowerCase();
+          const faultCode = (row.getAttribute('data-faultcode') || '').toLowerCase();
+          const faultDesc = (row.getAttribute('data-faultdesc') || '').toLowerCase();
+
+          const isMatch = sap.includes(search) || 
+                          name.includes(search) || 
+                          serial.includes(search) || 
+                          turbine.includes(search) || 
+                          report.includes(search) || 
+                          mcf.includes(search) ||
+                          faultCode.includes(search) ||
+                          faultDesc.includes(search);
+
+          if (isMatch) {
+            row.style.display = '';
+            matchingChildren++;
+          } else {
+            row.style.display = 'none';
+          }
+        });
+
+        if (matchingChildren > 0) {
+          header.style.display = '';
+          if (expandText) expandText.innerHTML = '<i class="fa-solid fa-compress"></i> Gizle';
+          if (toggleIcon) toggleIcon.style.transform = 'rotate(90deg)';
+        } else {
+          header.style.display = 'none';
+        }
+      }
+    });
+  };
+
+  (window as any).clearDefectSearch = () => {
+    const input = document.getElementById('defect-search-input') as HTMLInputElement;
+    if (input) {
+      input.value = '';
+    }
+    (window as any).filterDefectList('');
   };
 }

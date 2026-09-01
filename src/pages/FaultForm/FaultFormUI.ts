@@ -17,11 +17,21 @@ export const FaultFormUI = {
         const hideFaultFields = isMaintenanceTask || isDeficiencyTask;
         const isSmartEditor = localStorage.getItem('currentEditingTemplateId') !== null;
 
-        const initialFaultCode = currentTask?.faultCode || currentTask?.rawFaultCode || '';
+        const isPlanliDurus = currentTask?.secilenSablon === 'Planlı Duruş' || 
+                              (typeof currentTask?.secilenSablon === 'string' && currentTask.secilenSablon.includes('Planlı')) ||
+                              currentTask?.templateName === 'Planlı Duruş' ||
+                              (typeof currentTask?.templateName === 'string' && currentTask.templateName.includes('Planlı')) ||
+                              currentTask?.type === 'Planlı Duruş' ||
+                              currentTask?.faultCode === 'Planlı Duruş' ||
+                              currentTask?.faultCode === 'PLN';
+
+        const defaultFaultCode = isPlanliDurus ? 'Planlı Duruş' : (currentTask?.rawFaultCode || currentTask?.faultCode || '');
         let initialFaultDesc = currentTask?.faultDesc || '';
         
-        if (initialFaultCode) {
-            const exact = statusService.getCodeByKod(initialFaultCode);
+        if (isPlanliDurus) {
+            initialFaultDesc = currentTask?.yoneticiNotu || currentTask?.description || 'Planlı Duruş';
+        } else if (defaultFaultCode) {
+            const exact = statusService.getCodeByKod(defaultFaultCode);
             if (exact) {
                 initialFaultDesc = exact.Aciklama;
             }
@@ -155,17 +165,17 @@ export const FaultFormUI = {
                           </div>
                         </div>
 
-                        <!-- Row 2: Arıza Kodu & Arıza Açıklaması -->
+                        <!-- Row 2: Arıza Kodu / Planlı Kontrol & Açıklama -->
                         <div style="display: ${hideFaultFields ? 'none' : 'flex'}; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
                           <div class="form-group" style="flex: 1; min-width: 200px;">
-                            <label>ARIZA KODU</label>
+                            <label>${isPlanliDurus ? 'PLANLI KONTROL' : 'ARIZA KODU'}</label>
                             <div style="position: relative;">
-                              <input type="text" id="form-fault-search" class="cyber-input" placeholder="Kod ara..." oninput="window.searchFaultCodes(this.value)" autocomplete="off" ${hideFaultFields ? '' : 'required'} value="${currentTask?.rawFaultCode || ''}">
+                              <input type="text" id="form-fault-search" class="cyber-input" placeholder="Kod ara..." oninput="window.searchFaultCodes(this.value)" autocomplete="off" ${hideFaultFields ? '' : 'required'} value="${defaultFaultCode}">
                               <div id="form-fault-results" class="glass-panel hidden search-results-dropdown" style="width: 100%; position: absolute; top: 100%; z-index: 1000; padding: 0;"></div>
                             </div>
                           </div>
                           <div class="form-group" style="flex: 2; min-width: 300px;">
-                            <label>ARIZA TANIMI / AÇIKLAMASI</label>
+                            <label>${isPlanliDurus ? 'AÇIKLAMA' : 'ARIZA TANIMI / AÇIKLAMASI'}</label>
                             <textarea id="ariza-tanimi" class="cyber-input" rows="2" placeholder="Kod seçilince dolacak..." readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed; font-size: 0.8rem; line-height: 1.4; height: 38px; resize: none; overflow: hidden;">${initialFaultDesc}</textarea>
                           </div>
                         </div>
@@ -278,9 +288,10 @@ export const FaultFormUI = {
                             <label style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">MALZEME ÇIKIŞ FORM NO:</label>
                             <input type="text" id="mat-form-no" class="cyber-input" style="width: 150px; height: 30px; color: var(--accent-red); text-align: center; font-weight: 800;" placeholder="MÇF NO">
                           </div>
-                          <div style="display: flex; gap: 0.5rem;">
-                            <button type="button" class="btn-cyber" style="padding: 0.4rem 0.8rem; font-size: 0.65rem; background: var(--accent-green);" onclick="window.addMaterialRow()">MALZEME EKLE</button>
-                            <button type="button" class="btn-cyber" style="padding: 0.4rem 0.8rem; font-size: 0.65rem; background: var(--accent-red);" onclick="window.removeSelectedMaterials()">SATIR SİL</button>
+                          <div style="display: flex; gap: 0.4rem;">
+                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.addMaterialRow()"><i class="fa-solid fa-plus"></i> MALZEME EKLE</button>
+                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(143, 148, 251, 0.08); border: 1px solid rgba(143, 148, 251, 0.4); color: #8f94fb; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.scanBarcodeForMaterial()"><i class="fa-solid fa-qrcode"></i> BARKOD OKUT</button>
+                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(255, 23, 68, 0.08); border: 1px solid rgba(255, 23, 68, 0.4); color: #ff1744; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.removeSelectedMaterials()"><i class="fa-solid fa-trash"></i> SATIR SİL</button>
                           </div>
                         </div>
                       </div>
@@ -306,13 +317,15 @@ export const FaultFormUI = {
                     <div id="smart-audit-container"></div>
                   </div>
 
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; padding-bottom: 4rem;">
-                    <button type="button" id="save-draft-btn" class="btn-cyber-outline" style="border-color: var(--accent-orange); color: var(--accent-orange);" onclick="window.saveMaintenanceDraft()">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-bottom: 3rem;">
+                    <button type="button" id="save-draft-btn" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 171, 0, 0.08); border: 1px solid rgba(255, 171, 0, 0.4); color: var(--accent-orange); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="window.saveMaintenanceDraft()">
                       <i class="fa-solid fa-floppy-disk"></i> TASLAĞI KAYDET
                     </button>
-                    <div style="display: flex; gap: 1rem;">
-                      <button type="button" class="btn-cyber-outline" onclick="${backAction}">İPTAL</button>
-                      <button type="submit" id="submit-form-btn" class="btn-cyber" style="width: 250px; background: var(--accent-green); border-color: var(--accent-green); box-shadow: 0 0 15px rgba(0, 230, 118, 0.2);">RAPORU KAYDET VE GÖNDER</button>
+                    <div style="display: flex; gap: 0.6rem;">
+                      <button type="button" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-muted); display: inline-flex; align-items: center; cursor: pointer;" onclick="${backAction}">İPTAL</button>
+                      <button type="submit" id="submit-form-btn" class="btn-cyber" style="padding: 0 1.1rem; height: 32px; font-size: 0.72rem; font-weight: 900; border-radius: 6px; background: rgba(0, 230, 118, 0.12); border: 1px solid #00e676; color: #00e676; box-shadow: 0 0 12px rgba(0, 230, 118, 0.15); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <i class="fa-solid fa-paper-plane"></i> RAPORU KAYDET VE GÖNDER
+                      </button>
                     </div>
                   </div>
                 </form>
@@ -361,10 +374,11 @@ export const FaultFormUI = {
             <div style="flex: 1.5; min-width: 120px;">
                 <select class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; padding: 0 4px !important; font-size: 0.7rem; border-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); color: #fff;" 
                     onchange="window.updateSessionField('${ws.id}', 'type', this.value)" ${disabledAttr}>
-                    <option value="ÇALIŞMA" ${(ws.type === 'ÇALIŞMA' || !ws.type) ? 'selected' : ''}>ÇALIŞMA</option>
-                    <option value="EVDEN TÜRBİNE" ${ws.type === 'EVDEN TÜRBİNE' ? 'selected' : ''}>EVDEN TÜRBİNE</option>
-                    <option value="TÜRBİNDEN EVE" ${ws.type === 'TÜRBİNDEN EVE' ? 'selected' : ''}>TÜRBİNDEN EVE</option>
-                    <option value="BEKLEME" ${ws.type === 'BEKLEME' ? 'selected' : ''}>BEKLEME</option>
+                    <option value="ÇALIŞMA" ${(ws.type === 'ÇALIŞMA' || !ws.type) ? 'selected' : ''}>🛠️ ÇALIŞMA</option>
+                    <option value="EVDEN TÜRBİNE" ${ws.type === 'EVDEN TÜRBİNE' ? 'selected' : ''}>🏠 ➔ 🚗 EVDEN TÜRBİNE</option>
+                    <option value="TÜRBİNDEN EVE" ${ws.type === 'TÜRBİNDEN EVE' ? 'selected' : ''}>🚗 ➔ 🏠 TÜRBİNDEN EVE</option>
+                    <option value="TÜRBİNDEN TÜRBİNE" ${ws.type === 'TÜRBİNDEN TÜRBİNE' ? 'selected' : ''}>🚗 ➔ 🚗 TÜRBİNDEN TÜRBİNE</option>
+                    <option value="BEKLEME" ${ws.type === 'BEKLEME' ? 'selected' : ''}>⏳ BEKLEME</option>
                 </select>
             </div>
 
@@ -763,15 +777,16 @@ export const FaultFormUI = {
                     ${dateMsg ? `<div style="font-size: 0.6rem; color: ${dateColor}; font-weight: bold;">${dateMsg}</div>` : ''}
                 </div>
                 
-                ${isFirstAid ? `
                 <div style="display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.5rem;">
                     <input type="checkbox" id="saf-chk-${index}" ${valCheck ? 'checked' : ''} style="width: 16px; height: 16px; margin-top: 0.1rem; cursor: pointer;"
                         onchange="window.updateAdvMeasurement(${index}, 1, this.checked ? 'true' : 'false')">
                     <label for="saf-chk-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
-                        İlk yardım çantası içeriği eksiksizdir ve iç folyosunda herhangi bir hasar yoktur.
+                        ${isFirstAid 
+                            ? 'İlk yardım çantası içeriği eksiksizdir ve iç folyosunda herhangi bir hasar yoktur.' 
+                            : 'Yangın söndürme tüpü pimi ve mührü yerindedir, genel fiziksel durumu uygundur.'
+                        }
                     </label>
                 </div>
-                ` : ''}
 
                 <div style="margin-top: 0.5rem; border-top: 1px solid rgba(255, 170, 0, 0.2); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
@@ -1028,11 +1043,11 @@ export const FaultFormUI = {
                         
                         ${isTemplateMode ? `
                         <input type="text" class="cyber-input" style="padding: 0 0.6rem !important; font-size: ${itemFontSize}; min-height: ${inputHeight} !important; height: ${inputHeight} !important; max-height: ${inputHeight} !important; box-sizing: border-box !important; margin: 0 !important; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); color: #fff; border-radius: 4px;" 
-                               value="${item.text || item.title || item.stepName || ''}" 
+                               value="${(item.text || item.title || item.stepName || '').replace(/"/g, '&quot;')}" 
                                oninput="window.updateTemplateStep(${index}, 'text', this.value)" 
                                placeholder="İşlem adımı...">
                         ` : `
-                        <div style="padding: 0 0.6rem !important; font-size: ${itemFontSize}; min-height: ${inputHeight} !important; height: auto !important; box-sizing: border-box !important; margin: 0 !important; background: transparent; border: none; color: #fff; display: flex; align-items: center; line-height: 1.2;">
+                        <div style="padding: 0 0.6rem !important; font-size: ${itemFontSize}; min-height: ${inputHeight} !important; height: auto !important; box-sizing: border-box !important; margin: 0 !important; background: transparent; border: none; color: #fff; display: flex; align-items: center; line-height: 1.2; word-break: break-word; white-space: normal;">
                             ${item.text || item.title || item.stepName || ''}
                         </div>
                         `}
@@ -1230,8 +1245,8 @@ export const FaultFormUI = {
                                 <div style="display: grid; grid-template-columns: 24px 1fr 180px; gap: 0.6rem; align-items: stretch !important;">
                                     <div style="color: var(--text-muted); font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: ${itemFontSize}; text-align: center;">${(index + 1).toString().padStart(2, '0')}</div>
                                     <input type="text" class="cyber-input" readonly 
-                                           style="padding: 0 0.6rem !important; font-size: ${itemFontSize}; min-height: ${inputHeight} !important; height: ${inputHeight} !important; max-height: ${inputHeight} !important; box-sizing: border-box !important; margin: 0 !important; background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); color: #e2e8f0; border-radius: 4px; cursor: default; width: 100%; outline: none;" 
-                                           value="${item.text || item.title || item.stepName || 'Kontrol Adımı'}">
+                                           style="padding: 0 0.6rem !important; font-size: ${itemFontSize}; min-height: ${inputHeight} !important; height: auto !important; max-height: none !important; box-sizing: border-box !important; margin: 0 !important; background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); color: #e2e8f0; border-radius: 4px; cursor: default; width: 100%; outline: none; word-break: break-word; white-space: normal;" 
+                                           value="${(item.text || item.title || item.stepName || 'Kontrol Adımı').replace(/"/g, '&quot;')}">
                                     <select onchange="window.toggleAuditItem(${index}, this.value)" class="cyber-select" 
                                             style="width: 100%; min-height: ${inputHeight} !important; height: ${inputHeight} !important; max-height: ${inputHeight} !important; box-sizing: border-box !important; margin: 0 !important; font-size: ${itemFontSize}; padding: 0 0.6rem !important; background: rgba(15, 23, 42, 0.8); border: 1px solid ${isNotOk ? 'var(--accent-red)' : 'rgba(255, 255, 255, 0.15)'}; color: #fff; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
                                         <option value="PENDING" style="background: #0f172a; color: #fff;" ${item.status !== 'OK' && item.status !== 'NOT_OK' && item.status !== 'NA' ? 'selected' : ''}>⚫ SEÇİNİZ...</option>

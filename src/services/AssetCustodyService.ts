@@ -7,7 +7,7 @@ export interface CustodyItem {
   productName: string;       // Ürün Adı / Tanım (pense, tork anahtarı vb. - Zorunlu)
   serialNo?: string;         // Seri Numarası (İsteğe bağlı)
   description: string;       // Açıklama
-  category: string;          // Kategori: El Aleti, Ölçü Aleti, Elektrik Aleti, Güvenlik Ekipmanı, Hidrolik Ekipman, Diğer
+  category: string;          // Kategori: El Aleti, Ölçü Aleti, Elektrik Aleti, Şarjlı El Aleti, Güvenlik Ekipmanı, Hidrolik Ekipman, Diğer
   assignedTo: string;        // Kime zimmetli (kişi adı)
   assignedTeam: string;      // Hangi Team'e zimmetli
   location: 'team' | 'depo' | 'person'; // Nerede: Team'de mi, Depoda mı, Kişide mi

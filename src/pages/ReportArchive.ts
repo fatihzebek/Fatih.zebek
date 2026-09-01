@@ -31,6 +31,22 @@ const getReportBadge = (report: any) => {
     `;
 };
 
+(window as any).toggleArchiveSidebar = () => {
+    const sidebar = document.getElementById('archive-turbine-sidebar');
+    const toggleBtn = document.getElementById('archive-sidebar-toggle-btn');
+    if (sidebar && toggleBtn) {
+        const isCollapsed = sidebar.style.display === 'none';
+        if (isCollapsed) {
+            sidebar.style.display = 'flex';
+            toggleBtn.style.display = 'none';
+            (window as any).archiveSidebarCollapsed = false;
+        } else {
+            sidebar.style.display = 'none';
+            toggleBtn.style.display = 'flex';
+            (window as any).archiveSidebarCollapsed = true;
+        }
+    }
+};
 
 (window as any).toggleAllArchiveCheckboxes = (el: HTMLInputElement) => {
     const checkboxes = document.querySelectorAll('.archive-checkbox');
@@ -64,9 +80,57 @@ const archiveItemsPerPage = 50;
     }
 };
 
+(window as any).getStarredReports = () => {
+    try {
+        return JSON.parse(localStorage.getItem('fatih_starred_reports') || '[]');
+    } catch {
+        return [];
+    }
+};
+
+(window as any).toggleStarReport = (reportNo: string) => {
+    let starred = (window as any).getStarredReports();
+    if (starred.includes(reportNo)) {
+        starred = starred.filter((id: string) => id !== reportNo);
+    } else {
+        starred.push(reportNo);
+    }
+    localStorage.setItem('fatih_starred_reports', JSON.stringify(starred));
+    if ((window as any).renderArchiveTable) {
+        (window as any).renderArchiveTable();
+    }
+};
+
+(window as any).toggleArchiveStarredFilter = () => {
+    (window as any).onlyArchiveStarred = !(window as any).onlyArchiveStarred;
+    (window as any).archiveCurrentPage = 1;
+    if ((window as any).renderArchiveTable) {
+        (window as any).renderArchiveTable();
+    }
+};
+
 (window as any).renderArchiveTable = () => {
     const tbody = document.getElementById('archive-tbody');
     if (!tbody) return;
+
+    const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+    const userEmail = (currentUser?.email || '').toLowerCase();
+    const isFen = userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'fen' || userEmail.includes('fatih.zebek');
+    const starredReports = (window as any).getStarredReports();
+
+    const starredCountBtn = document.getElementById('btn-starred-filter');
+    const starredCountSpan = document.getElementById('starred-count');
+    if (starredCountSpan) {
+        const siteReports = (window as any).archiveReports || [];
+        const starredInSite = siteReports.filter((r: any) => starredReports.includes(r.reportNo)).length;
+        starredCountSpan.innerText = starredInSite.toString();
+    }
+    if (starredCountBtn) {
+        const isOnly = (window as any).onlyArchiveStarred;
+        starredCountBtn.style.background = isOnly ? 'rgba(255, 193, 7, 0.25)' : 'rgba(255, 193, 7, 0.08)';
+        starredCountBtn.style.borderColor = isOnly ? '#ffc107' : 'rgba(255, 193, 7, 0.3)';
+        starredCountBtn.style.boxShadow = isOnly ? '0 0 12px rgba(255, 193, 7, 0.4)' : 'none';
+    }
 
     const monthSelect = document.getElementById('archive-month') as HTMLSelectElement;
     const yearSelect = document.getElementById('archive-year') as HTMLSelectElement;
@@ -119,6 +183,10 @@ const archiveItemsPerPage = 50;
             if (!matches) return false;
         }
 
+        if (isFen && (window as any).onlyArchiveStarred && !starredReports.includes(report.reportNo)) {
+            return false;
+        }
+
         if (!report.date) return true;
         const d = new Date(report.date);
         if (mVal !== 'all' && d.getMonth().toString() !== mVal) return false;
@@ -147,7 +215,9 @@ const archiveItemsPerPage = 50;
 
     const counterText = document.getElementById('archive-counter');
     if (counterText) {
-        counterText.innerText = `TOPLAM ${totalItems} RAPOR BULUNDU`;
+        counterText.innerText = (isFen && (window as any).onlyArchiveStarred) 
+          ? `YILDIZLI RAPORLAR: ${totalItems} RAPOR` 
+          : `TOPLAM ${totalItems} RAPOR BULUNDU`;
     }
 
     const canEdit = (window as any).archiveCanEdit;
@@ -158,20 +228,24 @@ const archiveItemsPerPage = 50;
     const showBulkActions = (window as any).archiveShowBulkActions;
 
     if (paginated.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="${showBulkActions ? 7 : 6}" style="padding: 3rem; text-align: center; color: var(--text-muted);">Seçilen filtrelere uygun rapor bulunamadı.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${showBulkActions ? 7 : 6}" style="padding: 3rem; text-align: center; color: var(--text-muted);">${(isFen && (window as any).onlyArchiveStarred) ? 'Henüz yıldızlanmış takip raporu bulunmamaktadır.' : 'Seçilen filtrelere uygun rapor bulunamadı.'}</td></tr>`;
     } else {
         tbody.innerHTML = paginated.map((report: any) => {
            const isDownloaded = report.isDownloaded;
            const name = (report.templateName || report.faultCode || '').toLowerCase();
            const type = (report.type || '').toUpperCase();
+           const isPlanli = name.includes('planlı') || name.includes('planli') || (report.faultCode || '').toLowerCase().includes('planlı') || (report.faultCode || '').toLowerCase().includes('planli');
            const isBakim = type === 'BAKIM' || name.includes('bakım') || name.includes('bakim') || name.includes('yağ') || name.includes('temizlik') || name.includes('kontrol') || name.includes('t44') || name.includes('t13');
-           
-           const descriptionLine = isBakim 
-             ? (report.faultDesc || '') 
-             : `ARIZA KODU: ${report.faultCode || '---'} - ${report.faultDesc || ''}`;
+           const isStarred = starredReports.includes(report.reportNo);
+
+           const descriptionLine = isPlanli 
+             ? (report.faultDesc && report.faultDesc !== 'Planlı Duruş' ? report.faultDesc : '')
+             : (isBakim 
+                 ? '' 
+                 : `ARIZA KODU: ${report.faultCode || '---'} - ${report.faultDesc || ''}`);
 
            return `
-             <tr class="archive-row">
+             <tr class="archive-row" style="${isStarred && isFen ? 'background: rgba(255, 193, 7, 0.03);' : ''}">
                 ${showBulkActions ? `
                 <td style="padding: 1rem; text-align: center;">
                     <input type="checkbox" class="archive-checkbox" value="${report.reportNo}" data-id="${report.id}" data-type="${report.type === 'BAKIM' ? 'Bakim' : 'Ariza'}" data-turbin="${report.turbineNo}" data-template="${report.templateName || report.faultCode || 'Rapor'}" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-cyan);">
@@ -179,7 +253,15 @@ const archiveItemsPerPage = 50;
                 ` : ''}
                 <td style="padding: 1rem; text-align: center; color: var(--text-muted); font-weight: 600;">${new Date(report.date).toLocaleDateString('tr-TR')}</td>
                 <td style="padding: 1rem; text-align: center;">
-                  <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--accent-cyan); font-size: 0.95rem; letter-spacing: 0.5px;">${report.reportNo}</span>
+                  <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    ${isFen ? `
+                      <i class="${isStarred ? 'fa-solid fa-star' : 'fa-regular fa-star'}" 
+                         onclick="event.stopPropagation(); window.toggleStarReport('${report.reportNo}')" 
+                         style="cursor: pointer; color: ${isStarred ? '#ffc107' : 'rgba(255,255,255,0.25)'}; font-size: 1.1rem; transition: all 0.2s; ${isStarred ? 'filter: drop-shadow(0 0 5px rgba(255,193,7,0.8));' : ''}" 
+                         title="${isStarred ? 'Takibi Kaldır' : 'Takibe Al (Yıldızla)'}"></i>
+                    ` : ''}
+                    <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; color: var(--accent-cyan); font-size: 0.95rem; letter-spacing: 0.5px;">${report.reportNo}</span>
+                  </div>
                   ${isDownloaded ? `<div style="margin-top: 4px; display: flex; justify-content: center;"><span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid #22c55e; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.65rem;"><i class="fa-solid fa-check-double"></i> İNDİRİLDİ</span></div>` : ''}
                 </td>
                 <td style="padding: 1rem; text-align: center;">
@@ -196,9 +278,11 @@ const archiveItemsPerPage = 50;
                       </span>
                       ` : ''}
                     </div>
+                    ${descriptionLine ? `
                     <span style="font-size: 0.7rem; color: var(--text-muted); max-width: 450px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; text-transform: uppercase;" title="${descriptionLine}">
                       ${descriptionLine}
                     </span>
+                    ` : ''}
                   </div>
                 </td>
                 <td style="padding: 1rem; text-align: center;">
@@ -433,8 +517,10 @@ const archiveItemsPerPage = 50;
 
 export const ReportArchivePage = async (siteId?: string) => {
   try {
-    const currentUser = (window as any).currentUser;
-    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+    const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+    const userEmail = (currentUser?.email || '').toLowerCase();
+    const isFen = userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'fen' || userEmail.includes('fatih.zebek');
+    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || isFen;
 
     if (!siteId || siteId === 'TÜMÜ') {
       const activeTaskSites = (window as any).activeTaskSites || [];
@@ -481,13 +567,26 @@ export const ReportArchivePage = async (siteId?: string) => {
           .hover-scale-card { transition: all 0.3s ease; }
           .hover-scale-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(0, 242, 254, 0.3) !important;
-            box-shadow: 0 15px 35px rgba(0, 242, 254, 0.1) !important;
+            border-color: rgba(0, 242, 254, 0.4) !important;
+            box-shadow: 0 15px 35px rgba(0, 242, 254, 0.15) !important;
           }
-          .hover-scale-card:hover > div:nth-child(2) {
-            background: rgba(0, 242, 254, 0.2) !important;
-            box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+          .hover-scale-card:hover .site-icon-box {
+            background: rgba(0, 242, 254, 0.15) !important;
+            border-color: rgba(0, 242, 254, 0.5) !important;
+            color: #fff !important;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.45) !important;
+          }
+          .hover-scale-card:hover .site-icon-wrapper {
             transform: scale(1.05);
+          }
+          .hover-scale-card:hover .pulse-ring {
+            border-color: rgba(0, 242, 254, 0.55) !important;
+          }
+          .hover-scale-card:hover .cyber-enter-btn {
+            background: rgba(0, 242, 254, 0.18) !important;
+            border-color: rgba(0, 242, 254, 0.5) !important;
+            color: #fff !important;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.15) !important;
           }
         </style>
       `;
@@ -551,17 +650,22 @@ export const ReportArchivePage = async (siteId?: string) => {
 
     setTimeout(() => {
         if ((window as any).renderArchiveTable) {
-           (window as any).renderArchiveTable();
+            (window as any).renderArchiveTable();
         }
     }, 100);
 
-     return `
+    return `
     <div class="fade-in-up content-area" style="display: flex; gap: 1.5rem; align-items: flex-start; max-width: 100%; margin: 0; padding: 0 1.5rem 0 0.5rem; box-sizing: border-box;">
       
       <!-- Left Column: Turbine Sidebar (White box area) -->
-      <div class="glass-panel" style="width: 250px; flex-shrink: 0; max-height: calc(100vh - 120px); overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; scrollbar-width: thin; position: sticky; top: 20px; z-index: 10;">
-         <h4 style="font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; font-weight: 800; color: #FFF; margin: 0 0 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-           <i class="fa-solid fa-wind" style="color: var(--accent-cyan); text-shadow: 0 0 8px var(--accent-cyan);"></i> TÜRBİNLER
+      <div id="archive-turbine-sidebar" class="glass-panel" style="width: 250px; flex-shrink: 0; max-height: calc(100vh - 120px); overflow-y: auto; padding: 1rem; display: ${ (window as any).archiveSidebarCollapsed ? 'none' : 'flex' }; flex-direction: column; gap: 0.5rem; scrollbar-width: thin; position: sticky; top: 20px; z-index: 10;">
+         <h4 style="font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; font-weight: 800; color: #FFF; margin: 0 0 0.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+           <span style="display: flex; align-items: center; gap: 8px;">
+             <i class="fa-solid fa-wind" style="color: var(--accent-cyan); text-shadow: 0 0 8px var(--accent-cyan);"></i> TÜRBİNLER
+           </span>
+           <button onclick="window.toggleArchiveSidebar()" style="background: transparent; border: none; color: #64748B; cursor: pointer; transition: color 0.2s;" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='#64748B'" title="Menüyü Gizle">
+             <i class="fa-solid fa-angles-left"></i>
+           </button>
          </h4>
          
          <button onclick="window.filterArchiveByTurbine('all')" class="cyber-tab-btn ${(!selectedTurbine || selectedTurbine === 'all') ? 'active' : ''}" style="width: 100%; padding: 10px 14px; font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; font-weight: 700; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.2); background: rgba(0, 242, 254, 0.05); color: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
@@ -578,7 +682,7 @@ export const ReportArchivePage = async (siteId?: string) => {
              <button onclick="window.filterArchiveByTurbine('${tc.id}')" class="cyber-tab-btn ${(selectedTurbine === tc.id) ? 'active' : ''}" style="width: 100%; padding: 10px 14px; font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; font-weight: 700; border-radius: 8px; border: 1px solid ${tc.count > 0 ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255,255,255,0.05)'}; background: ${tc.count > 0 ? 'rgba(0, 242, 254, 0.02)' : 'rgba(255,255,255,0.01)'}; color: ${tc.count > 0 ? '#fff' : '#64748B'}; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
                <span style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left;">
                  <span style="font-weight: 800;">${nameOnly}</span>
-                 ${serialOnly ? `<span style="font-size: 0.7rem; color: #64748B; font-weight: 600; font-family: monospace;">S/N: ${serialOnly}</span>` : ''}
+                 ${serialOnly ? `<span style="font-size: 0.7rem; color: #64748B; font-weight: 600; font-family: monospace;">${serialOnly}</span>` : ''}
                </span>
                <span style="background: ${tc.count > 0 ? 'rgba(0, 242, 254, 0.12)' : 'rgba(255,255,255,0.03)'}; color: ${tc.count > 0 ? 'var(--accent-cyan)' : '#64748B'}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-family: monospace; font-weight: bold;">${tc.count}</span>
              </button>
@@ -587,7 +691,11 @@ export const ReportArchivePage = async (siteId?: string) => {
       </div>
 
       <!-- Right Column: Main Content -->
-      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column;">
+      <div id="archive-main-content" style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column;">
+        <!-- Sidebar Toggle Button (Only visible when collapsed) -->
+        <button id="archive-sidebar-toggle-btn" onclick="window.toggleArchiveSidebar()" class="cyber-button" style="display: ${ (window as any).archiveSidebarCollapsed ? 'flex' : 'none' }; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); color: var(--accent-cyan); border-radius: 6px; cursor: pointer; margin-bottom: 1rem; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.8rem; width: fit-content; text-transform: uppercase;">
+          <i class="fa-solid fa-angles-right"></i> Türbinler Listesi
+        </button>
         <!-- Title Area -->
         <div style="display: flex; align-items: center; gap: 1.25rem; margin-bottom: 2rem;">
           <button onclick="window.selectReportSiteAndNavigate('')" class="cyber-back-btn" style="width: 42px; height: 42px; border-radius: 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.25s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'; this.style.borderColor='rgba(0, 242, 254, 0.3)'; this.style.boxShadow='0 0 10px rgba(0, 242, 254, 0.15)';" onmouseout="this.style.background='rgba(255,255,255,0.03)'; this.style.borderColor='rgba(255,255,255,0.08)'; this.style.boxShadow='none';">
@@ -658,6 +766,12 @@ export const ReportArchivePage = async (siteId?: string) => {
 
         <!-- Right Side: Cyber Buttons -->
         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+          ${isFen ? `
+          <button id="btn-starred-filter" onclick="window.toggleArchiveStarredFilter()" class="cyber-action-bar-btn" style="background: ${ (window as any).onlyArchiveStarred ? 'rgba(255, 193, 7, 0.25)' : 'rgba(255, 193, 7, 0.08)' }; border: 1px solid ${ (window as any).onlyArchiveStarred ? '#ffc107' : 'rgba(255, 193, 7, 0.3)' }; color: #ffc107; display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Rajdhani'; font-weight: 800; font-size: 0.85rem; letter-spacing: 0.5px; transition: all 0.25s;" title="Sadece takip etmek için yıldızladığınız kritik raporları süzmenizi sağlar">
+            <i class="fa-solid fa-star" style="font-size: 0.9rem; color: #ffc107;"></i> YILDIZLI RAPORLAR (<span id="starred-count">0</span>)
+          </button>
+          ` : ''}
+
           ${showBulkActions ? `
           <button onclick="window.downloadSelectedAsZip('${site?.name}', '${siteId}')" class="cyber-action-bar-btn" style="background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); color: var(--accent-cyan); display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-family: 'Rajdhani'; font-weight: 800; letter-spacing: 0.5px; transition: all 0.25s;">
             <i class="fa-solid fa-file-zipper" style="font-size: 0.9rem;"></i> SEÇİLENLERİ ZIP İNDİR
@@ -1556,49 +1670,25 @@ export const ReportArchivePage = async (siteId?: string) => {
             fileName = fileName.replace(/Ğ/g,'G').replace(/ğ/g,'g').replace(/Ü/g,'U').replace(/ü/g,'u').replace(/Ş/g,'S').replace(/ş/g,'s').replace(/İ/g,'I').replace(/ı/g,'i').replace(/Ö/g,'O').replace(/ö/g,'o').replace(/Ç/g,'C').replace(/ç/g,'c');
             fileName = fileName.replace(/[\\/:*?"<>|]/g, '-');
 
-            // Create temporary container that mimics the exact print layout at A4 aspect ratio (margin: 0 in html2pdf)
+            // Create temporary container positioned at (0, 0) with zero visibility to prevent coordinate/viewport shifts
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'position: fixed; left: -9999px; top: 0; width: 794px; z-index: -9999;';
-
-            // Create target inner element to hold content with A4 margins/padding
-            const target = document.createElement('div');
-            target.id = 'pdf-download-target';
-            target.style.cssText = `
-                width: 794px;
-                background: #ffffff;
-                box-sizing: border-box;
-                padding: 30px 38px; /* 8mm top/bottom, 10mm left/right margins in pixels */
-            `;
-
-            // Inject styles to override #pdf-container layout and tables for direct conversion
-            const overrideStyle = `
-                <style>
-                    #pdf-download-target #pdf-container {
-                        width: 100% !important;
-                        max-width: none !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        background: #ffffff !important;
-                    }
-                    /* Ensure tables are correctly padded and borders remain fine */
-                    #pdf-download-target #pdf-container table {
-                        width: 100% !important;
-                        border-collapse: collapse !important;
-                    }
-                    #pdf-download-target #pdf-container tr, 
-                    #pdf-download-target #pdf-container td, 
-                    #pdf-download-target #pdf-container th {
-                        page-break-inside: avoid !important;
-                        break-inside: avoid !important;
-                    }
-                </style>
-            `;
-            target.innerHTML = overrideStyle + htmlContent;
-            wrapper.appendChild(target);
+            wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 900px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+            wrapper.innerHTML = htmlContent;
             document.body.appendChild(wrapper);
 
+            const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
+            if (targetElement) {
+              targetElement.style.width = '880px';
+              targetElement.style.minWidth = '880px';
+              targetElement.style.maxWidth = '880px';
+              targetElement.style.margin = '0';
+              targetElement.style.padding = '12px 16px';
+              targetElement.style.boxSizing = 'border-box';
+              targetElement.style.background = '#ffffff';
+            }
+
             // Wait for images to load inside target
-            const images = target.querySelectorAll('img');
+            const images = wrapper.querySelectorAll('img');
             if (images.length > 0) {
                 await Promise.all(Array.from(images).map((img: any) => {
                     if (img.complete) return Promise.resolve();
@@ -1607,16 +1697,20 @@ export const ReportArchivePage = async (siteId?: string) => {
             }
             await new Promise(r => setTimeout(r, 600));
 
-            // Set A4 options with 0 margin since margins are pre-built inside the wrapper padding
             const opt = {
-                margin: 0,
+                margin: [8, 6, 8, 6],
                 filename: fileName,
-                image: { type: 'png', quality: 1 },
+                image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
                     scale: 2, 
                     useCORS: true, 
-                    backgroundColor: '#ffffff', 
-                    width: 794
+                    backgroundColor: '#ffffff',
+                    x: 0,
+                    y: 0,
+                    scrollX: 0,
+                    scrollY: 0,
+                    width: 880,
+                    windowWidth: 900
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { mode: ['css', 'legacy'], before: ['.html2pdf__page-break', '.section-break'], avoid: ['tr', '.pdf-no-break', 'img'] }
@@ -1627,7 +1721,7 @@ export const ReportArchivePage = async (siteId?: string) => {
 
             try {
                 // Direct PDF download using target element
-                await (window as any).html2pdf().set(opt).from(target).save();
+                await (window as any).html2pdf().set(opt).from(targetElement).save();
             } finally {
                 document.documentElement.style.fontSize = originalHtmlFontSize;
             }
@@ -1643,6 +1737,74 @@ export const ReportArchivePage = async (siteId?: string) => {
             btn.innerHTML = originalHtml;
             btn.disabled = false;
         }
+    }
+};
+
+(window as any).shareReportPDF = async (event: Event) => {
+    event.stopPropagation();
+    const btn = event.currentTarget as HTMLButtonElement;
+    const reportId = btn?.getAttribute('data-id');
+    if (!reportId) return;
+
+    try {
+        const report = (window as any).allReportsCache?.find((r: any) => r.id === reportId);
+        if (!report) return;
+
+        const { renderReportPDF } = await import('../components/ReportTemplate');
+        const htmlContent = renderReportPDF(report);
+
+        if (!(window as any).html2pdf) {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        const dateStr = report.createdAt?.toDate ? report.createdAt.toDate().toISOString().split('T')[0] : (report.date || 'tarih-yok');
+        const actionStr = (report.actionType || 'Servis-Raporu').replace(/\s+/g, '_');
+        const fileName = `${dateStr}-${report.siteName}-${actionStr}-${report.turbineNo || ''}.pdf`;
+
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'absolute';
+        wrapper.style.left = '-9999px';
+        wrapper.style.top = '-9999px';
+        wrapper.style.width = '794px';
+
+        const target = document.createElement('div');
+        target.id = 'pdf-share-target';
+        target.innerHTML = htmlContent;
+        wrapper.appendChild(target);
+        document.body.appendChild(wrapper);
+
+        const opt = {
+            margin: [0, 0, 0, 0],
+            filename: fileName,
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const pdfBlob = await (window as any).html2pdf().set(opt).from(target).outputPdf('blob');
+        document.body.removeChild(wrapper);
+
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+                title: `DH Servis Raporu - ${report.siteName}`,
+                text: `${report.siteName} Santrali T${report.turbineNo || ''} Servis Raporu`,
+                files: [file]
+            });
+        } else {
+            // Fallback download if direct share isn't supported on desktop
+            (window as any).downloadReportPDF(event);
+        }
+    } catch (e: any) {
+        console.error("PDF Share error:", e);
+        (window as any).downloadReportPDF(event);
     }
 };
 

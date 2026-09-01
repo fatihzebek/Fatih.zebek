@@ -311,11 +311,12 @@ export const TurbinesPage = () => {
         const isMaintenanceState = maintenanceScadaStates.includes(scadaStatus);
         const isStartingState = ['0:1', '0:2', '0:4', 'Turbine starting', 'Turbine operational'].includes(scadaStatus);
         
-        const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
-        const isScadaMaintenance = ENABLE_SCADA_INTEGRATION && scada && scada.isMaintenance === true;
+        const isScadaEnabled = ENABLE_SCADA_INTEGRATION && siteId !== '3213';
+        const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
+        const isScadaMaintenance = isScadaEnabled && scada && scada.isMaintenance === true;
 
         let status = isFaulty ? 'fault' : (isMaintenance || isScadaMaintenance ? 'maintenance' : 'online');
-        if (ENABLE_SCADA_INTEGRATION && hasScadaFault && status === 'online') {
+        if (isScadaEnabled && hasScadaFault && status === 'online') {
           status = 'scada_fault';
         }
 
@@ -401,10 +402,10 @@ export const TurbinesPage = () => {
                         data-turbine-no="${t.no !== undefined ? t.no : (labelText === 'RTU' ? 0 : '')}"
                         data-turbine-id="${labelText}"
                         data-serial="${t.id}"
-                        style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--accent-red); border-radius: 4px; padding: 3px 6px; font-family: 'Rajdhani', sans-serif; font-size: 0.65rem; font-weight: 800; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 100%; box-shadow: 0 0 6px rgba(239, 68, 68, 0.15);"
-                        onmouseover="this.style.background='var(--accent-red)'; this.style.color='#000'; this.style.borderColor='var(--accent-red)';"
-                        onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'; this.style.color='var(--accent-red)'; this.style.borderColor='rgba(239, 68, 68, 0.4)';">
-                  <i class="fa-solid fa-bolt" style="font-size: 0.55rem;"></i> RESET
+                        style="background: rgba(129, 140, 248, 0.08); border: 1px solid rgba(129, 140, 248, 0.35); color: #818cf8; border-radius: 4px; padding: 3px 6px; font-family: 'Rajdhani', sans-serif; font-size: 0.65rem; font-weight: 800; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 100%; box-shadow: 0 0 6px rgba(129, 140, 248, 0.15);"
+                        onmouseover="this.style.background='#818cf8'; this.style.color='#060912'; this.style.borderColor='#818cf8'; this.style.boxShadow='0 0 12px rgba(129, 140, 248, 0.45)';"
+                        onmouseout="this.style.background='rgba(129, 140, 248, 0.08)'; this.style.color='#818cf8'; this.style.borderColor='rgba(129, 140, 248, 0.35)'; this.style.boxShadow='0 0 6px rgba(129, 140, 248, 0.15)';">
+                  <i class="fa-solid fa-bolt" style="font-size: 0.55rem;"></i> Reset
                 </button>
               ` : ''}
             </div>
@@ -775,10 +776,10 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
         resetBtnContainer.innerHTML = `
           <button onclick="window.triggerTurbineReset(${turbineNo}, '${turbineLabel}', '${turbineId}', '${siteId}', '${siteName.replace(/'/g, "\\'")}')" 
                   class="cyber-button" 
-                  style="background: rgba(239, 68, 68, 0.1); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;"
-                  onmouseover="this.style.background='var(--accent-red)'; this.style.color='#000'; this.style.borderColor='var(--accent-red)'"
-                  onmouseout="this.style.background='rgba(239, 68, 68, 0.1)'; this.style.color='var(--accent-red)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
-            <i class="fa-solid fa-bolt"></i> RESET ⚡
+                  style="background: rgba(129, 140, 248, 0.08); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.35); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;"
+                  onmouseover="this.style.background='#818cf8'; this.style.color='#060912'; this.style.borderColor='#818cf8'"
+                  onmouseout="this.style.background='rgba(129, 140, 248, 0.08)'; this.style.color='#818cf8'; this.style.borderColor='rgba(129, 140, 248, 0.35)'">
+            <i class="fa-solid fa-bolt"></i> Reset ⚡
           </button>
         `;
       } else {
@@ -813,7 +814,8 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
     if (tasksList) {
       const scadaData = (window as any).scadaData || {};
       const scadaInfo = scadaData[turbineId];
-      const hasScadaFault = !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
+      const isScadaEnabled = ENABLE_SCADA_INTEGRATION && siteId !== '3213';
+      const hasScadaFault = isScadaEnabled && !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
       const hasActiveTask = turbineTasks.some((t: any) => t.status !== 'Tamamlandı');
 
 
@@ -1038,7 +1040,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
 
               const reportDeleteBtn = isAdmin ? `
                 <button onclick="event.stopPropagation(); window.deleteTurbineReport('${r.id}', '${r.reportNo}')" 
-                        style="width: 30px; height: 30px; background: rgba(255, 77, 77, 0.06); border: 1px solid rgba(255, 77, 77, 0.12); border-radius: 8px; color: rgba(255, 77, 77, 0.5); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; transition: all 0.2s; flex-shrink: 0;"
+                        style="width: 32px; height: 32px; background: rgba(255, 77, 77, 0.06); border: 1px solid rgba(255, 77, 77, 0.12); border-radius: 8px; color: rgba(255, 77, 77, 0.5); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; transition: all 0.2s; flex-shrink: 0; box-sizing: border-box !important;"
                         onmouseover="this.style.background='rgba(255,77,77,0.15)'; this.style.color='#ff4d4d'; this.style.borderColor='rgba(255,77,77,0.4)'"
                         onmouseout="this.style.background='rgba(255,77,77,0.06)'; this.style.color='rgba(255,77,77,0.5)'; this.style.borderColor='rgba(255,77,77,0.12)'"
                         title="Bu raporu sil">
@@ -1055,7 +1057,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
                   <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                     <button onclick="window.viewTurbinePdf('${r.id}', '${r.reportNo}')" 
                             class="btn-cyber-outline" 
-                            style="padding: 0 10px; font-size: 0.7rem; border-radius: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 700; height: 30px; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px; border: 1px solid rgba(0, 242, 254, 0.35); background: rgba(0, 242, 254, 0.05); color: var(--accent-cyan); cursor: pointer; transition: all 0.2s;"
+                            style="padding: 0 12px; font-size: 0.72rem; border-radius: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 700; min-height: 0 !important; height: 32px !important; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.5px; border: 1px solid rgba(0, 242, 254, 0.35); background: rgba(0, 242, 254, 0.05); color: var(--accent-cyan); cursor: pointer; transition: all 0.2s; box-sizing: border-box !important;"
                             onmouseover="this.style.background='rgba(0, 242, 254, 0.15)'; this.style.borderColor='rgba(0, 242, 254, 0.65)'; this.style.boxShadow='0 0 12px rgba(0, 242, 254, 0.25)'"
                             onmouseout="this.style.background='rgba(0, 242, 254, 0.05)'; this.style.borderColor='rgba(0, 242, 254, 0.35)'; this.style.boxShadow='none'">
                       <i class="fa-solid fa-file-invoice" style="font-size: 0.75rem;"></i> RAPORU GÖSTER
@@ -1085,7 +1087,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
                 </td>
                 <td style="padding: 0.75rem 0.5rem; vertical-align: middle;">
                   <div style="font-family: monospace; font-weight: 700; color: #fff; font-size: 0.85rem;">${m.sapNo || '-'}</div>
-                  ${(m.serialNo || m.serial) ? `<div style="font-size: 0.7rem; color: #10B981; margin-top: 2px; font-weight: bold; font-family: monospace; word-break: break-all;">S/N: ${m.serialNo || m.serial}</div>` : ''}
+                  ${(m.serialNo || m.serial) ? `<div style="font-size: 0.7rem; color: #10B981; margin-top: 2px; font-weight: bold; font-family: monospace; word-break: break-all;">${m.serialNo || m.serial}</div>` : ''}
                 </td>
                 <td style="padding: 0.75rem 0.5rem; vertical-align: middle; font-size: 0.85rem; color: #E2E8F0; line-height: 1.4;">${m.description || m.type || '-'}</td>
                 <td style="padding: 0.75rem 0.5rem; vertical-align: middle; text-align: center;">
@@ -1122,7 +1124,8 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
         if (tasksList) {
           const scadaData = (window as any).scadaData || {};
           const scadaInfo = scadaData[turbineId];
-          const hasScadaFault = !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
+          const isScadaEnabled = ENABLE_SCADA_INTEGRATION && siteId !== '3213';
+          const hasScadaFault = isScadaEnabled && !!(scadaInfo && scadaInfo.status && scadaInfo.status !== 'OK' && !scadaInfo.status.includes('8:0') && !scadaInfo.status.includes('0:8'));
           const hasActiveTask = activeTasksForDeficiencies.some((t: any) => t.status !== 'Tamamlandı');
 
           let scadaClaimHtml = '';
@@ -2072,11 +2075,12 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
           if (t && t.id && (window as any).scadaData) {
             scada = (window as any).scadaData[t.id.toString()];
           }
-          const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
+          const isScadaEnabled = ENABLE_SCADA_INTEGRATION && site.id !== '3213';
+          const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
 
           if (isFaulty) {
             faultyCount++;
-          } else if (ENABLE_SCADA_INTEGRATION && hasScadaFault) {
+          } else if (isScadaEnabled && hasScadaFault) {
             scadaFaultCount++;
           } else if (isMaint) {
             maintCount++;
@@ -2253,11 +2257,12 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
       scada = (window as any).scadaData[t.id.toString()];
     }
     const scadaStatus = scada && scada.status ? scada.status : 'OK';
-    const hasScadaFault = ENABLE_SCADA_INTEGRATION && scada && scada.isFault === true;
-    const isScadaMaintenance = ENABLE_SCADA_INTEGRATION && scada && scada.isMaintenance === true;
+    const isScadaEnabled = ENABLE_SCADA_INTEGRATION && siteId !== '3213';
+    const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
+    const isScadaMaintenance = isScadaEnabled && scada && scada.isMaintenance === true;
 
     let status = isFaulty ? 'fault' : (isMaint || isScadaMaintenance ? 'maintenance' : 'online');
-    if (ENABLE_SCADA_INTEGRATION && hasScadaFault && status === 'online') {
+    if (isScadaEnabled && hasScadaFault && status === 'online') {
       status = 'scada_fault';
     }
 

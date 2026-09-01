@@ -4,6 +4,19 @@ import { personnelService } from './PersonnelService';
 import faultCategories from '../data/fault_categories.json';
 import { dataService } from './DataService';
 import * as DateTimeUtils from '../utils/DateTimeUtils';
+import { statusService } from './StatusService';
+
+export const getFaultMainCategory = (kodOrDesc: string): string => {
+  if (!kodOrDesc || kodOrDesc === '---') return '';
+  const item = statusService.getCodeByKod(kodOrDesc);
+  if (item && item.Aciklama) {
+    const parts = item.Aciklama.split('-');
+    if (parts.length > 0 && parts[0].trim()) {
+      return parts[0].trim().toLowerCase();
+    }
+  }
+  return kodOrDesc.split('-')[0]?.trim().toLowerCase() || kodOrDesc.trim().toLowerCase();
+};
 
 export interface PerformanceMetric {
   name: string;
@@ -20,6 +33,16 @@ export interface PerformanceMetric {
   repeatErrorRate: number;
   specialization: string;
   turbines: string[];
+  sites: string[];
+  team?: string;
+  company?: string;
+  speedScore: number;
+  qualityScore: number;
+  mobilityScore: number;
+  sacrificeScore: number;
+  masteryScore: number;
+  masteryGrade: 'A+' | 'A' | 'B' | 'C';
+  masteryLabel: string;
 }
 
 export interface OvertimeDetail {
@@ -64,15 +87,28 @@ const getCanonicalName = (name: string) => {
 class AnalyticsService {
   get personnel() {
     const details = personnelService.getPersonnelDetailsList();
-    return personnelService.getPersonnelList().map(name => {
-      const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
-      return {
-        name,
-        expertise: name === "Fatih ZEBEK" ? [""] : ["Servis Bakım"],
-        hourlyRate: 100,
-        baseSiteId: detail?.baseSites?.[0] || "GENEL"
-      };
-    });
+    const officeStaff = [
+      'fatih zebek',
+      'sercan yetki',
+      'furkan yıldırım',
+      'furkan yildirim',
+      'necat öztürk',
+      'necat ozturk'
+    ];
+    return personnelService.getPersonnelList()
+      .filter(name => {
+        const clean = name.toLocaleLowerCase('tr-TR').trim();
+        return !officeStaff.some(os => clean.includes(os) || os.includes(clean));
+      })
+      .map(name => {
+        const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
+        return {
+          name,
+          expertise: ["Servis Bakım"],
+          hourlyRate: 100,
+          baseSiteId: detail?.baseSites?.[0] || "GENEL"
+        };
+      });
   }
   private categories = faultCategories;
 
@@ -104,27 +140,49 @@ class AnalyticsService {
             totalTurbineHours += duration;
           }
 
-          // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, or TÜRBİNDEN EVE
-          if (session.type === 'GİDİŞ YOLU' || session.type === 'DÖNÜŞ YOLU' || session.type === 'TRAVEL' || session.type === 'EVDEN TÜRBİNE' || session.type === 'TÜRBİNDEN EVE' || session.type === 'YOL') {
+          // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, TÜRBİNDEN EVE, TÜRBİNDEN TÜRBİNE, or YOL
+          if (session.type === 'GİDİŞ YOLU' || session.type === 'DÖNÜŞ YOLU' || session.type === 'TRAVEL' || session.type === 'EVDEN TÜRBİNE' || session.type === 'TÜRBİNDEN EVE' || session.type === 'TÜRBİNDEN TÜRBİNE' || session.type === 'YOL') {
             totalRoadHours += duration;
           }
 
-          const otHours = DateTimeUtils.calculateOvertimeHours(
-            session.date || report.date || new Date().toISOString().split('T')[0],
-            session.startTime,
-            session.endTime,
-            session.isOffDay || false
-          );
+          let otTotal = 0;
+          const pList = session.personnel || [];
+          pList.forEach((name: string) => {
+            let otHours = DateTimeUtils.calculateOvertimeHours(
+              session.date || report.date || new Date().toISOString().split('T')[0],
+              session.startTime,
+              session.endTime,
+              session.isOffDay || false,
+              name
+            );
+            
+            // Onaylanmış mesai kontrolü (Yönetici onayı varsa onaylanan saat baz alınır)
+            const normName = name.toLocaleLowerCase('tr-TR').trim();
+            const approvalsForSession = report.overtimeApprovals?.[session.id];
+            if (approvalsForSession) {
+              const matchedKey = Object.keys(approvalsForSession).find(k => k.toLocaleLowerCase('tr-TR').trim() === normName);
+              if (matchedKey) {
+                const app = approvalsForSession[matchedKey];
+                if (app.status === 'approved') {
+                  otHours = app.approvedHours !== undefined ? app.approvedHours : otHours;
+                } else if (app.status === 'rejected') {
+                  otHours = 0;
+                }
+              }
+            }
+
+            otTotal += otHours;
+          });
           
-          const otTotal = otHours * pCount;
           overtimeManHours += otTotal;
 
-          if (otHours > 0 && pCount > 0) {
+          const representativeOt = pCount > 0 ? (otTotal / pCount) : 0;
+          if (otTotal > 0 && pCount > 0) {
             overtimeSegments.push({
               personnel: session.personnel,
               startTime: session.startTime,
               endTime: session.endTime,
-              hours: Number(otHours.toFixed(2))
+              hours: Number(representativeOt.toFixed(2))
             });
           }
         } catch (e) {}
@@ -148,21 +206,28 @@ class AnalyticsService {
           totalManHours = Math.max(0, durationHours * personnelCount);
           (this as any).lastTurbineDuration = durationHours;
 
-          const otHours = DateTimeUtils.calculateOvertimeHours(
-            report.date || new Date().toISOString().split('T')[0],
-            onStr,
-            offStr,
-            false
-          );
+          let otTotal = 0;
+          const pList = report.personnel || [];
+          pList.forEach((name: string) => {
+            const otHours = DateTimeUtils.calculateOvertimeHours(
+              report.date || new Date().toISOString().split('T')[0],
+              onStr,
+              offStr,
+              false,
+              name
+            );
+            otTotal += otHours;
+          });
           
-          overtimeManHours = otHours * personnelCount;
+          overtimeManHours = otTotal;
 
-          if (otHours > 0) {
+          const representativeOt = personnelCount > 0 ? (otTotal / personnelCount) : 0;
+          if (otTotal > 0) {
             overtimeSegments.push({
               personnel: report.personnel || [],
               startTime: onStr,
               endTime: offStr,
-              hours: Number(otHours.toFixed(2))
+              hours: Number(representativeOt.toFixed(2))
             });
           }
         } catch (e) {}
@@ -219,7 +284,7 @@ class AnalyticsService {
     const personnelCost = manHours * avgRate;
     
     // Simple material cost calculation
-    const materialCost = report.materials.reduce((sum, m) => sum + (m.used * 50), 0); // Assuming avg 50 unit price
+    const materialCost = (report.materials || []).reduce((sum, m) => sum + ((m.used || 0) * 50), 0); // Assuming avg 50 unit price
     
     return personnelCost + materialCost;
   }
@@ -298,25 +363,48 @@ class AnalyticsService {
         totalTurbineHours: Math.round(totalTurbineHours),
         totalRoadHours: Math.round(totalRoadHours)
       },
-      personnelMetrics: this.personnel.map(p => {
-        const pNameUpper = p.name.toUpperCase();
-        const personnelReports = reports.filter(r => 
-          r.personnel && r.personnel.some((name: string) => name.toUpperCase() === pNameUpper)
-        );
-        let pEfficiencySum = 0;
-        let pValidCount = 0;
-        let pBakimHours = 0;
-        let pArizaHours = 0;
-        let pOvertimeHours = 0;
-        let pRoadHours = 0;
-        let pBakimCount = 0;
-        let pArizaCount = 0;
-        let pRepeatCount = 0;
-        let pTurbines = new Set<string>();
-        
-        personnelReports.forEach(r => {
-          (this as any).lastTurbineDuration = 0;
-          const stats = this.calculateManHours(r, r.type === 'BAKIM' ? 8 : 4);
+      personnelMetrics: (() => {
+        const personnelDetails = personnelService.getPersonnelDetailsList();
+        const allSitesList = dataService.getSites();
+        const norm = (s: string) => (s || '').toLocaleLowerCase('tr-TR').replace(/[^a-z0-9]/g, '');
+
+        return this.personnel.map(p => {
+          const pNameUpper = p.name.toUpperCase();
+          const pDetail = personnelDetails.find(d => norm(d.name) === norm(p.name));
+          
+          let officialSites: string[] = [];
+          if (pDetail && pDetail.baseSites && pDetail.baseSites.length > 0) {
+            pDetail.baseSites.forEach(siteId => {
+              const matchedSite = allSitesList.find(s => s.id === siteId || s.name.toLowerCase() === siteId.toLowerCase());
+              if (matchedSite) {
+                officialSites.push(matchedSite.name);
+              } else {
+                officialSites.push(siteId);
+              }
+            });
+          }
+
+          const assignedTeam = pDetail?.team || '';
+          const assignedCompany = pDetail?.company || '';
+
+          const personnelReports = reports.filter(r => 
+            r.personnel && r.personnel.some((name: string) => name.toUpperCase() === pNameUpper)
+          );
+          let pEfficiencySum = 0;
+          let pValidCount = 0;
+          let pBakimHours = 0;
+          let pArizaHours = 0;
+          let pOvertimeHours = 0;
+          let pRoadHours = 0;
+          let pBakimCount = 0;
+          let pArizaCount = 0;
+          let pRepeatCount = 0;
+          let pTurbines = new Set<string>();
+          let pSites = new Set<string>();
+          
+          personnelReports.forEach(r => {
+            (this as any).lastTurbineDuration = 0;
+            const stats = this.calculateManHours(r, r.type === 'BAKIM' ? 8 : 4);
           if (stats.totalManHours > 0) {
             const reportEfficiency = Math.max(0, 1 - Math.abs(stats.deviation / 100));
             pEfficiencySum += reportEfficiency;
@@ -334,16 +422,33 @@ class AnalyticsService {
                   pTotalSessionHours += dur;
 
                   // Check if it is a road session
-                  if (ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE' || ws.type === 'YOL') {
+                  if (ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE' || ws.type === 'TÜRBİNDEN TÜRBİNE' || ws.type === 'YOL') {
                     pRoadSessionHours += dur;
                   }
                   
-                  const ot = DateTimeUtils.calculateOvertimeHours(
+                  let ot = DateTimeUtils.calculateOvertimeHours(
                     ws.date || r.date || new Date().toISOString().split('T')[0],
                     ws.startTime || '00:00',
                     ws.endTime || '00:00',
-                    ws.isOffDay || false
+                    ws.isOffDay || false,
+                    p.name
                   );
+
+                  // Onaylı mesai kontrolü
+                  const normPName = p.name.toLocaleLowerCase('tr-TR').trim();
+                  const approvalsForSession = r.overtimeApprovals?.[ws.id];
+                  if (approvalsForSession) {
+                    const matchedKey = Object.keys(approvalsForSession).find(k => k.toLocaleLowerCase('tr-TR').trim() === normPName);
+                    if (matchedKey) {
+                      const app = approvalsForSession[matchedKey];
+                      if (app.status === 'approved') {
+                        ot = app.approvedHours !== undefined ? app.approvedHours : ot;
+                      } else if (app.status === 'rejected') {
+                        ot = 0;
+                      }
+                    }
+                  }
+
                   pOvertimeSessionHours += ot;
                 }
               });
@@ -351,19 +456,42 @@ class AnalyticsService {
               const [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
               pTotalSessionHours = h + (m / 60);
               
-              const ot = DateTimeUtils.calculateOvertimeHours(
+              let ot = DateTimeUtils.calculateOvertimeHours(
                 r.date || new Date().toISOString().split('T')[0],
                 r.timeManagement?.maintenanceOn || '00:00',
                 r.timeManagement?.maintenanceOff || '00:00',
-                false
+                false,
+                p.name
               );
-              pOvertimeSessionHours = ot;
+
+              const normPName = p.name.toLocaleLowerCase('tr-TR').trim();
+              if (r.overtimeApprovals) {
+                Object.values(r.overtimeApprovals).forEach((sessionApps: any) => {
+                  if (sessionApps && typeof sessionApps === 'object') {
+                    const matchedKey = Object.keys(sessionApps).find(k => k.toLocaleLowerCase('tr-TR').trim() === normPName);
+                    if (matchedKey) {
+                      const app = sessionApps[matchedKey];
+                      if (app.status === 'approved') {
+                        ot = app.approvedHours !== undefined ? app.approvedHours : ot;
+                      } else if (app.status === 'rejected') {
+                        ot = 0;
+                      }
+                    }
+                  }
+                });
+              }
+
+              pOvertimeSessionHours += ot;
             }
 
             pOvertimeHours += pOvertimeSessionHours;
             pRoadHours += pRoadSessionHours;
             
-            if (r.turbineSerial) pTurbines.add(r.turbineSerial);
+            const site = r.siteName || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.siteName : '') || '';
+            const tNo = r.turbineNo || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.turbineNo : '') || r.turbineSerial || '';
+            const fullTurbineLabel = (site && tNo) ? (tNo.startsWith(site) ? tNo : `${site} ${tNo}`) : (site || tNo);
+            if (fullTurbineLabel) pTurbines.add(fullTurbineLabel.trim());
+            if (site) pSites.add(site);
             
             if (r.type === 'BAKIM') {
               pBakimHours += pTotalSessionHours;
@@ -372,17 +500,27 @@ class AnalyticsService {
               pArizaHours += pTotalSessionHours;
               pArizaCount++;
               
-              // REPEAT FAULT DETECTION
+              // REPEAT FAULT DETECTION (Birebir Kod veya Resmi Sözlükteki Ana Sistem Eşleşmesi)
               const reportDate = new Date(r.date);
               const sevenDaysLater = new Date(reportDate.getTime() + (7 * 24 * 60 * 60 * 1000));
+              const faultKey = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '');
+              const faultCat = getFaultMainCategory(faultKey);
               
-              const isRepeat = reports.some(otherR => 
-                otherR.id !== r.id && 
-                otherR.turbineSerial === r.turbineSerial && 
-                otherR.type === 'ARIZA' &&
-                new Date(otherR.date) > reportDate &&
-                new Date(otherR.date) <= sevenDaysLater
-              );
+              const isRepeat = !!faultKey && reports.some(otherR => {
+                if (otherR.id === r.id || otherR.type !== 'ARIZA' || otherR.turbineSerial !== r.turbineSerial) return false;
+                const otherDate = new Date(otherR.date);
+                if (otherDate <= reportDate || otherDate > sevenDaysLater) return false;
+
+                const otherKey = (otherR.faultCode && otherR.faultCode !== '---') ? otherR.faultCode : (otherR.faultDesc || '');
+                if (!otherKey) return false;
+
+                // 1. Birebir Aynı Arıza Kodu
+                if (otherKey.trim().toLowerCase() === faultKey.trim().toLowerCase()) return true;
+
+                // 2. Resmi Sözlükteki (fault_codes.json) Ana Sistem Eşleşmesi
+                const otherCat = getFaultMainCategory(otherKey);
+                return !!(faultCat && otherCat && faultCat === otherCat);
+              });
               
               if (isRepeat) pRepeatCount++;
             }
@@ -390,8 +528,80 @@ class AnalyticsService {
         });
 
         const totalPWorkHours = pBakimHours + pArizaHours;
+        const totalJobs = pBakimCount + pArizaCount;
         const repeatRate = pArizaCount > 0 ? (pRepeatCount / pArizaCount) : 0;
         const avgEff = pValidCount > 0 ? (pEfficiencySum / pValidCount) : 0;
+
+        const finalSites = officialSites.length > 0 ? officialSites : (pSites.size > 0 ? Array.from(pSites) : ['Belirtilmedi']);
+        const siteCount = officialSites.length > 0 ? officialSites.length : pSites.size;
+        const turbineCount = pTurbines.size;
+
+        // 1. Çoklu Saha & Türbin Portföyü / Sorumluluk Skoru (0 - 25 Puan)
+        let mobilityScore = 0;
+        if (siteCount >= 3) mobilityScore += 15;
+        else if (siteCount === 2) mobilityScore += 10;
+        else if (siteCount === 1) mobilityScore += 5;
+
+        if (turbineCount >= 15) mobilityScore += 10;
+        else if (turbineCount >= 10) mobilityScore += 8;
+        else if (turbineCount >= 5) mobilityScore += 6;
+        else if (turbineCount >= 1) mobilityScore += 4;
+
+        mobilityScore = Math.min(25, mobilityScore);
+
+        // 2. Mesai & Fedakarlık Skoru (0 - 25 Puan)
+        let sacrificeScore = 0;
+        if (pOvertimeHours >= 35) sacrificeScore = 25;
+        else if (pOvertimeHours >= 20) sacrificeScore = 20;
+        else if (pOvertimeHours >= 10) sacrificeScore = 15;
+        else if (pOvertimeHours >= 4) sacrificeScore = 10;
+        else if (pOvertimeHours > 0) sacrificeScore = 5;
+
+        // 3. Hız & Çözüm Verimliliği Skoru (0 - 25 Puan)
+        let speedScore = 0;
+        if (totalJobs > 0) {
+          const avgDurationPerJob = totalPWorkHours / totalJobs;
+          if (avgEff >= 0.8 || (avgDurationPerJob >= 1.0 && avgDurationPerJob <= 4.0)) {
+            speedScore = 25;
+          } else if (avgEff >= 0.6 || avgDurationPerJob <= 5.5) {
+            speedScore = 20;
+          } else if (avgEff >= 0.4 || avgDurationPerJob <= 7.5) {
+            speedScore = 15;
+          } else {
+            speedScore = 10;
+          }
+        }
+
+        // 4. İşçilik Kalitesi & Tekrarsız Başarı Skoru (0 - 25 Puan)
+        let qualityScore = 25;
+        if (pArizaCount > 0) {
+          const successRate = (pArizaCount - pRepeatCount) / pArizaCount;
+          if (successRate >= 0.95) qualityScore = 25;
+          else if (successRate >= 0.85) qualityScore = 22;
+          else if (successRate >= 0.75) qualityScore = 18;
+          else if (successRate >= 0.60) qualityScore = 14;
+          else qualityScore = 8;
+        }
+
+        // Toplam Performans & Uzmanlık Skoru (100 Üzerinden)
+        const rawScore = mobilityScore + sacrificeScore + speedScore + qualityScore;
+        const masteryScore = totalJobs === 0 ? 0 : Math.min(100, Math.max(0, rawScore));
+
+        let masteryGrade: 'A+' | 'A' | 'B' | 'C' = 'C';
+        let masteryLabel = 'Gelişime Açık';
+        if (masteryScore >= 80) {
+          masteryGrade = 'A+';
+          masteryLabel = 'Yıldız Teknisyen (Yüksek Zam & Prim)';
+        } else if (masteryScore >= 65) {
+          masteryGrade = 'A';
+          masteryLabel = 'Üstün Performans (Yüksek Zam)';
+        } else if (masteryScore >= 50) {
+          masteryGrade = 'B';
+          masteryLabel = 'Başarılı (Standart Zam)';
+        } else {
+          masteryGrade = 'C';
+          masteryLabel = 'Gelişime Açık (Eğitim Gerekli)';
+        }
 
         return {
           name: p.name,
@@ -407,9 +617,19 @@ class AnalyticsService {
           roadHours: Number(pRoadHours.toFixed(1)),
           repeatErrorRate: Number(repeatRate.toFixed(2)),
           specialization: p.expertise[0],
-          turbines: Array.from(pTurbines)
+          turbines: Array.from(pTurbines),
+          sites: finalSites,
+          team: assignedTeam,
+          company: assignedCompany,
+          speedScore,
+          qualityScore,
+          mobilityScore,
+          sacrificeScore,
+          masteryScore,
+          masteryGrade,
+          masteryLabel
         };
-      }),
+      })})(),
       overtimeDetails,
       backlogRecommendations: tasks
         .filter(t => t.status === 'WAITING')

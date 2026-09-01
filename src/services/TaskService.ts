@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { statusService } from './StatusService';
 import { dataService } from './DataService';
@@ -40,18 +40,19 @@ export interface Task {
     materials: any[];
     workSessions?: any[];
     lastUpdated?: any;
-  }
+  };
+  createdBy?: string;
 }
 
 class TaskService {
   private collectionName = 'tasks';
   private tasksCache: Task[] | null = null;
 
-  async createNewTask(data: TaskCreateData & { customStatus?: string }) {
+  async createNewTask(data: TaskCreateData & { customStatus?: string, createdBy?: string }) {
     try {
       // 1. Akıllı Arıza Kodu Eşleştirme
       let statuAciklamasi = '';
-      if (data.secilenSablon === 'Türbin Arıza Formu' && data.statuKodu) {
+      if (data.statuKodu) {
         const codeInfo = statusService.getCodeByKod(data.statuKodu);
         statuAciklamasi = codeInfo ? codeInfo.Aciklama : 'Tanımlanmamış Hata Kodu';
       }
@@ -73,7 +74,16 @@ class TaskService {
           assignedTeam: data.assignedTeam,
           yoneticiNotu: data.yoneticiNotu,
           resolvedDeficiencyId: data.resolvedDeficiencyId || '',
-          createdBy: 'Admin' // İleride aktif kullanıcıdan alınacak
+          createdBy: (() => {
+            if (data.createdBy) return data.createdBy;
+            let email = '';
+            try {
+              const stored = localStorage.getItem('dh_auth_fallback');
+              if (stored) email = JSON.parse(stored).user?.email || '';
+            } catch (e) {}
+            if (!email) email = auth?.currentUser?.email || (window as any).currentUser?.email || 'Admin';
+            return email;
+          })()
         },
         workflow: {
           durum: data.customStatus || 'Görev Oluşturuldu',
@@ -112,6 +122,14 @@ class TaskService {
       
       const tasks = querySnapshot.docs.map(doc => {
         const data = doc.data();
+        const rawCode = data.faultData?.statuKodu || '';
+        let desc = data.faultData?.statuAciklamasi || '';
+        if (rawCode && rawCode !== '---' && (!desc || desc === 'Genel Görev' || desc === 'Tanımlanmamış Hata Kodu')) {
+          const codeInfo = statusService.getCodeByKod(rawCode);
+          if (codeInfo) desc = codeInfo.Aciklama;
+        }
+        if (!desc) desc = 'Genel Görev';
+
         return {
           id: doc.id,
           siteId: data.taskInfo?.sahaBilgisi || 'Bilinmiyor',
@@ -119,15 +137,16 @@ class TaskService {
           turbineId: data.taskInfo?.turbinNo || 'Bilinmiyor',
           turbinSeriNo: data.taskInfo?.turbinSeriNo || '',
           personnel: data.assignment?.assignedTeam || 'Atanmadı',
-          faultCode: `${data.faultData?.statuKodu || '---'} - ${data.faultData?.statuAciklamasi || 'Genel Görev'}`,
-          rawFaultCode: data.faultData?.statuKodu || '',
+          faultCode: `${rawCode || '---'} - ${desc}`,
+          rawFaultCode: rawCode,
           status: data.workflow?.durum || 'Aktif',
           createdAt: data.workflow?.olusturulmaTarihi,
           secilenSablon: data.taskInfo?.secilenSablon || '',
           yoneticiNotu: data.assignment?.yoneticiNotu || '',
           resolvedDeficiencyId: data.assignment?.resolvedDeficiencyId || '',
           ohsData: data.ohsData || null,
-          maintenanceData: data.maintenanceData || null
+          maintenanceData: data.maintenanceData || null,
+          createdBy: data.assignment?.createdBy || 'Admin'
         };
       }).sort((a, b) => {
         const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -176,6 +195,14 @@ class TaskService {
     return onSnapshot(q, (snapshot) => {
       const tasks = snapshot.docs.map(doc => {
         const data = doc.data();
+        const rawCode = data.faultData?.statuKodu || '';
+        let desc = data.faultData?.statuAciklamasi || '';
+        if (rawCode && rawCode !== '---' && (!desc || desc === 'Genel Görev' || desc === 'Tanımlanmamış Hata Kodu')) {
+          const codeInfo = statusService.getCodeByKod(rawCode);
+          if (codeInfo) desc = codeInfo.Aciklama;
+        }
+        if (!desc) desc = 'Genel Görev';
+
         return {
           id: doc.id,
           siteId: data.taskInfo?.sahaBilgisi || 'Bilinmiyor',
@@ -183,8 +210,8 @@ class TaskService {
           turbineId: data.taskInfo?.turbinNo || 'Bilinmiyor',
           turbinSeriNo: data.taskInfo?.turbinSeriNo || '',
           personnel: data.assignment?.assignedTeam || 'Atanmadı',
-          faultCode: `${data.faultData?.statuKodu || '---'} - ${data.faultData?.statuAciklamasi || 'Genel Görev'}`,
-          rawFaultCode: data.faultData?.statuKodu || '',
+          faultCode: `${rawCode || '---'} - ${desc}`,
+          rawFaultCode: rawCode,
           status: data.workflow?.durum || 'Aktif',
           createdAt: data.workflow?.olusturulmaTarihi,
           secilenSablon: data.taskInfo?.secilenSablon || '',

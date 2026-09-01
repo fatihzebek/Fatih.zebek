@@ -166,9 +166,10 @@ function cleanLogNote(note: string): string {
         const detailedPattern = new RegExp(`Rapor:\\s*${reportId},\\s*Arıza\\s*Kodu:`, 'i');
         if (detailedPattern.test(displayNote)) {
             const standalonePattern = new RegExp(`\\s*\\(Rapor:\\s*${reportId}\\)`, 'gi');
-            displayNote = displayNote.replace(standalonePattern, '');
         }
     }
+    displayNote = displayNote.replace(/Self-healing:\s*Re-syncing defect records for/gi, 'Otomatik Veri Senkronizasyonu: Arızalı Sökülen Parça Kayıtları Yenilendi');
+
     return displayNote
         .replace(/\s*\[Durum:\s*(NEW|DEFECT|SCRAP)\]/gi, '')
         .trim();
@@ -184,8 +185,8 @@ function cleanLogNote(note: string): string {
         return logs.map(log => {
             const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
             
-            // Parse report details
-            const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
+            // Parse report details (matches Rapor: or Rapor Güncelleme:)
+            const match = log.note?.match(/(?:Rapor|Rapor Güncelleme):\s*([^\s,\)]+)/i);
             const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
             const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
             
@@ -196,7 +197,7 @@ function cleanLogNote(note: string): string {
             }
             turbineNo = standardizeTurbineNo(turbineNo);
  
-            const mcfNo = report?.matFormNo || '-';
+            const mcfNo = log.formNo || (log as any).mcfNo || report?.matFormNo || '-';
             const displayTurbine = turbineNo || '-';
  
             let typeBadge = '';
@@ -223,7 +224,7 @@ function cleanLogNote(note: string): string {
                 } else if (isScrap) {
                     typeBadge = `<span style="${badgeStyle} background: rgba(148, 163, 184, 0.08); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.15);"><i class="fa-solid fa-trash"></i> HURDA ÇIKIŞI</span>`;
                 } else {
-                    const isReportUse = log.note && log.note.includes('Saha Raporu');
+                    const isReportUse = log.note && (log.note.includes('Saha Raporu') || log.note.includes('Rapor Güncelleme'));
                     if (isReportUse) {
                         typeBadge = `<span style="${badgeStyle} background: rgba(0, 255, 127, 0.08); color: #00ff7f; border: 1px solid rgba(0, 255, 127, 0.15);"><i class="fa-solid fa-wrench"></i> TAKILAN PARÇA</span>`;
                     } else {
@@ -247,7 +248,7 @@ function cleanLogNote(note: string): string {
                 }
             }
             
-            const isReportUse = log.type === 'REMOVE' && log.note && log.note.includes('Saha Raporu');
+            const isReportUse = log.type === 'REMOVE' && log.note && (log.note.includes('Saha Raporu') || log.note.includes('Rapor Güncelleme'));
             const isDefectLog = log.note && log.note.includes('[Durum: DEFECT]');
             
             let qtySign = '';
@@ -344,6 +345,11 @@ function cleanLogNote(note: string): string {
         });
 
         const filtered = whLogs.filter((log: any) => {
+            // Hide internal system audit/re-sync logs from user-facing Hareket Listesi
+            if (log.note && (log.note.includes('Otomatik Veri Senkronizasyonu') || log.note.includes('Self-healing'))) {
+                return false;
+            }
+
             const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
 
             // Date filter
@@ -415,7 +421,7 @@ function cleanLogNote(note: string): string {
             }
 
             // Parse report details
-            const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
+            const match = log.note?.match(/(?:Rapor|Rapor Güncelleme):\s*([^\s,\)]+)/i);
             const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
             const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
             
@@ -666,7 +672,7 @@ function cleanLogNote(note: string): string {
             const exportData = logsToExport.map((log: any) => {
                 const date = log.timestamp?.toDate ? log.timestamp.toDate() : new Date(log.timestamp);
                 
-                const match = log.note?.match(/Rapor:\s*([^\s\)]+)/i);
+                const match = log.note?.match(/(?:Rapor|Rapor Güncelleme):\s*([^\s,\)]+)/i);
                 const reportNo = match ? match[1].replace(/[,;\.\)]+$/, '').trim().toUpperCase() : '';
                 const report = reportNo ? (window as any).globalReportsMap[reportNo] : null;
                 
@@ -1027,12 +1033,12 @@ function renderWarehouseDetailView(whId: string) {
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">MALZEME / SAP</label>
                     <input type="text" id="detail-sap-search" placeholder="SAP No veya Tanım..." oninput="window.filterWarehouseLogs()"
-                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box;">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">İŞLEM TİPİ</label>
                     <select id="detail-type-filter" onchange="window.filterWarehouseLogs()"
-                            style="background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                            style="background: rgba(15,23,42,0.95); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box;">
                         <option value="ALL">Tümü</option>
                         <option value="ADD_NEW">Stok Giriş</option>
                         <option value="ADD_INCREASE">Stok Artışı</option>
@@ -1048,22 +1054,22 @@ function renderWarehouseDetailView(whId: string) {
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">TARİH (GÜN)</label>
                     <input type="date" id="detail-date-filter" onchange="window.filterWarehouseLogs()"
-                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box; color-scheme: dark;">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">TÜRBİN NO</label>
                     <input type="text" id="detail-turbine-search" placeholder="Örn: T05..." oninput="window.filterWarehouseLogs()"
-                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box;">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">MÇF KODU</label>
                     <input type="text" id="detail-mcf-search" placeholder="Örn: MÇF..." oninput="window.filterWarehouseLogs()"
-                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box;">
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.35rem;">
                     <label style="font-size: 0.65rem; color: var(--text-dim); font-weight: 700;">SORUMLU</label>
                     <input type="text" id="detail-user-search" placeholder="Kullanıcı adı..." oninput="window.filterWarehouseLogs()"
-                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 0.45rem 0.75rem; border-radius: 6px; font-size: 0.8rem; outline: none; height: 32px; box-sizing: border-box;">
+                           style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); color: white; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; outline: none; height: 36px; box-sizing: border-box;">
                 </div>
             </div>
         </div>

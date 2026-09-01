@@ -1,12 +1,15 @@
-import { analyticsService } from '../services/AnalyticsService';
+import { analyticsService, getFaultMainCategory } from '../services/AnalyticsService';
 import { serviceReportService } from '../services/ServiceReportService';
 import { taskService } from '../services/TaskService';
 import { dataService } from '../services/DataService';
-import { agentHealthService } from '../services/AgentHealthService';
 import * as XLSX from 'xlsx';
 
 export const AnalyticsPage = async () => {
   const currentPeriod = localStorage.getItem('analytics_period') || 'this-month';
+  const activeTab = localStorage.getItem('analytics_active_tab') || 'personnel';
+  const personnelSortBy = localStorage.getItem('analytics_personnel_sort_by') || 'mastery';
+  const personnelSortOrder = localStorage.getItem('analytics_personnel_sort_order') || 'desc';
+
   const allReports = (await serviceReportService.getAllReports()).filter(r => {
     if (!r.date) return false;
     const d = new Date(r.date);
@@ -15,41 +18,278 @@ export const AnalyticsPage = async () => {
   let reports = [...allReports];
   const tasks = await taskService.getTasks();
 
-  // Period Filtering Logic
-  const now = new Date();
-  reports = reports.filter(r => {
-    const rDate = new Date(r.date);
-    if (currentPeriod === 'this-week') {
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
-      monday.setHours(0, 0, 0, 0);
-      return rDate >= monday;
-    } else if (currentPeriod === 'this-month') {
-      return rDate.getMonth() === now.getMonth() && rDate.getFullYear() === now.getFullYear();
-    } else if (currentPeriod === 'last-month') {
-      const lastMonth = new Date(now);
-      lastMonth.setMonth(lastMonth.getMonth() - 1);
-      return rDate.getMonth() === lastMonth.getMonth() && rDate.getFullYear() === lastMonth.getFullYear();
-    } else if (currentPeriod === 'this-year') {
-      return rDate.getFullYear() === now.getFullYear();
-    } else if (currentPeriod === 'custom') {
-      const startStr = localStorage.getItem('analytics_start');
-      const endStr = localStorage.getItem('analytics_end');
-      if (startStr && endStr) {
-        const start = new Date(startStr);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endStr);
-        end.setHours(23, 59, 59, 999);
-        return rDate >= start && rDate <= end;
+  // Helper for filtering reports by period
+  const filterReportsByPeriod = (rawReports: any[], period: string, startStr?: string, endStr?: string) => {
+    const now = new Date();
+    return rawReports.filter(r => {
+      if (!r.date) return false;
+      const rDate = new Date(r.date);
+      if (period === 'this-week') {
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - (now.getDay() === 0 ? 6 : now.getDay() - 1));
+        monday.setHours(0, 0, 0, 0);
+        return rDate >= monday;
+      } else if (period === 'this-month') {
+        return rDate.getMonth() === now.getMonth() && rDate.getFullYear() === now.getFullYear();
+      } else if (period === 'last-month') {
+        const lastMonth = new Date(now);
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        return rDate.getMonth() === lastMonth.getMonth() && rDate.getFullYear() === lastMonth.getFullYear();
+      } else if (period === 'this-year') {
+        return rDate.getFullYear() === now.getFullYear();
+      } else if (period === 'custom') {
+        if (startStr && endStr) {
+          const start = new Date(startStr);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(endStr);
+          end.setHours(23, 59, 59, 999);
+          return rDate >= start && rDate <= end;
+        }
       }
       return true;
-    }
-    return true;
-  });
+    });
+  };
+
+  reports = filterReportsByPeriod(reports, currentPeriod, localStorage.getItem('analytics_start') || undefined, localStorage.getItem('analytics_end') || undefined);
 
   const data = analyticsService.generateUnifiedAnalysis(reports, tasks);
 
-  // Filter & Refresh function
+  // 1. Site Metrics Computation
+  const siteMap: Record<string, { siteName: string; totalHours: number; bakimCount: number; arizaCount: number; totalReports: number; bakimHours: number; arizaHours: number }> = {};
+  reports.forEach(r => {
+    const site = r.siteName || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.siteName : undefined) || 'Diğer Santral';
+    if (!siteMap[site]) {
+      siteMap[site] = { siteName: site, totalHours: 0, bakimCount: 0, arizaCount: 0, totalReports: 0, bakimHours: 0, arizaHours: 0 };
+    }
+    siteMap[site].totalReports++;
+    if (r.type === 'BAKIM') siteMap[site].bakimCount++;
+    else siteMap[site].arizaCount++;
+
+    let reportHrs = 0;
+    if (r.workSessions && r.workSessions.length > 0) {
+      r.workSessions.forEach((ws: any) => {
+        const [h, m] = (ws.duration || '00:00').split(':').map(Number);
+        const pCount = (ws.personnel && Array.isArray(ws.personnel)) ? Math.max(1, ws.personnel.length) : 1;
+        reportHrs += ((isNaN(h) ? 0 : h) + ((isNaN(m) ? 0 : m) / 60)) * pCount;
+      });
+    } else {
+      const [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
+      const pCount = (r.personnel && Array.isArray(r.personnel)) ? Math.max(1, r.personnel.length) : 1;
+      reportHrs = ((isNaN(h) ? 0 : h) + ((isNaN(m) ? 0 : m) / 60)) * pCount;
+    }
+    const safeHrs = isNaN(reportHrs) ? 0 : reportHrs;
+    siteMap[site].totalHours += safeHrs;
+    if (r.type === 'BAKIM') siteMap[site].bakimHours += safeHrs;
+    else siteMap[site].arizaHours += safeHrs;
+  });
+
+  const sortedSites = Object.values(siteMap).sort((a, b) => b.totalHours - a.totalHours);
+
+  // 2. Top Faults & Repeat Logic
+  const faultMap: Record<string, { code: string; desc: string; count: number; totalHours: number }> = {};
+  reports.filter(r => r.type === 'ARIZA').forEach(r => {
+    const code = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || 'Genel Arıza');
+    const desc = (r.faultDesc && r.faultDesc !== 'Genel Görev' && r.faultDesc !== code) ? r.faultDesc : '';
+    if (!faultMap[code]) {
+      faultMap[code] = { code, desc, count: 0, totalHours: 0 };
+    }
+    faultMap[code].count++;
+    let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
+    let hrs = (isNaN(h) ? 0 : h) + ((isNaN(m) ? 0 : m) / 60);
+    if ((isNaN(hrs) || hrs <= 0) && r.workSessions) {
+      hrs = 0;
+      r.workSessions.forEach((ws: any) => {
+        const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
+        hrs += (isNaN(wh) ? 0 : wh) + ((isNaN(wm) ? 0 : wm) / 60);
+      });
+    }
+    faultMap[code].totalHours += (isNaN(hrs) ? 0 : hrs);
+  });
+
+  const sortedFaults = Object.values(faultMap).sort((a, b) => b.totalHours - a.totalHours);
+  const top10Faults = sortedFaults.slice(0, 10);
+  const maxFaultHours = top10Faults.length > 0 ? Math.max(...top10Faults.map(f => f.totalHours), 1) : 1;
+
+  // 3. Repeat Fault Helper
+  const getRepeatCount = (r: any): number => {
+    if (r.type !== 'ARIZA' || !r.turbineSerial) return 0;
+    const faultKey = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '');
+    if (!faultKey) return 0;
+    const faultCat = getFaultMainCategory(faultKey);
+    const rTime = new Date(r.date).getTime();
+    
+    const matches = reports.filter(otherR => {
+      if (otherR.type !== 'ARIZA' || otherR.turbineSerial !== r.turbineSerial) return false;
+      const otherTime = new Date(otherR.date).getTime();
+      const diffDays = Math.abs(rTime - otherTime) / (1000 * 60 * 60 * 24);
+      if (diffDays > 7) return false;
+
+      const otherKey = (otherR.faultCode && otherR.faultCode !== '---') ? otherR.faultCode : (otherR.faultDesc || '');
+      if (!otherKey) return false;
+
+      if (otherKey.trim().toLowerCase() === faultKey.trim().toLowerCase()) return true;
+      const otherCat = getFaultMainCategory(otherKey);
+      return !!(faultCat && otherCat && faultCat === otherCat);
+    });
+    
+    return matches.length;
+  };
+
+  // 4. Critical Turbines (En Çok Müdahale Edilen Türbinler)
+  const turbineMap: Record<string, { turbineSerial: string; turbineNo: string; siteName: string; count: number; totalHours: number; repeatCount: number }> = {};
+  reports.filter(r => r.type === 'ARIZA').forEach(r => {
+    const tKey = r.turbineSerial || r.turbineNo || 'Bilinmeyen Türbin';
+    const site = r.siteName || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.siteName : '') || 'Diğer Santral';
+    const tNo = r.turbineNo || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.turbineNo : '') || tKey;
+    
+    if (!turbineMap[tKey]) {
+      turbineMap[tKey] = { turbineSerial: r.turbineSerial || '', turbineNo: tNo, siteName: site, count: 0, totalHours: 0, repeatCount: 0 };
+    }
+    turbineMap[tKey].count++;
+    
+    let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
+    let hrs = (isNaN(h) ? 0 : h) + ((isNaN(m) ? 0 : m) / 60);
+    if ((isNaN(hrs) || hrs <= 0) && r.workSessions) {
+      hrs = 0;
+      r.workSessions.forEach((ws: any) => {
+        const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
+        hrs += (isNaN(wh) ? 0 : wh) + ((isNaN(wm) ? 0 : wm) / 60);
+      });
+    }
+    turbineMap[tKey].totalHours += (isNaN(hrs) ? 0 : hrs);
+    if (getRepeatCount(r) > 1) {
+      turbineMap[tKey].repeatCount++;
+    }
+  });
+  const criticalTurbines = Object.values(turbineMap).sort((a, b) => b.totalHours - a.totalHours).slice(0, 6);
+
+  // 5. Team (Ekip) Load Distribution
+  const teamMap: Record<string, { teamName: string; personnelCount: number; totalHours: number; bakimCount: number; arizaCount: number; overtimeHours: number; members: string[] }> = {};
+  data.personnelMetrics.forEach(p => {
+    const tName = p.team ? p.team.trim() : 'Ekip Atanmamış';
+    if (!teamMap[tName]) {
+      teamMap[tName] = { teamName: tName, personnelCount: 0, totalHours: 0, bakimCount: 0, arizaCount: 0, overtimeHours: 0, members: [] };
+    }
+    teamMap[tName].personnelCount++;
+    teamMap[tName].totalHours += p.totalHours;
+    teamMap[tName].bakimCount += p.bakimCount;
+    teamMap[tName].arizaCount += p.arizaCount;
+    teamMap[tName].overtimeHours += p.overtimeHours;
+    teamMap[tName].members.push(p.name);
+  });
+  const sortedTeams = Object.values(teamMap).sort((a, b) => {
+    if (a.teamName === 'Ekip Atanmamış') return 1;
+    if (b.teamName === 'Ekip Atanmamış') return -1;
+    return a.teamName.localeCompare(b.teamName, 'tr-TR', { numeric: true });
+  });
+
+  // 6. SAP Material & Spare Parts Consumption
+  const matMap: Record<string, { sapNo: string; description: string; type: string; totalUsed: number; sites: Record<string, number> }> = {};
+  reports.forEach(r => {
+    const site = r.siteName || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.siteName : '') || 'Genel';
+    if (r.materials && Array.isArray(r.materials)) {
+      r.materials.forEach((m: any) => {
+        const sapNo = (m.sapNo || '').trim();
+        const desc = (m.description || '').trim();
+        const qty = Number(m.used) || Math.max(0, (Number(m.received) || 0) - (Number(m.returned) || 0));
+        if (qty > 0 && (sapNo || desc)) {
+          const key = sapNo || desc;
+          if (!matMap[key]) {
+            matMap[key] = { sapNo, description: desc || sapNo, type: m.type || 'Sarf', totalUsed: 0, sites: {} };
+          }
+          matMap[key].totalUsed += qty;
+          matMap[key].sites[site] = (matMap[key].sites[site] || 0) + qty;
+        }
+      });
+    }
+  });
+  const topMaterials = Object.values(matMap).sort((a, b) => b.totalUsed - a.totalUsed);
+
+  // 7. Maintenance Title & Duration Helpers
+  const getMaintenanceTitle = (r: any): string => {
+    if (r.templateName && r.templateName !== '---' && !r.templateName.startsWith('GEN-')) return r.templateName;
+    if (r.faultCode && r.faultCode !== '---' && !r.faultCode.startsWith('GEN-')) return r.faultCode;
+    if (r.faultDesc && r.faultDesc !== 'Genel Görev' && r.faultDesc !== '---') return r.faultDesc;
+    if (r.notes && r.notes.trim().length > 0 && r.notes.trim().length < 60) return r.notes.trim();
+    return 'Periyodik Bakım';
+  };
+
+  const getReportDurationStr = (r: any): string => {
+    let totalMins = 0;
+    if (r.workSessions && r.workSessions.length > 0) {
+      r.workSessions.forEach((ws: any) => {
+        if (ws.duration) {
+          const [h, m] = ws.duration.split(':').map(Number);
+          totalMins += ((isNaN(h) ? 0 : h) * 60) + (isNaN(m) ? 0 : m);
+        } else if (ws.startTime && ws.endTime) {
+          const [sh, sm] = ws.startTime.split(':').map(Number);
+          const [eh, em] = ws.endTime.split(':').map(Number);
+          if (!isNaN(sh) && !isNaN(eh)) {
+            let mins = (eh * 60 + em) - (sh * 60 + sm);
+            if (mins < 0) mins += 24 * 60;
+            totalMins += mins;
+          }
+        }
+      });
+    }
+    if (totalMins === 0 && r.timeManagement?.interventionDuration) {
+      const [h, m] = r.timeManagement.interventionDuration.split(':').map(Number);
+      totalMins = ((isNaN(h) ? 0 : h) * 60) + (isNaN(m) ? 0 : m);
+    }
+    if (totalMins === 0 && r.timeManagement?.maintenanceOn && r.timeManagement?.maintenanceOff) {
+      const [sh, sm] = r.timeManagement.maintenanceOn.split(':').map(Number);
+      const [eh, em] = r.timeManagement.maintenanceOff.split(':').map(Number);
+      if (!isNaN(sh) && !isNaN(eh)) {
+        let mins = (eh * 60 + em) - (sh * 60 + sm);
+        if (mins < 0) mins += 24 * 60;
+        totalMins += mins;
+      }
+    }
+
+    if (totalMins > 0) {
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return `${h}:${m.toString().padStart(2, '0')} h`;
+    }
+
+    if (r.team === 'MANUEL' || r.reportNo?.startsWith('MAN-') || (r.personnel && r.personnel.includes('MANUEL'))) {
+      return 'Planlı Kayıt';
+    }
+
+    return '-';
+  };
+
+  // 8. Personnel Sorting Logic
+  let sortedPersonnel = [...data.personnelMetrics].sort((a, b) => {
+    let res = 0;
+    if (personnelSortBy === 'name') {
+      res = a.name.localeCompare(b.name, 'tr');
+    } else if (personnelSortBy === 'jobs') {
+      res = (a.bakimCount + a.arizaCount) - (b.bakimCount + b.arizaCount);
+    } else if (personnelSortBy === 'hours') {
+      res = a.totalHours - b.totalHours;
+    } else if (personnelSortBy === 'overtime') {
+      res = a.overtimeHours - b.overtimeHours;
+    } else {
+      res = a.masteryScore - b.masteryScore;
+    }
+    return personnelSortOrder === 'desc' ? -res : res;
+  });
+
+  // Leaders calculation
+  const masteryLeader = [...data.personnelMetrics].sort((a, b) => b.masteryScore - a.masteryScore)[0];
+
+  // 9. Arıza & Bakım Lists
+  const arizaReports = reports.filter(r => r.type === 'ARIZA').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const bakimReports = reports.filter(r => r.type === 'BAKIM').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const repeatReports = arizaReports.filter(r => getRepeatCount(r) > 1);
+
+  // Global window functions for UI
+  (window as any).setAnalyticsTab = (tab: string) => {
+    localStorage.setItem('analytics_active_tab', tab);
+    (window as any).navigate('analytics');
+  };
+
   (window as any).setAnalyticsPeriod = (period: string) => {
     localStorage.setItem('analytics_period', period);
     (window as any).navigate('analytics');
@@ -67,347 +307,237 @@ export const AnalyticsPage = async () => {
     }
   };
 
-  (window as any).voidOvertime = async (reportId: string, personnelName: string) => {
-    if (!confirm(`${personnelName} adlı personelin bu mesai kaydı sıfırlanacak. Onaylıyor musunuz?`)) return;
-    try {
-      const { doc, getDoc, updateDoc } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
-      const ref = doc(db, 'service_reports', reportId);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        const existing = snap.data().voidedOvertimes || [];
-        if (!existing.includes(personnelName)) {
-          await updateDoc(ref, { voidedOvertimes: [...existing, personnelName] });
-        }
-        (window as any).showToast?.('BAŞARILI', 'Mesai kaydı sıfırlandı. Sayfa güncelleniyor...', 'success');
-        setTimeout(() => window.location.reload(), 1500);
-      }
-    } catch (e) {
-      console.error(e);
-      alert("İşlem sırasında hata oluştu.");
-    }
-  };
-  
-  (window as any).applyModalDateFilter = () => {
-    const s = (document.getElementById('modal-analytics-start') as HTMLInputElement).value;
-    const e = (document.getElementById('modal-analytics-end') as HTMLInputElement).value;
-    if (s && e) {
-      localStorage.setItem('analytics_start', s);
-      localStorage.setItem('analytics_end', e);
-      (window as any).setAnalyticsPeriod('custom');
-      const modal = document.querySelector('.cyber-modal-overlay');
-      if (modal) modal.remove();
-    } else {
-      (window as any).showToast?.('HATA', 'Lütfen başlangıç ve bitiş tarihi seçin.', 'error') || alert('Lütfen başlangıç ve bitiş tarihi seçin.');
-    }
-  };
-  
-  // Mesai Detaylarını Göster
-  (window as any).showOvertimeDetails = () => {
-    const details = data.overtimeDetails;
-    const modal = document.createElement('div');
-    modal.className = 'cyber-modal-overlay fade-in';
-    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
+  (window as any).setPersonnelSort = (newSortBy: string) => {
+    const curSort = localStorage.getItem('analytics_personnel_sort_by') || 'mastery';
+    const curOrder = localStorage.getItem('analytics_personnel_sort_order') || 'desc';
     
-    const content = `
-      <div class="glass-panel" style="width: 90%; max-width: 1000px; max-height: 85vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-orange); overflow: hidden; display: flex; flex-direction: column;">
-        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
-        
-        <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-orange); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem;">
-          <i class="fa-solid fa-clock-rotate-left"></i> 18:00 SONRASI MESAİ DETAYLARI
-        </h3>
+    if (curSort === newSortBy) {
+      localStorage.setItem('analytics_personnel_sort_order', curOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+      localStorage.setItem('analytics_personnel_sort_by', newSortBy);
+      localStorage.setItem('analytics_personnel_sort_order', newSortBy === 'name' ? 'asc' : 'desc');
+    }
+    (window as any).navigate('analytics');
+  };
 
-        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <i class="fa-solid fa-calendar-days" style="color: var(--text-muted);"></i>
-            <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">TARİH ARALIĞI:</span>
+  (window as any).filterPersonnelTable = (query: string) => {
+    const term = (query || '').trim().toLowerCase();
+    const clearBtn = document.getElementById('personnel-search-clear');
+    if (clearBtn) clearBtn.style.display = term ? 'block' : 'none';
+
+    const rows = document.querySelectorAll('.personnel-row');
+    rows.forEach((row: any) => {
+      const pName = (row.getAttribute('data-pname') || '').toLowerCase();
+      const pSpec = (row.getAttribute('data-pspec') || '').toLowerCase();
+      const match = !term || pName.includes(term) || pSpec.includes(term);
+      row.style.display = match ? '' : 'none';
+    });
+  };
+
+  (window as any).clearPersonnelSearch = () => {
+    const input = document.getElementById('personnel-search-input') as HTMLInputElement;
+    if (input) input.value = '';
+    (window as any).filterPersonnelTable('');
+  };
+
+  // 10. PDF Scorecard Generation (Tek Tıkla Resmi Performans Karnesi)
+  (window as any).downloadPersonnelReportCard = async (personnelName: string) => {
+    const pMetric = data.personnelMetrics.find(p => p.name.toUpperCase() === personnelName.toUpperCase());
+    if (!pMetric) return;
+
+    if (!(window as any).html2pdf) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const periodLabels: Record<string, string> = {
+      'this-week': 'Bu Hafta',
+      'this-month': 'Bu Ay (Cari Dönem)',
+      'last-month': 'Önceki Ay',
+      'this-year': 'Yıllık Değerlendirme',
+      'all': 'Tüm Zamanlar',
+      'custom': `${localStorage.getItem('analytics_start') || ''} - ${localStorage.getItem('analytics_end') || ''}`
+    };
+    const periodStr = periodLabels[currentPeriod] || currentPeriod;
+    const assignedSitesStr = pMetric.sites && pMetric.sites.length > 0 ? pMetric.sites.join(', ') : 'Tüm Sahalar / Genel';
+
+    const pReports = allReports.filter(r => {
+      const pList = r.personnel || [];
+      const wsList = (r.workSessions || []).flatMap((ws: any) => ws.personnel || []);
+      return pList.concat(wsList).some(name => name && name.toUpperCase() === personnelName.toUpperCase());
+    }).slice(0, 15);
+
+    const scorecardHtml = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; background: #ffffff; padding: 24px; width: 750px; box-sizing: border-box;">
+        
+        <!-- Üst Başlık & Logo -->
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px;">
+          <div>
+            <div style="font-size: 1.4rem; font-weight: 900; color: #0f172a; letter-spacing: 0.5px;">DEMİRER ENERJİ • DH SERVİS</div>
+            <div style="font-size: 0.85rem; color: #0284c7; font-weight: 700; text-transform: uppercase;">TEKNİSYEN PERFORMANS VE MESAİ KARNESİ</div>
           </div>
-          <input type="date" id="modal-analytics-start" class="cyber-input" style="padding: 0.5rem; max-width: 150px;" value="${localStorage.getItem('analytics_start') || ''}">
-          <span style="color: var(--text-muted);"> - </span>
-          <input type="date" id="modal-analytics-end" class="cyber-input" style="padding: 0.5rem; max-width: 150px;" value="${localStorage.getItem('analytics_end') || ''}">
-          <button onclick="window.applyModalDateFilter()" class="btn-cyber-mini" style="padding: 0.5rem 1rem;">FİLTRELE</button>
+          <div style="text-align: right;">
+            <div style="font-size: 0.75rem; color: #64748b;">Rapor Tarihi: ${new Date().toLocaleDateString('tr-TR')}</div>
+            <div style="font-size: 0.8rem; font-weight: 800; color: #0f172a;">Dönem: ${periodStr}</div>
+          </div>
         </div>
 
-        <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar">
-          <table class="cyber-table">
-            <thead>
+        <!-- Personel Bilgi Kartı -->
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin-bottom: 16px; display: grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+          <div>
+            <div style="font-size: 1.25rem; font-weight: 800; color: #0f172a;">${pMetric.name}</div>
+            <div style="font-size: 0.85rem; color: #475569; margin-top: 2px;">
+              <strong>Şirket:</strong> ${pMetric.company || 'Demirer Enerji'} | <strong>Ekip:</strong> ${pMetric.team || 'Servis Ekibi'}
+            </div>
+            <div style="font-size: 0.85rem; color: #475569; margin-top: 2px;">
+              <strong>Sorumlu Santral(ler):</strong> ${assignedSitesStr}
+            </div>
+          </div>
+          <div style="text-align: right; display: flex; flex-direction: column; justify-content: center; align-items: flex-end;">
+            <div style="font-size: 0.75rem; color: #64748b; font-weight: 700;">UZMANLIK DERECESİ</div>
+            <div style="font-size: 1.6rem; font-weight: 900; color: ${pMetric.masteryGrade === 'A+' ? '#9333ea' : (pMetric.masteryGrade === 'A' ? '#16a34a' : '#0284c7')};">
+              ${pMetric.masteryScore} <span style="font-size: 1rem;">/ 100 (${pMetric.masteryGrade})</span>
+            </div>
+            <div style="font-size: 0.7rem; font-weight: 700; color: #475569;">${pMetric.masteryLabel}</div>
+          </div>
+        </div>
+
+        <!-- 4 KPI Özeti -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #1e40af; font-weight: 700;">TOPLAM EFOR</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #1e3a8a; margin: 2px 0;">${pMetric.totalHours} h</div>
+            <div style="font-size: 0.65rem; color: #3b82f6;">${pMetric.bakimHours}h Bakım / ${pMetric.arizaHours}h Arıza</div>
+          </div>
+          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #9a3412; font-weight: 700;">ONAYLI MESAİ</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #c2410c; margin: 2px 0;">${pMetric.overtimeHours} h</div>
+            <div style="font-size: 0.65rem; color: #ea580c;">Yönetici Onaylı</div>
+          </div>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #166534; font-weight: 700;">GÖREV ADETİ</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #14532d; margin: 2px 0;">${pMetric.bakimCount + pMetric.arizaCount}</div>
+            <div style="font-size: 0.65rem; color: #16a34a;">${pMetric.bakimCount} Bakım • ${pMetric.arizaCount} Arıza</div>
+          </div>
+          <div style="background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; padding: 10px; text-align: center;">
+            <div style="font-size: 0.7rem; color: #6b21a8; font-weight: 700;">KALİTE & BAŞARI</div>
+            <div style="font-size: 1.3rem; font-weight: 900; color: #581c87; margin: 2px 0;">%${Math.round((1 - pMetric.repeatErrorRate) * 100)}</div>
+            <div style="font-size: 0.65rem; color: #9333ea;">Tekrarsız Çözüm</div>
+          </div>
+        </div>
+
+        <!-- 4 Temel Değerlendirme Puan Kriteri -->
+        <div style="margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+            <thead style="background: #f1f5f9; color: #334155; font-weight: 800;">
               <tr>
-                <th>TARİH</th>
-                <th>PERSONEL</th>
-                <th style="text-align: center;">TÜRBİN</th>
-                <th style="text-align: center;">MESAİ ARALIĞI</th>
-                <th style="text-align: center;">SÜRE</th>
-                <th style="text-align: right;">RAPOR</th>
-                ${(window as any).currentUser?.role === 'ADMIN' ? '<th style="text-align: right; width: 60px;">İŞLEM</th>' : ''}
+                <th style="padding: 8px 12px; text-align: left;">DEĞERLENDİRME KRİTERİ</th>
+                <th style="padding: 8px 12px; text-align: left;">AÇIKLAMA</th>
+                <th style="padding: 8px 12px; text-align: center;">ALINAN PUAN</th>
               </tr>
             </thead>
             <tbody>
-              ${details.length > 0 ? details.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(d => `
-                <tr>
-                  <td style="font-weight: 600;">${new Date(d.date).toLocaleDateString('tr-TR')}</td>
-                  <td style="color: var(--text-main); font-weight: 700;">${d.personnelName}</td>
-                  <td style="text-align: center; color: var(--accent-cyan); font-weight: 800;">
-                    ${(d.siteName ? d.siteName + ' ' : '') + (d.turbineNo || d.turbineSerial)}
-                  </td>
-                  <td style="text-align: center; font-family: monospace; letter-spacing: 1px;">
-                    <span style="color: var(--text-muted);">${d.startTime}</span> 
-                    <i class="fa-solid fa-arrow-right" style="font-size: 0.6rem; margin: 0 5px; opacity: 0.3;"></i> 
-                    <span style="color: var(--accent-orange);">${d.endTime}</span>
-                  </td>
-                  <td style="text-align: center; font-weight: 900; color: var(--accent-orange);">+${d.overtimeHours} h</td>
-                  <td style="text-align: right; font-size: 0.7rem; color: var(--text-muted); opacity: 0.5;">#${d.reportId.slice(-6)}</td>
-                  ${(window as any).currentUser?.role === 'ADMIN' ? `<td style="text-align: right;"><button onclick="window.voidOvertime('${d.reportId}', '${d.personnelName}')" class="btn-cyber-mini" style="padding: 2px 8px; color: #ff4d4d; border-color: rgba(255, 77, 77, 0.3); background: rgba(255,0,0,0.1);" title="Mesaiyi Sıfırla"><i class="fa-solid fa-trash"></i></button></td>` : ''}
-                </tr>
-              `).join('') : `<tr><td colspan="${(window as any).currentUser?.role === 'ADMIN' ? '7' : '6'}" style="text-align: center; padding: 3rem; color: var(--text-muted);">Henüz mesai kaydı bulunmamaktadır.</td></tr>`}
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 8px 12px; font-weight: 700; color: #0284c7;">🌐 Saha & Sorumluluk</td>
+                <td style="padding: 8px 12px; color: #475569;">Atandığı bölge ve sorumlu olduğu santraller (${assignedSitesStr})</td>
+                <td style="padding: 8px 12px; text-align: center; font-weight: 800; color: #0f172a;">${pMetric.mobilityScore} / 25</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 8px 12px; font-weight: 700; color: #ea580c;">⚡ Mesai & Fedakarlık</td>
+                <td style="padding: 8px 12px; color: #475569;">18:00 sonrası onaylanan toplam mesai (${pMetric.overtimeHours} Saat)</td>
+                <td style="padding: 8px 12px; text-align: center; font-weight: 800; color: #0f172a;">${pMetric.sacrificeScore} / 25</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 8px 12px; font-weight: 700; color: #0284c7;">🚀 Çözüm Hızı & Verimlilik</td>
+                <td style="padding: 8px 12px; color: #475569;">Müdahale sürelerine ve standart bakım sürelerine uyum</td>
+                <td style="padding: 8px 12px; text-align: center; font-weight: 800; color: #0f172a;">${pMetric.speedScore} / 25</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; font-weight: 700; color: #16a34a;">🛡️ İşçilik Kalitesi</td>
+                <td style="padding: 8px 12px; color: #475569;">Müdahale sonrası 7 gün içinde tekrarsız çözüm başarısı (${pMetric.repeatFaultCount} Tekrar)</td>
+                <td style="padding: 8px 12px; text-align: center; font-weight: 800; color: #0f172a;">${pMetric.qualityScore} / 25</td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 1rem;">
-          <button class="btn-cyber-mini" onclick="window.exportOvertimeToExcel()" style="background: rgba(34, 197, 94, 0.1); border-color: var(--accent-green); color: var(--accent-green);">
-            <i class="fa-solid fa-file-excel" style="margin-right: 0.5rem;"></i> EXCEL OLARAK İNDİR
-          </button>
-          <button class="btn-cyber-mini" onclick="this.closest('.cyber-modal-overlay').remove()">KAPAT</button>
+        <!-- Son Görev Özeti -->
+        <div style="margin-bottom: 24px;">
+          <div style="font-size: 0.85rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">SON GÖREV VE ÇALIŞMA KAYITLARI</div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; border: 1px solid #e2e8f0;">
+            <thead style="background: #f8fafc; color: #475569;">
+              <tr>
+                <th style="padding: 6px 10px; text-align: left; border-bottom: 1px solid #e2e8f0;">TARİH</th>
+                <th style="padding: 6px 10px; text-align: left; border-bottom: 1px solid #e2e8f0;">SANTRAL / TÜRBİN</th>
+                <th style="padding: 6px 10px; text-align: left; border-bottom: 1px solid #e2e8f0;">GÖREV TANIMI / KODU</th>
+                <th style="padding: 6px 10px; text-align: center; border-bottom: 1px solid #e2e8f0;">TÜR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pReports.map(r => `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                  <td style="padding: 5px 10px; font-weight: 600;">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
+                  <td style="padding: 5px 10px; color: #0369a1; font-weight: 700;">${(r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || '')}</td>
+                  <td style="padding: 5px 10px;">${r.type === 'ARIZA' ? (r.faultCode || r.faultDesc || 'Arıza') : getMaintenanceTitle(r)}</td>
+                  <td style="padding: 5px 10px; text-align: center;">
+                    <span style="font-weight: 700; color: ${r.type === 'BAKIM' ? '#16a34a' : '#2563eb'};">${r.type}</span>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
+
+        <!-- Onay & İmza Alanı -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; border-top: 2px solid #cbd5e1; padding-top: 16px; margin-top: 20px;">
+          <div style="font-size: 0.75rem; color: #64748b;">
+            Bu karne Demirer Enerji Servis Yönetim Sistemi (DH Servis) tarafından otomatik üretilmiştir.
+          </div>
+          <div style="text-align: center; width: 200px;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: #0f172a;">Fatih ZEBEK</div>
+            <div style="font-size: 0.75rem; color: #64748b;">Operasyon & Servis Müdürü</div>
+            <div style="height: 35px; border-bottom: 1px dashed #94a3b8; margin-top: 4px;"></div>
+            <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 2px;">İmza / Onay</div>
+          </div>
+        </div>
+
       </div>
     `;
-    
-    modal.innerHTML = content;
-    document.body.appendChild(modal);
-  };
 
-  // Ekip Müdahale Hızı Analizi Göster
-  (window as any).showTeamSpeedAnalysis = () => {
-    const allArizaReports = allReports.filter(r => r.type === 'ARIZA');
-    const filteredArizaReports = reports.filter(r => r.type === 'ARIZA');
-    
-    const getReportPersonnelNames = (r: any): string[] => {
-      const names = new Set<string>();
-      if (r.workSessions && Array.isArray(r.workSessions)) {
-        r.workSessions.forEach((ws: any) => {
-          if (ws.personnel && Array.isArray(ws.personnel)) {
-            ws.personnel.forEach((p: any) => {
-              if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
-                names.add(p.trim());
-              }
-            });
-          }
-        });
-      }
-      if (r.personnel && Array.isArray(r.personnel)) {
-        r.personnel.forEach((p: any) => {
-          if (p && typeof p === 'string' && !/^\d+$/.test(p.trim())) {
-            names.add(p.trim());
-          }
-        });
-      }
-      return Array.from(names);
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '-9999px';
+    wrapper.style.top = '-9999px';
+    wrapper.style.width = '750px';
+    wrapper.innerHTML = scorecardHtml;
+    document.body.appendChild(wrapper);
+
+    const opt = {
+      margin: [8, 8, 8, 8],
+      filename: `Performans_Karnesi_${pMetric.name.replace(/\s+/g, '_')}_${currentPeriod}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    const faultAverages: Record<string, { totalHrs: number, count: number, avg: number, desc?: string }> = {};
-    allArizaReports.forEach(r => {
-        const code = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '---');
-        if (!code) return;
-        
-        let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
-        let hrs = h + (m / 60);
-        
-        if ((isNaN(hrs) || hrs <= 0) && r.workSessions && r.workSessions.length > 0) {
-            hrs = 0;
-            r.workSessions.forEach((ws: any) => {
-                const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
-                hrs += wh + (wm / 60);
-            });
-        }
-        
-        if (isNaN(hrs) || hrs <= 0) return;
-        
-        if (!faultAverages[code]) {
-            faultAverages[code] = { 
-                totalHrs: 0, 
-                count: 0, 
-                avg: 0,
-                desc: (r.faultCode && r.faultCode !== '---' && r.faultDesc && r.faultDesc !== 'Genel Görev') ? r.faultDesc : undefined
-            };
-        }
-        faultAverages[code].totalHrs += hrs;
-        faultAverages[code].count++;
-    });
-    
-    Object.keys(faultAverages).forEach(k => {
-        faultAverages[k].avg = faultAverages[k].totalHrs / faultAverages[k].count;
-    });
-
-    const formatHHMM = (decimalHours: number) => {
-        if (isNaN(decimalHours) || decimalHours < 0) return '0:00';
-        const totalMinutes = Math.round(decimalHours * 60);
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
-        return `${h}:${m.toString().padStart(2, '0')}`;
-    };
-
-    const speedRows: any[] = [];
-    filteredArizaReports.forEach(r => {
-        const code = (r.faultCode && r.faultCode !== '---') ? r.faultCode : (r.faultDesc || '---');
-        if (!code || !faultAverages[code]) return;
-        
-        const avg = faultAverages[code].avg;
-        
-        let reportHrs = 0;
-        let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
-        reportHrs = h + (m / 60);
-        
-        if ((isNaN(reportHrs) || reportHrs <= 0) && r.workSessions && r.workSessions.length > 0) {
-            reportHrs = 0;
-            r.workSessions.forEach((ws: any) => {
-                const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
-                reportHrs += wh + (wm / 60);
-            });
-        }
-        
-        if (!isNaN(reportHrs) && reportHrs > 0) {
-            const pNames = getReportPersonnelNames(r);
-            speedRows.push({
-                date: r.date,
-                personnel: pNames.length > 0 ? pNames.join(', ') : 'Belirtilmedi',
-                siteAndTurbine: (r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || 'Bilinmeyen'),
-                faultCode: code,
-                reportId: r.id,
-                hrs: reportHrs,
-                avg: avg
-            });
-        }
-    });
-
-    const groupedByFault: Record<string, { code: string, avg: number, totalMudahale: number, reports: any[] }> = {};
-
-    speedRows.forEach(row => {
-       if (!groupedByFault[row.faultCode]) {
-           groupedByFault[row.faultCode] = { code: row.faultCode, avg: row.avg, totalMudahale: faultAverages[row.faultCode].count, reports: [] };
-       }
-       groupedByFault[row.faultCode].reports.push(row);
-    });
-
-    const faultHtml = Object.keys(groupedByFault).length > 0 ? Object.values(groupedByFault).sort((a,b) => b.totalMudahale - a.totalMudahale).map(fault => {
-       fault.reports.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-       const avgData = faultAverages[fault.code];
-       const descSuffix = (avgData && avgData.desc) ? ` - ${avgData.desc}` : '';
-
-       return `
-        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 1rem; overflow: hidden; transition: all 0.3s ease;">
-           <h4 onclick="const content = this.nextElementSibling; const icon = this.querySelector('.chevron-icon'); if(content.style.display === 'none'){content.style.display = 'block'; icon.style.transform = 'rotate(180deg)'; this.style.background = 'rgba(0, 242, 254, 0.05)';}else{content.style.display = 'none'; icon.style.transform = 'rotate(0deg)'; this.style.background = 'transparent';}" style="color: var(--accent-cyan); margin: 0; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; transition: background 0.3s ease;">
-              <span style="display: flex; align-items: center; gap: 0.75rem;">
-                <i class="fa-solid fa-chevron-down chevron-icon" style="font-size: 0.9rem; transition: transform 0.3s ease; color: var(--text-muted);"></i>
-                <i class="fa-solid fa-wrench"></i> ARIZA KODU: ${fault.code}${descSuffix}
-              </span>
-              <span style="font-size: 0.85rem; color: var(--text-muted); background: rgba(0,0,0,0.3); padding: 4px 12px; border-radius: 12px;">Genel Ortalama: <strong style="color: var(--accent-orange);">${formatHHMM(fault.avg)}</strong> (${fault.totalMudahale} Kayıt)</span>
-           </h4>
-           <div style="display: none; padding: 0 1.5rem 1.5rem 1.5rem; border-top: 1px solid rgba(255,255,255,0.05);">
-             <table class="cyber-table" style="font-size: 0.85rem; margin-top: 1rem;">
-               <thead>
-                 <tr>
-                   <th>TARİH</th>
-                   <th style="text-align: center;">SAHA / TÜRBİN</th>
-                   <th>MÜDAHALE EDEN EKİP</th>
-                   <th style="text-align: center;">MÜDAHALE SÜRESİ</th>
-                   <th style="text-align: center;">HIZ / PERFORMANS</th>
-                   <th style="text-align: right;">RAPOR NO</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 ${fault.reports.map(r => {
-                     const rDate = new Date(r.date);
-                     rDate.setHours(0,0,0,0);
-                     const rTime = rDate.getTime();
-                     
-                     const isRepeated = fault.reports.some(newer => {
-                         if (newer.reportId === r.reportId || newer.siteAndTurbine !== r.siteAndTurbine) return false;
-                         const newerDate = new Date(newer.date);
-                         newerDate.setHours(0,0,0,0);
-                         const diffDays = (newerDate.getTime() - rTime) / (1000 * 60 * 60 * 24);
-                         return diffDays > 0 && diffDays <= 2;
-                     });
-
-                     const isFixingRepeat = fault.reports.some(older => {
-                         if (older.reportId === r.reportId || older.siteAndTurbine !== r.siteAndTurbine) return false;
-                         const olderDate = new Date(older.date);
-                         olderDate.setHours(0,0,0,0);
-                         const diffDays = (rTime - olderDate.getTime()) / (1000 * 60 * 60 * 24);
-                         return diffDays > 0 && diffDays <= 2;
-                     });
-
-                     let perfHtml = '';
-                     if (isFixingRepeat && !isRepeated) {
-                         perfHtml = `<span title="Tekrarlayan bir arızaya müdahale edip kalıcı çözüm sağlandı. Kök neden tespiti süresi norm olarak kabul edilir." style="color: #fbbf24; font-weight: 800; background: rgba(251, 191, 36, 0.1); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(251, 191, 36, 0.3);"><i class="fa-solid fa-award"></i> KALICI ÇÖZÜM</span>`;
-                     } else {
-                         const ratio = r.hrs / fault.avg;
-                         if (ratio < 0.85) {
-                             const pct = Math.round((1 - ratio) * 100);
-                             perfHtml = `<span style="color: var(--accent-green); font-weight: 800; background: rgba(34, 197, 94, 0.1); padding: 4px 8px; border-radius: 4px;">🚀 %${pct} HIZLI</span>`;
-                         } else if (ratio > 1.15) {
-                             const pct = Math.round((ratio - 1) * 100);
-                             perfHtml = `<span style="color: #ef4444; font-weight: 800; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 4px;">🐢 %${pct} YAVAŞ</span>`;
-                         } else {
-                             perfHtml = `<span style="color: var(--text-muted); font-weight: 700;">~ NORM</span>`;
-                         }
-                     }
-
-                     if (isRepeated) {
-                         perfHtml = `
-                           <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
-                              ${perfHtml}
-                              <span title="Bu müdahaleden sonraki 48 saat içinde arıza aynı türbinde tekrar etti! Kalıcı çözüm sağlanamamış olabilir." style="color: #f59e0b; font-size: 0.7rem; font-weight: 800; background: rgba(245, 158, 11, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px dashed #f59e0b; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-rotate-right"></i> TEKRAR ETTİ</span>
-                           </div>
-                         `;
-                     }
-
-                    return `
-                      <tr>
-                        <td style="font-weight: 600; color: var(--text-muted);">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
-                        <td style="text-align: center; color: var(--accent-cyan); font-weight: 700;">${r.siteAndTurbine}</td>
-                        <td style="font-weight: 700; color: var(--text-main);">${r.personnel}</td>
-                        <td style="text-align: center; color: var(--accent-cyan); font-weight: 800;">${formatHHMM(r.hrs)}</td>
-                        <td style="text-align: center;">${perfHtml}</td>
-                        <td style="text-align: right;">
-                          <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.reportId}'), 300); this.closest('.cyber-modal-overlay').remove()" class="btn-cyber-mini" style="padding: 2px 8px; background: rgba(0, 242, 254, 0.1); border-color: var(--accent-cyan); color: var(--text-muted);" title="Raporu Aç">
-                            #${r.reportId.slice(-6)} <i class="fa-solid fa-arrow-up-right-from-square" style="margin-left: 4px; color: var(--accent-cyan);"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    `;
-                 }).join('')}
-               </tbody>
-             </table>
-           </div>
-        </div>
-       `;
-    }).join('') : `<div style="text-align: center; padding: 3rem; color: var(--text-muted);">Analiz edilebilir (en az 2 defa tekrarlanmış) arıza kaydı bulunmamaktadır.</div>`;
-
-    const modal = document.createElement('div');
-    modal.className = 'cyber-modal-overlay fade-in';
-    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
-    
-    const content = `
-      <div class="glass-panel" style="width: 95%; max-width: 1200px; max-height: 85vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-green); overflow: hidden; display: flex; flex-direction: column;">
-        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
-        
-        <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-green); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem;">
-          <i class="fa-solid fa-gauge-high"></i> ARIZA KODLARINA GÖRE EKİP HIZ VE PERFORMANS LİDERLİĞİ
-        </h3>
-
-        <div style="overflow-y: auto; flex: 1; padding-right: 1rem;" class="custom-scrollbar">
-          ${faultHtml}
-        </div>
-      </div>
-    `;
-    
-    modal.innerHTML = content;
-    document.body.appendChild(modal);
+    try {
+      await (window as any).html2pdf().set(opt).from(wrapper).save();
+      (window as any).showToast?.('BAŞARILI', 'Performans karnesi PDF olarak indirildi.', 'success');
+    } catch (e: any) {
+      console.error(e);
+      alert('PDF oluşturulurken hata: ' + e.message);
+    } finally {
+      document.body.removeChild(wrapper);
+    }
   };
 
-  // Personel Detaylarını (Modal) Göster
-  (window as any).showPersonnelDetails = (personnelName: string, startStr?: string, endStr?: string) => {
+  // Personnel Detail Modal with Date Filtering and Official Assigned Sites
+  (window as any).showPersonnelDetails = (personnelName: string, period: string = currentPeriod, startStr?: string, endStr?: string) => {
     const existing = document.getElementById('personnel-details-modal');
     if (existing) existing.remove();
 
@@ -435,475 +565,509 @@ export const AnalyticsPage = async () => {
     };
 
     const upperName = personnelName.toUpperCase();
-    let pReports = reports.filter(r => {
-        const pNames = getReportPersonnelNames(r);
-        return pNames.some((name: string) => name.toUpperCase() === upperName);
+    let pAllReports = allReports.filter(r => {
+      const pNames = getReportPersonnelNames(r);
+      return pNames.some((name: string) => name.toUpperCase() === upperName);
     });
 
-    if (startStr && endStr) {
-        const start = new Date(startStr); start.setHours(0,0,0,0);
-        const end = new Date(endStr); end.setHours(23,59,59,999);
-        pReports = pReports.filter(r => {
-            if(!r.date) return false;
-            const d = new Date(r.date);
-            return d >= start && d <= end;
-        });
-    }
+    const filteredPReports = filterReportsByPeriod(pAllReports, period, startStr, endStr)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    pReports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const pMetric = data.personnelMetrics.find(p => p.name.toUpperCase() === upperName);
 
     const modal = document.createElement('div');
     modal.id = 'personnel-details-modal';
     modal.className = 'cyber-modal-overlay fade-in';
     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
-    
-    const getHours = (r: any) => {
-        let hours = 0;
-        if (r.workSessions && r.workSessions.length > 0) {
-            r.workSessions.forEach((ws: any) => {
-                if (ws.personnel && ws.personnel.some((name: string) => name.toUpperCase() === upperName)) {
-                    const [h, m] = (ws.duration || '00:00').split(':').map(Number);
-                    hours += h + (m / 60);
-                }
-            });
-        } else {
-            const [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
-            hours = h + (m / 60);
-        }
-        return isNaN(hours) ? 0 : Number(hours.toFixed(1));
-    };
 
-    const isRepeat = (r: any) => {
-        if (r.type !== 'ARIZA') return false;
-        const reportDate = new Date(r.date);
-        const sevenDaysLater = new Date(reportDate.getTime() + (7 * 24 * 60 * 60 * 1000));
-        return reports.some(otherR => 
-            otherR.id !== r.id && 
-            otherR.turbineSerial === r.turbineSerial && 
-            otherR.type === 'ARIZA' &&
-            new Date(otherR.date) > reportDate &&
-            new Date(otherR.date) <= sevenDaysLater
-        );
-    };
-
-    const formatHHMM = (decimalHours: number) => {
-        if (isNaN(decimalHours) || decimalHours < 0) return '0:00';
-        const totalMinutes = Math.round(decimalHours * 60);
-        const h = Math.floor(totalMinutes / 60);
-        const m = totalMinutes % 60;
-        return `${h}:${m.toString().padStart(2, '0')}`;
-    };
-
-    (window as any).filterPModal = () => {
-        const s = (document.getElementById('p-modal-start') as HTMLInputElement).value;
-        const e = (document.getElementById('p-modal-end') as HTMLInputElement).value;
-        if (s && e) {
-            (window as any).showPersonnelDetails(personnelName, s, e);
-        }
-    };
-
-    (window as any).filterPModalQuick = (days: number) => {
-        const end = new Date();
-        const start = new Date();
-        start.setDate(end.getDate() - days);
-        const sStr = start.toISOString().split('T')[0];
-        const eStr = end.toISOString().split('T')[0];
-        (window as any).showPersonnelDetails(personnelName, sStr, eStr);
-    };
-
-    const getFaultAverage = (r: any) => {
-        if (r.type !== 'ARIZA') return null;
-        const code = r.faultCode || r.faultDesc;
-        if (!code) return null;
-        
-        const matchingReports = allReports.filter((or: any) => 
-            or.type === 'ARIZA' && 
-            (or.faultCode === code || or.faultDesc === code)
-        );
-        
-        if (matchingReports.length < 2) return null;
-        
-        let totalHrs = 0;
-        let count = 0;
-        matchingReports.forEach((mr: any) => {
-            let [h, m] = (mr.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
-            let hrs = h + (m / 60);
-            
-            if ((isNaN(hrs) || hrs <= 0) && mr.workSessions && mr.workSessions.length > 0) {
-                hrs = 0;
-                mr.workSessions.forEach((ws: any) => {
-                    const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
-                    hrs += wh + (wm / 60);
-                });
-            }
-
-            if (!isNaN(hrs) && hrs > 0) {
-                totalHrs += hrs;
-                count++;
-            }
-        });
-        
-        return count > 0 ? (totalHrs / count) : null;
-    };
-
-    let totalFilteredHours = 0;
-    const rowsHtml = pReports.map(r => {
-        const rep = isRepeat(r);
-        const hrs = getHours(r);
-        totalFilteredHours += hrs;
-        const badgeColor = r.type === 'BAKIM' ? 'var(--accent-green)' : 'var(--accent-blue)';
-        const badgeBg = r.type === 'BAKIM' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(59, 130, 246, 0.1)';
-        
-        const avg = getFaultAverage(r);
-        let perfHtml = `<span style="color: var(--text-muted); opacity: 0.3;">-</span>`;
-        if (avg !== null && r.type === 'ARIZA' && hrs > 0) {
-            const ratio = hrs / avg;
-            if (ratio < 0.85) {
-                const p = Math.round((1 - ratio) * 100);
-                perfHtml = `<span title="Genel ortalamadan (${formatHHMM(avg)}) %${p} daha hızlı" style="color: var(--accent-green); font-size: 0.75rem; font-weight: 800; background: rgba(34, 197, 94, 0.1); padding: 2px 6px; border-radius: 4px;">🚀 %${p} HIZLI</span>`;
-            } else if (ratio > 1.15) {
-                const p = Math.round((ratio - 1) * 100);
-                perfHtml = `<span title="Genel ortalamadan (${formatHHMM(avg)}) %${p} daha yavaş" style="color: #ef4444; font-size: 0.75rem; font-weight: 800; background: rgba(239, 68, 68, 0.1); padding: 2px 6px; border-radius: 4px;">🐢 %${p} YAVAŞ</span>`;
-            } else {
-                perfHtml = `<span title="Genel ortalama hızda (${formatHHMM(avg)})" style="color: var(--text-muted); font-size: 0.75rem; font-weight: 700;">~ NORM</span>`;
-            }
-        }
-
-        return `
+    const rowsHtml = filteredPReports.map(r => {
+      const repCount = getRepeatCount(r);
+      const dur = getReportDurationStr(r);
+      return `
         <tr>
           <td style="font-weight: 600;">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
-          <td style="text-align: center;">
-            <span class="badge" style="background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeColor}; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; max-width: 150px; display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;" title="${r.type === 'ARIZA' ? (r.faultCode || r.faultDesc || r.type) : r.type}">
-              ${r.type === 'ARIZA' ? (r.faultCode || r.faultDesc || r.type) : r.type}
+          <td>
+            <span class="badge" style="background: ${r.type === 'BAKIM' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(59, 130, 246, 0.1)'}; color: ${r.type === 'BAKIM' ? 'var(--accent-green)' : 'var(--accent-blue)'}; border: 1px solid ${r.type === 'BAKIM' ? 'var(--accent-green)' : 'var(--accent-blue)'}; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">
+              ${r.type === 'ARIZA' ? (r.faultCode || r.faultDesc || r.type) : getMaintenanceTitle(r)}
             </span>
           </td>
-          <td style="text-align: center; color: var(--accent-cyan); font-weight: 800;">
-            ${(r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial)}
-          </td>
-          <td style="text-align: center;">
-            ${rep ? '<span title="Aynı türbinde 7 gün içinde tekrar eden arıza tespit edildi!" style="color: #ef4444; font-size: 1.1rem; cursor: help;">🚩</span>' : '<span style="color: var(--text-muted); opacity: 0.3;">-</span>'}
-          </td>
-          <td style="text-align: center; font-weight: 900; color: var(--accent-cyan);">${formatHHMM(hrs)}</td>
-          <td style="text-align: center;">${perfHtml}</td>
+          <td style="color: var(--accent-cyan); font-weight: 700;">${(r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || '')}</td>
+          <td style="text-align: center;">${repCount > 1 ? `<span style="color:#ef4444; font-weight:bold;">🚩 ${repCount}x</span>` : '<span style="color:var(--text-muted); opacity:0.4;">-</span>'}</td>
+          <td style="text-align: center; font-family: monospace; font-weight: 700; color: ${dur.includes('h') ? 'var(--accent-cyan)' : 'var(--text-muted)'};">${dur}</td>
           <td style="text-align: right;">
-            <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.id}'), 300); document.getElementById('personnel-details-modal').remove()" class="btn-cyber-mini" style="padding: 4px 10px; background: rgba(0, 242, 254, 0.1); border-color: var(--accent-cyan); color: var(--accent-cyan);" title="PDF Görüntüle">
-              <i class="fa-solid fa-file-pdf"></i>
+            <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.id}'), 300); document.getElementById('personnel-details-modal').remove()" class="btn-cyber-mini" style="padding: 3px 8px;">
+              <i class="fa-solid fa-file-pdf"></i> PDF
             </button>
           </td>
         </tr>
-      `}).join('');
+      `;
+    }).join('');
 
-    let days = 1;
-    if (startStr && endStr) {
-        const s = new Date(startStr);
-        const e = new Date(endStr);
-        days = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    } else if (pReports.length > 0) {
-        const dates = pReports.map(r => new Date(r.date).getTime()).filter(t => !isNaN(t));
-        if (dates.length > 0) {
-            const min = Math.min(...dates);
-            const max = Math.max(...dates);
-            days = Math.max(1, Math.round((max - min) / (1000 * 60 * 60 * 24)) + 1);
-        }
-    }
-    
-    // Türkiye Yasal Çalışma Süresi: Aylık 225 Saat -> Günlük 7.5 Saat
-    const targetHours = days * 7.5; 
-    const effortRatio = targetHours > 0 ? (totalFilteredHours / targetHours) * 100 : 0;
-    
-    let barColor = "var(--accent-green)";
-    if (effortRatio > 80) barColor = "var(--accent-cyan)";
-    if (effortRatio > 100) barColor = "var(--accent-orange)";
-    if (effortRatio > 120) barColor = "var(--accent-red)";
+    const assignedSitesStr = pMetric?.sites && pMetric.sites.length > 0 ? pMetric.sites.join(', ') : 'Belirtilmedi';
 
-    const content = `
-      <div class="glass-panel" style="width: 90%; max-width: 1000px; max-height: 85vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-cyan); overflow: hidden; display: flex; flex-direction: column;">
+    modal.innerHTML = `
+      <div class="glass-panel" style="width: 90%; max-width: 900px; max-height: 88vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-cyan); overflow: hidden; display: flex; flex-direction: column;">
         <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
         
-        <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-cyan); margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <i class="fa-solid fa-user-gear"></i> ${personnelName.toUpperCase()} - GÖREV GEÇMİŞİ
+        <!-- Üst Başlık, Karne Butonu & Tarih Filtresi -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-cyan); margin: 0; font-size: 1.4rem;">
+                <i class="fa-solid fa-user-gear"></i> ${personnelName.toUpperCase()}
+              </h3>
+              <!-- Performans Karnesi Butonu -->
+              <button onclick="window.downloadPersonnelReportCard('${personnelName}')" class="btn-cyber-mini" style="background: linear-gradient(135deg, rgba(192, 132, 252, 0.2), rgba(0, 242, 254, 0.2)); border: 1px solid #c084fc; color: #fff; font-weight: 700; padding: 3px 10px; border-radius: 6px; font-size: 0.75rem;">
+                <i class="fa-solid fa-file-pdf" style="color: #c084fc; margin-right: 4px;"></i> Performans Karnesi İndir (PDF)
+              </button>
+            </div>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">
+              ${pMetric?.company ? `${pMetric.company} • ` : ''}${pMetric?.team ? `${pMetric.team} • ` : ''}${pMetric?.specialization || 'Servis Teknisyeni'} • ${filteredPReports.length} Görev Kaydı
+            </span>
           </div>
-          <div style="font-size: 1.1rem; color: #fff; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-            <div>TOPLAM EFOR: <span style="color: var(--accent-cyan); font-weight: 900;">${formatHHMM(totalFilteredHours)}</span></div>
-            <div style="font-size: 0.7rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px;" title="Türkiye yasal çalışma süresine göre (Aylık 225 saat / Günlük 7.5 saat) kapasite kullanımı">
-              <span style="font-family: monospace;">KAPASİTE KULLANIMI: <strong style="color: ${barColor}">%${Math.round(effortRatio)}</strong></span>
-              <div style="width: 60px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
-                <div style="width: ${Math.min(100, effortRatio)}%; height: 100%; background: ${barColor};"></div>
-              </div>
+
+          <!-- Kompakt Modal Tarih Filtresi -->
+          <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap;">
+            <button class="btn-filter ${period === 'this-week' ? 'active' : ''}" onclick="window.showPersonnelDetails('${personnelName}', 'this-week')">Haftalık</button>
+            <button class="btn-filter ${period === 'this-month' ? 'active' : ''}" onclick="window.showPersonnelDetails('${personnelName}', 'this-month')">Aylık</button>
+            <button class="btn-filter ${period === 'this-year' ? 'active' : ''}" onclick="window.showPersonnelDetails('${personnelName}', 'this-year')">Yıllık</button>
+            <button class="btn-filter ${period === 'all' ? 'active' : ''}" onclick="window.showPersonnelDetails('${personnelName}', 'all')">Tümü</button>
+            
+            <div style="display: flex; align-items: center; gap: 4px; margin-left: 4px;">
+              <input type="date" id="p-modal-start" style="padding: 2px 4px; font-size: 0.7rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff;" value="${startStr || ''}">
+              <span style="color: var(--text-muted); font-size: 0.7rem;">-</span>
+              <input type="date" id="p-modal-end" style="padding: 2px 4px; font-size: 0.7rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff;" value="${endStr || ''}">
+              <button class="btn-filter" onclick="const s = (document.getElementById('p-modal-start') as any).value; const e = (document.getElementById('p-modal-end') as any).value; if(s && e) window.showPersonnelDetails('${personnelName}', 'custom', s, e);" style="padding: 2px 6px;">
+                <i class="fa-solid fa-filter"></i>
+              </button>
             </div>
           </div>
-        </h3>
+        </div>
 
-        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; background: rgba(0,0,0,0.2); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap;">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <i class="fa-solid fa-calendar-days" style="color: var(--text-muted);"></i>
-            <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700;">TARİH ARALIĞI:</span>
+        <!-- 4 Temel Skor Kartı -->
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; margin-bottom: 1.25rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 0.65rem; color: var(--accent-cyan); font-weight: 700;">🌐 SAHA & SORUMLULUK</div>
+            <div style="font-size: 0.95rem; font-weight: 800; color: #fff; margin: 4px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${assignedSitesStr}">
+              ${assignedSitesStr}
+            </div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">${pMetric?.team ? `${pMetric.team} • ` : ''}${pMetric?.sites?.length || 0} Sorumlu Santral</div>
           </div>
-          <input type="date" id="p-modal-start" class="cyber-input" style="padding: 0.5rem; max-width: 150px;" value="${startStr || ''}">
-          <span style="color: var(--text-muted);"> - </span>
-          <input type="date" id="p-modal-end" class="cyber-input" style="padding: 0.5rem; max-width: 150px;" value="${endStr || ''}">
-          <button onclick="window.filterPModal()" class="btn-cyber-mini" style="padding: 0.5rem 1rem;">FİLTRELE</button>
-          
-          <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 0.5rem;"></div>
-          
-          <button onclick="window.filterPModalQuick(7)" class="btn-cyber-mini" style="padding: 0.5rem 1rem; background: transparent; border-style: dashed;">HAFTALIK</button>
-          <button onclick="window.filterPModalQuick(30)" class="btn-cyber-mini" style="padding: 0.5rem 1rem; background: transparent; border-style: dashed;">AYLIK</button>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 0.65rem; color: var(--accent-orange); font-weight: 700;">⚡ EFOR & MESAİ</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 4px 0;">${pMetric?.sacrificeScore || 0}/25</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">${pMetric?.totalHours || 0}h (<span style="color:var(--accent-orange); font-weight:bold;">${pMetric?.overtimeHours || 0}h Onaylı</span>)</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 0.65rem; color: #38bdf8; font-weight: 700;">🚀 HIZ SKORU</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 4px 0;">${pMetric?.speedScore || 0}/25</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">Ortalama süreye uyum</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
+            <div style="font-size: 0.65rem; color: #4ade80; font-weight: 700;">🛡️ İŞÇİLİK KALİTESİ</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 4px 0;">${pMetric?.qualityScore || 0}/25</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">${pMetric?.repeatFaultCount || 0} Tekrar (7 Gün)</div>
+          </div>
+        </div>
 
-          ${(startStr && endStr) ? `<button onclick="window.showPersonnelDetails('${personnelName}')" class="btn-cyber-mini" style="padding: 0.5rem 1rem; background: rgba(255,77,77,0.1); border-color: rgba(255,77,77,0.3); color: #ff4d4d; margin-left: auto;">TEMİZLE</button>` : ''}
+        <!-- Görev Tablosu -->
+        <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar">
+          <table class="cyber-table">
+            <thead>
+              <tr>
+                <th>TARİH</th>
+                <th>KAYIT TÜRÜ / TANIMI</th>
+                <th>SANTRAL / TÜRBİN</th>
+                <th style="text-align: center;">TEKRAR</th>
+                <th style="text-align: center;">SÜRE</th>
+                <th style="text-align: right;">RAPOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">Seçili tarih aralığında kayıt bulunamadı.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+          <button class="btn-cyber-mini" onclick="this.closest('.cyber-modal-overlay').remove()">KAPAT</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  };
+
+  // Site Detail Modal with Dynamic Date Filter
+  (window as any).showSiteDetails = (siteName: string, period: string = currentPeriod, startStr?: string, endStr?: string) => {
+    const existing = document.getElementById('site-details-modal');
+    if (existing) existing.remove();
+
+    const siteAllReports = allReports.filter(r => 
+      r.siteName === siteName || 
+      (r.turbineSerial && dataService.findTurbineBySerial(r.turbineSerial)?.siteName === siteName)
+    );
+
+    const siteFilteredReports = filterReportsByPeriod(siteAllReports, period, startStr, endStr);
+    const siteData = analyticsService.generateUnifiedAnalysis(siteFilteredReports, []);
+    const activePersonnel = siteData.personnelMetrics.filter(p => (p.bakimCount + p.arizaCount) > 0);
+
+    const modal = document.createElement('div');
+    modal.id = 'site-details-modal';
+    modal.className = 'cyber-modal-overlay fade-in';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
+
+    modal.innerHTML = `
+      <div class="glass-panel" style="width: 92%; max-width: 950px; max-height: 88vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-cyan); overflow: hidden; display: flex; flex-direction: column;">
+        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+        
+        <!-- Modal Başlık & Canlı Tarih Filtreleme -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-cyan); margin: 0; font-size: 1.4rem;">
+              <i class="fa-solid fa-solar-panel"></i> ${siteName.toUpperCase()} - SAHA ANALİZİ
+            </h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">${siteFilteredReports.length} Rapor • ${activePersonnel.length} Görevli Personel</span>
+          </div>
+
+          <!-- Kompakt Modal Tarih Filtresi -->
+          <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap;">
+            <button class="btn-filter ${period === 'this-week' ? 'active' : ''}" onclick="window.showSiteDetails('${siteName}', 'this-week')">Haftalık</button>
+            <button class="btn-filter ${period === 'this-month' ? 'active' : ''}" onclick="window.showSiteDetails('${siteName}', 'this-month')">Aylık</button>
+            <button class="btn-filter ${period === 'this-year' ? 'active' : ''}" onclick="window.showSiteDetails('${siteName}', 'this-year')">Yıllık</button>
+            <button class="btn-filter ${period === 'all' ? 'active' : ''}" onclick="window.showSiteDetails('${siteName}', 'all')">Tümü</button>
+            
+            <div style="display: flex; align-items: center; gap: 4px; margin-left: 4px;">
+              <input type="date" id="site-modal-start" style="padding: 2px 4px; font-size: 0.7rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff;" value="${startStr || ''}">
+              <span style="color: var(--text-muted); font-size: 0.7rem;">-</span>
+              <input type="date" id="site-modal-end" style="padding: 2px 4px; font-size: 0.7rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff;" value="${endStr || ''}">
+              <button class="btn-filter" onclick="const s = (document.getElementById('site-modal-start') as any).value; const e = (document.getElementById('site-modal-end') as any).value; if(s && e) window.showSiteDetails('${siteName}', 'custom', s, e);" style="padding: 2px 6px;">
+                <i class="fa-solid fa-filter"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
+          <div style="background: rgba(0, 242, 254, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(0, 242, 254, 0.2); font-size: 0.85rem; font-weight: 800; color: #fff;">
+            Toplam Efor: ${siteData.operationSummary.totalManHours}h
+          </div>
+          <div style="background: rgba(34, 197, 94, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(34, 197, 94, 0.2); font-size: 0.85rem; font-weight: 800; color: #4ade80;">
+            Bakım: ${siteFilteredReports.filter(r => r.type === 'BAKIM').length}
+          </div>
+          <div style="background: rgba(59, 130, 246, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2); font-size: 0.85rem; font-weight: 800; color: #60a5fa;">
+            Arıza: ${siteFilteredReports.filter(r => r.type === 'ARIZA').length}
+          </div>
         </div>
 
         <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar">
           <table class="cyber-table">
             <thead>
               <tr>
-                <th>TARİH</th>
-                <th style="text-align: center;">KAYIT TÜRÜ</th>
-                <th style="text-align: center;">BÖLGE / TÜRBİN</th>
-                <th style="text-align: center;">TEKRAR</th>
-                <th style="text-align: center;">ADAM-SAAT</th>
-                <th style="text-align: center;">HIZ / PERFORMANS</th>
-                <th style="text-align: right;">GÖRÜNTÜLE</th>
+                <th>PERSONEL</th>
+                <th style="text-align: center;">BAKIM</th>
+                <th style="text-align: center;">ARIZA</th>
+                <th style="text-align: center;">TOPLAM SAAT</th>
+                <th style="text-align: center;">ONAYLI MESAİ</th>
+                <th style="text-align: right;">SKOR</th>
               </tr>
             </thead>
             <tbody>
-              ${pReports.length > 0 ? rowsHtml : `<tr><td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-muted);">Görev kaydı bulunmamaktadır.</td></tr>`}
+              ${activePersonnel.length > 0 ? activePersonnel.map(p => `
+                <tr class="clickable-row" onclick="window.showPersonnelDetails('${p.name}')" style="cursor: pointer;">
+                  <td style="font-weight: 600;">${p.name}</td>
+                  <td style="text-align: center; color: var(--accent-green); font-weight: 700;">${p.bakimCount}</td>
+                  <td style="text-align: center; color: var(--accent-blue); font-weight: 700;">${p.arizaCount}</td>
+                  <td style="text-align: center; font-family: monospace; font-weight: 700; color: var(--accent-cyan);">${p.totalHours}h</td>
+                  <td style="text-align: center; font-family: monospace; color: var(--accent-orange); font-weight: 700;">${p.overtimeHours > 0 ? p.overtimeHours + 'h' : '-'}</td>
+                  <td style="text-align: right; font-weight: 800; color: #38bdf8;">${p.masteryScore} Puan</td>
+                </tr>
+              `).join('') : '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">Seçili tarih aralığında bu sahada görev kaydı bulunamadı.</td></tr>'}
             </tbody>
           </table>
         </div>
 
-        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+        <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
           <button class="btn-cyber-mini" onclick="this.closest('.cyber-modal-overlay').remove()">KAPAT</button>
         </div>
       </div>
     `;
-    
-    modal.innerHTML = content;
     document.body.appendChild(modal);
   };
 
-  // Mesai Detaylarını Excel'e Aktar
-  (window as any).exportOvertimeToExcel = () => {
+  // Overtime Details Modal
+  (window as any).showOvertimeDetails = () => {
     const details = data.overtimeDetails;
-    if (details.length === 0) {
-      alert("İndirilecek mesai verisi bulunamadı.");
-      return;
-    }
+    const modal = document.createElement('div');
+    modal.className = 'cyber-modal-overlay fade-in';
+    modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
     
-    const headers = ['Tarih', 'Personel', 'Turbin', 'Baslangic', 'Bitis', 'Mesai (Saat)', 'Rapor ID'];
-    const rows = details.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(d => [
-      new Date(d.date).toLocaleDateString('tr-TR'),
-      d.personnelName,
-      (d.siteName ? d.siteName + ' ' : '') + (d.turbineNo || d.turbineSerial),
-      d.startTime,
-      d.endTime,
-      d.overtimeHours,
-      d.reportId
-    ]);
+    modal.innerHTML = `
+      <div class="glass-panel" style="width: 90%; max-width: 850px; max-height: 85vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-orange); overflow: hidden; display: flex; flex-direction: column;">
+        <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+        
+        <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-orange); margin: 0 0 1.5rem 0; display: flex; align-items: center; gap: 0.75rem;">
+          <i class="fa-solid fa-clock-rotate-left"></i> 18:00 SONRASI ONAYLI MESAİ DETAYLARI
+        </h3>
 
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Mesai Detaylari");
-    
-    XLSX.writeFile(workbook, `DH_Servis_Mesai_Detaylari_${new Date().toISOString().split('T')[0]}.xlsx`);
+        <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar">
+          <table class="cyber-table">
+            <thead>
+              <tr>
+                <th>TARİH</th>
+                <th>PERSONEL</th>
+                <th>SANTRAL / TÜRBİN</th>
+                <th style="text-align: center;">MESAİ SÜRESİ</th>
+                <th style="text-align: right;">RAPOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${details.length > 0 ? details.map(d => `
+                <tr>
+                  <td>${new Date(d.date).toLocaleDateString('tr-TR')}</td>
+                  <td style="font-weight: 600;">${d.personnelName}</td>
+                  <td style="color: var(--accent-cyan); font-weight: 700;">${(d.siteName ? d.siteName + ' ' : '') + (d.turbineNo || d.turbineSerial || '')}</td>
+                  <td style="text-align: center; font-weight: 800; color: var(--accent-orange); font-family: monospace;">${d.overtimeHours} h</td>
+                  <td style="text-align: right;">
+                    <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${d.reportId}'), 300); document.querySelector('.cyber-modal-overlay')?.remove()" class="btn-cyber-mini" style="padding: 2px 8px;">
+                      <i class="fa-solid fa-file-lines"></i> Aç
+                    </button>
+                  </td>
+                </tr>
+              `).join('') : '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">Mesai kaydı bulunamadı.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+          <button class="btn-cyber-mini" onclick="this.closest('.cyber-modal-overlay').remove()">KAPAT</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
   };
 
-  // Attach export function to window directly in TS scope
+  // Excel Export
   (window as any).exportAnalyticsToExcel = () => {
-    const metrics = data.personnelMetrics;
-    const headers = ['Personel', 'Uzmanlik', 'Bakim (Adet)', 'Ariza (Adet)', 'Tekrar (7 Gun)', 'Toplam Saat', 'Mesai (Saat)', 'Yol Suresi (Saat)', 'Verimlilik (%)', 'Turbinler'];
-    
-    const rows = metrics.map(p => [
-      p.name,
-      p.specialization,
-      p.bakimCount,
-      p.arizaCount,
-      p.repeatFaultCount,
-      p.totalHours,
-      p.overtimeHours,
-      p.roadHours || 0,
-      Math.round(p.avgEfficiency * 100),
-      p.turbines.join(' | ')
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Personel', 'Şirket', 'Ekip', 'Sorumlu Santral', 'Bakım (Adet)', 'Arıza (Adet)', 'Toplam Saat', 'Onaylı Mesai (Saat)', 'Uzmanlık Skoru'],
+      ...data.personnelMetrics.map(p => [p.name, p.company || '', p.team || '', (p.sites || []).join(' | '), p.bakimCount, p.arizaCount, p.totalHours, p.overtimeHours, p.masteryScore])
     ]);
-
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Personel Analizi");
-    
-    XLSX.writeFile(workbook, `DH_Servis_AdamSaat_Analizi_${new Date().toISOString().split('T')[0]}.xlsx`);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Personel Analizi");
+    XLSX.writeFile(wb, `DH_Servis_Analiz_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Agent Health Monitoring Subscription
-  setTimeout(() => {
-    const currentUser = (window as any).currentUser;
-    if (currentUser?.role !== 'ADMIN') return;
-
-    const agentGrid = document.getElementById('agent-health-grid');
-    if (agentGrid) {
-      agentHealthService.subscribeToAgents((agents) => {
-        agentGrid.innerHTML = agents.map(agent => `
-          <div class="agent-mini-card" style="display: flex; align-items: center; gap: 0.75rem; background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-            <div class="status-pulse ${agent.status}" style="width: 10px; height: 10px; border-radius: 50%;"></div>
-            <div style="flex: 1;">
-              <div style="font-weight: 700; font-size: 0.8rem; color: var(--text-main);">${agent.name.toUpperCase()}</div>
-              <div style="font-size: 0.65rem; color: var(--text-muted);">${agent.type} • ${agent.latency || 0}ms</div>
-            </div>
-            <div style="text-align: right;">
-              <div style="font-size: 0.6rem; color: var(--text-muted);">${new Date(agent.lastSeen).toLocaleTimeString()}</div>
-              <div style="font-size: 0.65rem; font-weight: 800; color: ${agent.status === 'online' ? 'var(--accent-green)' : (agent.status === 'busy' ? 'var(--accent-orange)' : 'var(--accent-red)')};">
-                ${agent.status.toUpperCase()}
-              </div>
-            </div>
-          </div>
-        `).join('');
-      });
-    }
-  }, 100);
+  // Sort Arrow Helper
+  const getSortArrow = (col: string) => {
+    if (personnelSortBy !== col) return '<i class="fa-solid fa-sort" style="opacity: 0.3; margin-left: 4px; font-size: 0.7rem;"></i>';
+    return personnelSortOrder === 'desc' 
+      ? '<i class="fa-solid fa-sort-down" style="color: var(--accent-cyan); margin-left: 4px; font-size: 0.8rem;"></i>' 
+      : '<i class="fa-solid fa-sort-up" style="color: var(--accent-cyan); margin-left: 4px; font-size: 0.8rem;"></i>';
+  };
 
   return `
-    <div class="fade-in-up content-area">
-      <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+    <div class="fade-in-up content-area" style="max-width: 1300px; margin: 0 auto;">
+      
+      <!-- 🌟 1. TEMİZ VE SADE ÜST BAŞLIK -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <div>
-          <h2 style="font-family: 'Rajdhani', sans-serif; font-size: 2rem; color: var(--text-main); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.5rem;">
-            <i class="fa-solid fa-chart-line" style="color: var(--accent-cyan); margin-right: 0.5rem;"></i> Adam-Saat Analizi
+          <h2 style="font-family: 'Rajdhani', sans-serif; font-size: 1.8rem; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 0.6rem; letter-spacing: 1px;">
+            <i class="fa-solid fa-chart-simple" style="color: var(--accent-cyan);"></i> ADAM-SAAT & PERFORMANS
           </h2>
-          <div class="filter-group" style="display: flex; align-items: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); padding: 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); gap: 4px;">
-            <button class="btn-filter ${currentPeriod === 'this-week' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-week')">BU HAFTA</button>
-            <button class="btn-filter ${currentPeriod === 'this-month' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-month')">BU AY</button>
-            <button class="btn-filter ${currentPeriod === 'last-month' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('last-month')">ÖNCEKİ AY</button>
-            <button class="btn-filter ${currentPeriod === 'this-year' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-year')">BU YIL</button>
-            <button class="btn-filter ${currentPeriod === 'all' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('all')">TÜMÜ</button>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Saha operasyonlarının efor, bakım ve onaylı mesai analiz portalı</span>
+        </div>
+
+        <!-- Sade Filtre Grubu -->
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <div style="background: rgba(255,255,255,0.03); padding: 3px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+            <button class="btn-filter ${currentPeriod === 'this-week' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-week')">Bu Hafta</button>
+            <button class="btn-filter ${currentPeriod === 'this-month' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-month')">Bu Ay</button>
+            <button class="btn-filter ${currentPeriod === 'last-month' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('last-month')">Önceki Ay</button>
+            <button class="btn-filter ${currentPeriod === 'this-year' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('this-year')">Bu Yıl</button>
+            <button class="btn-filter ${currentPeriod === 'all' ? 'active' : ''}" onclick="window.setAnalyticsPeriod('all')">Tümü</button>
             
-            <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+            <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
             
-            <input type="date" id="analytics-start" class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-main);" value="${localStorage.getItem('analytics_start') || ''}">
-            <span style="color: var(--text-muted); font-size: 0.8rem;">-</span>
-            <input type="date" id="analytics-end" class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-main);" value="${localStorage.getItem('analytics_end') || ''}">
-            <button class="btn-filter ${currentPeriod === 'custom' ? 'active' : ''}" onclick="window.setCustomAnalyticsPeriod()" style="padding: 4px 12px; border-radius: 4px;" title="Tarih aralığına göre filtrele">
+            <input type="date" id="analytics-start" style="padding: 2px 4px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-main);" value="${localStorage.getItem('analytics_start') || ''}">
+            <span style="color: var(--text-muted); font-size: 0.75rem;">-</span>
+            <input type="date" id="analytics-end" style="padding: 2px 4px; font-size: 0.75rem; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: var(--text-main);" value="${localStorage.getItem('analytics_end') || ''}">
+            <button class="btn-filter ${currentPeriod === 'custom' ? 'active' : ''}" onclick="window.setCustomAnalyticsPeriod()" style="padding: 2px 8px; border-radius: 4px;" title="Tarih aralığına göre filtrele">
               <i class="fa-solid fa-filter"></i>
             </button>
           </div>
-        </div>
-        <div style="display: flex; gap: 1rem;">
-          <button class="btn-cyber-mini" onclick="window.showTeamSpeedAnalysis()" style="padding: 0.75rem 1.5rem; background: rgba(34, 197, 94, 0.1); border-color: var(--accent-green); color: var(--accent-green);">
-            <i class="fa-solid fa-gauge-high" style="margin-right: 0.5rem;"></i> HIZ ANALİZİ
-          </button>
-          <button class="btn-cyber-mini" onclick="window.exportAnalyticsToExcel()" style="padding: 0.75rem 1.5rem;">
-            <i class="fa-solid fa-file-excel" style="margin-right: 0.5rem;"></i> EXCEL'E AKTAR
+
+          <button class="btn-cyber-mini" onclick="window.exportAnalyticsToExcel()" style="padding: 0.45rem 1rem; border-radius: 8px;">
+            <i class="fa-solid fa-file-excel" style="margin-right: 0.4rem;"></i> Excel İndir
           </button>
         </div>
       </div>
 
-      <div class="analytics-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
-        <div class="glass-panel stat-card" style="border-left: 4px solid var(--accent-cyan);">
-          <span class="stat-label">TOPLAM TÜRBİN DURUŞU</span>
-          <div class="stat-value">${data.operationSummary.totalTurbineHours} <span style="font-size: 1rem; color: var(--text-muted);">h</span></div>
-          <span class="stat-desc">Türbinin başında geçen saf süre</span>
+      <!-- 📊 2. SADE 3 KPI KARTI (FERAH DÜZEN) -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-bottom: 1.75rem;">
+        
+        <!-- Kart 1: Toplam Efor -->
+        <div class="glass-panel" style="padding: 1.25rem; border-radius: 12px; border-left: 4px solid var(--accent-cyan); display: flex; flex-direction: column; justify-content: space-between;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">TOPLAM ÇALIŞMA (EFOR)</div>
+          <div style="font-size: 2rem; font-weight: 900; color: #FFFFFF; font-family: monospace; margin: 0.4rem 0;">
+            ${data.operationSummary.totalManHours} <span style="font-size: 1rem; color: var(--text-muted); font-weight: normal;">Saat</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+            <span>Duruş: <strong style="color: #fff;">${data.operationSummary.totalTurbineHours}h</strong></span>
+            <span onclick="window.showOvertimeDetails()" style="cursor: pointer; color: var(--accent-orange);" title="Onaylı mesai detayları için tıklayın">
+              Onaylı Mesai: <strong>${data.operationSummary.totalOvertimeHours}h</strong> <i class="fa-solid fa-chevron-right" style="font-size: 0.6rem;"></i>
+            </span>
+          </div>
         </div>
-        <div class="glass-panel stat-card" style="border-left: 4px solid var(--accent-green);">
-          <span class="stat-label">TOPLAM ADAM-SAAT</span>
-          <div class="stat-value">${data.operationSummary.totalManHours} <span style="font-size: 1rem; color: var(--text-muted);">h</span></div>
-          <span class="stat-desc">Gerçekleşen toplam efor</span>
+
+        <!-- Kart 2: Operasyon Dağılımı -->
+        <div class="glass-panel" style="padding: 1.25rem; border-radius: 12px; border-left: 4px solid var(--accent-green); display: flex; flex-direction: column; justify-content: space-between;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">İŞ DAĞILIMI & VERİMLİLİK</div>
+          <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin: 0.4rem 0; display: flex; gap: 1rem;">
+            <span style="color: #4ade80;">%${data.operationSummary.bakimRatio} <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Bakım</span></span>
+            <span style="color: #60a5fa;">%${data.operationSummary.arizaRatio} <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">Arıza</span></span>
+          </div>
+          <!-- Zarif Çubuk Grafik -->
+          <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; display: flex;">
+            <div style="width: ${data.operationSummary.bakimRatio}%; height: 100%; background: #4ade80;"></div>
+            <div style="width: ${data.operationSummary.arizaRatio}%; height: 100%; background: #60a5fa;"></div>
+          </div>
         </div>
-        <div class="glass-panel stat-card clickable-card" onclick="window.showOvertimeDetails()" style="border-left: 4px solid var(--accent-orange); cursor: pointer; transition: all 0.3s ease;">
-          <style>
-            .clickable-card:hover { transform: translateY(-5px); background: rgba(255,157,0,0.05) !important; border-color: var(--accent-orange) !important; }
-          </style>
+
+        <!-- Kart 3: Ayın / Dönemin Öne Çıkanı -->
+        <div class="glass-panel clickable-row" onclick="window.showPersonnelDetails('${masteryLeader?.name || ''}')" style="cursor: pointer; padding: 1.25rem; border-radius: 12px; border-left: 4px solid #c084fc; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span class="stat-label">TOPLAM FAZLA MESAİ</span>
-            <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.7rem; color: var(--accent-orange); opacity: 0.5;"></i>
+            <span style="font-size: 0.75rem; color: #c084fc; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">👑 DÖNEMİN YILDIZI</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">İncele <i class="fa-solid fa-arrow-right"></i></span>
           </div>
-          <div class="stat-value" style="color: var(--accent-orange);">${data.operationSummary.totalOvertimeHours} <span style="font-size: 1rem; color: var(--text-muted);">h</span></div>
-          <span class="stat-desc">18:00 sonrası gerçekleşen çalışma</span>
-        </div>
-        <div class="glass-panel stat-card" style="border-left: 4px solid #a855f7;">
-          <span class="stat-label">TOPLAM YOL SÜRESİ</span>
-          <div class="stat-value" style="color: #c084fc;">${data.operationSummary.totalRoadHours} <span style="font-size: 1rem; color: var(--text-muted);">h</span></div>
-          <span class="stat-desc">Şantiye & türbin arası intikal süresi</span>
-        </div>
-        <div class="glass-panel stat-card" style="border-left: 4px solid var(--accent-cyan);">
-          <span class="stat-label">VERİMLİLİK SKORU</span>
-          <div class="stat-value">%${Math.round(data.operationSummary.efficiencyScore * 100)}</div>
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-            <span style="font-size: 0.7rem; color: var(--accent-cyan);">Bakım: %${data.operationSummary.bakimRatio}</span>
-            <span style="font-size: 0.7rem; color: var(--accent-orange);">Arıza: %${data.operationSummary.arizaRatio}</span>
+          <div style="font-size: 1.4rem; font-weight: 900; color: #FFFFFF; margin: 0.4rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            ${masteryLeader ? masteryLeader.name : '-'}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">
+            <strong style="color: #c084fc; font-family: monospace;">${masteryLeader ? `${masteryLeader.masteryScore} Puan` : '-'}</strong> • ${masteryLeader ? `${masteryLeader.bakimCount + masteryLeader.arizaCount} Görev (${masteryLeader.overtimeHours}h Onaylı Mesai)` : '-'}
           </div>
         </div>
+
       </div>
 
-      <div style="display: grid; grid-template-columns: 2.5fr 1fr; gap: 1.5rem;">
-        <!-- Personel Performans Matrisi -->
-        <div class="glass-panel" style="padding: 1.5rem; display: flex; flex-direction: column; max-height: 800px;">
-          <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem;">
-            <i class="fa-solid fa-users-gears" style="color: var(--accent-cyan);"></i> Personel Yetkinlik & Performans Detayları
-          </h3>
-          <div style="overflow-y: auto; flex: 1; padding-right: 0.5rem;" class="custom-scrollbar">
+      <!-- 🗂️ 3. ZARİF MODERN SEKME ÇUBUĞU (APPLE / NOTION STİLİ) -->
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.5rem; overflow-x: auto;">
+        <button class="tab-pill ${activeTab === 'personnel' ? 'active' : ''}" onclick="window.setAnalyticsTab('personnel')">
+          <i class="fa-solid fa-users"></i> Personel Performansı (${data.personnelMetrics.length})
+        </button>
+        <button class="tab-pill ${activeTab === 'teams' ? 'active' : ''}" onclick="window.setAnalyticsTab('teams')">
+          <i class="fa-solid fa-people-group"></i> Ekip Dağılımı (${sortedTeams.length})
+        </button>
+        <button class="tab-pill ${activeTab === 'ariza' ? 'active' : ''}" onclick="window.setAnalyticsTab('ariza')">
+          <i class="fa-solid fa-bolt"></i> Arıza & Kritik Türbinler (${arizaReports.length})
+        </button>
+        <button class="tab-pill ${activeTab === 'bakim' ? 'active' : ''}" onclick="window.setAnalyticsTab('bakim')">
+          <i class="fa-solid fa-wrench"></i> Bakım Takibi (${bakimReports.length})
+        </button>
+        <button class="tab-pill ${activeTab === 'materials' ? 'active' : ''}" onclick="window.setAnalyticsTab('materials')">
+          <i class="fa-solid fa-box-open"></i> Malzeme Tüketimi (${topMaterials.length})
+        </button>
+        <button class="tab-pill ${activeTab === 'sites' ? 'active' : ''}" onclick="window.setAnalyticsTab('sites')">
+          <i class="fa-solid fa-solar-panel"></i> Santraller (${sortedSites.length})
+        </button>
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- 👥 SEKME 1: PERSONEL TABLOSU & SIRALAMA KONTROLLERİ           -->
+      <!-- ============================================================= -->
+      ${activeTab === 'personnel' ? `
+        <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+          
+          <!-- Arama & Hızlı Sıralama Çubuğu -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+            <!-- Arama Kutusu -->
+            <div style="position: relative; width: 260px;">
+              <i class="fa-solid fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.85rem;"></i>
+              <input 
+                type="text" 
+                id="personnel-search-input" 
+                class="cyber-input" 
+                placeholder="Personel veya uzmanlık ara..." 
+                oninput="window.filterPersonnelTable(this.value)"
+                style="height: 36px; padding-left: 2.2rem; padding-right: 2rem; font-size: 0.85rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; width: 100%; color: #fff;"
+              >
+              <i id="personnel-search-clear" onclick="window.clearPersonnelSearch()" class="fa-solid fa-xmark" style="display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; cursor: pointer;"></i>
+            </div>
+
+            <!-- Hızlı Sıralama Butonları -->
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-right: 2px;">SIRALAMA:</span>
+              <button class="btn-filter ${personnelSortBy === 'mastery' ? 'active' : ''}" onclick="window.setPersonnelSort('mastery')" style="font-size: 0.75rem; padding: 4px 8px;">
+                ⭐ Uzmanlık ${personnelSortBy === 'mastery' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button class="btn-filter ${personnelSortBy === 'jobs' ? 'active' : ''}" onclick="window.setPersonnelSort('jobs')" style="font-size: 0.75rem; padding: 4px 8px;">
+                📋 Görev Adeti ${personnelSortBy === 'jobs' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button class="btn-filter ${personnelSortBy === 'hours' ? 'active' : ''}" onclick="window.setPersonnelSort('hours')" style="font-size: 0.75rem; padding: 4px 8px;">
+                ⏱️ Toplam Efor ${personnelSortBy === 'hours' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button class="btn-filter ${personnelSortBy === 'overtime' ? 'active' : ''}" onclick="window.setPersonnelSort('overtime')" style="font-size: 0.75rem; padding: 4px 8px;">
+                🔥 Onaylı Mesai ${personnelSortBy === 'overtime' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
+              </button>
+              <button class="btn-filter ${personnelSortBy === 'name' ? 'active' : ''}" onclick="window.setPersonnelSort('name')" style="font-size: 0.75rem; padding: 4px 8px;">
+                🔤 İsim (A-Z) ${personnelSortBy === 'name' ? (personnelSortOrder === 'asc' ? 'A-Z' : 'Z-A') : ''}
+              </button>
+            </div>
+          </div>
+
+          <!-- Sadeleştirilmiş 5 Sütunlu Tablo (Sıralanabilir Başlıklar) -->
+          <div style="overflow-x: auto;">
             <table class="cyber-table">
               <thead>
                 <tr>
-                  <th>PERSONEL</th>
-                  <th style="text-align: center;">BAKIM (ADET)</th>
-                  <th style="text-align: center;">ARIZA (ADET)</th>
-                  <th style="text-align: center;">TEKRAR (7 GÜN)</th>
-                  <th style="text-align: center;">TOPLAM SAAT</th>
-                  <th style="text-align: center; color: var(--accent-orange);">MESAİ</th>
-                  <th style="text-align: center; color: #c084fc;">YOL</th>
-                  <th style="text-align: center;">VERİMLİLİK</th>
-                  <th style="text-align: right;">DURUM</th>
+                  <th onclick="window.setPersonnelSort('name')" style="cursor: pointer;" title="İsme göre sırala">
+                    PERSONEL ${getSortArrow('name')}
+                  </th>
+                  <th onclick="window.setPersonnelSort('jobs')" style="text-align: center; cursor: pointer;" title="Görev sayısına göre sırala">
+                    GÖREVLER (BAKIM / ARIZA) ${getSortArrow('jobs')}
+                  </th>
+                  <th onclick="window.setPersonnelSort('hours')" style="text-align: center; cursor: pointer;" title="Toplam çalışma saatine göre sırala">
+                    TOPLAM EFOR ${getSortArrow('hours')}
+                  </th>
+                  <th onclick="window.setPersonnelSort('overtime')" style="text-align: center; cursor: pointer;" title="Onaylanan mesai saatine göre sırala">
+                    ONAYLANAN MESAİ ${getSortArrow('overtime')}
+                  </th>
+                  <th onclick="window.setPersonnelSort('mastery')" style="text-align: center; cursor: pointer;" title="Uzmanlık skoruna göre sırala">
+                    UZMANLIK SKORU ${getSortArrow('mastery')}
+                  </th>
+                  <th style="text-align: right;">İŞLEM</th>
                 </tr>
               </thead>
               <tbody>
-                ${data.personnelMetrics.map(p => `
-                  <tr class="clickable-row" onclick="window.showPersonnelDetails('${p.name}')" style="cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 242, 254, 0.05)'" onmouseout="this.style.background='transparent'">
+                ${sortedPersonnel.map(p => `
+                  <tr class="clickable-row personnel-row" data-pname="${p.name.toLowerCase()}" data-pspec="${p.specialization.toLowerCase()}" onclick="window.showPersonnelDetails('${p.name}')" style="cursor: pointer;">
                     <td>
-                    <div style="font-weight: 600; color: var(--text-main);">${p.name}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 4px;">${p.specialization}</div>
-                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                      ${p.turbines.map(t => {
-                        const turbine = dataService.findTurbineBySerial(t);
-                        const label = (turbine ? turbine.siteName + ' ' + (turbine.turbineNo || t) : t);
-                        return `<span style="font-size: 10px; padding: 1px 4px; background: rgba(255,255,255,0.05); border-radius: 3px; color: var(--accent-cyan); border: 1px solid rgba(0,255,255,0.1);">${label}</span>`;
-                      }).join('')}
-                    </div>
+                      <div style="font-weight: 700; color: #FFFFFF; font-size: 0.95rem;">${p.name}</div>
+                      <div style="font-size: 0.72rem; color: var(--text-muted);">${p.team ? `${p.team} • ` : ''}${p.specialization}</div>
                     </td>
                     <td style="text-align: center;">
-                      <span class="badge" style="background: rgba(34, 197, 94, 0.1); color: var(--accent-green); border: 1px solid rgba(34, 197, 94, 0.2); padding: 2px 8px; border-radius: 4px;">
-                        ${p.bakimCount}
-                      </span>
-                    </td>
-                    <td style="text-align: center;">
-                      <span class="badge" style="background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); border: 1px solid rgba(59, 130, 246, 0.2); padding: 2px 8px; border-radius: 4px;">
-                        ${p.arizaCount}
-                      </span>
-                    </td>
-                    <td style="text-align: center;">
-                      ${p.repeatFaultCount > 0 ? `
-                        <span class="badge" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 2px 8px; border-radius: 4px; font-weight: bold;">
-                          🚩 ${p.repeatFaultCount}
-                        </span>
-                      ` : '<span style="color: var(--text-muted); opacity: 0.3;">-</span>'}
-                    </td>
-                    <td style="text-align: center; font-weight: 600; color: var(--accent-cyan);">
-                      ${p.totalHours} <span style="font-size: 0.7rem; color: var(--text-muted);">h</span>
-                    </td>
-                    <td style="text-align: center; font-weight: 800; color: var(--accent-orange);">
-                      ${p.overtimeHours > 0 ? p.overtimeHours + ' h' : '<span style="opacity: 0.2;">0</span>'}
-                    </td>
-                    <td style="text-align: center; font-weight: 800; color: #c084fc;">
-                      ${p.roadHours > 0 ? p.roadHours + ' h' : '<span style="opacity: 0.2;">0</span>'}
-                    </td>
-                    <td style="text-align: center;">
-                      <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-                        <div style="flex: 1; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; width: 40px;">
-                          <div style="height: 100%; width: ${p.avgEfficiency * 100}%; background: ${p.avgEfficiency > 0.85 ? 'var(--accent-green)' : (p.avgEfficiency > 0.7 ? 'var(--accent-cyan)' : '#f59e0b')}; border-radius: 2px;"></div>
-                        </div>
-                        <span style="font-size: 0.8rem; font-weight: 600;">%${Math.round(p.avgEfficiency * 100)}</span>
+                      <span style="font-weight: 700; color: #fff;">${p.bakimCount + p.arizaCount} Görev</span>
+                      <div style="font-size: 0.7rem; color: var(--text-muted);">
+                        <span style="color: #4ade80;">${p.bakimCount} Bakım</span> • <span style="color: #60a5fa;">${p.arizaCount} Arıza</span>
                       </div>
                     </td>
-                    <td style="text-align: right;">
-                      <span class="status-pill ${p.totalHours > 40 ? 'completed' : 'pending'}" style="font-size: 0.65rem;">
-                        ${p.totalHours > 40 ? 'YÜKSEK EFOR' : 'NORMAL'}
+                    <td style="text-align: center; font-family: monospace; font-weight: 800; color: var(--accent-cyan); font-size: 1rem;">
+                      ${p.totalHours} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Saat</span>
+                    </td>
+                    <td style="text-align: center; font-family: monospace; font-weight: 700;">
+                      ${p.overtimeHours > 0 ? `<span style="color: var(--accent-orange); background: rgba(255,157,0,0.1); padding: 3px 8px; border-radius: 4px; font-size: 0.8rem;" title="Yönetici tarafından onaylanan net mesai saati">${p.overtimeHours}h</span>` : '<span style="color: var(--text-muted); opacity: 0.4;">-</span>'}
+                    </td>
+                    <td style="text-align: center;">
+                      <span style="font-family: monospace; font-weight: 800; font-size: 0.95rem; color: ${p.masteryGrade === 'A+' ? '#c084fc' : (p.masteryGrade === 'A' ? '#4ade80' : '#38bdf8')};">
+                        ${p.masteryScore}
                       </span>
+                      <span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; margin-left: 4px; background: rgba(255,255,255,0.05); color: #fff;">
+                        ${p.masteryGrade}
+                      </span>
+                    </td>
+                    <td style="text-align: right;">
+                      <button class="btn-cyber-mini" style="padding: 4px 12px; border-radius: 6px; font-size: 0.75rem;">
+                        İncele <i class="fa-solid fa-chevron-right" style="font-size: 0.65rem; margin-left: 4px;"></i>
+                      </button>
                     </td>
                   </tr>
                 `).join('')}
@@ -911,75 +1075,361 @@ export const AnalyticsPage = async () => {
             </table>
           </div>
         </div>
+      ` : ''}
 
-        <!-- Yan Panel: Yıldızlar ve Öneriler -->
+      <!-- ============================================================= -->
+      <!-- 👥 SEKME 2: EKİP (TEAM) BAZLI İŞ & EFOR DAĞILIMI              -->
+      <!-- ============================================================= -->
+      ${activeTab === 'teams' ? `
+        <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.2rem; color: var(--accent-cyan);">
+                <i class="fa-solid fa-people-group"></i> EKİP (TEAM 01 - 15) İŞ VE EFOR DAĞILIMI
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Ekiplerin çalışma saatleri, görev dağılımları ve mesai dengesi</span>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+            ${sortedTeams.map(t => `
+              <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1.25rem; border-left: 3px solid ${t.teamName.startsWith('Team') ? 'var(--accent-cyan)' : '#a855f7'};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                  <span style="font-weight: 800; font-size: 1.1rem; color: #fff; font-family: 'Rajdhani', sans-serif;">${t.teamName}</span>
+                  <span style="background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; color: var(--accent-cyan); font-weight: 700;">
+                    ${t.personnelCount} Teknisyen
+                  </span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+                  <span style="color: var(--text-muted);">Toplam Çalışma:</span>
+                  <span style="font-weight: 800; color: #fff; font-family: monospace;">${Math.round(t.totalHours)} Saat</span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+                  <span style="color: var(--text-muted);">Bakım / Arıza:</span>
+                  <span><strong style="color: #4ade80;">${t.bakimCount}</strong> Bakım • <strong style="color: #60a5fa;">${t.arizaCount}</strong> Arıza</span>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.85rem;">
+                  <span style="color: var(--text-muted);">Onaylanan Mesai:</span>
+                  <span style="color: var(--accent-orange); font-weight: 700; font-family: monospace;">${Math.round(t.overtimeHours)} Saat</span>
+                </div>
+
+                <!-- Ekip Üyeleri Listesi -->
+                <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                  <strong>Ekip Üyeleri:</strong> ${t.members.join(', ')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- ============================================================= -->
+      <!-- ⚡ SEKME 3: ARIZA & KRİTİK TÜRBİNLER ANALİZİ                  -->
+      <!-- ============================================================= -->
+      ${activeTab === 'ariza' ? `
         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-          <!-- Ayın Yıldızları (Sıralama) -->
-          <div class="glass-panel" style="padding: 1.5rem; border-top: 3px solid #fcd34d;">
-            <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1.5rem; font-size: 1rem; color: #fcd34d;">
-              <i class="fa-solid fa-crown"></i> DÖNEMİN YILDIZLARI
-            </h3>
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              ${[...data.personnelMetrics]
-                .sort((a, b) => b.totalHours - a.totalHours)
-                .slice(0, 3)
-                .map((p, idx) => `
-                <div style="display: flex; align-items: center; gap: 1rem; background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 12px;">
-                  <div style="width: 32px; height: 32px; background: ${idx === 0 ? '#fcd34d' : (idx === 1 ? '#94a3b8' : '#b45309')}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #000; font-size: 0.9rem;">
-                    ${idx + 1}
+          
+          <!-- Üst: Kritik Türbinler (En Çok Duruş Yaşayanlar) -->
+          <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; border-top: 3px solid #f43f5e;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.15rem; color: #f43f5e;">
+                <i class="fa-solid fa-triangle-exclamation"></i> EN ÇOK MÜDAHALE EDİLEN KRİTİK TÜRBİNLER (TOP 6)
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Arıza sıklığı ve müdahale süresi en yüksek türbinler</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+              ${criticalTurbines.map(t => `
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 1rem; border-left: 3px solid #f43f5e;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                    <span style="font-weight: 800; color: #fff; font-size: 0.95rem;">${t.siteName} - T${t.turbineNo}</span>
+                    <span style="color: #f43f5e; font-weight: 800; font-family: monospace;">${Math.round(t.totalHours)}h</span>
                   </div>
-                  <div style="flex: 1;">
-                    <div style="font-weight: 600; font-size: 0.9rem;">${p.name}</div>
-                    <div style="font-size: 0.7rem; color: var(--text-muted);">${p.totalHours} Saat Mesai</div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);">
+                    <span>${t.count} Arıza Müdahalesi</span>
+                    <span>${t.repeatCount > 0 ? `<strong style="color: #f87171;">🚩 ${t.repeatCount} Tekrar</strong>` : '<span style="color: #4ade80;">Tekrarsız</span>'}</span>
                   </div>
-                  <i class="fa-solid fa-trophy" style="color: ${idx === 0 ? '#fcd34d' : 'rgba(255,255,255,0.1)'};"></i>
                 </div>
               `).join('')}
             </div>
           </div>
 
-          <div class="glass-panel" style="padding: 1.5rem; border-top: 3px solid var(--accent-orange);">
-            <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1.5rem; font-size: 1rem;">
-              <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-orange);"></i> Atama Önerileri
-            </h3>
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-              ${data.backlogRecommendations.length > 0 ? data.backlogRecommendations.slice(0, 3).map(rec => `
-                <div style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 12px; border-left: 2px solid var(--accent-orange);">
-                  <div style="font-size: 0.75rem; color: var(--accent-orange); font-weight: 700; margin-bottom: 0.25rem;">GÖREV #${rec.taskId.slice(-4).toUpperCase()}</div>
-                  <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">${rec.recommendedPersonnel}</div>
-                  <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4;">${rec.reason}</div>
-                </div>
-              `).join('') : '<p style="color: var(--text-muted); font-size: 0.8rem; text-align: center;">Öneri bulunamadı.</p>'}
-            </div>
-          </div>
-
-          <div class="glass-panel" style="padding: 1.5rem; background: linear-gradient(135deg, rgba(255,107,107,0.05) 0%, rgba(0,0,0,0) 100%);">
-            <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1rem; font-size: 1rem; color: var(--accent-red);">
-              <i class="fa-solid fa-triangle-exclamation"></i> Kritik Sapmalar
-            </h3>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">+%20 üzerinde adam-saat sapması olan raporlar.</p>
-            <div style="font-family: 'Rajdhani'; font-weight: 700; color: var(--accent-red); font-size: 1.2rem;">0 Kayıt</div>
-          </div>
-
-          <!-- SİSTEM AJANLARI DURUMU (NEW) -->
-          <div class="glass-panel" style="padding: 1.5rem; border-top: 3px solid var(--accent-cyan);">
-            <h3 style="font-family: 'Rajdhani', sans-serif; margin-bottom: 1.25rem; font-size: 1rem; color: var(--accent-cyan); display: flex; justify-content: space-between; align-items: center;">
-              <span><i class="fa-solid fa-microchip"></i> AGENT MONITORING</span>
-              <span style="font-size: 0.6rem; background: rgba(0,243,255,0.1); padding: 2px 6px; border-radius: 4px;">LIVE</span>
-            </h3>
-            ${(window as any).currentUser?.role === 'ADMIN' ? `
-            <div id="agent-health-grid" style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <div style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.8rem;">
-                <i class="fa-solid fa-spinner fa-spin"></i> Ajanlar taranıyor...
+          <!-- Alt Grid: En Çok Zaman Alan Arızalar & 7 Gün İçinde Tekrar Edenler -->
+          <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1.5rem;">
+            <!-- Sol: En Çok Zaman Alan Arıza Kodları -->
+            <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; border-top: 3px solid var(--accent-orange);">
+              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--accent-orange);">
+                <i class="fa-solid fa-fire"></i> EN ÇOK ZAMAN ALAN ARIZALAR (TOP 10)
+              </h3>
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto;" class="custom-scrollbar">
+                ${top10Faults.map((f, idx) => {
+                  const pct = Math.min(100, Math.round((f.totalHours / maxFaultHours) * 100));
+                  return `
+                    <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                        <div style="font-weight: 700; font-family: monospace; font-size: 0.85rem; color: #fff;">
+                          <span style="color: #fbbf24; margin-right: 4px;">#${idx + 1}</span> ${f.code}
+                        </div>
+                        <div style="font-weight: 800; color: var(--accent-orange); font-family: monospace; font-size: 0.85rem;">
+                          ${Math.round(f.totalHours)}h <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: normal;">(${f.count}x)</span>
+                        </div>
+                      </div>
+                      ${f.desc ? `<div style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.4rem;">${f.desc}</div>` : ''}
+                      <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden;">
+                        <div style="width: ${pct}%; height: 100%; background: linear-gradient(90deg, #f59e0b, #ef4444);"></div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
-            ` : ''}
+
+            <!-- Sağ: 7 Gün İçinde Tekrar Eden Arızalar -->
+            <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; border-top: 3px solid #ef4444;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.1rem; color: #ef4444;">
+                  <i class="fa-solid fa-triangle-exclamation"></i> 7 GÜN İÇİNDE TEKRAR EDENLER
+                </h3>
+                <span style="font-size: 0.75rem; color: #f87171; font-weight: 700;">${repeatReports.length} Vaka</span>
+              </div>
+              <div style="overflow-y: auto; max-height: 500px;" class="custom-scrollbar">
+                <table class="cyber-table">
+                  <thead>
+                    <tr>
+                      <th>TARİH</th>
+                      <th>SANTRAL / TÜRBİN</th>
+                      <th>ARIZA KODU</th>
+                      <th style="text-align: center;">TEKRAR</th>
+                      <th style="text-align: right;">PDF</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${repeatReports.length > 0 ? repeatReports.map(r => `
+                      <tr>
+                        <td style="font-weight: 600;">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
+                        <td style="color: var(--accent-cyan); font-weight: 700;">${(r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || '')}</td>
+                        <td>
+                          <span style="color: #fff; font-family: monospace; font-weight: 700;">${r.faultCode || r.faultDesc}</span>
+                        </td>
+                        <td style="text-align: center;">
+                          <span style="color: #ef4444; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 0.75rem;">
+                            🚩 ${getRepeatCount(r)}x
+                          </span>
+                        </td>
+                        <td style="text-align: right;">
+                          <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.id}'), 300);" class="btn-cyber-mini" style="padding: 2px 8px;">
+                            <i class="fa-solid fa-file-pdf"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    `).join('') : '<tr><td colspan="5" style="text-align: center; color: var(--accent-green); padding: 2rem;">🎉 Tekrar eden arıza tespit edilmedi.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ` : ''}
+
+      <!-- ============================================================= -->
+      <!-- 🛠️ SEKME 4: SADE BAKIM TAKİBİ                                -->
+      <!-- ============================================================= -->
+      ${activeTab === 'bakim' ? `
+        <div style="display: grid; grid-template-columns: 1fr 1.8fr; gap: 1.5rem;">
+          <!-- Sol: Santral Bazlı Bakım Eforu -->
+          <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; border-top: 3px solid var(--accent-green);">
+            <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--accent-green);">
+              <i class="fa-solid fa-solar-panel"></i> SANTRAL BAZLI BAKIM EFORU
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              ${sortedSites.map(s => `
+                <div class="clickable-row" onclick="window.showSiteDetails('${s.siteName}')" style="cursor: pointer; background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                    <span style="font-weight: 700; color: #fff;">${s.siteName}</span>
+                    <span style="font-weight: 800; color: var(--accent-green); font-family: monospace;">${Math.round(s.bakimHours)}h (${s.bakimCount} Bakım)</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Sağ: Tamamlanan Bakımlar Listesi (Detaylı Bakım Türü & Süre) -->
+          <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; border-top: 3px solid var(--accent-cyan);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.1rem; color: var(--accent-cyan);">
+                <i class="fa-solid fa-list-check"></i> GERÇEKLEŞEN BAKIMLAR
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">${bakimReports.length} Bakım Kaydı</span>
+            </div>
+            <div style="overflow-y: auto; max-height: 600px;" class="custom-scrollbar">
+              <table class="cyber-table">
+                <thead>
+                  <tr>
+                    <th>TARİH</th>
+                    <th>SANTRAL / TÜRBİN</th>
+                    <th>BAKIM TÜRÜ / TANIMI</th>
+                    <th>EKİP / PERSONEL</th>
+                    <th style="text-align: center;">SÜRE</th>
+                    <th style="text-align: right;">PDF</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${bakimReports.length > 0 ? bakimReports.map(r => {
+                    const isManual = r.team === 'MANUEL' || r.reportNo?.startsWith('MAN-') || (r.personnel && r.personnel.includes('MANUEL'));
+                    const pList = (r.personnel && Array.isArray(r.personnel) && !isManual) ? r.personnel.join(', ') : '';
+                    const dur = getReportDurationStr(r);
+                    return `
+                      <tr>
+                        <td style="font-weight: 600;">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
+                        <td style="color: var(--accent-cyan); font-weight: 700;">${(r.siteName ? r.siteName + ' ' : '') + (r.turbineNo || r.turbineSerial || '')}</td>
+                        <td>
+                          <span style="font-weight: 700; color: #FFFFFF;">${getMaintenanceTitle(r)}</span>
+                        </td>
+                        <td>
+                          ${isManual ? `
+                            <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 700;">
+                              📋 Manuel Planlama
+                            </span>
+                          ` : `<span style="font-size: 0.8rem; color: var(--text-main);">${pList || '-'}</span>`}
+                        </td>
+                        <td style="text-align: center; font-family: monospace; font-weight: 700; color: ${dur.includes('h') ? 'var(--accent-green)' : 'var(--text-muted)'};">
+                          ${dur}
+                        </td>
+                        <td style="text-align: right;">
+                          <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.id}'), 300);" class="btn-cyber-mini" style="padding: 2px 8px;">
+                            <i class="fa-solid fa-file-pdf"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('') : '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">Bakım kaydı bulunamadı.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- ============================================================= -->
+      <!-- 📦 SEKME 5: MALZEME VE SARFİYAT ANALİZİ                      -->
+      <!-- ============================================================= -->
+      ${activeTab === 'materials' ? `
+        <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.2rem; color: var(--accent-cyan);">
+                <i class="fa-solid fa-box-open"></i> BAKIM VE ARIZALARDA KULLANILAN SAP MALZEMELER
+              </h3>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Raporlarda kaydedilen yedek parça ve sarf malzemesi tüketimleri</span>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="cyber-table">
+              <thead>
+                <tr>
+                  <th>SAP KODU</th>
+                  <th>MALZEME TANIMI</th>
+                  <th>TÜR</th>
+                  <th style="text-align: center;">TOPLAM SARFİYAT</th>
+                  <th>KULLANILAN SANTRALLER</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${topMaterials.length > 0 ? topMaterials.map(m => {
+                  const siteList = Object.entries(m.sites).map(([site, count]) => `${site} (${count})`).join(', ');
+                  return `
+                    <tr>
+                      <td style="font-family: monospace; font-weight: 700; color: var(--accent-cyan);">${m.sapNo || '-'}</td>
+                      <td style="font-weight: 600; color: #fff;">${m.description}</td>
+                      <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">${m.type}</span></td>
+                      <td style="text-align: center; font-family: monospace; font-weight: 800; color: #4ade80; font-size: 1rem;">
+                        ${m.totalUsed} Adet
+                      </td>
+                      <td style="font-size: 0.8rem; color: var(--text-muted);">${siteList}</td>
+                    </tr>
+                  `;
+                }).join('') : '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Seçili dönemde kullanılan malzeme kaydı bulunamadı.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- ============================================================= -->
+      <!-- 🏢 SEKME 6: SADE SANTRAL KARTLARI                             -->
+      <!-- ============================================================= -->
+      ${activeTab === 'sites' ? `
+        <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+          <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0 0 1.25rem 0; font-size: 1.1rem; color: var(--accent-cyan);">
+            <i class="fa-solid fa-solar-panel"></i> AKTİF SANTRALLER & EFOR DAĞILIMI
+          </h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem;">
+            ${sortedSites.map(s => `
+              <div class="clickable-card" onclick="window.showSiteDetails('${s.siteName}')" style="cursor: pointer; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 1rem; transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                  <strong style="font-size: 0.95rem; color: #fff;">${s.siteName}</strong>
+                  <span style="color: var(--accent-cyan); font-weight: 900; font-family: monospace;">${Math.round(s.totalHours)}h</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">
+                  <span>${s.totalReports} Toplam Rapor</span>
+                  <span><strong style="color: #4ade80;">${s.bakimCount}</strong> Bakım • <strong style="color: #60a5fa;">${s.arizaCount}</strong> Arıza</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+
     </div>
 
     <style>
+      .tab-pill {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+        font-weight: 700;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        white-space: nowrap;
+      }
+      .tab-pill:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+      }
+      .tab-pill.active {
+        background: rgba(0, 242, 254, 0.1);
+        color: var(--accent-cyan);
+        border: 1px solid rgba(0, 242, 254, 0.25);
+      }
+      .btn-filter {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        padding: 0.35rem 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
+        border-radius: 6px;
+        transition: all 0.2s;
+      }
+      .btn-filter:hover {
+        color: #fff;
+      }
+      .btn-filter.active {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        font-weight: 800;
+      }
       .cyber-table {
         width: 100%;
         border-collapse: collapse;
@@ -987,60 +1437,28 @@ export const AnalyticsPage = async () => {
       }
       .cyber-table th {
         text-align: left;
-        padding: 1rem;
+        padding: 0.85rem 1rem;
         color: var(--text-muted);
-        font-family: 'Rajdhani', sans-serif;
+        font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: 1px;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
       }
       .cyber-table td {
-        padding: 1rem;
+        padding: 0.85rem 1rem;
         border-bottom: 1px solid rgba(255,255,255,0.02);
       }
-      .badge-mini {
-        padding: 0.2rem 0.5rem;
-        background: rgba(0, 243, 255, 0.05);
-        border: 1px solid rgba(0, 243, 255, 0.1);
-        border-radius: 4px;
-        color: var(--accent-cyan);
-        font-size: 0.7rem;
-      }
-      .btn-filter {
-        background: transparent;
-        border: none;
-        color: var(--text-muted);
-        padding: 0.5rem 1rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        cursor: pointer;
-        border-radius: 6px;
-        transition: all 0.2s;
-        font-family: 'Rajdhani', sans-serif;
-      }
-      .btn-filter:hover {
-        background: rgba(255,255,255,0.05);
-        color: var(--text-main);
-      }
-      .btn-filter.active {
-        background: var(--accent-cyan);
-        color: #000;
-      }
       .btn-cyber-mini {
-        background: rgba(255, 159, 67, 0.1);
-        color: var(--accent-orange);
-        border: 1px solid rgba(255, 159, 67, 0.2);
-        padding: 0.5rem;
-        border-radius: 6px;
-        font-size: 0.7rem;
-        font-family: 'Rajdhani';
-        font-weight: 700;
+        background: rgba(0, 242, 254, 0.08);
+        border: 1px solid rgba(0, 242, 254, 0.3);
+        color: var(--accent-cyan);
         cursor: pointer;
+        border-radius: 6px;
         transition: all 0.2s;
       }
       .btn-cyber-mini:hover {
-        background: var(--accent-orange);
-        color: white;
+        background: var(--accent-cyan);
+        color: #000;
       }
       .custom-scrollbar::-webkit-scrollbar {
         width: 4px;
@@ -1052,35 +1470,6 @@ export const AnalyticsPage = async () => {
         background: var(--accent-cyan);
         border-radius: 10px;
         opacity: 0.5;
-      }
-      
-      /* Status Pulse Animations */
-      .status-pulse {
-        position: relative;
-      }
-      .status-pulse.online { background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
-      .status-pulse.busy { background: var(--accent-orange); box-shadow: 0 0 10px var(--accent-orange); }
-      .status-pulse.offline { background: var(--text-muted); }
-      .status-pulse.error { background: var(--accent-red); box-shadow: 0 0 10px var(--accent-red); animation: pulse-error 1s infinite; }
-      
-      .status-pulse.online::after {
-        content: '';
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        background: inherit;
-        animation: pulse-ring 2s infinite;
-      }
-      
-      @keyframes pulse-ring {
-        0% { transform: scale(1); opacity: 0.8; }
-        100% { transform: scale(2.5); opacity: 0; }
-      }
-      @keyframes pulse-error {
-        0% { opacity: 1; }
-        50% { opacity: 0.4; }
-        100% { opacity: 1; }
       }
     </style>
   `;

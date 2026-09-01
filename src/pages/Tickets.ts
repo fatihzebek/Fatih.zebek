@@ -2,6 +2,7 @@ import { ticketService } from '../services/TicketService';
 import type { Ticket, TicketMessage } from '../services/TicketService';
 import { dataService } from '../services/DataService';
 import { inventoryService } from '../services/InventoryService'; // For image upload compression
+import { formatDisplayName } from '../utils/formatters';
 
 let allTickets: Ticket[] = [];
 let currentTicketId: string | null = null;
@@ -86,11 +87,11 @@ export const TicketsPage = async () => {
           </div>
 
           <button onclick="window.openNewTicketModal()" class="btn-cyber" style="
-            background: linear-gradient(135deg, var(--accent-cyan) 0%, #00a8ff 100%);
-            color: #000;
-            border: none;
+            background: rgba(0, 242, 254, 0.06);
+            color: #00f2ff;
+            border: 1px solid rgba(0, 242, 254, 0.25);
             outline: none;
-            box-shadow: 0 4px 20px rgba(0, 242, 254, 0.25);
+            box-shadow: none;
             padding: 0.85rem 2.25rem;
             font-family: 'Rajdhani', sans-serif;
             font-weight: 800;
@@ -105,10 +106,10 @@ export const TicketsPage = async () => {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             margin: 0.5rem auto 0 auto;
           "
-          onmouseover="this.style.transform='scale(1.03)'; this.style.boxShadow='0 0 30px rgba(0, 242, 254, 0.45)';"
-          onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 4px 20px rgba(0, 242, 254, 0.25)';"
+          onmouseover="this.style.transform='scale(1.03)'; this.style.background='rgba(0, 242, 254, 0.15)'; this.style.borderColor='rgba(0, 242, 254, 0.5)'; this.style.color='#fff';"
+          onmouseout="this.style.transform='scale(1)'; this.style.background='rgba(0, 242, 254, 0.06)'; this.style.borderColor='rgba(0, 242, 254, 0.25)'; this.style.color='#00f2ff';"
           >
-            <i class="fa-solid fa-plus" style="font-size: 1rem; -webkit-text-stroke: 1px #000;"></i> YENİ DESTEK TALEBİ OLUŞTUR
+            <i class="fa-solid fa-plus" style="font-size: 1rem;"></i> YENİ DESTEK TALEBİ OLUŞTUR
           </button>
           
         </div>
@@ -318,7 +319,7 @@ export const TicketsPage = async () => {
       }
 
       // Update global unread badge
-      const unreadCount = tickets.filter(t => isAdmin ? t.unreadAdmin : t.unreadUser).length;
+      const unreadCount = tickets.filter(t => isAdmin ? t.unreadAdmin : (t.createdByUid === currentUser.uid && t.unreadUser)).length;
       const bell = document.getElementById('topbar-ticket-bell');
       if (bell) {
         if (unreadCount > 0) {
@@ -467,7 +468,7 @@ export const TicketsPage = async () => {
       return `
         <div class="msg-row ${isMe ? 'me' : 'other'}">
           <div class="msg-bubble">
-            ${!isMe ? `<div class="msg-sender">${m.senderName}</div>` : ''}
+            ${!isMe ? `<div class="msg-sender">${formatDisplayName(m.senderName)}</div>` : ''}
             <div>${m.text.replace(/\n/g, '<br>')}</div>
             ${m.photoUrl ? `<img src="${m.photoUrl}" class="msg-photo" onclick="window.showTicketImage('${m.photoUrl}')">` : ''}
             <div class="msg-time">${timeStr}</div>
@@ -500,20 +501,22 @@ export const TicketsPage = async () => {
         <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">
           <span style="color:var(--accent-cyan);">${ticket.ticketNo}</span> • 
           <i class="fa-solid fa-wind"></i> ${ticket.turbineName} • 
-          Oluşturan: ${ticket.createdByName}
+          Oluşturan: ${formatDisplayName(ticket.createdByName)}
         </div>
       </div>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <span style="font-size:0.65rem; border:1px solid ${prioColors[ticket.priority]}; color:${prioColors[ticket.priority]}; padding:2px 6px; border-radius:12px;">Öncelik: ${prioLabels[ticket.priority]}</span>
+      <div style="display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; flex-shrink: 0; box-sizing: border-box;">
+        <span style="font-size: 0.68rem; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; border: 1.2px solid ${prioColors[ticket.priority]}80; color: ${prioColors[ticket.priority]}; background: ${prioColors[ticket.priority]}15; padding: 4px 10px; border-radius: 12px; height: 32px; display: inline-flex; align-items: center; box-sizing: border-box; text-transform: uppercase;">ÖNCELİK: ${prioLabels[ticket.priority]}</span>
         
         ${isAdmin ? `
-          <select class="cyber-input" style="padding: 4px 8px; font-size: 0.75rem; height: auto;" onchange="window.changeTicketStatus('${ticket.id}', this.value)">
+          <select class="cyber-input" style="padding: 0 10px; font-size: 0.75rem; height: 32px; min-height: 32px; width: 140px; box-sizing: border-box; cursor: pointer; line-height: 30px;" onchange="window.changeTicketStatus('${ticket.id}', this.value)">
             <option value="open" ${ticket.status === 'open' ? 'selected' : ''}>Açık</option>
             <option value="in_progress" ${ticket.status === 'in_progress' ? 'selected' : ''}>İşlemde</option>
             <option value="waiting_for_user" ${ticket.status === 'waiting_for_user' ? 'selected' : ''}>Yanıt Bekleniyor</option>
             <option value="resolved" ${ticket.status === 'resolved' ? 'selected' : ''}>Çözüldü</option>
           </select>
-          <button class="btn-cyber-outline" style="padding: 4px 8px; color: #ef4444; border-color: rgba(239,68,68,0.3);" onclick="window.deleteTicket('${ticket.id}')" title="Bileti Sil"><i class="fa-solid fa-trash"></i></button>
+          <button class="btn-cyber-outline red" style="padding: 0; width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 8px; color: #ef4444; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05); display: flex; align-items: center; justify-content: center; box-sizing: border-box; cursor: pointer; transition: all 0.2s;" onclick="window.deleteTicket('${ticket.id}')" title="Bileti Sil">
+            <i class="fa-solid fa-trash" style="font-size: 0.82rem;"></i>
+          </button>
         ` : ''}
       </div>
     </div>
@@ -594,7 +597,7 @@ let pendingChatPhotoBase64 = '';
     await ticketService.sendMessage(
       currentTicketId, 
       currentUser.uid, 
-      currentUser.displayName || 'Kullanıcı', 
+      formatDisplayName(currentUser.displayName || currentUser.email || 'Kullanıcı'), 
       text, 
       isAdmin, 
       pendingChatPhotoBase64 || undefined
@@ -654,7 +657,7 @@ let pendingChatPhotoBase64 = '';
       priority: priority as any,
       status: 'open',
       createdByUid: currentUser.uid,
-      createdByName: currentUser.displayName || 'Kullanıcı'
+      createdByName: formatDisplayName(currentUser.displayName || currentUser.email || 'Kullanıcı')
     };
     if (initialPhotoUrl) {
       ticketPayload.photoUrl = initialPhotoUrl;
@@ -663,7 +666,7 @@ let pendingChatPhotoBase64 = '';
     const ticketId = await ticketService.createTicket(ticketPayload);
 
     // Add initial description as first message for context
-    await ticketService.sendMessage(ticketId, currentUser.uid, currentUser.displayName || 'Kullanıcı', desc, false, initialPhotoUrl);
+    await ticketService.sendMessage(ticketId, currentUser.uid, formatDisplayName(currentUser.displayName || currentUser.email || 'Kullanıcı'), desc, false, initialPhotoUrl);
 
     (window as any).showToast?.('BAŞARILI', 'Bilet başarıyla oluşturuldu.', 'success');
     (window as any).closeNewTicketModal();

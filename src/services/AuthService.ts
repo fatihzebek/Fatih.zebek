@@ -117,7 +117,7 @@ class AuthService {
   async login(email: string, pass: string) {
     try {
       // DEV MODE / OFFLINE BYPASS
-      if (import.meta.env.DEV || email.endsWith('@dev.local') || pass === 'dev') {
+      if (email.endsWith('@dev.local') || pass === 'dev') {
         console.log("[Auth] Dev mode/bypass login detected.");
         try {
           await this.signInGateway();

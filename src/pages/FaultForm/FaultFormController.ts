@@ -13,6 +13,7 @@ import { warehouseService } from '../../services/WarehouseService';
 import { maintenanceService } from '../../services/MaintenanceService';
 import { formatTeamName } from '../../utils/formatters';
 import { ImageCompressor } from '../../utils/imageCompressor';
+import { qrService } from '../../services/QRService';
 
 function getCanonicalTeamWarehouseId(siteId: string): string {
     const w = window as any;
@@ -119,27 +120,47 @@ export class FaultFormController {
     private static registerGlobalHandlers() {
         const w = window as any;
 
+        let isRefreshingBadges = false;
         w.refreshAllStockBadges = async () => {
-            const rows = Array.from(document.querySelectorAll('#material-rows tr'));
-            for (const row of rows) {
-                const type = row.getAttribute('data-type') || '';
-                if (type.toUpperCase() !== 'T') continue;
-                const inputs = row.querySelectorAll('input');
-                if (inputs.length >= 4) {
-                    const sapInput = inputs[0];
-                    if (sapInput.value.trim()) {
-                        await w.handleSapLookup(sapInput);
+            if (isRefreshingBadges) return;
+            isRefreshingBadges = true;
+            try {
+                const rows = Array.from(document.querySelectorAll('#material-rows tr'));
+                for (const row of rows) {
+                    const type = row.getAttribute('data-type') || '';
+                    if (type.toUpperCase() !== 'T') continue;
+                    const inputs = row.querySelectorAll('input');
+                    if (inputs.length >= 4) {
+                        const sapInput = inputs[0];
+                        if (sapInput.value.trim()) {
+                            await w.handleSapLookup(sapInput);
+                        }
                     }
                 }
+            } finally {
+                isRefreshingBadges = false;
             }
         };
 
         w.handleMaterialQtyChange = (input: HTMLInputElement) => {
+            const val = parseFloat(input.value) || 0;
+            const row = input.closest('tr');
+            const sapInput = row?.querySelector('input') as HTMLInputElement;
+            if (sapInput && sapInput.value.trim() !== '') {
+                if (val <= 0) {
+                    input.style.borderColor = '#ff0055';
+                    input.style.boxShadow = '0 0 10px rgba(255, 0, 85, 0.6)';
+                } else {
+                    const rowType = row?.getAttribute('data-type') || 'S';
+                    input.style.borderColor = rowType === 'S' ? 'rgba(255,0,85,0.3)' : 'rgba(0,230,118,0.3)';
+                    input.style.boxShadow = 'none';
+                }
+            } else {
+                input.style.boxShadow = 'none';
+            }
+
             if (typeof w.saveMaintenanceDraft === 'function') {
                 w.saveMaintenanceDraft(true);
-            }
-            if (typeof w.refreshAllStockBadges === 'function') {
-                w.refreshAllStockBadges();
             }
         };
 
@@ -191,6 +212,18 @@ export class FaultFormController {
                     const baseDesc = material ? (material.d || '') : (inputs[2].value || '');
                     const cleanDesc = baseDesc.replace(/\s*\(STOK:\s*\d+\)/gi, '');
                     inputs[2].value = cleanDesc;
+                }
+
+                // 2. Direct visual warning check if qty is 0
+                if (inputs && inputs[3]) {
+                    const qVal = parseFloat(inputs[3].value) || 0;
+                    if (qVal <= 0) {
+                        inputs[3].style.borderColor = '#ff0055';
+                        inputs[3].style.boxShadow = '0 0 10px rgba(255, 0, 85, 0.6)';
+                    } else {
+                        inputs[3].style.borderColor = rowType === 'S' ? 'rgba(255,0,85,0.3)' : 'rgba(0,230,118,0.3)';
+                        inputs[3].style.boxShadow = 'none';
+                    }
                 }
 
                 // 2. Handle stock badge lookup only for Takılan (T) type
@@ -1295,23 +1328,32 @@ export class FaultFormController {
                     totalTurbineHours += durationH;
                 }
                 
-                // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, or TÜRBİNDEN EVE
-                if (ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE') {
+                // Road hours: only for type GİDİŞ YOLU, DÖNÜŞ YOLU, TRAVEL, EVDEN TÜRBİNE, TÜRBİNDEN EVE, or TÜRBİNDEN TÜRBİNE
+                if (ws.type === 'GİDİŞ YOLU' || ws.type === 'DÖNÜŞ YOLU' || ws.type === 'TRAVEL' || ws.type === 'EVDEN TÜRBİNE' || ws.type === 'TÜRBİNDEN EVE' || ws.type === 'TÜRBİNDEN TÜRBİNE') {
                     totalRoadHours += durationH;
                 }
 
                 // Overtime calculation
-                const ot = DateTimeUtils.calculateOvertimeHours(
-                    ws.date || new Date().toISOString().split('T')[0],
-                    ws.startTime || '00:00',
-                    ws.endTime || '00:00',
-                    ws.isOffDay || false
-                );
-                const overtimeH = Math.min(durationH, ot);
-                const normalH = Math.max(0, durationH - overtimeH);
+                let wsNormalManHours = 0;
+                let wsOvertimeManHours = 0;
+                const pList = Array.isArray(ws.personnel) ? ws.personnel : [ws.personnel || ''];
 
-                totalNormalManHours += normalH * personnelCount;
-                totalOvertimeManHours += overtimeH * personnelCount;
+                pList.forEach((name: string) => {
+                    const ot = DateTimeUtils.calculateOvertimeHours(
+                        ws.date || new Date().toISOString().split('T')[0],
+                        ws.startTime || '00:00',
+                        ws.endTime || '00:00',
+                        ws.isOffDay || false,
+                        name
+                    );
+                    const overtimeH = Math.min(durationH, ot);
+                    const normalH = Math.max(0, durationH - overtimeH);
+                    wsNormalManHours += normalH;
+                    wsOvertimeManHours += overtimeH;
+                });
+
+                totalNormalManHours += wsNormalManHours;
+                totalOvertimeManHours += wsOvertimeManHours;
                 totalManHours += durationH * personnelCount;
             });
 
@@ -1359,6 +1401,166 @@ export class FaultFormController {
             `).join('');
         };
 
+        w.loadFaultKnowledgeBase = async (kod: string) => {
+            const container = document.getElementById('fault-kb-container');
+            if (!container) return;
+
+            const cleanCode = (kod || '').trim();
+            const isValidCode = cleanCode && cleanCode !== '---' && cleanCode !== 'Planlı Duruş';
+            if (!isValidCode) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div class="glass-panel" style="padding: 1.2rem; border-left: 4px solid var(--accent-cyan); background: rgba(0, 242, 254, 0.02); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <i class="fa-solid fa-circle-notch fa-spin" style="color: var(--accent-cyan); font-size: 1rem;"></i>
+                    <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--accent-cyan); font-weight: 700; letter-spacing: 1px;">GEÇMİŞ ÇÖZÜMLER VE STOK BİLGİLERİ ANALİZ EDİLİYOR...</span>
+                </div>
+            `;
+
+            try {
+                const allReports = await serviceReportService.getAllReports();
+                const similar = allReports.filter((r: any) => {
+                    if (!r.faultCode) return false;
+                    const rCode = r.faultCode.includes(' - ') ? r.faultCode.split(' - ')[0].trim() : r.faultCode.trim();
+                    const targetCode = cleanCode.includes(' - ') ? cleanCode.split(' - ')[0].trim() : cleanCode;
+                    return rCode === targetCode;
+                });
+
+                if (similar.length === 0) {
+                    container.innerHTML = `
+                        <div class="glass-panel" style="padding: 1.2rem; border-left: 4px solid var(--accent-orange); background: rgba(255, 165, 0, 0.02); display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-info" style="color: var(--accent-orange); font-size: 1rem;"></i>
+                            <span style="font-size: 0.72rem; color: var(--text-muted);">Bu arıza koduyla ilgili daha önce sisteme girilmiş geçmiş bir servis kaydı bulunamadı.</span>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Analyze materials
+                const materialCounts: { [key: string]: { sapNo: string; desc: string; count: number; usages: { siteName: string; turbineNo: string }[] } } = {};
+                similar.forEach((r: any) => {
+                    if (Array.isArray(r.materials)) {
+                        r.materials.forEach((m: any) => {
+                            if (m.sapNo && m.used > 0) {
+                                const key = m.sapNo;
+                                if (!materialCounts[key]) {
+                                    materialCounts[key] = {
+                                        sapNo: m.sapNo,
+                                        desc: m.description || 'Tanımsız Parça',
+                                        count: 0,
+                                        usages: []
+                                    };
+                                }
+                                materialCounts[key].count += m.used;
+                                
+                                const siteName = r.siteName || 'Bölge Bilinmiyor';
+                                const turbineNo = r.turbineNo ? (String(r.turbineNo).toUpperCase().startsWith('T') ? r.turbineNo : `T${r.turbineNo}`) : 'Türbin Bilinmiyor';
+                                const exists = materialCounts[key].usages.some(u => u.siteName === siteName && u.turbineNo === turbineNo);
+                                if (!exists) {
+                                    materialCounts[key].usages.push({ siteName, turbineNo });
+                                }
+                            }
+                        });
+                    }
+                });
+
+                const sortedMaterials = Object.values(materialCounts).sort((a, b) => b.count - a.count);
+
+                // Collect recent resolution notes
+                const recentNotes = similar
+                    .map((r: any) => {
+                        const dateStr = r.date || 'Tarih Bilinmiyor';
+                        const teamName = r.team || 'Atanmamış Ekip';
+                        const turbineName = r.turbineNo ? `T${r.turbineNo}` : 'Türbin Bilinmiyor';
+                        const noteText = (r.notes || '').trim();
+                        return { dateStr, teamName, turbineName, noteText };
+                    })
+                    .filter(item => item.noteText && item.noteText !== 'Genel Görev' && item.noteText.length > 5)
+                    .slice(0, 3);
+
+                let materialsHtml = '';
+                if (sortedMaterials.length > 0) {
+                    materialsHtml = sortedMaterials.slice(0, 3).map(m => {
+                        const usagesStr = m.usages.map(u => `${u.siteName} (${u.turbineNo})`).join(', ');
+                        return `
+                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 6px; font-size: 0.7rem;">
+                                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                                        <span style="font-weight: 700; color: var(--text-main);">${m.desc}</span>
+                                        <span style="font-family: monospace; color: var(--text-muted); font-size: 0.65rem;">SAP: ${m.sapNo}</span>
+                                    </div>
+                                    <span class="badge" style="background: rgba(0, 242, 254, 0.1); color: var(--accent-cyan); font-weight: 800; padding: 2px 8px; border-radius: 10px; font-size: 0.65rem;">${m.count} adet</span>
+                                </div>
+                                <div style="font-size: 0.58rem; color: var(--text-muted); border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 3px; line-height: 1.2;">
+                                    <i class="fa-solid fa-map-pin" style="color: var(--accent-orange); margin-right: 3px;"></i> Yer: <strong style="color: var(--text-main); opacity: 0.85;">${usagesStr}</strong>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    materialsHtml = `
+                        <div style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.68rem; font-style: italic;">
+                            Bu arıza çözümünde yedek parça kullanılmadı.
+                        </div>
+                    `;
+                }
+
+                let notesHtml = '';
+                if (recentNotes.length > 0) {
+                    notesHtml = recentNotes.map(n => `
+                        <div style="padding: 10px; background: rgba(0, 242, 254, 0.01); border-left: 2px solid var(--accent-cyan); border-radius: 0 6px 6px 0; margin-bottom: 8px; font-size: 0.7rem; line-height: 1.4;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; color: var(--text-muted); font-size: 0.62rem; font-weight: 700;">
+                                <span><i class="fa-regular fa-calendar"></i> ${n.dateStr} - ${n.turbineName}</span>
+                                <span><i class="fa-solid fa-user-group"></i> ${n.teamName}</span>
+                            </div>
+                            <div style="color: var(--text-main); font-weight: 500;">"${n.noteText}"</div>
+                        </div>
+                    `).join('');
+                } else {
+                    notesHtml = `
+                        <div style="text-align: center; padding: 1rem; color: var(--text-muted); font-size: 0.68rem; font-style: italic;">
+                            Detaylı arıza çözüm notu bulunamadı.
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = `
+                    <div class="glass-panel" style="padding: 1.2rem; border-left: 4px solid var(--accent-cyan); background: rgba(0, 242, 254, 0.02); box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                        <h4 style="color: var(--accent-cyan); font-size: 0.75rem; margin: 0 0 1rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-brain" style="font-size: 0.85rem; filter: drop-shadow(0 0 4px var(--accent-cyan));"></i> AKILLI ARIZA ÇÖZÜM ASİSTANI (GEÇMİŞ RAPOR ANALİZİ)
+                        </h4>
+                        <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
+                            <!-- En Sık Değişen Malzemeler -->
+                            <div style="flex: 1; min-width: 250px;">
+                                <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 1px; margin-bottom: 0.6rem; text-transform: uppercase; display: flex; align-items: center; gap: 5px;">
+                                    <i class="fa-solid fa-wrench" style="color: var(--accent-orange);"></i> SIKÇA KULLANILAN MALZEMELER
+                                </div>
+                                ${materialsHtml}
+                            </div>
+                            <!-- Son Çözüm Açıklamaları -->
+                            <div style="flex: 2; min-width: 300px;">
+                                <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 1px; margin-bottom: 0.6rem; text-transform: uppercase; display: flex; align-items: center; gap: 5px;">
+                                    <i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-cyan);"></i> SON RAPORLARDAKİ ÇÖZÜM AÇIKLAMALARI
+                                </div>
+                                ${notesHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                console.error("Knowledge base load error:", err);
+                container.innerHTML = `
+                    <div class="glass-panel" style="padding: 1.2rem; border-left: 4px solid var(--accent-red); background: rgba(255, 0, 0, 0.02); display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-red); font-size: 1rem;"></i>
+                        <span style="font-size: 0.72rem; color: var(--text-muted);">Çözüm asistanı yüklenirken bir hata oluştu.</span>
+                    </div>
+                `;
+            }
+        };
+
         w.selectFormFault = async (kod: string) => {
             const input = document.getElementById('form-fault-search') as HTMLInputElement;
             const desc = document.getElementById('ariza-tanimi') as HTMLTextAreaElement;
@@ -1368,6 +1570,11 @@ export class FaultFormController {
                 input.value = exact.KOD;
                 if (desc) desc.value = exact.Aciklama;
                 if (dropdown) dropdown.classList.add('hidden');
+                
+                // Call loadFaultKnowledgeBase when a code is selected
+                if (w.loadFaultKnowledgeBase) {
+                    w.loadFaultKnowledgeBase(exact.KOD);
+                }
             }
         };
 
@@ -1487,8 +1694,8 @@ export class FaultFormController {
             
             try {
                 for (const file of files) {
-                    // Compress client-side with 2400px max bounds and 92% quality
-                    const compressedFile = await ImageCompressor.compressImage(file, 2400, 2400, 0.92);
+                    // Compress client-side with 1200px max bounds and 75% quality (~80-120KB)
+                    const compressedFile = await ImageCompressor.compressImage(file, 1200, 1200, 0.75);
                     w.selectedFaultFiles.push(compressedFile);
 
                     const reader = new FileReader();
@@ -1623,12 +1830,62 @@ export class FaultFormController {
                     matFormNo: (document.getElementById('mat-form-no') as HTMLInputElement)?.value || ''
                 };
 
+                // Local crash recovery backup
+                try {
+                    localStorage.setItem(`draft_backup_${currentTask.id}`, JSON.stringify(data));
+                } catch (e) {}
+
                 await auditService.saveMaintenanceDraft(currentTask, data, isSilent);
                 if (!isSilent) alert("Bakım taslağı başarıyla kaydedildi.");
             } catch (err: any) {
                 if (!isSilent) alert("Taslak kaydedilirken hata oluştu: " + err.message);
             } finally {
                 if (!isSilent && btn) { btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> TASLAĞI KAYDET'; btn.disabled = false; }
+            }
+        };
+
+        // Auto-save draft every 5 seconds in background to prevent battery/crash data loss
+        if (w._autoSaveTimer) clearInterval(w._autoSaveTimer);
+        w._autoSaveTimer = setInterval(() => {
+            if (w.currentTaskContext?.id && document.getElementById('fault-form-container')) {
+                w.saveMaintenanceDraft(true);
+            } else if (w._autoSaveTimer) {
+                clearInterval(w._autoSaveTimer);
+                w._autoSaveTimer = null;
+            }
+        }, 5000);
+
+        w.scanBarcodeForMaterial = async () => {
+            try {
+                const scannedText = await qrService.scanQRCode();
+                if (!scannedText) return;
+                const cleanCode = scannedText.trim();
+                
+                // Add a new material row if addMaterialRow is available
+                if (w.addMaterialRow) {
+                    w.addMaterialRow();
+                }
+
+                // Find the newly added or last SAP input field and populate
+                const sapInputs = document.querySelectorAll('.mat-sap-input') as NodeListOf<HTMLInputElement>;
+                if (sapInputs.length > 0) {
+                    const lastInput = sapInputs[sapInputs.length - 1];
+                    lastInput.value = cleanCode;
+                    lastInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    lastInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+                    // Try to auto-resolve description from SAP catalog
+                    const mat = inventoryService.getMaterialBySap(cleanCode);
+                    if (mat) {
+                        const descInputs = document.querySelectorAll('.mat-desc-input') as NodeListOf<HTMLInputElement>;
+                        if (descInputs.length >= sapInputs.length) {
+                            descInputs[sapInputs.length - 1].value = mat.d;
+                        }
+                    }
+                }
+                (w as any).showToast?.('BARKOD OKUNDU', `Kod: ${cleanCode} eklendi.`, 'success');
+            } catch (e: any) {
+                console.error("Barcode scan error:", e);
             }
         };
 
@@ -1655,12 +1912,59 @@ export class FaultFormController {
                 const faultDescEl = document.getElementById('ariza-tanimi') as HTMLTextAreaElement;
                 const faultDesc = faultDescEl ? faultDescEl.value.trim() : '';
                 
-                const isMaintenance = (w.smartAuditItems && w.smartAuditItems.length > 0) || (currentTask?.type === 'BAKIM') || (currentTask?.type === 'EKSİKLİK');
-                const isDeficiency = currentTask?.type === 'EKSİKLİK';
+                const hasValidFaultCode = faultCode && faultCode.trim() !== '' && faultCode.trim() !== '---' && faultCode.trim() !== 'PLN' && faultCode.trim() !== 'Planlı Duruş';
+                const isPlanliDurus = !hasValidFaultCode && (
+                    currentTask?.secilenSablon === 'Planlı Duruş' || 
+                    (typeof currentTask?.secilenSablon === 'string' && currentTask.secilenSablon.includes('Planlı')) ||
+                    currentTask?.templateName === 'Planlı Duruş' || 
+                    (typeof currentTask?.templateName === 'string' && currentTask.templateName.includes('Planlı')) ||
+                    currentTask?.type === 'Planlı Duruş' || 
+                    (typeof currentTask?.type === 'string' && currentTask.type.includes('Planlı'))
+                );
+                const isMaintenance = !!(
+                    (w.smartAuditItems && w.smartAuditItems.length > 0 && 
+                     currentTask?.maintenanceData?.templateId !== 'form-ariza' && 
+                     !(currentTask?.secilenSablon || '').toLowerCase().includes('ariza') &&
+                     !(currentTask?.templateName || '').toLowerCase().includes('ariza')) ||
+                    (currentTask?.type === 'BAKIM') ||
+                    (currentTask?.type === 'EKSİKLİK') ||
+                    isPlanliDurus ||
+                    (
+                        ['bak-m', 'bakim', 'bakım', 'yag', 'yağ', 'kont', 'ana', 'bak'].some(k => (currentTask?.secilenSablon || '').toLowerCase().includes(k)) &&
+                        !(currentTask?.secilenSablon || '').toLowerCase().includes('ariza')
+                    ) ||
+                    currentTask?.isMaintenance === true
+                );
+                const isDeficiency = (currentTask?.type === 'EKSİKLİK');
                 
-                if (!isMaintenance && !isDeficiency && !faultCode) throw new Error("Lütfen bir Arıza Kodu seçiniz.");
+                if (isPlanliDurus) {
+                    if (!faultDesc || faultDesc.trim().length < 5) {
+                        throw new Error("Lütfen planlı duruş için en az 5 karakterlik açıklama/tanım giriniz.");
+                    }
+                }
+
+                if (!isMaintenance && !isDeficiency) {
+                    if (!faultCode || faultCode.trim() === '---') {
+                        throw new Error("Lütfen arama kutusundan geçerli bir Arıza Kodu seçiniz.");
+                    }
+                    let codeOnly = faultCode;
+                    if (codeOnly.includes(' - ')) {
+                        codeOnly = codeOnly.split(' - ')[0].trim();
+                    }
+                    if (!statusService.getCodeByKod(codeOnly)) {
+                        throw new Error("Girdiğiniz arıza kodu sistemde bulunamadı. Lütfen arama sonuçlarından tıklayarak seçiniz.");
+                    }
+                }
                 
                 const materials = w.getMaterialData();
+                
+                // Block submission if any entered SAP material has 0 ADET quantity
+                const zeroQtyMaterials = materials.filter((mat: any) => mat.sapNo && mat.sapNo.trim() !== '' && (mat.used <= 0 && mat.defectCount <= 0));
+                if (zeroQtyMaterials.length > 0) {
+                    const zeroSaps = zeroQtyMaterials.map((m: any) => `• [SAP: ${m.sapNo}] ${m.description || 'Malzeme'}`).join('\n');
+                    throw new Error(`🧐 DİKKAT: MALZEME ADETİ UNUTULDU!\n\nMalzeme seçimi yaptınız (SAP No yazdınız) fakat malzeme adetini girmeyip 0 (Sıfır) bıraktınız:\n\n${zeroSaps}\n\nMalzeme düşümü yapmak istediniz fakat malzeme adetini girmediniz! Lütfen kullandığınız/söktüğünüz adet miktarını yazarak raporu detaylıca iyice inceleyip kontrol eder misiniz?`);
+                }
+
                 const matFormNoEl = document.getElementById('mat-form-no') as HTMLInputElement;
                 const matFormNo = matFormNoEl ? matFormNoEl.value.trim() : '';
                 
@@ -1904,9 +2208,42 @@ export class FaultFormController {
                         }
                         return currentUser?.displayName || currentUser?.email || 'SİSTEM';
                     })(),
-                    templateName: currentTask?.secilenSablon || currentTask?.templateName || '',
-                    faultCode: faultCode || currentTask?.rawFaultCode || currentTask?.secilenSablon || '---',
-                    faultDesc: faultDesc || currentTask?.secilenSablon || 'Genel Görev',
+                    templateName: isMaintenance ? (currentTask?.secilenSablon || currentTask?.templateName || '') : '',
+                    instructionCode: isMaintenance ? (currentTask?.instructionCode || currentTask?.templateInstructionCode || '') : '',
+                    faultCode: (() => {
+                        let c = faultCode || currentTask?.rawFaultCode || '';
+                        if (c.includes(' - ')) c = c.split(' - ')[0].trim();
+                        const isPlanli = currentTask?.secilenSablon === 'Planlı Duruş' || 
+                                        (typeof currentTask?.secilenSablon === 'string' && currentTask.secilenSablon.includes('Planlı')) ||
+                                        currentTask?.templateName === 'Planlı Duruş' || 
+                                        (typeof currentTask?.templateName === 'string' && currentTask.templateName.includes('Planlı')) ||
+                                        currentTask?.type === 'Planlı Duruş' || 
+                                        (typeof currentTask?.type === 'string' && currentTask.type.includes('Planlı'));
+                        if (isPlanli) {
+                            return 'Planlı Duruş';
+                        }
+                        return c || '---';
+                    })(),
+                    faultDesc: (() => {
+                        let c = faultCode || currentTask?.rawFaultCode || '';
+                        let d = faultDesc;
+                        if (c.includes(' - ')) {
+                            d = c.split(' - ').slice(1).join(' - ').trim();
+                        } else if (c && c !== '---') {
+                            const exact = statusService.getCodeByKod(c);
+                            if (exact) d = exact.Aciklama;
+                        }
+                        const isPlanli = currentTask?.secilenSablon === 'Planlı Duruş' || 
+                                        (typeof currentTask?.secilenSablon === 'string' && currentTask.secilenSablon.includes('Planlı')) ||
+                                        currentTask?.templateName === 'Planlı Duruş' || 
+                                        (typeof currentTask?.templateName === 'string' && currentTask.templateName.includes('Planlı')) ||
+                                        currentTask?.type === 'Planlı Duruş' || 
+                                        (typeof currentTask?.type === 'string' && currentTask.type.includes('Planlı'));
+                        if (isPlanli) {
+                            return d || currentTask?.yoneticiNotu || currentTask?.description || 'Planlı Duruş';
+                        }
+                        return d || 'Genel Görev';
+                    })(),
                     workSessions: workSessions,
                     personnel: personnel,
                     matFormNo: matFormNo,
@@ -2016,7 +2353,7 @@ export class FaultFormController {
                                                 const qty = parseFloat(sm.defectCount) || 1;
                                                 await warehouseService.updateStockBySap(whId, sapNo, qty, {
                                                     user: currentUser?.email || 'Sistem',
-                                                    reason: 'Self-healing: Re-syncing defect records for ' + detailedNote,
+                                                    reason: 'Otomatik Veri Senkronizasyonu: Arızalı Sökülen Parça Kayıtları Yenilendi ' + detailedNote,
                                                     reportNo: reportData.reportNo,
                                                     materialName: matDesc
                                                 }, 'DEFECT', undefined, sNo);
@@ -2195,6 +2532,15 @@ export class FaultFormController {
                                         materialName: mat.description
                                     }, 'DEFECT', undefined, mat.serialNo);
                                 }
+                                
+                                if (usedWarehouseId) {
+                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
+                                        user: currentUser?.email || 'Sistem',
+                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
+                                        reportNo: reportData.reportNo,
+                                        materialName: mat.description
+                                    }, 'DEFECT', undefined, mat.serialNo);
+                                }
                             }
                         }
                     }
@@ -2207,9 +2553,9 @@ export class FaultFormController {
                         delete w.currentTaskContext;
                     }
 
-                    setBtnStatus('BİTİRİLİYOR...');
+                    (window as any).showToast?.('BAŞARILI', 'Rapor başarıyla kaydedildi!', 'success');
                     alert("Rapor başarıyla kaydedildi!");
-                    w.navigate('tasks');
+                    w.navigate('reports-archive');
                 }
             } catch (err: any) {
                 console.error("Submit Error:", err);
@@ -2405,6 +2751,113 @@ export class FaultFormController {
             }
         }
 
+        // Real-time synchronization for checklist (and other fields if needed, but mainly checklist)
+        if (initialData?.id) {
+            const { onSnapshot, doc } = await import('firebase/firestore');
+            const taskDocRef = doc(db, 'tasks', initialData.id);
+            
+            // Clean up any existing listener
+            if (w._draftAuditUnsubscribe) {
+                try {
+                    w._draftAuditUnsubscribe();
+                } catch(e) {}
+                w._draftAuditUnsubscribe = null;
+            }
+            
+            w._draftAuditUnsubscribe = onSnapshot(taskDocRef, (snapshot) => {
+                if (!snapshot.exists()) return;
+                const data = snapshot.data();
+                const dbChecklist = data?.maintenanceData?.checklist;
+                
+                if (Array.isArray(dbChecklist)) {
+                    // Check if local checklist is different from db checklist
+                    const localSerialized = JSON.stringify(w.smartAuditItems || []);
+                    const dbSerialized = JSON.stringify(dbChecklist);
+                    
+                    if (localSerialized !== dbSerialized) {
+                        console.log("Real-time sync: Checklist updated from database.");
+                        const oldItems = w.smartAuditItems || [];
+                        w.smartAuditItems = JSON.parse(dbSerialized);
+                        
+                        // Instead of full innerHTML re-render (which would steal input focus), update DOM nodes in place!
+                        const listContainer = document.getElementById('audit-items-list');
+                        if (listContainer) {
+                            w.smartAuditItems.forEach((newItem: any, idx: number) => {
+                                const oldItem = oldItems[idx];
+                                if (!oldItem || oldItem.status !== newItem.status || oldItem.comment !== newItem.comment) {
+                                    const itemDivs = listContainer.getElementsByClassName('audit-item');
+                                    const itemDiv = itemDivs[idx] as HTMLElement;
+                                    if (itemDiv) {
+                                        // Update select element value
+                                        const select = itemDiv.querySelector('select') as HTMLSelectElement;
+                                        if (select && select.value !== newItem.status) {
+                                            select.value = newItem.status || 'PENDING';
+                                            const isNotOk = newItem.status === 'NOT_OK';
+                                            select.style.borderColor = isNotOk ? 'var(--accent-red)' : 'rgba(255, 255, 255, 0.15)';
+                                        }
+                                        
+                                        // Handle textarea visibility and comment value
+                                        const commentContainer = itemDiv.querySelector('div[style*="padding-left: 30px"]') as HTMLElement;
+                                        const isNotOk = newItem.status === 'NOT_OK';
+                                        
+                                        if (isNotOk) {
+                                            if (!commentContainer) {
+                                                // If textarea container is missing, do full render to show it
+                                                if (typeof w.renderSmartAuditUI === 'function') {
+                                                    w.renderSmartAuditUI();
+                                                }
+                                            } else {
+                                                const textarea = commentContainer.querySelector('textarea') as HTMLTextAreaElement;
+                                                if (textarea && document.activeElement !== textarea && textarea.value !== (newItem.comment || '')) {
+                                                    textarea.value = newItem.comment || '';
+                                                }
+                                            }
+                                        } else if (commentContainer) {
+                                            // If textarea container exists but status is no longer NOT_OK, do full render to hide it
+                                            if (typeof w.renderSmartAuditUI === 'function') {
+                                                w.renderSmartAuditUI();
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                            
+                            // Update header completed counts dynamically
+                            const countEl = document.getElementById('audit-tab-count');
+                            if (countEl && w.smartAuditItems) {
+                                const completed = w.smartAuditItems.filter((i: any) => i.status && i.status !== 'PENDING').length;
+                                countEl.textContent = `(${completed}/${w.smartAuditItems.length})`;
+                            }
+                            
+                            // Update total count cards
+                            let completedCount = 0;
+                            let failedCount = 0;
+                            let naCount = 0;
+                            w.smartAuditItems.forEach((item: any) => {
+                                if (item.status === 'OK') completedCount++;
+                                else if (item.status === 'NOT_OK') failedCount++;
+                                else if (item.status === 'NA') naCount++;
+                            });
+                            
+                            const statBoxes = document.querySelectorAll('.stat-box');
+                            if (statBoxes.length === 3) {
+                                const total = w.smartAuditItems.length;
+                                statBoxes[0].querySelector('div:last-child')!.textContent = `${completedCount} / ${total}`;
+                                statBoxes[1].querySelector('div:last-child')!.textContent = `${failedCount}`;
+                                statBoxes[2].querySelector('div:last-child')!.textContent = `${naCount}`;
+                            }
+                        } else {
+                            if (typeof w.renderSmartAuditUI === 'function') {
+                                w.renderSmartAuditUI();
+                            }
+                        }
+                    }
+                }
+            }, (error) => {
+                console.error("Real-time task subscription error:", error);
+            });
+        }
+
         // Photos
         if (isEditMode && (initialData.photos || initialData.imageUrls)) {
             const container = document.getElementById('image-previews');
@@ -2437,14 +2890,39 @@ export class FaultFormController {
                 faultCodeInput.value = faultCode;
             }
             if (faultCode) {
+                const isPlanli = initialData?.secilenSablon === 'Planlı Duruş' || 
+                                 (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
+                                 initialData?.templateName === 'Planlı Duruş' || 
+                                 (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
+                                 initialData?.type === 'Planlı Duruş' || 
+                                 (typeof initialData?.type === 'string' && initialData.type.includes('Planlı')) ||
+                                 faultCode === 'Planlı Duruş';
+                
                 const exact = statusService.getCodeByKod(faultCode);
                 if (exact) {
                     faultDescEl.value = exact.Aciklama;
+                } else if (isPlanli) {
+                    faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || initialData?.faultDesc || 'Planlı Duruş';
                 } else if (initialData?.faultDesc) {
                     faultDescEl.value = initialData.faultDesc;
                 } else if (initialData?.faultCode && initialData.faultCode.includes(' - ')) {
                     faultDescEl.value = initialData.faultCode.split(' - ').slice(1).join(' - ').trim();
                 }
+            } else if (!isEditMode && (
+                initialData?.secilenSablon === 'Planlı Duruş' || 
+                (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
+                initialData?.templateName === 'Planlı Duruş' || 
+                (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
+                initialData?.type === 'Planlı Duruş' || 
+                (typeof initialData?.type === 'string' && initialData.type.includes('Planlı'))
+            )) {
+                if (faultCodeInput) {
+                    faultCodeInput.value = 'Planlı Duruş';
+                }
+                faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || 'Planlı Duruş';
+            }
+            if (faultCode && w.loadFaultKnowledgeBase) {
+                w.loadFaultKnowledgeBase(faultCode);
             }
         }
     }

@@ -65,6 +65,8 @@ class MaintenanceService {
       localStorage.setItem(cacheKey, JSON.stringify(this.templates));
 
       // Only attempt default initialization/sync if we are online!
+      // DEACTIVATED FOR PRODUCTION STABILITY: We manage templates only via Admin UI.
+      /*
       if (navigator.onLine) {
         try {
           await this.initializeDefaultTemplates();
@@ -74,6 +76,7 @@ class MaintenanceService {
           console.error("Error initializing default templates:", initError);
         }
       }
+      */
       
       return this.templates;
     } catch (error) {
@@ -103,16 +106,16 @@ class MaintenanceService {
       // User Request: E44-E48 4 yıllık ana bakım
       { id: 'e44-e48-4-yillik', name: 'E44-E48 4 Yıllık Ana Bakım', icon: '⏳', category: '4YIL', turbineModel: 'E44-E48', instructionCode: '' },
       // User Request: E70 Serisi
-      { id: 'e70-ya-lama', name: 'E70 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E70', instructionCode: '' },
-      { id: 'e70-ana-bakim', name: 'E70 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E70', instructionCode: '' },
+      { id: 'e70-ya-lama', name: 'E70 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E70', instructionCode: 'TD-esc-08-de-tr-10-052 Rev005' },
+      { id: 'e70-ana-bakim', name: 'E70 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E70', instructionCode: 'D0847062/8.0-tr' },
       { id: 'e70-4-yillik', name: 'E70 4 Yıllık Bakım', icon: '⏳', category: '4YIL', turbineModel: 'E70', instructionCode: '' },
       // User Request: E82 Serisi
-      { id: 'e82-ya-lama', name: 'E82 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E82', instructionCode: '' },
-      { id: 'e82-ana-bakim', name: 'E82 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E82', instructionCode: '' },
+      { id: 'e82-ya-lama', name: 'E82 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E82', instructionCode: 'TD-esc-08-de-tr-14-018 Rev003' },
+      { id: 'e82-ana-bakim', name: 'E82 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E82', instructionCode: 'D0847068/8.0-tr/DC' },
       { id: 'e82-4-yillik', name: 'E82 4 Yıllık Bakım', icon: '⏳', category: '4YIL', turbineModel: 'E82', instructionCode: '' },
       // User Request: E82/E2 Serisi
-      { id: 'e82-e2-ya-lama', name: 'E82/E2 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E82/E2', instructionCode: '' },
-      { id: 'e82-e2-ana-bakim', name: 'E82/E2 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E82/E2', instructionCode: '' },
+      { id: 'e82-e2-ya-lama', name: 'E82/E2 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E82/E2', instructionCode: 'TD-esc-08-de-tr-11-002 Rev004' },
+      { id: 'e82-e2-ana-bakim', name: 'E82/E2 Ana Bakım', icon: '📋', category: 'ANA', turbineModel: 'E82/E2', instructionCode: 'D0847069/8.0-tr/DC' },
       { id: 'e82-e2-4-yillik', name: 'E82/E2 4 Yıllık Bakım', icon: '⏳', category: '4YIL', turbineModel: 'E82/E2', instructionCode: '' },
       // User Request: E92 Serisi
       { id: 'e92-ya-lama', name: 'E92 Yağlama bakımı', icon: '🛠️', category: 'YAĞLAMA', turbineModel: 'E92', instructionCode: '' },

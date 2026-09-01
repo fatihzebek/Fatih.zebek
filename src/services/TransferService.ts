@@ -5,7 +5,13 @@ import { warehouseService } from './WarehouseService';
 const MSF_INITIAL_SEEDS: Record<string, number> = {
   '2688': 197, // Anemon
   '3243': 25,  // Çamseki
-  '3439': 19   // Sarıkaya
+  '3439': 19,  // Sarıkaya
+  '3245': 119, // Alize Keltepe
+  '2678': 270, // Mare Manastır
+  '0752': 53,  // Alize Germiyan
+  '2990': 155, // Doğal Sayalar
+  '3793': 102, // Alize Kuyucak
+  '3892': 2    // Alize Çataltape
 };
 
 export interface Transfer {
@@ -28,6 +34,7 @@ export interface TransferItem {
   materialCode: string; // SAP No
   materialName: string;
   quantity: number;
+  condition?: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP';
 }
 
 export interface TransferV2 {
@@ -103,7 +110,7 @@ class TransferService {
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const year = now.getFullYear();
         const dateStr = `${day}${month}${year}`;
-        const msfNo = `MSF-${dateStr}-${nextSeq}`;
+        const msfNo = `${nextSeq}-MSF-${dateStr}`;
 
         transaction.set(newTransferDocRef, {
           ...transferData,
@@ -115,7 +122,7 @@ class TransferService {
       });
 
       // 2. Decrease stocks in source warehouse immediately with the actual MSF No
-      const successfulDecreases: Array<{ sapNo: string, quantity: number }> = [];
+      const successfulDecreases: Array<{ sapNo: string, quantity: number, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' }> = [];
       try {
         for (const item of transferData.items) {
           await warehouseService.updateStockBySap(
@@ -126,9 +133,10 @@ class TransferService {
               user: transferData.requestedBy,
               reason: `MSF Sevk Çıkışı (MSF No: ${result.msfNo})`,
               materialName: item.materialName
-            }
+            },
+            item.condition || 'NEW'
           );
-          successfulDecreases.push({ sapNo: item.materialCode, quantity: item.quantity });
+          successfulDecreases.push({ sapNo: item.materialCode, quantity: item.quantity, condition: item.condition || 'NEW' });
         }
       } catch (stockError: any) {
         console.error('[TransferService] Stock decrease failed, rolling back...', stockError);
@@ -142,7 +150,8 @@ class TransferService {
               {
                 user: 'SİSTEM',
                 reason: `MSF Hata Geri Yükleme (MSF No: ${result.msfNo})`
-              }
+              },
+              dec.condition
             );
           } catch (rollbackError) {
             console.error('[TransferService] Rollback failed for:', dec.sapNo, rollbackError);
@@ -266,10 +275,13 @@ class TransferService {
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) throw new Error("Transfer bulunamadı");
       
-      const transfer = docSnap.data() as TransferV2;
+      const transfer = docSnap.data() as any;
+      const itemsList = Array.isArray(transfer.items) 
+        ? transfer.items 
+        : [{ materialCode: transfer.materialCode, materialName: transfer.materialName, quantity: transfer.quantity }];
 
       // 1. Add stocks to target warehouse
-      for (const item of transfer.items) {
+      for (const item of itemsList) {
         const detail = itemDetails?.find(d => d.materialCode === item.materialCode);
         const targetShelf = detail ? detail.shelfNo : undefined;
         const targetCondition = detail ? detail.condition : 'NEW';
@@ -335,7 +347,8 @@ class TransferService {
             user: adminEmail,
             reason: `MSF İptal İadesi (MSF No: ${transfer.msfNo})`,
             materialName: item.materialName
-          }
+          },
+          item.condition || 'NEW'
         );
       }
 

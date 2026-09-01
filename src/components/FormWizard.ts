@@ -46,6 +46,14 @@ export const NewTaskForm = async () => {
           if (icon) {
             icon.classList.toggle('rotate-180');
           }
+
+          // Focus on search input when team dropdown is opened
+          if (dd.id === 'nt-team' && !options.classList.contains('hidden')) {
+            const searchInput = document.getElementById('nt-team-search') as HTMLInputElement;
+            if (searchInput) {
+              setTimeout(() => searchInput.focus(), 50);
+            }
+          }
         });
         
         // Select option
@@ -69,6 +77,17 @@ export const NewTaskForm = async () => {
             const icon = trigger.querySelector('.fa-chevron-down');
             if (icon) icon.classList.remove('rotate-180');
 
+            // Reset search input and show all options again
+            if (dd.id === 'nt-team') {
+              const searchInput = document.getElementById('nt-team-search') as HTMLInputElement;
+              if (searchInput) {
+                searchInput.value = '';
+                options.querySelectorAll('.custom-dropdown-option').forEach(o => {
+                  (o as HTMLElement).style.display = 'flex';
+                });
+              }
+            }
+
             // Trigger change logic
             if (dd.id === 'nt-task-type') {
               (window as any).handleTaskTypeChange(val);
@@ -77,6 +96,39 @@ export const NewTaskForm = async () => {
         });
       }
     });
+
+    // Handle team search filter input events
+    const teamSearchInput = document.getElementById('nt-team-search') as HTMLInputElement;
+    if (teamSearchInput) {
+      teamSearchInput.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      teamSearchInput.addEventListener('input', (e) => {
+        const val = (e.target as HTMLInputElement).value.toLowerCase().trim();
+        const optionsContainer = document.getElementById('nt-team-options');
+        if (optionsContainer) {
+          const options = optionsContainer.querySelectorAll('.custom-dropdown-option');
+          options.forEach(opt => {
+            const dataVal = opt.getAttribute('data-value') || '';
+            if (!dataVal) return; // Keep "Atanacak Ekip Seçiniz..." visible
+
+            const optText = opt.textContent || '';
+            const cleanOptText = optText.toLowerCase().replace(/\s+/g, '');
+            const cleanSearchVal = val.replace(/\s+/g, '');
+
+            const numSearch = val.replace(/[^0-9]/g, '');
+            const numOpt = optText.replace(/[^0-9]/g, '');
+            const isNumMatch = numSearch !== '' && parseInt(numOpt) === parseInt(numSearch);
+
+            if (optText.toLowerCase().includes(val) || cleanOptText.includes(cleanSearchVal) || isNumMatch || val === '') {
+              (opt as HTMLElement).style.display = 'flex';
+            } else {
+              (opt as HTMLElement).style.display = 'none';
+            }
+          });
+        }
+      });
+    }
 
     // Close on outside click
     document.addEventListener('click', () => {
@@ -87,6 +139,16 @@ export const NewTaskForm = async () => {
         const icon = trigger?.querySelector('.fa-chevron-down');
         if (icon) icon.classList.remove('rotate-180');
       });
+      // Clear team search input when closed
+      if (teamSearchInput) {
+        teamSearchInput.value = '';
+        const optionsContainer = document.getElementById('nt-team-options');
+        if (optionsContainer) {
+          optionsContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
+            (o as HTMLElement).style.display = 'flex';
+          });
+        }
+      }
     });
 
     // Check if task creation was triggered with pre-filled parameters
@@ -278,6 +340,9 @@ export const NewTaskForm = async () => {
                 <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.2s;"></i>
               </div>
               <div class="custom-dropdown-options hidden glass-panel" id="nt-team-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.7); max-height: 250px; overflow-y: auto; z-index: 100;">
+                <div class="dropdown-search-wrapper" style="padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 0; background: rgba(13, 18, 30, 0.98); z-index: 10;">
+                  <input type="text" id="nt-team-search" placeholder="Ekip No Yazın (Örn: 5)..." style="width: 100%; padding: 6px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; box-sizing: border-box; font-family: 'Inter', sans-serif;" autocomplete="off">
+                </div>
                 <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: all 0.2s;">
                   Atanacak Ekip Seçiniz...
                 </div>
@@ -294,7 +359,7 @@ export const NewTaskForm = async () => {
 
           <!-- Form Submit Button -->
           <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1.75rem; display: flex; justify-content: flex-end;">
-            <button type="submit" id="nt-submit-btn" class="btn-cyber" style="width: 100%; max-width: 320px; padding: 12px 24px; font-size: 0.85rem; background: var(--accent-cyan); border-color: var(--accent-cyan); box-shadow: 0 4px 20px rgba(0, 242, 254, 0.2); font-weight: 800; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <button type="submit" id="nt-submit-btn" class="btn-cyber" style="width: 100%; max-width: 320px; padding: 12px 24px; font-size: 0.85rem; background: rgba(0, 242, 254, 0.06); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2ff; font-weight: 800; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
               <i class="fa-solid fa-paper-plane" style="font-size: 0.95rem;"></i> GÖREVİ ATAMASINI GERÇEKLEŞTİR
             </button>
           </div>
@@ -304,6 +369,12 @@ export const NewTaskForm = async () => {
     </div>
 
     <style>
+      #nt-submit-btn:hover {
+        background: rgba(0, 242, 254, 0.15) !important;
+        border-color: rgba(0, 242, 254, 0.5) !important;
+        color: #fff !important;
+        box-shadow: 0 0 15px rgba(0, 242, 254, 0.15) !important;
+      }
       .cyber-form-section-title {
         font-family: 'Rajdhani', sans-serif;
         font-size: 0.8rem;
@@ -535,48 +606,92 @@ const resetTelemetryCards = () => {
   const selectEl = document.getElementById('nt-maintenance-template') as HTMLSelectElement;
   if (!selectEl) return;
   
-  const tModel = turbineType.replace(/[^0-9a-zA-Z]/g, '').toUpperCase(); // E-48 -> E48
-  const searchType = maintType.toUpperCase().includes('YAĞ') ? 'YAĞ' : 'ANA';
+  const rawModel = (turbineType || '').toUpperCase().trim();
+  const rawMaint = (maintType || '').toUpperCase().trim();
+
+  // Determine category search type: '4YIL', 'YAĞ', or 'ANA'
+  let searchCategory = 'ANA';
+  if (rawMaint.includes('4') && (rawMaint.includes('YIL') || rawMaint.includes('YILLIK'))) {
+    searchCategory = '4YIL';
+  } else if (rawMaint.includes('YAĞ') || rawMaint.includes('YAG')) {
+    searchCategory = 'YAĞ';
+  } else if (rawMaint.includes('ANA')) {
+    searchCategory = 'ANA';
+  }
   
+  // Determine canonical model key
+  let canonicalModel = '';
+  if (rawModel.includes('E82/E2') || rawModel.includes('E82-E2') || rawModel.includes('E82E2') || rawModel.includes('E82/2') || rawModel.includes('E82_E2')) {
+    canonicalModel = 'E82/E2';
+  } else if (rawModel.includes('E82')) {
+    canonicalModel = 'E82';
+  } else if (rawModel.includes('E44') || rawModel.includes('E48')) {
+    canonicalModel = 'E44-E48';
+  } else if (rawModel.includes('E70')) {
+    canonicalModel = 'E70';
+  } else if (rawModel.includes('E92')) {
+    canonicalModel = 'E92';
+  }
+
+  const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
   let matchedOptionValue = '';
+
+  // Helper to check if an option matches canonicalModel and searchCategory
+  const isMatch = (optText: string, reqCategory: boolean) => {
+    const is4Yil = /4\s*YIL|4\.YIL|4-YIL/.test(optText);
+    const isYag = optText.includes('YAĞ') || optText.includes('YAG');
+    const isAna = optText.includes('ANA') && !is4Yil;
+
+    if (reqCategory) {
+      if (searchCategory === '4YIL') {
+        if (!is4Yil) return false;
+      } else if (searchCategory === 'YAĞ') {
+        if (!isYag) return false;
+      } else {
+        // ANA
+        if (!isAna) return false;
+      }
+    }
+
+    const cOpt = clean(optText);
+
+    if (canonicalModel === 'E82/E2') {
+      return cOpt.includes('E82E2') || cOpt.includes('E822');
+    } else if (canonicalModel === 'E82') {
+      return cOpt.includes('E82') && !cOpt.includes('E82E2') && !cOpt.includes('E822');
+    } else if (canonicalModel === 'E44-E48') {
+      return cOpt.includes('E44') || cOpt.includes('E48');
+    } else if (canonicalModel === 'E70') {
+      return cOpt.includes('E70');
+    } else if (canonicalModel === 'E92') {
+      return cOpt.includes('E92');
+    }
+    return false;
+  };
+
+  // 1. Match canonical model + exact searchCategory (ANA / YAĞ / 4YIL)
   for (let i = 0; i < selectEl.options.length; i++) {
     const opt = selectEl.options[i];
-    const optText = opt.text.toUpperCase();
-    const optVal = opt.value;
-    
-    // Skip 4-year templates as requested by the user
-    if (/4\s*YIL|4\.YIL|4-YIL/.test(optText)) {
-      continue;
-    }
-    
-    if (optText.includes(tModel) && (searchType === 'YAĞ' ? (optText.includes('YAĞ') || optText.includes('YAG')) : optText.includes('ANA'))) {
-      matchedOptionValue = optVal;
+    if (isMatch(opt.text.toUpperCase(), true)) {
+      matchedOptionValue = opt.value;
       break;
     }
   }
-  
-  // Fallback: match model only (still skipping 4-year templates)
+
+  // 2. Fallback: match canonical model regardless of category
   if (!matchedOptionValue) {
     for (let i = 0; i < selectEl.options.length; i++) {
       const opt = selectEl.options[i];
-      const optText = opt.text.toUpperCase();
-      
-      if (/4\s*YIL|4\.YIL|4-YIL/.test(optText)) {
-        continue;
-      }
-      
-      if (optText.includes(tModel)) {
+      if (isMatch(opt.text.toUpperCase(), false)) {
         matchedOptionValue = opt.value;
         break;
       }
     }
   }
-  
+
   if (matchedOptionValue) {
     selectEl.value = matchedOptionValue;
-    // Trigger any change handler
-    const event = new Event('change');
-    selectEl.dispatchEvent(event);
+    selectEl.dispatchEvent(new Event('change'));
   }
 };
 
@@ -701,11 +816,23 @@ const resetTelemetryCards = () => {
       return;
     }
 
-    if (taskType === 'Türbin Arıza Formu' && !faultCode) {
-      alert('Lütfen arama sonuçlarından geçerli bir Arıza Kodu seçiniz. (Arama kutusuna yazdıktan sonra çıkan listeden tıklamalısınız)');
-      btn.disabled = false;
-      btn.innerHTML = originalText;
-      return;
+    if (taskType === 'Türbin Arıza Formu') {
+      if (!faultCode || faultCode === '---' || !statusService.getCodeByKod(faultCode)) {
+        alert('Lütfen arama sonuçlarından geçerli bir Arıza Kodu seçiniz. (Arama kutusuna yazdıktan sonra çıkan listeden tıklamalısınız)');
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        return;
+      }
+    }
+
+    if (taskType === 'Planlı Duruş') {
+      const plannedStopDesc = (document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement)?.value.trim() || '';
+      if (!plannedStopDesc) {
+        alert("Lütfen planlı duruş için bir açıklama giriniz.");
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        return;
+      }
     }
     
     let templateName = taskType;
@@ -744,7 +871,7 @@ const resetTelemetryCards = () => {
       turbinSeriNo: serial,
       turbinNo: turbine,
       statuKodu: faultCode,
-      yoneticiNotu: taskType === 'Planlı Duruş' ? (plannedStopDesc || 'Planlı Operasyonel Duruş') : `Sistemden atanan ${templateName} görevi.`,
+      yoneticiNotu: taskType === 'Planlı Duruş' ? plannedStopDesc : `Sistemden atanan ${templateName} görevi.`,
       assignedTeam: team,
       maintenanceData
     });
@@ -768,8 +895,8 @@ const resetTelemetryCards = () => {
   } finally {
     setTimeout(() => {
       btn.disabled = false;
-      btn.style.background = 'var(--accent-cyan)';
-      btn.style.borderColor = 'var(--accent-cyan)';
+      btn.style.background = '';
+      btn.style.borderColor = '';
       btn.innerHTML = originalText;
     }, 3000);
   }

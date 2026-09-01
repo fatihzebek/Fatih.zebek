@@ -1,17 +1,16 @@
 $DateStr = Get-Date -Format "yyyy_MM_dd_HH_mm"
-$BackupDir = "C:\Users\FatihZebek\Desktop\Dh_Servis\_VERSIONS\Yedek_$DateStr"
-$ZipPath = "C:\Users\FatihZebek\Desktop\Dh_Servis\_VERSIONS\Yedek_$DateStr.zip"
+$VersionsDir = "D:\Dh_Servis\_VERSIONS"
+if (!(Test-Path $VersionsDir)) {
+    New-Item -ItemType Directory -Force -Path $VersionsDir | Out-Null
+}
+$ZipPath = "D:\Dh_Servis\_VERSIONS\Yedek_$DateStr.zip"
 
 Write-Host "Yedekleme basliyor..." -ForegroundColor Cyan
 
-# Klasoru olustur (istege bagli, eger ziplenmemis halini de gormek isterseniz)
-# New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
-# Copy-Item -Path "src" -Destination "$BackupDir\src" -Recurse
-# Copy-Item -Path "package.json" -Destination $BackupDir
+Compress-Archive -Path "src", "public", "scripts", "sunucu", ".agents", "package.json", "package-lock.json", "tsconfig.json", "vite.config.ts", "firebase.json", "firestore.rules", "firestore.indexes.json", "index.html", "sap_list.xlsx" -DestinationPath $ZipPath -Force
 
-# Zip olustur
-Compress-Archive -Path "src", "package.json", "index.html", "vite.config.ts" -DestinationPath $ZipPath -Force
+$fileInfo = Get-Item $ZipPath
+$sizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
 
-Write-Host "Yedekleme tamamlandi! Dosya: $ZipPath" -ForegroundColor Green
-Write-Host "Cikmak icin bir tusa basin..."
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+Write-Host "Yedekleme tamamlandi! Dosya: $ZipPath ($sizeMB MB)" -ForegroundColor Green
+

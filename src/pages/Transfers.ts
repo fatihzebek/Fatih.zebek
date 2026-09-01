@@ -23,10 +23,78 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
   const month = String(new Date().getMonth() + 1).padStart(2, '0');
   const year = new Date().getFullYear();
   const dateStr = `${day}${month}${year}`;
-  const initialMsfNo = `MSF-${dateStr}-XXXX`;
+  const initialMsfNo = `XXXX-MSF-${dateStr}`;
 
   return `
     <div class="fade-in-up content-area">
+      <style>
+        /* Overrides for Transfers page buttons */
+        .content-area .btn-cyber,
+        .content-area .btn-cyber-outline {
+          min-height: unset !important;
+          height: 34px !important;
+          padding: 0 12px !important;
+          border-radius: 6px !important;
+          font-family: 'Rajdhani', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 0.72rem !important;
+          transition: all 0.2s !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          letter-spacing: 0.5px !important;
+          text-transform: uppercase !important;
+          box-shadow: none !important;
+        }
+
+        /* Active filter / active delivery mode */
+        .content-area .btn-cyber,
+        .content-area #delivery-person-btn.btn-cyber,
+        .content-area #delivery-cargo-btn.btn-cyber {
+          background: rgba(0, 242, 255, 0.08) !important;
+          border: 1px solid rgba(0, 242, 255, 0.35) !important;
+          color: #00f2ff !important;
+          box-shadow: 0 0 10px rgba(0, 242, 255, 0.08) !important;
+        }
+
+        /* Inactive state */
+        .content-area .btn-cyber-outline,
+        .content-area #delivery-person-btn.btn-cyber-outline,
+        .content-area #delivery-cargo-btn.btn-cyber-outline {
+          background: transparent !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          color: #94A3B8 !important;
+        }
+
+        /* Hover states */
+        .content-area .btn-cyber:hover,
+        .content-area .btn-cyber-outline:hover,
+        .content-area #delivery-person-btn:hover,
+        .content-area #delivery-cargo-btn:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+        }
+
+        /* Giant Submit button at the bottom left */
+        .content-area button[type="submit"].btn-cyber {
+          height: 42px !important;
+          font-size: 0.85rem !important;
+          background: rgba(0, 242, 255, 0.08) !important;
+          border: 1px solid rgba(0, 242, 255, 0.35) !important;
+          color: #00f2ff !important;
+          box-shadow: 0 0 15px rgba(0, 242, 255, 0.1) !important;
+          width: 100% !important;
+        }
+
+        .content-area button[type="submit"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 20px rgba(0, 242, 255, 0.2) !important;
+        }
+      </style>
       <h1 class="page-title"><i class="fa-solid fa-truck-ramp-box" style="color: var(--accent-cyan);"></i> Malzeme Transfer İşlemleri (MSF)</h1>
       
       <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 2rem; align-items: stretch;">
@@ -98,6 +166,31 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
               <!-- Materials List Title -->
               <div style="margin-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1.5rem; display: flex; flex-direction: column; flex-grow: 1;">
                 <label style="font-weight: 700; font-size: 0.65rem; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 12px; display: block; text-transform: uppercase;">SEVK EDİLECEK MALZEMELER</label>
+                <div id="msf-adder-container" style="display: none; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
+                  <div style="display: flex; gap: 0.75rem; align-items: flex-end; width: 100%;">
+                    <div style="flex: 1; position: relative; min-width: 0;">
+                      <label style="font-size: 0.62rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; text-transform: uppercase;">MALZEME ARA</label>
+                      <input type="text" id="msf-search-input" class="cyber-input" placeholder="Malzeme SAP No veya Adı ara..." autocomplete="off" style="font-size: 0.78rem; height: 44px !important; min-height: 44px !important; padding: 0 16px !important; line-height: 44px !important; box-sizing: border-box; width: 100%;">
+                      <div id="msf-search-results" class="search-results-dropdown hidden" style="z-index: 99999;"></div>
+                      
+                      <input type="hidden" id="msf-selected-sap">
+                      <input type="hidden" id="msf-selected-name">
+                      <input type="hidden" id="msf-selected-condition">
+                      <input type="hidden" id="msf-selected-max-qty">
+                    </div>
+                    <div style="width: 80px; flex-shrink: 0;">
+                      <label style="font-size: 0.62rem; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 4px; text-transform: uppercase;">MİKTAR</label>
+                      <input type="number" id="msf-qty-input" class="cyber-input" placeholder="Miktar" value="1" min="1" disabled style="font-size: 0.78rem; text-align: center; height: 44px !important; min-height: 44px !important; padding: 0 !important; line-height: 44px !important; box-sizing: border-box; width: 100%;">
+                    </div>
+                    <div style="width: 90px; flex-shrink: 0;">
+                      <button type="button" id="msf-add-to-list-btn" onclick="window.addMsfSelectedMaterialToList()" class="btn-cyber" style="height: 44px !important; min-height: 44px !important; width: 100%; box-sizing: border-box; font-size: 0.78rem; padding: 0 !important; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700;" disabled>
+                        <i class="fa-solid fa-plus"></i> Ekle
+                      </button>
+                    </div>
+                  </div>
+                  <div id="msf-selected-stock-lbl" style="margin-top: 8px;"></div>
+                </div>
+
                 <div id="msf-items-container">
                   <div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1.5rem; border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 8px;">
                     Lütfen önce bir Çıkış Santrali (Nereden) seçiniz.
@@ -114,17 +207,39 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
 
         <!-- Dispatches List -->
         <div class="glass-panel" style="padding: 2rem; border: 1px solid rgba(0, 243, 255, 0.15); box-shadow: 0 4px 30px rgba(0, 243, 255, 0.05); display: flex; flex-direction: column;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 12px;">
             <h3 style="font-family: 'Rajdhani', sans-serif; font-weight: 800; color: var(--text-main); letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; margin: 0;">
               <i class="fa-solid fa-list-check" style="color: var(--accent-cyan);"></i> SON SEVKLER (MSF LİSTESİ)
             </h3>
             
             <!-- Filters -->
-            <div style="display: flex; gap: 6px;">
+            <div style="display: flex; gap: 6px; align-items: center;">
               <button type="button" onclick="window.filterMsfTransfers('HEPSİ')" id="filter-msf-all" class="btn-cyber" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600;">HEPSİ</button>
               <button type="button" onclick="window.filterMsfTransfers('YOLDA')" id="filter-msf-yolda" class="btn-cyber-outline" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600;">YOLDA</button>
               <button type="button" onclick="window.filterMsfTransfers('TAMAMLANDI')" id="filter-msf-tamamlandi" class="btn-cyber-outline" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600;">TAMAMLANAN</button>
               <button type="button" onclick="window.filterMsfTransfers('IPTAL_EDILDI')" id="filter-msf-iptal" class="btn-cyber-outline" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600;">İPTAL EDİLEN</button>
+              <button type="button" onclick="window.exportTransfersListToExcel()" class="btn-cyber" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600; background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #10B981; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.18)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(16, 185, 129, 0.08)'; this.style.color='#10B981'">
+                <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
+              </button>
+            </div>
+          </div>
+
+          <!-- Warehouse Search / Filter Row -->
+          <div style="display: flex; gap: 12px; margin-bottom: 1.5rem; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255,255,255,0.03); padding: 10px 15px; border-radius: 8px; align-items: center; flex-wrap: wrap;">
+            <span style="font-size: 0.72rem; font-weight: 800; color: var(--accent-cyan); display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase;">
+              <i class="fa-solid fa-filter"></i> Saha Filtresi:
+            </span>
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 220px; flex: 1;">
+              <span style="font-size: 0.65rem; color: #64748B; font-weight: 800;">NEREDEN:</span>
+              <select id="msf-filter-departure" class="cyber-input" style="height: 34px; padding: 0 10px; font-size: 0.75rem; border-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.3); border-radius: 6px; flex: 1; color: #fff; outline: none; cursor: pointer;">
+                <option value="HEPSİ">Tüm Çıkış Depoları</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; min-width: 220px; flex: 1;">
+              <span style="font-size: 0.65rem; color: #64748B; font-weight: 800;">NEREYE:</span>
+              <select id="msf-filter-destination" class="cyber-input" style="height: 34px; padding: 0 10px; font-size: 0.75rem; border-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.3); border-radius: 6px; flex: 1; color: #fff; outline: none; cursor: pointer;">
+                <option value="HEPSİ">Tüm Varış Depoları</option>
+              </select>
             </div>
           </div>
           
@@ -142,11 +257,14 @@ let departureInventory: any[] = [];
 let currentDeliveryMethod: 'PERSON' | 'CARGO' = 'PERSON';
 let msfRowCounter = 0;
 let activeFilter = 'HEPSİ';
+let filterDeparture = 'HEPSİ';
+let filterDestination = 'HEPSİ';
 let loadedTransfersList: any[] = [];
 let warehousesMap: Record<string, string> = {};
 let msfListUnsubscribe: (() => void) | null = null;
 let msfPage = 1;
 const msfPageSize = 5;
+let msfAddedItems: Array<{ materialCode: string, materialName: string, quantity: number, condition?: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' }> = [];
 
 (window as any).changeMsfPage = (delta: number) => {
   msfPage += delta;
@@ -161,6 +279,47 @@ const msfPageSize = 5;
     const tName = `Team ${String(i).padStart(2, '0')}`;
     const tId = `team_${tName.replace(/\s+/g, '_')}`;
     warehousesMap[tId] = `${tName} Deposu`;
+  }
+
+  const filterDepSelect = document.getElementById('msf-filter-departure') as HTMLSelectElement;
+  const filterDestSelect = document.getElementById('msf-filter-destination') as HTMLSelectElement;
+
+  if (filterDepSelect && filterDestSelect) {
+    // Clear first (keep HEPSİ option)
+    filterDepSelect.innerHTML = '<option value="HEPSİ">Tüm Çıkış Depoları</option>';
+    filterDestSelect.innerHTML = '<option value="HEPSİ">Tüm Varış Depoları</option>';
+
+    // Sort warehouses alphabetically
+    const sortedWhs = Object.entries(warehousesMap)
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+    sortedWhs.forEach(wh => {
+      const opt1 = document.createElement('option');
+      opt1.value = wh.id;
+      opt1.innerText = wh.name;
+      filterDepSelect.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = wh.id;
+      opt2.innerText = wh.name;
+      filterDestSelect.appendChild(opt2);
+    });
+
+    filterDepSelect.value = filterDeparture;
+    filterDestSelect.value = filterDestination;
+
+    filterDepSelect.addEventListener('change', () => {
+      filterDeparture = filterDepSelect.value;
+      msfPage = 1;
+      (window as any).renderMsfCards();
+    });
+
+    filterDestSelect.addEventListener('change', () => {
+      filterDestination = filterDestSelect.value;
+      msfPage = 1;
+      (window as any).renderMsfCards();
+    });
   }
 
   const fromSiteSelect = document.getElementById('from-site') as HTMLSelectElement;
@@ -179,13 +338,26 @@ const msfPageSize = 5;
 
       if (!warehouseId) {
         departureInventory = [];
+        msfAddedItems = [];
         const now = new Date();
         const day = String(now.getDate()).padStart(2, '0');
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const year = now.getFullYear();
         const dateStr = `${day}${month}${year}`;
-        if (display) display.innerText = `MSF-${dateStr}-XXXX`;
-        if (input) input.value = `MSF-${dateStr}-XXXX`;
+        if (display) display.innerText = `XXXX-MSF-${dateStr}`;
+        if (input) input.value = `XXXX-MSF-${dateStr}`;
+        
+        const adderContainer = document.getElementById('msf-adder-container');
+        if (adderContainer) adderContainer.style.display = 'none';
+        
+        const itemsContainer = document.getElementById('msf-items-container');
+        if (itemsContainer) {
+          itemsContainer.innerHTML = `
+            <div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1.5rem; border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 8px;">
+              Lütfen önce bir Çıkış Santrali (Nereden) seçiniz.
+            </div>
+          `;
+        }
         return;
       }
 
@@ -197,7 +369,7 @@ const msfPageSize = 5;
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const year = now.getFullYear();
         const dateStr = `${day}${month}${year}`;
-        const newMsfNo = `MSF-${dateStr}-${nextSeq}`;
+        const newMsfNo = `${nextSeq}-MSF-${dateStr}`;
 
         if (display) display.innerText = newMsfNo;
         if (input) input.value = newMsfNo;
@@ -212,14 +384,19 @@ const msfPageSize = 5;
 
       try {
         departureInventory = await warehouseService.getInventory(warehouseId);
-        if (itemsContainer) {
-          itemsContainer.innerHTML = '';
-          // Add initial empty row
-          (window as any).addMsfItemRow();
-        }
+        msfAddedItems = [];
+        
+        const adderContainer = document.getElementById('msf-adder-container');
+        if (adderContainer) adderContainer.style.display = 'block';
+        
+        (window as any).renderMsfAddedItemsTable();
+        (window as any).setupMsfSearchListener();
       } catch (err) {
         console.error("Failed to load inventory:", err);
         departureInventory = [];
+        msfAddedItems = [];
+        const adderContainer = document.getElementById('msf-adder-container');
+        if (adderContainer) adderContainer.style.display = 'none';
         if (itemsContainer) itemsContainer.innerHTML = '<div style="color: #ef4444; font-size: 0.8rem; text-align: center; padding: 1rem;">Envanter yüklenemedi!</div>';
       }
     });
@@ -255,66 +432,48 @@ const msfPageSize = 5;
     }
   };
 
-  // Add Item Row dynamically
-  (window as any).addMsfItemRow = () => {
-    const container = document.getElementById('msf-items-container');
-    if (!container) return;
-    
-    // Clear loading if any
-    const loader = container.querySelector('div');
-    if (loader && loader.innerText.includes('Yükleniyor')) {
-      container.innerHTML = '';
-    }
-
-    const rowIdx = msfRowCounter++;
-    const rowHTML = `
-      <div id="msf-row-${rowIdx}" class="msf-item-row" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; position: relative;">
-        <div style="display: grid; grid-template-columns: 2fr 1fr 40px; gap: 0.75rem; align-items: start;">
-          <div style="position: relative;">
-            <input type="text" id="msf-search-${rowIdx}" class="cyber-input msf-autocomplete" data-row="${rowIdx}" placeholder="Malzeme SAP No veya Adı ara..." autocomplete="off">
-            <div id="msf-results-${rowIdx}" class="search-results-dropdown hidden" style="z-index: 99999;"></div>
-            <input type="hidden" id="msf-sap-${rowIdx}">
-            <input type="hidden" id="msf-name-${rowIdx}">
-            <div id="msf-stock-lbl-${rowIdx}" style="font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; font-weight: bold;"></div>
-          </div>
-          <div>
-            <input type="number" id="msf-qty-${rowIdx}" class="cyber-input" placeholder="Miktar" value="1" min="1" disabled>
-          </div>
-          <div>
-            <button type="button" onclick="window.removeMsfItemRow(${rowIdx})" class="btn-cyber-mini" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); color: #ef4444; height: 38px; width: 38px; display: flex; align-items: center; justify-content: center; padding: 0;" title="Satırı Sil">
-              <i class="fa-solid fa-trash-can"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-    container.insertAdjacentHTML('beforeend', rowHTML);
-
-    // Set up Autocomplete listener for this row
-    const searchInput = document.getElementById(`msf-search-${rowIdx}`) as HTMLInputElement;
-    const resultsDiv = document.getElementById(`msf-results-${rowIdx}`) as HTMLDivElement;
+  // Setup autocomplete search listener on the adder input
+  (window as any).setupMsfSearchListener = () => {
+    const searchInput = document.getElementById('msf-search-input') as HTMLInputElement;
+    const resultsDiv = document.getElementById('msf-search-results') as HTMLDivElement;
 
     if (searchInput && resultsDiv) {
-      searchInput.addEventListener('input', () => {
-        const query = searchInput.value.toLowerCase().trim();
+      // Clone searchInput to remove previous event listeners
+      const newSearchInput = searchInput.cloneNode(true) as HTMLInputElement;
+      searchInput.parentNode?.replaceChild(newSearchInput, searchInput);
+
+      newSearchInput.addEventListener('input', () => {
+        const query = newSearchInput.value.toLowerCase().trim();
         if (query.length < 2) {
           resultsDiv.classList.add('hidden');
           return;
         }
 
         const matches = departureInventory.filter(item => {
+          if (item.condition === 'DEFECT') return false;
           const sap = String(item.sapNo || '').toLowerCase();
           const name = String(item.name || item.description || '').toLowerCase();
           return sap.includes(query) || name.includes(query);
         });
 
-        resultsDiv.innerHTML = matches.slice(0, 10).map(m => `
-          <div class="search-item" onclick="window.selectMsfRowMaterial(${rowIdx}, '${m.sapNo}', '${(m.name || m.description || 'Bilinmeyen').replace(/'/g, "\\'")}', ${m.quantity})">
-            <div style="font-weight: 700; color: var(--accent-cyan);">${m.sapNo}</div>
-            <div style="font-size: 0.7rem; color: var(--text-main); font-weight: 500;">${m.name || m.description}</div>
-            <div style="font-size: 0.65rem; color: #14F195; font-weight: 700; margin-top: 2px;">Mevcut Stok: ${m.quantity} Adet</div>
-          </div>
-        `).join('');
+        resultsDiv.innerHTML = matches.slice(0, 10).map(m => {
+          const cond = m.condition || 'NEW';
+          const condLabel = cond === 'REVISED' ? 'Revize' : cond === 'DEFECT' ? 'Arızalı' : cond === 'SCRAP' ? 'Hurda' : '';
+          const condColor = cond === 'DEFECT' ? '#EF4444' : cond === 'REVISED' ? '#3B82F6' : cond === 'SCRAP' ? '#9CA3AF' : '';
+          const condBg = cond === 'DEFECT' ? 'rgba(239,68,68,0.15)' : cond === 'REVISED' ? 'rgba(59,130,246,0.15)' : cond === 'SCRAP' ? 'rgba(156,163,175,0.15)' : '';
+          const condBorder = cond === 'DEFECT' ? 'rgba(239,68,68,0.3)' : cond === 'REVISED' ? 'rgba(59,130,246,0.3)' : cond === 'SCRAP' ? 'rgba(156,163,175,0.3)' : '';
+
+          return `
+            <div class="search-item" onclick="window.selectMsfMaterialForAdder('${m.sapNo}', '${(m.name || m.description || 'Bilinmeyen').replace(/'/g, "\\'")}', ${m.quantity}, '${cond}')">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div style="font-weight: 700; color: var(--accent-cyan); font-family: monospace; font-size: 0.85rem;">${m.sapNo}</div>
+                ${condLabel ? `<span style="font-size: 0.65rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; border: 1px solid ${condBorder}; background: ${condBg}; color: ${condColor}; text-transform: uppercase;">${condLabel}</span>` : ''}
+              </div>
+              <div style="font-size: 0.7rem; color: var(--text-main); font-weight: 500; line-height: 1.3;">${m.name || m.description}</div>
+              <div style="font-size: 0.65rem; color: #14F195; font-weight: 700; margin-top: 4px;">Mevcut Stok: ${m.quantity} Adet</div>
+            </div>
+          `;
+        }).join('');
 
         if (matches.length > 0) {
           resultsDiv.classList.remove('hidden');
@@ -326,40 +485,48 @@ const msfPageSize = 5;
 
       // Close dropdown when clicking outside
       document.addEventListener('click', (e) => {
-        if (e.target !== searchInput && !resultsDiv.contains(e.target as Node)) {
+        if (e.target !== newSearchInput && !resultsDiv.contains(e.target as Node)) {
           resultsDiv.classList.add('hidden');
         }
       });
     }
   };
 
-  (window as any).removeMsfItemRow = (idx: number) => {
-    const row = document.getElementById(`msf-row-${idx}`);
-    if (row) row.remove();
-  };
-
-  (window as any).selectMsfRowMaterial = (rowIdx: number, sapNo: string, name: string, maxQty: number) => {
-    const searchInput = document.getElementById(`msf-search-${rowIdx}`) as HTMLInputElement;
-    const sapInput = document.getElementById(`msf-sap-${rowIdx}`) as HTMLInputElement;
-    const nameInput = document.getElementById(`msf-name-${rowIdx}`) as HTMLInputElement;
-    const qtyInput = document.getElementById(`msf-qty-${rowIdx}`) as HTMLInputElement;
-    const label = document.getElementById(`msf-stock-lbl-${rowIdx}`) as HTMLDivElement;
-    const resultsDiv = document.getElementById(`msf-results-${rowIdx}`) as HTMLDivElement;
+  // Triggered when item is selected in autocomplete list
+  (window as any).selectMsfMaterialForAdder = (sapNo: string, name: string, maxQty: number, condition: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' = 'NEW') => {
+    const searchInput = document.getElementById('msf-search-input') as HTMLInputElement;
+    const sapInput = document.getElementById('msf-selected-sap') as HTMLInputElement;
+    const nameInput = document.getElementById('msf-selected-name') as HTMLInputElement;
+    const condInput = document.getElementById('msf-selected-condition') as HTMLInputElement;
+    const maxQtyInput = document.getElementById('msf-selected-max-qty') as HTMLInputElement;
+    const qtyInput = document.getElementById('msf-qty-input') as HTMLInputElement;
+    const addBtn = document.getElementById('msf-add-to-list-btn') as HTMLButtonElement;
+    const label = document.getElementById('msf-selected-stock-lbl') as HTMLDivElement;
+    const resultsDiv = document.getElementById('msf-search-results') as HTMLDivElement;
 
     if (searchInput && sapInput && nameInput && qtyInput && label) {
       searchInput.value = `${sapNo} - ${name}`;
       sapInput.value = sapNo;
       nameInput.value = name;
+      if (condInput) condInput.value = condition;
+      if (maxQtyInput) maxQtyInput.value = maxQty.toString();
       
       qtyInput.disabled = false;
       qtyInput.max = maxQty.toString();
       qtyInput.value = "1";
+      if (addBtn) addBtn.disabled = false;
+
+      const condLabel = condition === 'REVISED' ? 'Revize' : condition === 'DEFECT' ? 'Arızalı' : condition === 'SCRAP' ? 'Hurda' : '';
+      const condColor = condition === 'DEFECT' ? '#EF4444' : condition === 'REVISED' ? '#3B82F6' : condition === 'SCRAP' ? '#9CA3AF' : '';
+      const condBg = condition === 'DEFECT' ? 'rgba(239,68,68,0.15)' : condition === 'REVISED' ? 'rgba(59,130,246,0.15)' : condition === 'SCRAP' ? 'rgba(156,163,175,0.15)' : '';
+      const condBorder = condition === 'DEFECT' ? 'rgba(239,68,68,0.3)' : condition === 'REVISED' ? 'rgba(59,130,246,0.3)' : condition === 'SCRAP' ? 'rgba(156,163,175,0.3)' : '';
 
       label.innerHTML = `
         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 8px 12px; margin-top: 8px; line-height: 1.4; color: var(--text-main);">
           <div style="font-weight: 700; font-size: 0.8rem; margin-bottom: 4px; word-break: break-word;">${name}</div>
           <div style="display: flex; justify-content: space-between; font-size: 0.68rem; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 4px; margin-top: 4px;">
             <span style="color: var(--text-muted);">SAP Kod: <strong style="color: var(--accent-cyan); font-family: monospace;">${sapNo}</strong></span>
+            ${condLabel ? `<span style="font-size: 0.65rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; border: 1px solid ${condBorder}; background: ${condBg}; color: ${condColor}; text-transform: uppercase;">${condLabel}</span>` : ''}
             <span style="color: #14F195;"><i class="fa-solid fa-circle-check"></i> Stok: <strong style="font-size: 0.75rem;">${maxQty} Adet</strong></span>
           </div>
         </div>
@@ -367,6 +534,135 @@ const msfPageSize = 5;
       
       if (resultsDiv) resultsDiv.classList.add('hidden');
     }
+  };
+
+  // Add the selected material row into the local state table
+  (window as any).addMsfSelectedMaterialToList = () => {
+    const sapInput = document.getElementById('msf-selected-sap') as HTMLInputElement;
+    const nameInput = document.getElementById('msf-selected-name') as HTMLInputElement;
+    const condInput = document.getElementById('msf-selected-condition') as HTMLInputElement;
+    const maxQtyInput = document.getElementById('msf-selected-max-qty') as HTMLInputElement;
+    const qtyInput = document.getElementById('msf-qty-input') as HTMLInputElement;
+
+    const sap = sapInput ? sapInput.value : '';
+    const name = nameInput ? nameInput.value : '';
+    const condition = (condInput ? condInput.value : 'NEW') as any;
+    const maxQty = maxQtyInput ? parseInt(maxQtyInput.value) : 0;
+    const qty = qtyInput ? parseInt(qtyInput.value) : 0;
+
+    if (!sap || !name || isNaN(qty) || qty <= 0) {
+      alert("Lütfen geçerli bir malzeme seçin ve miktar girin.");
+      return;
+    }
+
+    if (qty > maxQty) {
+      alert(`Girilen miktar (${qty}), mevcut çıkış stoğunu (${maxQty}) aşamaz!`);
+      return;
+    }
+
+    // Check duplicates in local array
+    const existingIndex = msfAddedItems.findIndex(i => i.materialCode === sap && i.condition === condition);
+    if (existingIndex !== -1) {
+      const totalQty = msfAddedItems[existingIndex].quantity + qty;
+      if (totalQty > maxQty) {
+        alert(`Toplam sevk miktarı (${totalQty}), mevcut çıkış stoğunu (${maxQty}) aşamaz!`);
+        return;
+      }
+      msfAddedItems[existingIndex].quantity = totalQty;
+    } else {
+      msfAddedItems.push({
+        materialCode: sap,
+        materialName: name,
+        quantity: qty,
+        condition: condition
+      });
+    }
+
+    // Reset adder inputs
+    const searchInput = document.getElementById('msf-search-input') as HTMLInputElement;
+    if (searchInput) searchInput.value = '';
+    if (sapInput) sapInput.value = '';
+    if (nameInput) nameInput.value = '';
+    if (condInput) condInput.value = '';
+    if (maxQtyInput) maxQtyInput.value = '';
+    if (qtyInput) {
+      qtyInput.value = '1';
+      qtyInput.disabled = true;
+    }
+
+    const stockLbl = document.getElementById('msf-selected-stock-lbl');
+    if (stockLbl) stockLbl.innerHTML = '';
+
+    const addBtn = document.getElementById('msf-add-to-list-btn') as HTMLButtonElement;
+    if (addBtn) addBtn.disabled = true;
+
+    // Render list table
+    (window as any).renderMsfAddedItemsTable();
+  };
+
+  // Remove added item from state array
+  (window as any).removeMsfAddedItem = (index: number) => {
+    if (index >= 0 && index < msfAddedItems.length) {
+      msfAddedItems.splice(index, 1);
+      (window as any).renderMsfAddedItemsTable();
+    }
+  };
+
+  // Render local state array to HTML table representation
+  (window as any).renderMsfAddedItemsTable = () => {
+    const container = document.getElementById('msf-items-container');
+    if (!container) return;
+
+    if (msfAddedItems.length === 0) {
+      container.innerHTML = `
+        <div style="color: var(--text-muted); font-size: 0.75rem; text-align: center; padding: 1.5rem; border: 1px dashed rgba(255, 255, 255, 0.08); border-radius: 8px;">
+          Sevk listesi boş. Lütfen yukarıdan malzeme ekleyin.
+        </div>
+      `;
+      return;
+    }
+
+    const rowsHTML = msfAddedItems.map((item, index) => {
+      const cond = item.condition || 'NEW';
+      const condLabel = cond === 'REVISED' ? 'Revize' : cond === 'DEFECT' ? 'Arızalı' : cond === 'SCRAP' ? 'Hurda' : '';
+      const condColor = cond === 'DEFECT' ? '#EF4444' : cond === 'REVISED' ? '#3B82F6' : cond === 'SCRAP' ? '#9CA3AF' : '';
+      const condBg = cond === 'DEFECT' ? 'rgba(239,68,68,0.15)' : cond === 'REVISED' ? 'rgba(59,130,246,0.15)' : cond === 'SCRAP' ? 'rgba(156,163,175,0.15)' : '';
+      const condBorder = cond === 'DEFECT' ? 'rgba(239,68,68,0.3)' : cond === 'REVISED' ? 'rgba(59,130,246,0.3)' : cond === 'SCRAP' ? 'rgba(156,163,175,0.3)' : '';
+
+      return `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+          <td style="padding: 10px 8px; color: var(--accent-cyan); font-family: monospace; font-size: 0.78rem; font-weight: 700;">${item.materialCode}</td>
+          <td style="padding: 10px 8px; color: var(--text-main); font-weight: 500; font-size: 0.78rem;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>${item.materialName}</span>
+              ${condLabel ? `<span style="font-size: 0.6rem; font-weight: 700; padding: 1px 5px; border-radius: 4px; border: 1px solid ${condBorder}; background: ${condBg}; color: ${condColor}; text-transform: uppercase;">${condLabel}</span>` : ''}
+            </div>
+          </td>
+          <td style="padding: 10px 8px; color: #14F195; font-weight: 700; font-size: 0.78rem; text-align: center;">${item.quantity} Adet</td>
+          <td style="padding: 10px 8px; text-align: right;">
+            <button type="button" onclick="window.removeMsfAddedItem(${index})" class="btn-cyber-mini" style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.25); color: #ef4444; height: 28px; width: 28px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.15)';" onmouseout="this.style.background='rgba(239, 68, 68, 0.06)';" title="Sil">
+              <i class="fa-solid fa-trash-can" style="font-size: 0.65rem;"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    container.innerHTML = `
+      <table style="width: 100%; border-collapse: collapse; margin-top: 0.5rem;">
+        <thead>
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">
+            <th style="padding: 8px; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">SAP Kodu</th>
+            <th style="padding: 8px; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Malzeme Tanımı</th>
+            <th style="padding: 8px; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; text-align: center;">Miktar</th>
+            <th style="padding: 8px; font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; text-align: right;">Aksiyon</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHTML}
+        </tbody>
+      </table>
+    `;
   };
 
   // Form Submission
@@ -382,49 +678,11 @@ const msfPageSize = 5;
         return;
       }
 
-      // Collect items from rows
-      const items: TransferItem[] = [];
-      const rows = document.querySelectorAll('#msf-items-container .msf-item-row');
-      
-      let validationError = null;
-
-      rows.forEach(row => {
-        const idStr = row.id.split('-').pop();
-        const sap = (document.getElementById(`msf-sap-${idStr}`) as HTMLInputElement).value;
-        const name = (document.getElementById(`msf-name-${idStr}`) as HTMLInputElement).value;
-        const qtyVal = parseInt((document.getElementById(`msf-qty-${idStr}`) as HTMLInputElement).value);
-        const qtyMax = parseInt((document.getElementById(`msf-qty-${idStr}`) as HTMLInputElement).max);
-
-        if (!sap || !name || isNaN(qtyVal) || qtyVal <= 0) {
-          validationError = "Lütfen sevk listesindeki tüm malzeme satırlarını doldurun.";
-          return;
-        }
-
-        if (qtyVal > qtyMax) {
-          validationError = `${sap} kodlu malzeme için sevk miktarı (${qtyVal}), mevcut çıkış stoğunu (${qtyMax}) aşamaz!`;
-          return;
-        }
-
-        // Check duplicates
-        const existing = items.find(i => i.materialCode === sap);
-        if (existing) {
-          existing.quantity += qtyVal;
-        } else {
-          items.push({
-            materialCode: sap,
-            materialName: name,
-            quantity: qtyVal
-          });
-        }
-      });
-
-      if (validationError) {
-        alert(validationError);
-        return;
-      }
+      // Collect items from local state array
+      const items: TransferItem[] = [...msfAddedItems];
 
       if (items.length === 0) {
-        alert("Lütfen en az bir malzeme satırı ekleyin.");
+        alert("Lütfen en az bir sevk edilecek malzeme ekleyin.");
         return;
       }
 
@@ -555,6 +813,16 @@ const msfPageSize = 5;
     });
   }
 
+  if (filterDeparture !== 'HEPSİ') {
+    filtered = filtered.filter(t => t.fromSiteId === filterDeparture);
+  }
+
+  if (filterDestination !== 'HEPSİ') {
+    filtered = filtered.filter(t => t.toSiteId === filterDestination);
+  }
+
+  (window as any)._filteredTransfersForExcel = filtered;
+
   const totalCount = filtered.length;
   if (totalCount === 0) {
     container.innerHTML = `
@@ -580,7 +848,15 @@ const msfPageSize = 5;
 
   const cardsHtml = pagedItems.map(t => {
     const isV2 = Array.isArray(t.items);
-    const msfNo = t.msfNo || `TRF-${t.id?.substring(0, 8).toUpperCase()}`;
+    const formatMsfNo = (msf: string): string => {
+      if (!msf) return '';
+      const parts = msf.split('-');
+      if (parts.length === 3 && parts[0] === 'MSF') {
+        return `${parts[2]}-MSF-${parts[1]}`;
+      }
+      return msf;
+    };
+    const msfNo = formatMsfNo(t.msfNo || `TRF-${t.id?.substring(0, 8).toUpperCase()}`);
     const fromName = warehousesMap[t.fromSiteId] || t.fromSiteId;
     const toName = warehousesMap[t.toSiteId] || t.toSiteId;
     
@@ -661,7 +937,14 @@ const msfPageSize = 5;
     }
 
     const isReceiver = currentUser?.allowedWarehouses?.includes(t.toSiteId) || currentUser?.role === 'ADMIN' || currentUser?.role === 'MALZEME_YONETIMI';
-    const showActions = normStatus === 'YOLDA' && isReceiver;
+    const isSystemAdmin = currentUser?.role === 'ADMIN' || 
+                          currentUser?.role === 'MALZEME_YONETIMI' || 
+                          currentUser?.email?.toLowerCase() === 'fatih.zebek@demirerholding.com' ||
+                          currentUser?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
+    
+    const showApprove = normStatus === 'YOLDA' && isReceiver;
+    const showReject = normStatus === 'YOLDA' && isReceiver && !isSystemAdmin;
+    const showCancel = normStatus === 'YOLDA' && isSystemAdmin;
 
     const createdDateStr = t.createdAt?.toDate 
       ? t.createdAt.toDate().toLocaleString('tr-TR') 
@@ -693,10 +976,19 @@ const msfPageSize = 5;
               <i class="fa-solid fa-print"></i> Yazdır
             </button>
             
-            ${showActions ? `
+            ${showCancel ? `
+              <button onclick="window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+                <i class="fa-solid fa-ban"></i> İptal Et (Sil)
+              </button>
+            ` : ''}
+
+            ${showReject ? `
               <button onclick="window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
                 <i class="fa-solid fa-ban"></i> Reddet
               </button>
+            ` : ''}
+
+            ${showApprove ? `
               <button onclick="window.approveMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: 700; transition: all 0.2s; box-shadow: 0 0 10px rgba(16,185,129,0.05);" onmouseover="this.style.background='rgba(16,185,129,0.18)'; this.style.borderColor='#10B981'; this.style.boxShadow='0 0 15px rgba(16,185,129,0.15)';" onmouseout="this.style.background='rgba(16,185,129,0.08)'; this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.boxShadow='0 0 10px rgba(16,185,129,0.05)'">
                 <i class="fa-solid fa-circle-check"></i> Teslim Al
               </button>
@@ -779,27 +1071,139 @@ const msfPageSize = 5;
 
 // Approve Multi-Item Transfer
 (window as any).approveMsfTransfer = async (transferId: string) => {
-  if (!confirm("Sevk malzemelerini eksiksiz teslim aldığınızı onaylıyor musunuz?\nKabul edildiğinde malzemeler varış deposunun stoğuna eklenecektir.")) return;
+  const t = loadedTransfersList.find(x => x.id === transferId);
+  if (!t) return;
 
   const adminEmail = authService.getCurrentUser()?.email || 'Admin';
+  const items = Array.isArray(t.items) 
+    ? t.items 
+    : [{ materialCode: t.materialCode, materialName: t.materialName, quantity: t.quantity, condition: 'NEW' }];
+
+  // 1. Create a dynamic modal container if not exists
+  let modal = document.getElementById('msf-approval-modal');
+  if (modal) {
+    modal.remove();
+  }
   
-  try {
-    const t = loadedTransfersList.find(x => x.id === transferId);
-    if (!t) return;
-    
-    const isV2 = Array.isArray(t.items);
-    if (isV2) {
-      await transferService.approveMultiItemTransfer(transferId, adminEmail);
-    } else {
-      // Legacy compatibility
-      await transferService.approveTransfer(t, adminEmail);
-    }
-    
-    alert("✅ Sevk başarıyla teslim alındı ve stoğa girildi!");
-    (window as any).navigate('transfers');
-  } catch (err: any) {
-    console.error(err);
-    alert("Kabul işlemi sırasında hata oluştu: " + err.message);
+  modal = document.createElement('div');
+  modal.id = 'msf-approval-modal';
+  modal.className = 'lightbox-fade-in';
+  modal.style.position = 'fixed';
+  modal.style.top = '0';
+  modal.style.left = '0';
+  modal.style.width = '100%';
+  modal.style.height = '100%';
+  modal.style.background = 'rgba(5, 8, 15, 0.85)';
+  modal.style.backdropFilter = 'blur(12px)';
+  modal.style.zIndex = '9999';
+  modal.style.display = 'flex';
+  modal.style.justifyContent = 'center';
+  modal.style.alignItems = 'center';
+  modal.style.padding = '20px';
+
+  // Generate HTML for each item inputs
+  const itemsInputsHtml = items.map((item: any) => {
+    const itemCond = item.condition || 'NEW';
+    return `
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 6px;">
+          <span style="font-weight: 700; color: var(--text-main); font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+            <span style="font-family: monospace; font-size: 0.72rem; color: #00f3ff; background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.15); padding: 2px 6px; border-radius: 4px;">${item.materialCode}</span>
+            <span>${item.materialName}</span>
+          </span>
+          <span style="color: #14F195; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.82rem;">${item.quantity} Adet</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="display: block; font-size: 0.65rem; color: #64748B; font-weight: 800; text-transform: uppercase; margin-bottom: 4px;">Giriş Rafı (Konum)</label>
+            <input type="text" id="appr-shelf-${item.materialCode}" class="cyber-input" placeholder="Raf No (örn: A-12)" value="" style="width: 100%; font-size: 0.8rem; height: 38px; padding: 0 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; border-radius: 6px;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.65rem; color: #64748B; font-weight: 800; text-transform: uppercase; margin-bottom: 4px;">Malzeme Durumu</label>
+            <select id="appr-cond-${item.materialCode}" class="cyber-input" style="width: 100%; font-size: 0.8rem; height: 38px; padding: 0 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); color: #fff; border-radius: 6px; cursor: pointer;">
+              <option value="NEW" ${itemCond === 'NEW' ? 'selected' : ''}>Yeni</option>
+              <option value="REVISED" ${itemCond === 'REVISED' ? 'selected' : ''}>Revize</option>
+              <option value="DEFECT" ${itemCond === 'DEFECT' ? 'selected' : ''}>Arızalı</option>
+              <option value="SCRAP" ${itemCond === 'SCRAP' ? 'selected' : ''}>Hurda</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  modal.innerHTML = `
+    <div class="glass-panel lightbox-scale-up" style="width: 100%; max-width: 500px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 16px; box-shadow: 0 10px 40px rgba(0, 243, 255, 0.15), 0 0 2px rgba(0, 243, 255, 0.4); padding: 1.5rem; display: flex; flex-direction: column; max-height: 90vh; overflow-y: auto;">
+      
+      <!-- Modal Header -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px; margin-bottom: 16px;">
+        <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin: 0; display: inline-flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-warehouse" style="color: var(--accent-cyan);"></i> Depo Girişi Raf ve Durum Belirleme
+        </h3>
+        <button onclick="document.getElementById('msf-approval-modal').remove()" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='var(--text-muted)'">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div style="flex: 1; overflow-y: auto; padding-right: 4px; margin-bottom: 16px;">
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0; margin-bottom: 12px; line-height: 1.4;">
+          Lütfen teslim alınan malzemelerin yerleştirileceği raf numarasını ve fiziki durumunu kontrol ederek belirtiniz.
+        </p>
+        ${itemsInputsHtml}
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 16px;">
+        <button onclick="document.getElementById('msf-approval-modal').remove()" class="btn-cyber-mini" style="font-size: 0.8rem; padding: 8px 16px; border-color: rgba(255,255,255,0.15); background: transparent; color: var(--text-main); height: 38px;">
+          Vazgeç
+        </button>
+        <button id="msf-approve-submit-btn" class="btn-cyber-mini" style="font-size: 0.8rem; padding: 8px 20px; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); color: #10B981; font-weight: 700; height: 38px; box-shadow: 0 0 10px rgba(16,185,129,0.05);" onmouseover="this.style.background='rgba(16,185,129,0.2)'; this.style.borderColor='#10B981'; this.style.boxShadow='0 0 15px rgba(16,185,129,0.2)';" onmouseout="this.style.background='rgba(16,185,129,0.1)'; this.style.borderColor='rgba(16, 185, 129, 0.4)'; this.style.boxShadow='0 0 10px rgba(16,185,129,0.05)'">
+          <i class="fa-solid fa-check-circle" style="margin-right: 4px;"></i> Depoya Giriş Yap
+        </button>
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Bind Submit Button Click
+  const submitBtn = document.getElementById('msf-approve-submit-btn');
+  if (submitBtn) {
+    submitBtn.onclick = async () => {
+      // Gather inputs
+      const details = items.map((item: any) => {
+        const shelfInput = document.getElementById(`appr-shelf-${item.materialCode}`) as HTMLInputElement;
+        const condSelect = document.getElementById(`appr-cond-${item.materialCode}`) as HTMLSelectElement;
+        
+        const shelfVal = shelfInput ? shelfInput.value.trim() : '';
+        const condVal = condSelect ? condSelect.value : 'NEW';
+
+        return {
+          materialCode: item.materialCode,
+          shelfNo: shelfVal || 'Belirtilmedi',
+          condition: condVal as 'NEW' | 'DEFECT' | 'REVISED' | 'SCRAP'
+        };
+      });
+
+      // Show loader on button
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> İşleniyor...';
+
+      try {
+        await transferService.approveMultiItemTransfer(transferId, adminEmail, details);
+
+        modal.remove();
+        alert("✅ Sevk başarıyla teslim alındı, belirtilen raflara ve durumlarına göre stoğa girildi!");
+        (window as any).navigate('transfers');
+      } catch (err: any) {
+        console.error(err);
+        submitBtn.removeAttribute('disabled');
+        submitBtn.innerHTML = '<i class="fa-solid fa-check-circle" style="margin-right: 4px;"></i> Depoya Giriş Yap';
+        alert("Kabul işlemi sırasında hata oluştu: " + err.message);
+      }
+    };
   }
 };
 
@@ -839,7 +1243,15 @@ const msfPageSize = 5;
   const transfer = loadedTransfersList.find(x => x.id === transferId);
   if (!transfer) return;
 
-  const msfNo = transfer.msfNo || `TRF-${transfer.id?.substring(0, 8).toUpperCase()}`;
+  const formatMsfNo = (msf: string): string => {
+    if (!msf) return '';
+    const parts = msf.split('-');
+    if (parts.length === 3 && parts[0] === 'MSF') {
+      return `${parts[2]}-MSF-${parts[1]}`;
+    }
+    return msf;
+  };
+  const msfNo = formatMsfNo(transfer.msfNo || `TRF-${transfer.id?.substring(0, 8).toUpperCase()}`);
   const fromName = warehousesMap[transfer.fromSiteId] || transfer.fromSiteId;
   const toName = warehousesMap[transfer.toSiteId] || transfer.toSiteId;
   const dateStr = transfer.createdAt?.toDate ? transfer.createdAt.toDate().toLocaleString('tr-TR') : new Date().toLocaleString('tr-TR');
@@ -1035,4 +1447,19 @@ const msfPageSize = 5;
     </html>
   `);
   printWindow.document.close();
+};
+
+(window as any).exportTransfersListToExcel = async () => {
+  try {
+    const list = (window as any)._filteredTransfersForExcel || [];
+    if (list.length === 0) {
+      alert("İndirilecek transfer kaydı bulunamadı!");
+      return;
+    }
+    const { excelService } = await import('../services/ExcelService');
+    const fileName = `Demirer_Holding_Transfer_Raporu`;
+    await excelService.exportTransfersToExcel(list, fileName);
+  } catch (err: any) {
+    alert("Excel indirilirken hata oluştu: " + err.message);
+  }
 };

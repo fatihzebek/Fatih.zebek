@@ -5,128 +5,151 @@ import { warehouseService } from '../services/WarehouseService';
 import { serviceReportService } from '../services/ServiceReportService';
 import { turbineReminderService } from '../services/TurbineReminderService';
 import { personnelService } from '../services/PersonnelService';
+import { transferService } from '../services/TransferService';
+import { formatDisplayName, formatTeamName } from '../utils/formatters';
+import { getGreetingPrefixHTML, getUserBadgeHTML } from './Dashboard/DashboardHeader';
+import { DashboardAgenda } from './Dashboard/DashboardAgenda';
+import { DashboardFeed } from './Dashboard/DashboardFeed';
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '').replace(/\s*[Tt]alimat[ıi]\s*/g, '').trim().toUpperCase();
 };
 const isGenericFault = (code: string) => !code || code.includes('---') || code.toUpperCase().includes('GENEL GÖREV');
 
+// Stale-while-revalidate cache for instant 0ms Dashboard rendering
+let cachedDashboardData: {
+  tasks?: any[];
+  pendingLeaves?: any[];
+  reminders?: any[];
+  transfers?: any[];
+  reports?: any[];
+} = {};
+
 export const DashboardPage = async () => {
-  let tasks = await taskService.getTasks();
+  const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
   
-  // Fetch pending reminders
-  const reminders = await turbineReminderService.getPendingReminders();
+  (window as any).switchLeaveTabAndGo = (tabName: string) => {
+    (window as any).leaveCurrentTab = tabName;
+    (window as any).navigate('leave-management');
+  };
+
+  // If cache is empty, load data synchronously first to prevent blank/zero screen on first load
+  const isCacheEmpty = !cachedDashboardData.tasks;
+  if (isCacheEmpty) {
+    try {
+      const [freshTasks, freshLeaves, freshReminders, freshTransfers, freshReports] = await Promise.all([
+        taskService.getTasks(),
+        (async () => {
+          let freshLeaves: any[] = [];
+          try {
+            const { db } = await import('../firebase');
+            const { collection, getDocs, query, where } = await import('firebase/firestore');
+            const userEmail = (currentUser?.email || '').toLowerCase().trim();
+            const isAdminUser = currentUser?.role === 'ADMIN';
+            const isApprover = isAdminUser || userEmail === 'furkan.yildirim@demirerholding.com' || userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'emre.aydogdu@demirerholding.com';
+            if (isApprover) {
+              const snap = await getDocs(query(collection(db, 'leaveRequests'), where('status', 'in', ['PENDING_FIRST', 'PENDING_FINAL'])));
+              snap.forEach(d => freshLeaves.push({ id: d.id, ...d.data() }));
+              if (userEmail === 'furkan.yildirim@demirerholding.com' || userEmail === 'fatih.zebek@demirerholding.com' || isAdminUser) {
+                freshLeaves = freshLeaves.filter(r => r.status === 'PENDING_FIRST' || r.status === 'PENDING_FINAL');
+              } else if (userEmail === 'emre.aydogdu@demirerholding.com') {
+                freshLeaves = freshLeaves.filter(r => r.status === 'PENDING_FINAL');
+              } else {
+                freshLeaves = [];
+              }
+            }
+          } catch (e) {}
+          return freshLeaves;
+        })(),
+        turbineReminderService.getPendingReminders(),
+        transferService.getTransfers(),
+        serviceReportService.getAllReports()
+      ]);
+
+      cachedDashboardData = {
+        tasks: freshTasks,
+        pendingLeaves: freshLeaves,
+        reminders: freshReminders,
+        transfers: freshTransfers,
+        reports: freshReports
+      };
+    } catch (err) {
+      console.error("Failed initial dashboard data load:", err);
+    }
+  }
+
+  // Use cached arrays if available for instant 0ms HTML generation
+  let tasks: any[] = cachedDashboardData.tasks || [];
+  let pendingLeaves: any[] = cachedDashboardData.pendingLeaves || [];
+  let reminders: any[] = cachedDashboardData.reminders || [];
+  let transfers: any[] = cachedDashboardData.transfers || [];
+  let reports: any[] = cachedDashboardData.reports || [];
+
   const todayStr = new Date().toISOString().split('T')[0];
   const todayTime = new Date(todayStr).getTime();
-  
-  // Filter for reminders whose date is today or earlier
-  const dueReminders = reminders.filter(r => {
-    const rTime = new Date(r.reminderDate).getTime();
-    return rTime <= todayTime;
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const allowedSites = currentUser?.allowedSites || [];
+  const userTeam = ((window as any).currentUserTeam || currentUser?.team || '').trim();
+  const userTeamId = userTeam ? `team_${userTeam.toLowerCase().replace(/\s+/g, '_')}` : '';
+
+  const pendingTransfers = transfers.filter(t => {
+    const isPending = t.status === 'YOLDA' || t.status === 'PENDING';
+    if (!isPending) return false;
+    if (isAdmin) return true;
+    const fromMatches = allowedSites.includes(t.fromSiteId) || (userTeamId && t.fromSiteId.toLowerCase() === userTeamId);
+    const toMatches = allowedSites.includes(t.toSiteId) || (userTeamId && t.toSiteId.toLowerCase() === userTeamId);
+    return fromMatches || toMatches;
   });
 
-  // Sort: CRITICAL -> MEDIUM -> LOW
-  const priorityOrder = { CRITICAL: 0, MEDIUM: 1, LOW: 2 };
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const warningTransfers = pendingTransfers.map(t => {
+    let createdDate = new Date();
+    let dateText = 'Bilinmeyen Tarih';
+    if (t.createdAt) {
+      createdDate = t.createdAt.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+      dateText = createdDate.toLocaleDateString('tr-TR');
+    } else {
+      dateText = new Date().toLocaleDateString('tr-TR');
+    }
+    const startOfCreated = new Date(createdDate);
+    startOfCreated.setHours(0, 0, 0, 0);
+    const daysPending = Math.max(0, Math.round((startOfToday.getTime() - startOfCreated.getTime()) / (1000 * 60 * 60 * 24)));
+    return { ...t, dateText, daysPending };
+  });
+  
+  const isFatihOrAdmin = currentUser?.role === 'ADMIN' || 
+                         (currentUser?.email || '').toLowerCase().includes('fatih.zebek') ||
+                         (currentUser?.displayName || '').toLowerCase().includes('fatih zebek');
+
+  const dueReminders = reminders.filter(r => {
+    const rTime = new Date(r.reminderDate).getTime();
+    if (rTime > todayTime) return false;
+    if (isFatihOrAdmin) return true;
+    const creatorEmail = (r.createdBy || '').toLowerCase().trim();
+    const myEmail = (currentUser?.email || '').toLowerCase().trim();
+    if (myEmail && creatorEmail && myEmail === creatorEmail) return true;
+    const rSiteId = (r.siteId || '').toLowerCase().trim();
+    const rSiteName = (r.siteName || '').toLowerCase().trim();
+    return (currentUser?.allowedSites || []).some((s: string) => {
+      const cleanS = s.toLowerCase().trim();
+      return cleanS === rSiteId || cleanS.includes(rSiteId) || rSiteId.includes(cleanS) || rSiteName.includes(cleanS) || cleanS.includes(rSiteName);
+    });
+  });
+
+  const priorityOrder: Record<string, number> = { CRITICAL: 0, MEDIUM: 1, LOW: 2 };
   dueReminders.sort((a, b) => {
-    const orderA = priorityOrder[a.priority || 'LOW'];
-    const orderB = priorityOrder[b.priority || 'LOW'];
+    const orderA = priorityOrder[a.priority || 'LOW'] ?? 2;
+    const orderB = priorityOrder[b.priority || 'LOW'] ?? 2;
     if (orderA !== orderB) return orderA - orderB;
     return a.reminderDate.localeCompare(b.reminderDate);
   });
-  
-  // Sadece ilgili ekibin görevlerini göster (Eğer kullanıcı TECHNICIAN ise)
-  const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
 
-  // Welcome Text & Slogan Logic
-  const getGreetingPrefixHTML = () => {
-    const h = new Date().getHours();
-    let greetingPrefix = '';
-    let icon = '';
-    
-    if (h < 6) {
-      icon = '<i class="fa-solid fa-moon" style="color: #a29bfe; margin-right: 10px;"></i>';
-      greetingPrefix = 'İYİ GECELER';
-    } else if (h < 12) {
-      icon = '<i class="fa-solid fa-sun" style="color: #ffd93d; margin-right: 10px;"></i>';
-      greetingPrefix = 'GÜNAYDINN';
-    } else if (h < 18) {
-      icon = '<i class="fa-solid fa-cloud-sun" style="color: #ff9f43; margin-right: 10px;"></i>';
-      greetingPrefix = 'İYİ GÜNLER';
-    } else {
-      icon = '<i class="fa-solid fa-star" style="color: #a29bfe; margin-right: 10px;"></i>';
-      greetingPrefix = 'İYİ AKŞAMLAR';
-    }
-
-    return `${icon} ${greetingPrefix}`;
-  };
-
-  const getUserBadgeHTML = () => {
-    if (!currentUser) return '';
-
-    if (currentUser.role === 'ADMIN') {
-      return `
-        <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">YÖNETİCİ</span>
-        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-main); margin-top: 2px; text-align: center; width: 100%;">Fatih ZEBEK</span>
-      `;
-    }
-
-    const rawTeam = ((window as any).currentUserTeam || currentUser.team || currentUser.displayName || '').trim();
-    const normalizedRawTeam = rawTeam.toUpperCase().replace(/\s+/g, '');
-
-    // Query team personnel dynamically from Firestore
-    const allPersonnel = personnelService.getPersonnelDetailsList();
-    const teamPersonnelNames = allPersonnel
-      .filter(p => {
-        const pTeam = (p.team || '').toUpperCase().replace(/\s+/g, '');
-        return pTeam && pTeam === normalizedRawTeam;
-      })
-      .map(p => p.name);
-
-    // Apply custom order from Fatih's spreadsheet hierarchy
-    const customOrderList = [
-      'Niyazi KARADAYI', 'Gürkan VARDAR',
-      'Gökmen KÖKSAL', 'Cemalettin KAYA',
-      'Volkan VARDAR', 'Sercan MUTLU',
-      'Harun DALKIRAN', 'Ahmet Oğuz ÖZMUTLU',
-      'ONUR Çelik', 'Onur ÇELİK', 'Ali BODUR',
-      'Arif ARIKAN', 'Batuhan KÖKEN',
-      'Ali ÇETİNKAYA', 'RECEP ERTAN', 'Recep ERTAN',
-      'Süleyman AŞKIN', 'Adem ARASLI',
-      'Mehmet GÜNAY', 'Zafer DURMAZ',
-      'Emre ACAR', 'Berkay keskin', 'Berkay KESKİN',
-      'Berkant SAV', 'Ahmet can GÜLAÇ', 'Ahmet Can GÜLAÇ',
-      'İbrahim ÖZKARA', 'Ahmet ALAN',
-      'Eray ÖNLÜ', 'Kadir DEMİRÖZ',
-      'Ahmet DÜNDAR', 'Halil ibrahim Çetin', 'Halil İbrahim ÇETİN',
-      'Mehmet KÖKEN', 'Özgür DEMİRAY'
-    ].map(n => n.toUpperCase().trim());
-
-    teamPersonnelNames.sort((a, b) => {
-      const idxA = customOrderList.indexOf(a.toUpperCase().trim());
-      const idxB = customOrderList.indexOf(b.toUpperCase().trim());
-      if (idxA === -1 && idxB === -1) return a.localeCompare(b, 'tr-TR');
-      if (idxA === -1) return 1;
-      if (idxB === -1) return -1;
-      return idxA - idxB;
-    });
-
-    if (teamPersonnelNames.length > 0) {
-      return `
-        <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">${rawTeam.toUpperCase()}</span>
-        <span style="font-size: 0.7rem; font-weight: 600; color: var(--text-muted); margin-top: 2px; text-align: center; width: 100%;">${teamPersonnelNames.join(' & ')}</span>
-      `;
-    }
-
-    return `
-      <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">${rawTeam.toUpperCase() || 'EKİP ÜYESİ'}</span>
-    `;
-  };
-
-  // Allow real-time badge updates from database callbacks
   (window as any).updateDashboardUserBadge = () => {
     const badge = document.querySelector('.user-profile-badge');
     if (badge) {
-      badge.innerHTML = getUserBadgeHTML();
+      badge.innerHTML = getUserBadgeHTML(currentUser);
     }
   };
 
@@ -140,6 +163,7 @@ export const DashboardPage = async () => {
     }
     return !!dashPerms;
   };
+
   if (currentUser && currentUser.role === 'TECHNICIAN') {
     const allowedSites = dataService.getSites().map(s => s.id);
     tasks = tasks.filter(t => {
@@ -151,48 +175,37 @@ export const DashboardPage = async () => {
       return allowedSites.includes(tSiteId);
     });
 
-    const userTeam = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
-    if (userTeam) {
+    const userTeamStr = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
+    if (userTeamStr) {
+      const managedTeams = (currentUser?.managedTeams || []).map((mt: string) => mt.toUpperCase().trim());
       tasks = tasks.filter(t => {
         const taskPersonnel = String(t.personnel || '').toUpperCase().trim();
-        const searchTeam = userTeam.toUpperCase().trim();
-        
-        // "SİSTEM" veya boş olanları (kendi bölgelerinde olduğu sürece) göster
         if (!taskPersonnel || taskPersonnel === 'SİSTEM' || taskPersonnel === 'ATANMADI') return true;
-        
+        if (managedTeams.some((mt: string) => taskPersonnel.includes(mt))) return true;
         const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
-        const userNum = searchTeam.replace(/[^0-9]/g, '');
-        
+        const userNum = userTeamStr.replace(/[^0-9]/g, '');
         if (taskNum && userNum) {
           const tN = parseInt(taskNum);
           const uN = parseInt(userNum);
           if (tN === uN) return true;
-          // Özel Dares İstisnası: Team 5 ve Team 10 aynı ekip görevlerini görebilmeli!
           if ((tN === 5 && uN === 10) || (tN === 10 && uN === 5)) return true;
         }
-        
-        return taskPersonnel.includes(searchTeam) || searchTeam.includes(taskPersonnel);
+        return taskPersonnel.includes(userTeamStr) || userTeamStr.includes(taskPersonnel);
       });
     }
   }
 
   const sites = dataService.getSites();
-  const reports = await serviceReportService.getAllReports();
-  
-  // Filter for OPEN tasks (Maintenance or Fault)
   const openTasks = tasks.filter(t => t.status !== 'Tamamlandı');
   const activeTasksCount = openTasks.length;
   const emergencyTasksCount = openTasks.filter(t => t.secilenSablon?.toLowerCase().includes('arıza')).length;
   
-  // Maintenance Tracking Logic
   const maintenancePlan = (() => {
     const plan: { siteName: string, turbineNo: string, lastDate: string, lastType: string, nextDate: Date, nextType: string, status: 'safe' | 'warning' | 'overdue' }[] = [];
     const now = new Date();
-
     sites.forEach(site => {
       const siteTurbines = dataService.getTurbinesBySite(site.id);
       siteTurbines.forEach(t => {
-        // Find last maintenance report for this turbine
         const turbineReports = reports.filter(r => r.turbineSerial === t.id);
         const lastMaint = turbineReports
           .filter(r => {
@@ -208,195 +221,83 @@ export const DashboardPage = async () => {
         if (lastMaint) {
           const lastDate = new Date(lastMaint.date);
           const nextDate = new Date(lastDate);
-          nextDate.setMonth(nextDate.getMonth() + 6); // Add 6 months
-
+          nextDate.setMonth(nextDate.getMonth() + 6);
           const searchStr = `${lastMaint.type} ${lastMaint.templateName} ${lastMaint.faultCode}`.toLowerCase();
           const isLastAna = searchStr.includes('ana');
           const nextType = isLastAna ? 'YAĞLAMA BAKIMI' : 'ANA BAKIM';
           const lastType = isLastAna ? 'ANA BAKIM' : 'YAĞLAMA BAKIMI';
-
-          // Status calculation
           const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
           let status: 'safe' | 'warning' | 'overdue' = 'safe';
           if (diffDays < 0) status = 'overdue';
           else if (diffDays < 30) status = 'warning';
-
-          plan.push({
-            siteName: site.name,
-            turbineNo: t.no.toString(),
-            lastDate: lastMaint.date,
-            lastType,
-            nextDate,
-            nextType,
-            status
-          });
+          plan.push({ siteName: site.name, turbineNo: t.no.toString(), lastDate: lastMaint.date, lastType, nextDate, nextType, status });
         }
       });
     });
-
     return plan.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime());
   })();
 
-  // Real-time Agent Monitoring + Counter Animation + Agenda
-  setTimeout(() => {
-    // Counter-up animation for stat values
-    document.querySelectorAll('.dash-stat-card .value[data-count]').forEach(el => {
-      const target = parseInt(el.getAttribute('data-count') || '0');
-      if (target === 0) { el.textContent = '0'; return; }
-      let current = 0;
-      const increment = Math.max(1, Math.ceil(target / 25));
-      const timer = setInterval(() => {
-        current += increment;
-        if (current >= target) { current = target; clearInterval(timer); el.classList.add('counted'); }
-        el.textContent = String(current);
-      }, 30);
-    });
+  // Background Async Data Hydration
+  setTimeout(async () => {
+    try {
+      const freshTasks = await taskService.getTasks();
+      cachedDashboardData.tasks = freshTasks;
 
-    const currentUser = (window as any).currentUser;
-
-    // Agent monitoring (admin only)
-    if (currentUser?.role === 'ADMIN') {
-      const agentGrid = document.getElementById('dash-agent-grid');
-      if (agentGrid) {
-        agentHealthService.subscribeToAgents((agents) => {
-          agentGrid.innerHTML = agents.slice(0, 4).map(agent => `
-            <div class="agent-mini-tag ${agent.status}">
-              <span class="pulse-dot"></span>
-              <span class="agent-name">${agent.name.split(' ')[0]}</span>
-            </div>
-          `).join('');
-        });
-      }
-    }
-
-    // ===== AJANDA WIDGET LOGIC =====
-    const trMonths = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-    const trDays = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
-    let agendaDate = new Date();
-
-    // Collect all agenda events
-    type AgendaEvent = { date: Date; title: string; subtitle: string; type: 'task' | 'maintenance' | 'overdue'; icon: string };
-    const agendaEvents: AgendaEvent[] = [];
-
-    // Add tasks
-    openTasks.forEach(t => {
-      const d = t.createdAt?.toDate ? t.createdAt.toDate() : null;
-      if (d) {
-        const isEmergency = t.secilenSablon?.toLowerCase().includes('arıza');
-        agendaEvents.push({
-          date: d,
-          title: `${t.siteId} / ${t.turbineId}`,
-          subtitle: `${t.personnel || 'Atanmadı'} • ${cleanSablonName(t.secilenSablon)}`,
-          type: isEmergency ? 'overdue' : 'task',
-          icon: isEmergency ? 'fa-bolt-lightning' : 'fa-wrench'
-        });
-      }
-    });
-
-    // Add maintenance plans
-    maintenancePlan.forEach(p => {
-      agendaEvents.push({
-        date: p.nextDate,
-        title: `${p.siteName} / T${p.turbineNo}`,
-        subtitle: p.nextType,
-        type: p.status === 'overdue' ? 'overdue' : 'maintenance',
-        icon: p.status === 'overdue' ? 'fa-triangle-exclamation' : 'fa-calendar-check'
-      });
-    });
-
-    agendaEvents.sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    function renderAgendaCalendar() {
-      const cal = document.getElementById('agenda-mini-calendar');
-      const label = document.getElementById('agenda-month-label');
-      if (!cal || !label) return;
-
-      const year = agendaDate.getFullYear();
-      const month = agendaDate.getMonth();
-      label.textContent = `${trMonths[month]} ${year}`;
-
-      const firstDay = new Date(year, month, 1);
-      let startDow = firstDay.getDay() - 1;
-      if (startDow < 0) startDow = 6;
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const today = new Date();
-
-      // Collect event dates for this month
-      const eventDates = new Map<number, string>();
-      agendaEvents.forEach(e => {
-        if (e.date.getFullYear() === year && e.date.getMonth() === month) {
-          const day = e.date.getDate();
-          if (!eventDates.has(day) || e.type === 'overdue') {
-            eventDates.set(day, e.type);
+      // Pending leaves
+      let freshLeaves: any[] = [];
+      try {
+        const { db } = await import('../firebase');
+        const { collection, getDocs, query, where } = await import('firebase/firestore');
+        const userEmail = (currentUser?.email || '').toLowerCase().trim();
+        const isAdminUser = currentUser?.role === 'ADMIN';
+        const isApprover = isAdminUser || userEmail === 'furkan.yildirim@demirerholding.com' || userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'emre.aydogdu@demirerholding.com';
+        if (isApprover) {
+          const snap = await getDocs(query(collection(db, 'leaveRequests'), where('status', 'in', ['PENDING_FIRST', 'PENDING_FINAL'])));
+          snap.forEach(d => freshLeaves.push({ id: d.id, ...d.data() }));
+          if (userEmail === 'furkan.yildirim@demirerholding.com' || userEmail === 'fatih.zebek@demirerholding.com' || isAdminUser) {
+            freshLeaves = freshLeaves.filter(r => r.status === 'PENDING_FIRST' || r.status === 'PENDING_FINAL');
+          } else if (userEmail === 'emre.aydogdu@demirerholding.com') {
+            freshLeaves = freshLeaves.filter(r => r.status === 'PENDING_FINAL');
+          } else {
+            freshLeaves = [];
           }
         }
-      });
+      } catch (err) {}
+      cachedDashboardData.pendingLeaves = freshLeaves;
 
-      let html = '<div class="cal-header-row">';
-      trDays.forEach(d => { html += `<span class="cal-day-name">${d}</span>`; });
-      html += '</div><div class="cal-grid">';
+      // Pending reminders
+      try {
+        cachedDashboardData.reminders = await turbineReminderService.getPendingReminders();
+      } catch (err) {}
 
-      for (let i = 0; i < startDow; i++) {
-        html += '<span class="cal-day empty"></span>';
-      }
+      // Transfers
+      try {
+        cachedDashboardData.transfers = await transferService.getTransfers();
+      } catch (err) {}
 
-      for (let d = 1; d <= daysInMonth; d++) {
-        const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
-        const evType = eventDates.get(d) || '';
-        const classes = ['cal-day'];
-        if (isToday) classes.push('today');
-        if (evType) classes.push('has-event', evType);
-        html += `<span class="${classes.join(' ')}">${d}</span>`;
-      }
+      // Reports
+      try {
+        cachedDashboardData.reports = await serviceReportService.getAllReports();
+      } catch (err) {}
 
-      html += '</div>';
-      cal.innerHTML = html;
+      // Re-trigger counter animation if numbers changed
+      const openT = (cachedDashboardData.tasks || []).filter(t => t.status !== 'Tamamlandı');
+      const activeCount = openT.length;
+      const emCount = openT.filter(t => t.secilenSablon?.toLowerCase().includes('arıza')).length;
+      DashboardFeed.updateStatValues(activeCount, emCount);
+    } catch (err) {
+      console.error("Dashboard async background refresh failed:", err);
     }
+  }, 10);
 
-    function renderAgendaTimeline() {
-      const timeline = document.getElementById('agenda-timeline');
-      if (!timeline) return;
+  // Real-time Agent Monitoring + Counter Animation + Agenda
+  setTimeout(() => {
+    DashboardFeed.initCounterAnimations();
+    const currentUser = (window as any).currentUser;
+    DashboardFeed.initAgentMonitoring(currentUser?.role);
 
-      const now = new Date();
-      const upcoming = agendaEvents
-        .filter(e => e.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7))
-        .slice(0, 8);
-
-      if (upcoming.length === 0) {
-        timeline.innerHTML = '<div style="text-align: center; padding: 2rem 1rem; color: var(--text-dim); font-size: 0.8rem;"><i class="fa-solid fa-calendar-xmark" style="font-size: 1.5rem; opacity: 0.2; margin-bottom: 0.5rem; display: block;"></i>Yaklaşan olay bulunmuyor.</div>';
-        return;
-      }
-
-      timeline.innerHTML = upcoming.map(e => {
-        const dayStr = e.date.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
-        const isPast = e.date < now;
-        const colorMap: Record<string, string> = { task: '#f59e0b', overdue: '#ef4444', maintenance: '#a78bfa' };
-        const color = colorMap[e.type] || '#a78bfa';
-
-        return `
-          <div class="agenda-event-item ${isPast ? 'past' : ''}" style="--ev-color: ${color}">
-            <div class="agenda-event-date">${dayStr}</div>
-            <div class="agenda-event-line"><span class="agenda-event-dot"></span></div>
-            <div class="agenda-event-body">
-              <div class="agenda-event-title"><i class="fa-solid ${e.icon}" style="color: ${color}; margin-right: 6px; font-size: 0.65rem;"></i>${e.title}</div>
-              <div class="agenda-event-sub">${e.subtitle}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    (window as any).agendaPrevMonth = () => {
-      agendaDate.setMonth(agendaDate.getMonth() - 1);
-      renderAgendaCalendar();
-    };
-    (window as any).agendaNextMonth = () => {
-      agendaDate.setMonth(agendaDate.getMonth() + 1);
-      renderAgendaCalendar();
-    };
-
-    renderAgendaCalendar();
-    renderAgendaTimeline();
+    // ===== AJANDA WIDGET LOGIC =====
+    DashboardAgenda.init(openTasks, maintenancePlan, cleanSablonName);
   }, 100);
 
   // Global Stock Search Handler
@@ -454,6 +355,7 @@ export const DashboardPage = async () => {
   // Turbine QR Scanner Logic
   (window as any).scanTurbineQR = async () => {
     const { Html5QrcodeScanner } = await import('html5-qrcode');
+    const { soundService } = await import('../services/SoundService');
     
     const modal = document.createElement('div');
     modal.className = 'cyber-modal-overlay fade-in';
@@ -474,9 +376,23 @@ export const DashboardPage = async () => {
     `;
     document.body.appendChild(modal);
 
-    const scanner = new Html5QrcodeScanner('turbine-qr-reader', { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
+    const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+      const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+      const edge = Math.max(220, Math.floor(minEdge * 0.75));
+      return { width: edge, height: edge };
+    };
+
+    const scanner = new Html5QrcodeScanner('turbine-qr-reader', { 
+      fps: 20, 
+      qrbox: qrboxFunction, 
+      aspectRatio: 1.0,
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
+      }
+    }, false);
     
     scanner.render(async (decodedText) => {
+      soundService.playScannerBeep();
       scanner.clear();
       modal.remove();
       
@@ -506,14 +422,111 @@ export const DashboardPage = async () => {
     }, (error) => {});
   };
 
+  let currentFeedPage = 1;
+  (window as any).changeFeedPage = (delta: number) => {
+    const totalPages = Math.ceil(openTasks.length / 5);
+    const newPage = currentFeedPage + delta;
+    if (newPage < 1 || newPage > totalPages) return;
+
+    const oldPageEl = document.getElementById(`feed-page-${currentFeedPage}`);
+    if (oldPageEl) oldPageEl.style.display = 'none';
+
+    currentFeedPage = newPage;
+
+    const newPageEl = document.getElementById(`feed-page-${currentFeedPage}`);
+    if (newPageEl) newPageEl.style.display = 'flex';
+
+    const infoEl = document.getElementById('feed-page-info');
+    if (infoEl) infoEl.innerText = `SAYFA ${currentFeedPage} / ${totalPages}`;
+
+    const prevBtn = document.getElementById('feed-prev-btn') as HTMLButtonElement;
+    const nextBtn = document.getElementById('feed-next-btn') as HTMLButtonElement;
+    if (prevBtn) prevBtn.disabled = currentFeedPage === 1;
+    if (nextBtn) nextBtn.disabled = currentFeedPage === totalPages;
+  };
+
+  // Precompute paginated feed HTML for active tasks flow
+  let activeFeedHtml = '';
+  if (openTasks.length === 0) {
+    activeFeedHtml = `
+      <div class="empty-feed">
+        <i class="fa-solid fa-circle-check"></i>
+        <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; margin-top: 4px;">TÜM GÖREVLER TAMAMLANDI</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); max-width: 250px; line-height: 1.4; margin-top: 2px;">Şu an aktif olarak takip edilen bir saha görevi bulunmamaktadır.</div>
+      </div>
+    `;
+  } else {
+    const pageSize = 5;
+    const totalPages = Math.ceil(openTasks.length / pageSize);
+    const pagesHtml: string[] = [];
+
+    for (let p = 0; p < totalPages; p++) {
+      const pageItems = openTasks.slice(p * pageSize, (p + 1) * pageSize);
+      const pageItemsHtml = pageItems.map(t => {
+        const isEmergency = t.secilenSablon?.toLowerCase().includes('arıza');
+        const cleanName = cleanSablonName(t.secilenSablon);
+        const faultDetails = t.faultCode && !isGenericFault(t.faultCode) ? ` • ${t.faultCode}` : '';
+        const createdDate = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('tr-TR') : '';
+        const descRow = t.yoneticiNotu ? `<div class="task-desc-row"><i class="fa-solid fa-circle-info"></i> ${t.yoneticiNotu}</div>` : '';
+
+        return `
+          <div class="feed-item ${isEmergency ? 'emergency' : ''}" onclick="window.navigate('tasks')" style="margin-bottom: 0.75rem;">
+            <div class="feed-marker"></div>
+            <div class="feed-content">
+              <div class="feed-header">
+                <span class="site-tag">${t.siteId} / ${t.turbineId}</span>
+                <span class="task-type">${cleanName}${faultDetails}</span>
+              </div>
+              <div class="personnel-row">
+                <i class="fa-solid fa-users"></i> 
+                <strong>${t.personnel || 'EKİP ATANMAMIŞ'}</strong>
+              </div>
+              ${descRow}
+              <div class="status-row">
+                <span class="status-text">${t.status}</span>
+                <span class="time-text">${createdDate}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      pagesHtml.push(`
+        <div class="feed-page-container" id="feed-page-${p + 1}" style="display: ${p === 0 ? 'flex' : 'none'}; flex-direction: column;">
+          ${pageItemsHtml}
+        </div>
+      `);
+    }
+
+    const paginationControl = totalPages > 1 ? `
+      <div class="feed-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.05); font-family: 'Rajdhani', sans-serif;">
+        <button id="feed-prev-btn" onclick="window.changeFeedPage(-1)" disabled class="btn-cyber-outline" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 700; height: 26px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; min-width: 65px; justify-content: center;">
+          <i class="fa-solid fa-angle-left"></i> ÖNCEKİ
+        </button>
+        <span id="feed-page-info" style="color: var(--accent-cyan); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px;">SAYFA 1 / ${totalPages}</span>
+        <button id="feed-next-btn" onclick="window.changeFeedPage(1)" class="btn-cyber" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 700; height: 26px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; min-width: 65px; justify-content: center;">
+          SONRAKİ <i class="fa-solid fa-angle-right"></i>
+        </button>
+      </div>
+    ` : '';
+
+    activeFeedHtml = pagesHtml.join('') + paginationControl;
+  }
+
   return `
     <div class="fade-in-up dashboard-container">
+      <!-- Glowing background elements for premium ambient look -->
+      <div style="position: absolute; top: -150px; left: -100px; width: 550px; height: 550px; background: radial-gradient(circle, rgba(0, 243, 255, 0.16) 0%, transparent 75%); pointer-events: none; z-index: 0; filter: blur(70px);"></div>
+      <div style="position: absolute; bottom: -100px; right: -150px; width: 600px; height: 600px; background: radial-gradient(circle, rgba(167, 139, 250, 0.13) 0%, transparent 75%); pointer-events: none; z-index: 0; filter: blur(80px);"></div>
+      <div style="position: absolute; top: 30%; left: 15%; width: 700px; height: 700px; background: radial-gradient(circle, rgba(20, 241, 149, 0.08) 0%, transparent 80%); pointer-events: none; z-index: 0; filter: blur(90px);"></div>
+
       <!-- HEADER & WELCOME -->
-      <div class="dash-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; width: 100%;">
+      <div class="dash-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem; width: 100%; position: relative; z-index: 2;">
         <div class="welcome-text" style="flex: 1; min-width: 250px;">
           <h1>${getGreetingPrefixHTML()} ${currentUser?.role === 'ADMIN' ? '<span class="v-tag">V3.4</span>' : ''}</h1>
           <p>Sistem genel durumu, bakım planı ve global stok verileri.</p>
         </div>
+
         <div style="display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
           ${(window as any).currentUser?.role === 'ADMIN' ? `
           <div id="dash-agent-grid" class="agent-summary-strip" style="margin: 0;">
@@ -521,10 +534,51 @@ export const DashboardPage = async () => {
           </div>
           ` : ''}
           <div class="user-profile-badge" style="display: flex; flex-direction: column; align-items: center; text-align: center; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 255, 0.08); padding: 0.4rem 0.85rem; border-radius: 8px; backdrop-filter: blur(5px);">
-            ${getUserBadgeHTML()}
+            ${getUserBadgeHTML(currentUser)}
           </div>
         </div>
       </div>
+
+      ${pendingLeaves.length > 0 ? `
+      <!-- PENDING LEAVES ALERT PANEL -->
+      <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #fbbf24; background: rgba(251, 191, 36, 0.03); box-shadow: 0 0 20px rgba(251, 191, 36, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <h3 style="font-size: 0.85rem; color: #fbbf24; margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+          <i class="fa-solid fa-umbrella-beach fa-bounce" style="color: #fbbf24;"></i> BEKLEYEN İZİN ONAYLARI (${pendingLeaves.length})
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+          ${pendingLeaves.map(l => {
+            const dateText = `${new Date(l.startDate).toLocaleDateString('tr-TR')} - ${new Date(l.endDate).toLocaleDateString('tr-TR')}`;
+            const typeLabel = l.type === 'YILLIK_IZIN' ? 'Yıllık İzin' : (l.type === 'RAPOR' ? 'Sağlık Raporu' : (l.type === 'MAZERET' ? 'Mazeret İzni' : 'Ücretsiz İzin'));
+            
+            let statusText = '';
+            if (l.status === 'PENDING_FIRST') {
+              statusText = `<span style="font-size: 0.65rem; color: #fbbf24; font-weight: bold; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.25); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; font-family: 'Rajdhani', sans-serif;"><i class="fa-solid fa-hourglass-half"></i> İlk Onay Bekliyor</span>`;
+            } else if (l.status === 'PENDING_FINAL') {
+              statusText = `<span style="font-size: 0.65rem; color: var(--accent-cyan); font-weight: bold; background: rgba(0,243,255,0.08); border: 1px solid rgba(0,243,255,0.25); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; font-family: 'Rajdhani', sans-serif;"><i class="fa-solid fa-user-clock"></i> Son Onayda (Ön Onay: ${l.firstApprovedBy || '---'})</span>`;
+            }
+
+            return `
+              <div onclick="window.switchLeaveTabAndGo('approvals')" class="reminder-alert-item" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span style="font-weight: 700; color: #fff; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    ${l.userName} (${l.team || '---'})
+                    <span style="font-size: 0.65rem; font-weight: 800; color: #fbbf24; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.35); padding: 2px 6px; border-radius: 4px;">${typeLabel}</span>
+                    ${statusText}
+                  </span>
+                  <span style="font-size: 0.8rem; color: var(--text-muted); font-family: 'Rajdhani', sans-serif;">
+                    Talep Edilen: <strong>${l.duration} Gün</strong> (Açıklama: "${l.description}")
+                  </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 0.7rem; font-weight: 700; color: var(--accent-cyan); background: rgba(0, 243, 255, 0.1); border: 1px solid rgba(0, 243, 255, 0.2); padding: 3px 8px; border-radius: 4px;">${dateText}</span>
+                  <i class="fa-solid fa-chevron-right" style="color: rgba(255,255,255,0.2); font-size: 0.8rem;"></i>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
 
       ${dueReminders.length > 0 ? `
       <!-- DUE REMINDERS PANEL -->
@@ -574,6 +628,64 @@ export const DashboardPage = async () => {
       </div>
       ` : ''}
 
+      ${warningTransfers.length > 0 ? `
+      <!-- PENDING TRANSFERS ALERT PANEL -->
+      <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.03); box-shadow: 0 0 20px rgba(245, 158, 11, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+        <h3 style="font-size: 0.85rem; color: #f59e0b; margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+          <i class="fa-solid fa-truck-fast"></i> YOLDA / BEKLEYEN SEVKİYATLAR (${warningTransfers.length})
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+          ${warningTransfers.map(t => {
+            const daysLabel = t.daysPending >= 3 
+              ? `<span style="font-size: 0.65rem; font-weight: 800; color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; animation: pulse 2s infinite;"><i class="fa-solid fa-clock"></i> ${t.daysPending} GÜNDÜR YOLDA</span>`
+              : `<span style="font-size: 0.65rem; font-weight: 800; color: var(--accent-cyan); background: rgba(0, 243, 255, 0.08); border: 1px solid rgba(0, 243, 255, 0.2); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;">${t.daysPending} GÜNDÜR YOLDA</span>`;
+            
+            const getWhName = (id: string): string => {
+              if (!id) return '-';
+              if (id.startsWith('team_')) {
+                const teamName = id.replace('team_', '').replace(/_/g, ' ');
+                return `${teamName} (Ekip)`;
+              }
+              const wh = dataService.getWarehouses().find(w => w.id === id);
+              return wh ? wh.name.replace(/\s*[Dd]epo(su)?\s*$/, '') : id;
+            };
+
+            const fromName = getWhName(t.fromSiteId);
+            const toName = getWhName(t.toSiteId);
+            
+            // Format items description
+            let itemsSummary = '';
+            if (t.items && Array.isArray(t.items)) {
+              itemsSummary = t.items.map((it: any) => `${it.materialName} (${it.quantity} ${it.unit || 'Adet'})`).join(', ');
+            } else if (t.materialName) {
+              itemsSummary = `${t.materialName} (${t.quantity} ${t.unit || 'Adet'})`;
+            }
+            if (itemsSummary.length > 90) {
+              itemsSummary = itemsSummary.substring(0, 87) + '...';
+            }
+
+            return `
+              <div onclick="window.navigate('transfers')" class="reminder-alert-item" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.02); border: 1px solid ${t.daysPending >= 3 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.2)'}; border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span style="font-weight: 700; color: #fff; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
+                    ${fromName} ➔ ${toName}
+                    ${daysLabel}
+                  </span>
+                  <span style="font-size: 0.8rem; color: var(--text-muted); font-family: 'Rajdhani', sans-serif;">
+                    <strong style="color: var(--accent-cyan);">${t.msfNo || 'Sevk'}</strong>: ${itemsSummary}
+                  </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 0.7rem; font-weight: 700; color: var(--accent-orange); background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.2); padding: 3px 8px; border-radius: 4px;">${t.dateText}</span>
+                  <i class="fa-solid fa-chevron-right" style="color: rgba(255,255,255,0.2); font-size: 0.8rem;"></i>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      ` : ''}
+
       <!-- MAIN STATS GRID -->
       <div class="dash-stats-grid">
         ${isAllowedSub('dash_activeTeams') ? `
@@ -581,7 +693,7 @@ export const DashboardPage = async () => {
           <div class="stat-icon"><i class="fa-solid fa-person-digging"></i></div>
           <div class="stat-content">
             <span class="label">AKTİF EKİPLER</span>
-            <span class="value" data-count="${activeTasksCount}">0</span>
+            <span class="value" id="dash-stat-active-val" data-count="${activeTasksCount}">${activeTasksCount}</span>
             <span class="sub-label">Sahadaki Toplam İş</span>
           </div>
           <div class="card-glow primary"></div>
@@ -593,7 +705,7 @@ export const DashboardPage = async () => {
           <div class="stat-icon"><i class="fa-solid fa-bolt-lightning"></i></div>
           <div class="stat-content">
             <span class="label">ARIZA DURUMU</span>
-            <span class="value" data-count="${emergencyTasksCount}">0</span>
+            <span class="value" id="dash-stat-em-val" data-count="${emergencyTasksCount}">${emergencyTasksCount}</span>
             <span class="sub-label">Müdahale Edilen Arıza</span>
           </div>
           <div class="card-glow danger"></div>
@@ -605,7 +717,7 @@ export const DashboardPage = async () => {
           <div class="stat-icon"><i class="fa-solid fa-calendar-check"></i></div>
           <div class="stat-content">
             <span class="label">YAKLAŞAN BAKIM</span>
-            <span class="value" data-count="${maintenancePlan.filter(p => p.status !== 'safe').length}">0</span>
+            <span class="value" id="dash-stat-maint-val" data-count="${maintenancePlan.filter(p => p.status !== 'safe').length}">${maintenancePlan.filter(p => p.status !== 'safe').length}</span>
             <span class="sub-label">Kritik Planlama Listesi</span>
           </div>
           <div class="card-glow info"></div>
@@ -617,7 +729,7 @@ export const DashboardPage = async () => {
           <div class="stat-icon"><i class="fa-solid fa-warehouse"></i></div>
           <div class="stat-content">
             <span class="label">LOJİSTİK NOKTA</span>
-            <span class="value" data-count="${sites.length}">0</span>
+            <span class="value" id="dash-stat-sites-val" data-count="${sites.length}">${sites.length}</span>
             <span class="sub-label">Bağlı Depo Sayısı</span>
           </div>
           <div class="card-glow warning"></div>
@@ -669,36 +781,8 @@ export const DashboardPage = async () => {
               <h3><i class="fa-solid fa-person-running"></i> AKTİF GÖREV AKIŞI</h3>
               <span class="count-tag">${activeTasksCount} GÖREV</span>
             </div>
-            <div class="feed-container custom-scrollbar">
-              ${openTasks.length > 0 ? openTasks.map(t => {
-                const isEmergency = t.secilenSablon?.toLowerCase().includes('arıza');
-                return `
-                  <div class="feed-item ${isEmergency ? 'emergency' : ''}" onclick="window.navigate('tasks')">
-                    <div class="feed-marker"></div>
-                    <div class="feed-content">
-                      <div class="feed-header">
-                        <span class="site-tag">${t.siteId} / ${t.turbineId}</span>
-                        <span class="task-type">${cleanSablonName(t.secilenSablon)}${t.faultCode && !isGenericFault(t.faultCode) ? ` • ${t.faultCode}` : ''}</span>
-                      </div>
-                      <div class="personnel-row">
-                        <i class="fa-solid fa-users"></i> 
-                        <strong>${t.personnel || 'EKİP ATANMAMIŞ'}</strong>
-                      </div>
-                      ${t.yoneticiNotu ? `<div class="task-desc-row"><i class="fa-solid fa-circle-info"></i> ${t.yoneticiNotu}</div>` : ''}
-                      <div class="status-row">
-                        <span class="status-text">${t.status}</span>
-                        <span class="time-text">${t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString('tr-TR') : ''}</span>
-                      </div>
-                    </div>
-                  </div>
-                `;
-              }).join('') : `
-                <div class="empty-feed">
-                  <i class="fa-solid fa-circle-check"></i>
-                  <div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; margin-top: 4px;">TÜM GÖREVLER TAMAMLANDI</div>
-                  <div style="font-size: 0.75rem; color: var(--text-muted); max-width: 250px; line-height: 1.4; margin-top: 2px;">Şu an aktif olarak takip edilen bir saha görevi bulunmamaktadır.</div>
-                </div>
-              `}
+            <div class="feed-container custom-scrollbar" style="display: flex; flex-direction: column;">
+              ${activeFeedHtml}
             </div>
           </div>
           ` : ''}
@@ -743,11 +827,93 @@ export const DashboardPage = async () => {
     </div>
 
     <style>
-      .dashboard-container { padding: 1rem; display: flex; flex-direction: column; gap: 1.5rem; }
-      .dash-header { display: flex; justify-content: space-between; align-items: center; }
-      .welcome-text h1 { font-family: 'Rajdhani', sans-serif; font-size: 1.8rem; letter-spacing: 2px; margin: 0; color: var(--text-main); display: flex; align-items: center; }
-      .welcome-text .v-tag { font-size: 0.6rem; background: linear-gradient(135deg, #64ffda, #00bcd4); color: #000; padding: 3px 8px; border-radius: 6px; vertical-align: middle; margin-left: 12px; font-weight: 900; letter-spacing: 1px; }
-      .welcome-text p { color: var(--text-muted); font-size: 0.85rem; margin: 4px 0 0 0; }
+      .dashboard-container { 
+        padding: 1.25rem; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 1.5rem; 
+        position: relative; 
+        z-index: 1; 
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+      }
+      .dash-header { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2; }
+      .welcome-text h1 { 
+        font-family: 'Rajdhani', sans-serif; 
+        font-size: 1.6rem; 
+        font-weight: 900; 
+        letter-spacing: 1.5px; 
+        margin: 0; 
+        color: #fff; 
+        display: flex; 
+        align-items: center; 
+        text-transform: uppercase; 
+        text-shadow: 0 0 10px rgba(0, 243, 255, 0.25); 
+      }
+      .welcome-text .v-tag { font-size: 0.55rem; background: linear-gradient(135deg, #64ffda, #00bcd4); color: #000; padding: 2px 6px; border-radius: 5px; vertical-align: middle; margin-left: 8px; font-weight: 900; letter-spacing: 1px; }
+      .welcome-text p { 
+        color: var(--accent-cyan) !important; 
+        font-family: 'Rajdhani', sans-serif; 
+        font-weight: 700; 
+        letter-spacing: 1px; 
+        text-transform: uppercase; 
+        font-size: 0.7rem; 
+        margin: 4px 0 0 0; 
+        opacity: 0.85; 
+        text-shadow: 0 0 6px rgba(0, 243, 255, 0.15);
+      }
+
+      /* HUD Animations */
+      .hologram-blade-group {
+        animation: turbine-rotate 10s linear infinite;
+      }
+      .hud-circle {
+        animation: spin-clockwise 25s linear infinite;
+      }
+      .radar-bezel {
+        animation: spin-clockwise 35s linear infinite;
+      }
+      .radar-sweep {
+        animation: spin-clockwise 4s linear infinite;
+      }
+      @keyframes turbine-rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes spin-clockwise {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      /* Frosted Glass Override */
+      .dashboard-container .glass-panel {
+        background: linear-gradient(135deg, rgba(16, 22, 37, 0.75), rgba(9, 13, 22, 0.95)) !important;
+        backdrop-filter: blur(25px) !important;
+        border: 1px solid rgba(0, 243, 255, 0.08) !important;
+        border-top: 2px solid rgba(0, 243, 255, 0.2) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        position: relative;
+        overflow: hidden;
+        z-index: 2;
+      }
+      .dashboard-container .glass-panel::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+      }
+      .dashboard-container .glass-panel:hover {
+        border-color: rgba(0, 243, 255, 0.15) !important;
+        box-shadow: 0 20px 55px rgba(0, 243, 255, 0.04) !important;
+        transform: translateY(-2px);
+      }
       
       .agent-summary-strip { display: flex; gap: 8px; }
       .agent-mini-tag { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; display: flex; align-items: center; gap: 6px; font-size: 0.65rem; font-weight: 700; color: var(--text-muted); }
@@ -755,9 +921,13 @@ export const DashboardPage = async () => {
       .pulse-dot { width: 6px; height: 6px; border-radius: 50%; }
 
       /* Stats Grid */
-      .dash-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; }
-      .dash-stat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 1.4rem; display: flex; align-items: center; gap: 1.25rem; position: relative; overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
-      .dash-stat-card:hover { transform: translateY(-6px); background: rgba(255,255,255,0.04); }
+      .dash-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; max-width: 100%; box-sizing: border-box; }
+      .dash-stat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 0.8rem 1.1rem; display: flex; align-items: center; gap: 1rem; position: relative; overflow: hidden; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+      .dash-stat-card:hover { transform: translateY(-5px); background: rgba(255,255,255,0.04); }
+      .dash-stat-card.primary:hover { border-color: rgba(0, 243, 255, 0.35) !important; box-shadow: 0 12px 30px rgba(0, 243, 255, 0.12), inset 0 1px 0 rgba(255,255,255,0.1) !important; }
+      .dash-stat-card.danger:hover { border-color: rgba(255, 77, 77, 0.35) !important; box-shadow: 0 12px 30px rgba(255, 77, 77, 0.12), inset 0 1px 0 rgba(255,255,255,0.1) !important; }
+      .dash-stat-card.info:hover { border-color: rgba(162, 155, 254, 0.35) !important; box-shadow: 0 12px 30px rgba(162, 155, 254, 0.12), inset 0 1px 0 rgba(255,255,255,0.1) !important; }
+      .dash-stat-card.warning:hover { border-color: rgba(255, 159, 67, 0.35) !important; box-shadow: 0 12px 30px rgba(255, 159, 67, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important; }
       .dash-stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, currentColor, transparent); opacity: 0; transition: opacity 0.4s; }
       .dash-stat-card:hover::before { opacity: 0.5; }
       
@@ -768,16 +938,16 @@ export const DashboardPage = async () => {
       .card-glow.danger { background: #ff4d4d; }
       .card-glow.info { background: #a29bfe; }
       .card-glow.warning { background: #ff9f43; }
-
-      .dash-stat-card .stat-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; transition: all 0.4s; }
+ 
+      .dash-stat-card .stat-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: all 0.4s; }
       .dash-stat-card:hover .stat-icon { transform: scale(1.1) rotate(-5deg); }
       .dash-stat-card.primary .stat-icon { background: rgba(0, 243, 255, 0.1); color: var(--accent-cyan); box-shadow: 0 0 20px rgba(0, 243, 255, 0.08); }
       .dash-stat-card.danger .stat-icon { background: rgba(255, 77, 77, 0.1); color: var(--accent-red); box-shadow: 0 0 20px rgba(255, 77, 77, 0.08); }
       .dash-stat-card.info .stat-icon { background: rgba(162, 155, 254, 0.1); color: #a29bfe; box-shadow: 0 0 20px rgba(162, 155, 254, 0.08); }
       .dash-stat-card.warning .stat-icon { background: rgba(255, 159, 67, 0.1); color: var(--accent-orange); box-shadow: 0 0 20px rgba(255, 159, 67, 0.08); }
-      .dash-stat-card .label { font-size: 0.63rem; font-weight: 800; color: rgba(255,255,255,0.4); letter-spacing: 1.5px; }
-      .dash-stat-card .value { font-size: 2rem; font-weight: 900; color: #fff; font-family: 'Rajdhani', sans-serif; line-height: 1.1; margin: 2px 0; }
-      .dash-stat-card .sub-label { font-size: 0.68rem; color: var(--text-dim); }
+      .dash-stat-card .label { font-size: 0.62rem; font-weight: 800; color: rgba(255,255,255,0.4); letter-spacing: 1.2px; text-transform: uppercase; }
+      .dash-stat-card .value { font-size: 1.5rem; font-weight: 800; color: #fff; font-family: 'Rajdhani', sans-serif; line-height: 1.1; margin: 1px 0; }
+      .dash-stat-card .sub-label { font-size: 0.65rem; color: var(--text-dim); }
       
       /* Counter animation */
       @keyframes countPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
@@ -817,12 +987,18 @@ export const DashboardPage = async () => {
       .plan-status-pill.safe { background: var(--accent-green); color: #000; }
 
       /* Main Grid */
-      .dash-agenda-row { display: grid; grid-template-columns: 340px 1fr; gap: 1.5rem; }
-      @media (max-width: 1200px) { .dash-agenda-row { grid-template-columns: 1fr; } }
-      .dash-agenda-right { display: grid; grid-template-columns: 1fr 350px; gap: 1.5rem; }
+      .dash-agenda-row { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 1.25rem; max-width: 100%; box-sizing: border-box; }
+      @media (max-width: 1280px) { .dash-agenda-row { grid-template-columns: 1fr; } }
+      .dash-agenda-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); gap: 1.25rem; max-width: 100%; box-sizing: border-box; }
       @media (max-width: 1024px) { .dash-agenda-right { grid-template-columns: 1fr; } }
 
-      .dash-feed-section { padding: 1.5rem; display: flex; flex-direction: column; }
+      .dash-feed-section { 
+        padding: 1.5rem; 
+        display: flex; 
+        flex-direction: column; 
+        border-top: 3px solid #00f3ff !important;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45), 0 0 20px rgba(0, 243, 255, 0.08) !important;
+      }
       .empty-feed {
         display: flex;
         flex-direction: column;
@@ -853,16 +1029,51 @@ export const DashboardPage = async () => {
       .count-tag { font-size: 0.65rem; background: var(--accent-cyan); color: #000; font-weight: 900; padding: 2px 8px; border-radius: 4px; }
 
       .feed-container { display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 4px 4px; }
-      .feed-item { background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; display: flex; gap: 1rem; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; flex-shrink: 0; }
-      .feed-item:hover { background: rgba(255,255,255,0.03); border-color: var(--accent-cyan); transform: translateX(5px); }
-      .feed-item.emergency { border-left: 4px solid var(--accent-red); }
       
-      .feed-marker { width: 4px; height: 100%; position: absolute; left: 0; top: 0; background: var(--accent-cyan); opacity: 0.3; }
-      .feed-item.emergency .feed-marker { background: var(--accent-red); opacity: 1; }
+      .feed-item {
+        background: rgba(255, 255, 255, 0.01) !important;
+        border: 1px solid rgba(255, 255, 255, 0.04) !important;
+        padding: 0.9rem 1.1rem !important;
+        border-radius: 12px !important;
+        display: flex;
+        gap: 0.75rem;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
+      }
+      .feed-item::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 3px;
+        height: 100%;
+        background: var(--accent-cyan);
+        opacity: 0.4;
+        transition: all 0.3s;
+      }
+      .feed-item.emergency::before {
+        background: var(--accent-red);
+        opacity: 1;
+        box-shadow: 0 0 10px var(--accent-red);
+      }
+      .feed-item:hover {
+        background: rgba(0, 243, 255, 0.02) !important;
+        border-color: rgba(0, 243, 255, 0.2) !important;
+        transform: translateX(4px) scale(1.01);
+      }
+      .feed-item:hover::before {
+        opacity: 1;
+        width: 4px;
+        box-shadow: 0 0 12px var(--accent-cyan);
+      }
 
-      .feed-content { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+      .feed-marker { display: none; }
+
+      .feed-content { flex: 1; display: flex; flex-direction: column; gap: 6px; position: relative; z-index: 2; }
       .feed-header { display: flex; justify-content: space-between; align-items: center; }
-      .site-tag { font-size: 0.9rem; font-weight: 800; color: #fff; }
+      .site-tag { font-size: 0.9rem; font-weight: 800; color: #fff; font-family: 'Rajdhani', sans-serif; }
       .task-type { font-size: 0.65rem; color: var(--accent-cyan); font-weight: 700; text-transform: uppercase; }
       
       .personnel-row { font-size: 0.8rem; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
@@ -876,12 +1087,20 @@ export const DashboardPage = async () => {
       .time-text { font-size: 0.65rem; color: var(--text-dim); }
 
       /* Stock Search Card */
-      .stock-search-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+      .stock-search-card { 
+        padding: 1.5rem; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 1rem; 
+        border-top: 3px solid var(--accent-orange) !important;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45), 0 0 20px rgba(255, 159, 67, 0.08) !important;
+      }
       .stock-search-card h3 { font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: var(--accent-cyan); margin: 0; }
       
-      .search-box { display: flex; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 4px; }
-      .search-box input { flex: 1; background: transparent; border: none; color: #fff; padding: 8px 12px; font-size: 0.85rem; outline: none; }
-      .search-box button { background: var(--accent-cyan); border: none; color: #000; width: 36px; height: 36px; border-radius: 6px; cursor: pointer; }
+      .search-box { display: flex; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 4px; }
+      .search-box input { flex: 1; background: transparent; border: none; color: #fff; padding: 8px 12px; font-size: 0.85rem; outline: none; font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.5px; }
+      .search-box button { background: var(--accent-cyan); border: none; color: #000; width: 36px; height: 36px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+      .search-box button:hover { background: #fff; transform: scale(1.05); }
       
       .results-container { min-height: 150px; max-height: 300px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 8px; }
       .placeholder { font-size: 0.75rem; color: var(--text-dim); text-align: center; padding: 2rem 1rem; line-height: 1.5; }
@@ -895,9 +1114,10 @@ export const DashboardPage = async () => {
       .stock-result-item .qty { font-size: 0.85rem; font-weight: 900; color: var(--accent-green); font-family: 'Rajdhani'; flex-shrink: 0; }
 
       .quick-actions-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: auto; }
-      .action-btn { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
-      .action-btn:hover { background: rgba(0, 243, 255, 0.05); border-color: rgba(0, 243, 255, 0.1); transform: translateY(-3px); }
-      .action-btn i { font-size: 1.2rem; color: var(--accent-cyan); }
+      .action-btn { background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+      .action-btn:hover { background: rgba(0, 243, 255, 0.04); border-color: rgba(0, 243, 255, 0.2); transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 243, 255, 0.05); }
+      .action-btn i { font-size: 1.2rem; color: var(--accent-cyan); transition: transform 0.3s; }
+      .action-btn:hover i { transform: scale(1.15) rotate(5deg); }
       .action-btn span { font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; }
 
       .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -907,7 +1127,8 @@ export const DashboardPage = async () => {
       /* ===== AJANDA WIDGET STYLES ===== */
       .dash-agenda-widget {
         padding: 1.25rem;
-        border-top: 2px solid #a78bfa;
+        border-top: 3px solid #a78bfa !important;
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45), 0 0 20px rgba(167, 139, 250, 0.08) !important;
         position: relative;
         overflow: hidden;
       }
@@ -972,8 +1193,21 @@ export const DashboardPage = async () => {
         transition: all 0.2s;
         font-weight: 600;
         position: relative;
+        cursor: pointer;
       }
-      .cal-day.empty { visibility: hidden; }
+      .cal-day:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }
+      .cal-day.empty { visibility: hidden; cursor: default; }
+      .cal-day.empty:hover { background: transparent; }
+      .cal-day.selected {
+        background: rgba(0, 242, 255, 0.25) !important;
+        color: #00f2ff !important;
+        font-weight: 800;
+        box-shadow: 0 0 10px rgba(0, 242, 255, 0.2);
+        border: 1.2px solid rgba(0, 242, 255, 0.45);
+      }
       .cal-day.today {
         background: rgba(167, 139, 250, 0.2);
         color: #a78bfa;

@@ -3,17 +3,25 @@ import type { CustodyItem, CustodyHistoryEntry } from '../services/AssetCustodyS
 import { dataService } from '../services/DataService';
 import { personnelService } from '../services/PersonnelService';
 import { fileService } from '../services/FileService';
+import { warehouseService } from '../services/WarehouseService';
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 let allItems: CustodyItem[] = [];
 let globalHistory: CustodyHistoryEntry[] = [];
 let cachedRawList: CustodyItem[] | null = null;
 let activeTab = 'list'; // 'list' or 'xray'
+let filterSite = 'all';
 let filterTeam = 'all';
 let filterPerson = 'all';
+let filterCategory = 'all';
 let filterCondition = 'all';
 let filterLocation = 'all';
 let filterWarehouse = 'all';
 let searchQuery = '';
+let custodyCurrentPage = 1;
+const CUSTODY_PAGE_SIZE = 20;
+let globalImagePoolMap: Map<string, string> = new Map();
 
 export const AssetCustodyPage = async () => {
   const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
@@ -72,6 +80,18 @@ export const AssetCustodyPage = async () => {
     allItems = rawList.filter(item => item.location === 'depo' || allowedTeams.includes(item.assignedTeam));
   } else {
     allItems = rawList;
+  }
+
+  if (globalImagePoolMap.size === 0) {
+    // Non-blocking background load for image pool so page renders instantly (<100ms)
+    setTimeout(async () => {
+      try {
+        globalImagePoolMap = await warehouseService.getGlobalImagePool();
+        (window as any).filterCustodyItems?.();
+      } catch (e) {
+        console.warn("Image pool background load error", e);
+      }
+    }, 0);
   }
 
   try {
@@ -143,6 +163,7 @@ export const AssetCustodyPage = async () => {
     if (item.location === 'depo') g.depo += qty;
     else g.team += qty;
   });  const renderListTab = () => {
+    const allSites = dataService.getAllSites();
     let personnelNames = personnelService.getPersonnelList();
     if (!isAdmin) {
       const details = personnelService.getPersonnelDetailsList();
@@ -162,6 +183,19 @@ export const AssetCustodyPage = async () => {
           style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px 12px 10px 36px; border-radius: 10px; font-size: 0.85rem; outline: none; box-sizing: border-box;"
           oninput="window.filterCustodyItems()">
       </div>
+      <select id="custody-filter-site" onchange="window.filterCustodyItems()" style="background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.3); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; font-weight: 800; outline: none; min-width: 220px;">
+        <option value="all" ${filterSite === 'all' ? 'selected' : ''}>📍 Tüm Bölgeler / Santraller</option>
+        ${allSites.map(s => `<option value="${s.id}" ${filterSite === s.id ? 'selected' : ''}>📍 ${s.name}</option>`).join('')}
+      </select>
+      <select id="custody-filter-category" onchange="window.filterCustodyItems()" style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; outline: none;">
+        <option value="all" ${filterCategory === 'all' ? 'selected' : ''}>Tüm Kategoriler</option>
+        <option value="El Aleti" ${filterCategory === 'El Aleti' ? 'selected' : ''}>🔧 El Aleti</option>
+        <option value="Ölçü Aleti" ${filterCategory === 'Ölçü Aleti' ? 'selected' : ''}>📏 Ölçü Aleti</option>
+        <option value="Elektrik Aleti" ${filterCategory === 'Elektrik Aleti' ? 'selected' : ''}>⚡ Elektrik Aleti</option>
+        <option value="Şarjlı El Aleti" ${filterCategory === 'Şarjlı El Aleti' ? 'selected' : ''}>🔋 Şarjlı El Aleti</option>
+        <option value="Güvenlik Ekipmanı" ${filterCategory === 'Güvenlik Ekipmanı' ? 'selected' : ''}>🦺 Güvenlik Ekipmanı</option>
+        <option value="Hidrolik Ekipman" ${filterCategory === 'Hidrolik Ekipman' ? 'selected' : ''}>🔴 Hidrolik Ekipman</option>
+      </select>
       <select id="custody-filter-team" onchange="window.filterCustodyItems()" style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; outline: none;">
         <option value="all" ${filterTeam === 'all' ? 'selected' : ''}>Tüm Ekipler</option>
         ${allowedTeams.map(teamName => `<option value="${teamName}" ${filterTeam === teamName ? 'selected' : ''}>${teamName}</option>`).join('')}
@@ -187,7 +221,13 @@ export const AssetCustodyPage = async () => {
         <option value="all" ${filterWarehouse === 'all' ? 'selected' : ''}>Tüm Depolar</option>
         ${warehouses.map(w => `<option value="${w.id}" ${filterWarehouse === w.id ? 'selected' : ''}>${w.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim()}</option>`).join('')}
       </select>
+      <button onclick="window.resetCustodyFilters()" title="Tüm Filtreleri Sıfırla" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); color: #ef4444; padding: 8px 12px; border-radius: 10px; font-size: 0.8rem; font-weight: 800; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-rotate-left"></i> Temizle
+      </button>
     </div>
+
+    <!-- REGIONAL AUDIT SUMMARY CARD -->
+    <div id="custody-regional-summary-card" style="display: none; margin-bottom: 1.5rem;"></div>
 
     <!-- TABLE -->
     <div class="glass-panel" style="padding: 0; overflow: hidden;">
@@ -208,15 +248,10 @@ export const AssetCustodyPage = async () => {
             </tr>
           </thead>
           <tbody id="custody-table-body">
-            ${allItems.length === 0 ? `
-            <tr><td colspan="10" style="text-align: center; padding: 4rem; color: var(--text-muted);">
-              <i class="fa-solid fa-toolbox" style="font-size: 2.5rem; opacity: 0.15; margin-bottom: 1rem; display: block;"></i>
-              Henüz zimmet kaydı bulunmuyor. Yeni kayıt eklemek için üst kısımdaki butonu kullanın.
-            </td></tr>
-            ` : allItems.map(item => renderRow(item, hasCustodyPermission('assignCustody'), isAdmin)).join('')}
           </tbody>
         </table>
       </div>
+      <div id="custody-pagination-controls"></div>
     </div>
     `;
   };
@@ -430,6 +465,7 @@ export const AssetCustodyPage = async () => {
             <option value="El Aleti">🔧 El Aleti</option>
             <option value="Ölçü Aleti">📏 Ölçü Aleti</option>
             <option value="Elektrik Aleti">⚡ Elektrik Aleti</option>
+            <option value="Şarjlı El Aleti">🔋 Şarjlı El Aleti</option>
             <option value="Güvenlik Ekipmanı">🦺 Güvenlik Ekipmanı</option>
             <option value="Hidrolik Ekipman">🔴 Hidrolik Ekipman</option>
           </select>
@@ -506,6 +542,7 @@ export const AssetCustodyPage = async () => {
                     'El Aleti': '🔧',
                     'Ölçü Aleti': '📏',
                     'Elektrik Aleti': '⚡',
+                    'Şarjlı El Aleti': '🔋',
                     'Güvenlik Ekipmanı': '🦺',
                     'Hidrolik Ekipman': '🔴',
                     'Diğer': '📦'
@@ -556,6 +593,120 @@ export const AssetCustodyPage = async () => {
 
   return `
     <div class="fade-in-up content-area" style="padding: 1rem;">
+      <style>
+        /* Global overrides for AssetCustody page buttons */
+        .content-area .btn-cyber,
+        .content-area .btn-cyber-outline {
+          min-height: unset !important;
+          height: 34px !important;
+          padding: 0 12px !important;
+          border-radius: 6px !important;
+          font-family: 'Rajdhani', sans-serif !important;
+          font-weight: 800 !important;
+          font-size: 0.72rem !important;
+          transition: all 0.2s !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          letter-spacing: 0.5px !important;
+          text-transform: uppercase !important;
+          box-shadow: none !important;
+          cursor: pointer !important;
+        }
+
+        /* + YENİ ZİMMET KAYDI active outline style */
+        .content-area button[onclick="window.openCustodyModal()"].btn-cyber {
+          background: rgba(0, 242, 255, 0.06) !important;
+          border: 1px solid rgba(0, 242, 255, 0.25) !important;
+          color: #00f2ff !important;
+        }
+        .content-area button[onclick="window.openCustodyModal()"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(0, 242, 255, 0.1) !important;
+        }
+
+        /* EXCEL YÜKLE outline style */
+        .content-area button[onclick="document.getElementById('custody-excel-import-file').click()"].btn-cyber {
+          background: rgba(192, 132, 252, 0.06) !important;
+          border: 1px solid rgba(192, 132, 252, 0.25) !important;
+          color: #c084fc !important;
+        }
+        .content-area button[onclick="document.getElementById('custody-excel-import-file').click()"].btn-cyber:hover {
+          background: rgba(192, 132, 252, 0.15) !important;
+          border-color: rgba(192, 132, 252, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(192, 132, 252, 0.1) !important;
+        }
+
+        /* ŞABLON İNDİR outline style */
+        .content-area button[onclick="window.downloadCustodyTemplate()"].btn-cyber {
+          background: rgba(59, 130, 246, 0.06) !important;
+          border: 1px solid rgba(59, 130, 246, 0.25) !important;
+          color: #60a5fa !important;
+        }
+        .content-area button[onclick="window.downloadCustodyTemplate()"].btn-cyber:hover {
+          background: rgba(59, 130, 246, 0.15) !important;
+          border-color: rgba(59, 130, 246, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(59, 130, 246, 0.1) !important;
+        }
+
+        /* ANALİZ & DETAY table button style */
+        .content-area button[onclick^="window.openCustodyDetailsModal"].btn-cyber {
+          background: rgba(0, 242, 255, 0.06) !important;
+          border: 1px solid rgba(0, 242, 255, 0.25) !important;
+          color: #00f2ff !important;
+          height: 28px !important;
+          padding: 0 10px !important;
+          font-size: 0.65rem !important;
+        }
+        .content-area button[onclick^="window.openCustodyDetailsModal"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 10px rgba(0, 242, 255, 0.1) !important;
+        }
+
+        /* Modal buttons overrides */
+        #custody-modal .btn-cyber-outline,
+        #custody-details-modal .btn-cyber-outline {
+          background: transparent !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          color: #94A3B8 !important;
+        }
+        #custody-modal .btn-cyber-outline:hover,
+        #custody-details-modal .btn-cyber-outline:hover {
+          background: rgba(255, 255, 255, 0.04) !important;
+          border-color: rgba(255, 255, 255, 0.2) !important;
+          color: #fff !important;
+        }
+
+        #custody-modal button[onclick="window.saveCustodyItem()"].btn-cyber {
+          background: rgba(20, 241, 149, 0.06) !important;
+          border: 1px solid rgba(20, 241, 149, 0.25) !important;
+          color: #14F195 !important;
+        }
+        #custody-modal button[onclick="window.saveCustodyItem()"].btn-cyber:hover {
+          background: rgba(20, 241, 149, 0.15) !important;
+          border-color: rgba(20, 241, 149, 0.5) !important;
+          color: #fff !important;
+          box-shadow: 0 0 12px rgba(20, 241, 149, 0.12) !important;
+        }
+
+        #custody-details-modal button[onclick="window.closeCustodyDetailsModal()"].btn-cyber {
+          background: rgba(0, 242, 255, 0.06) !important;
+          border: 1px solid rgba(0, 242, 255, 0.25) !important;
+          color: #00f2ff !important;
+        }
+        #custody-details-modal button[onclick="window.closeCustodyDetailsModal()"].btn-cyber:hover {
+          background: rgba(0, 242, 255, 0.15) !important;
+          border-color: rgba(0, 242, 255, 0.5) !important;
+          color: #fff !important;
+        }
+      </style>
       <!-- HEADER -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
         <div>
@@ -564,8 +715,10 @@ export const AssetCustodyPage = async () => {
           </h1>
           <p style="color: var(--text-muted); font-size: 0.8rem; margin: 4px 0 0 0;">Demirbaş el aletlerinin ve ölçüm cihazlarının seri numaralarıyla takibi ve kullanım analizleri</p>
         </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
-
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+          <button class="btn-cyber" onclick="window.openCustodyImagePoolModal()" style="gap: 8px; background: rgba(20, 241, 149, 0.15); border: 1px solid rgba(20, 241, 149, 0.4); color: #14F195;" title="Resim Havuzunu Görüntüle ve Yönet">
+            <i class="fa-solid fa-images"></i> RESİM HAVUZU
+          </button>
           ${hasCustodyPermission('assignCustody') ? `
           <button class="btn-cyber" onclick="window.openCustodyModal()" style="gap: 8px;">
             <i class="fa-solid fa-plus"></i> YENİ ZİMMET KAYDI
@@ -641,6 +794,32 @@ export const AssetCustodyPage = async () => {
       <!-- TAB CONTENT -->
       ${activeTab === 'list' ? renderListTab() : (activeTab === 'xray' ? renderXrayTab() : (activeTab === 'compare-warehouse' ? renderCompareTab('warehouse') : (activeTab === 'compare-person' ? renderCompareTab('person') : renderCompareTab('team'))))}
 
+      <!-- RESİM HAVUZU MODALI -->
+      <div id="custody-image-pool-modal" class="modal-overlay hidden" style="z-index: 999999;">
+        <div class="glass-panel modal-content-box" style="max-width: 900px; width: 95%; max-height: 85vh; margin: auto; display: flex; flex-direction: column; border: 1px solid rgba(20, 241, 149, 0.3); box-shadow: 0 0 35px rgba(20, 241, 149, 0.15);">
+          <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; background: rgba(20, 241, 149, 0.05);">
+            <h3 style="margin: 0; font-family: 'Rajdhani'; font-size: 1.25rem; color: #14F195; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-images"></i> MALZEME RESİM HAVUZU
+            </h3>
+            <button onclick="document.getElementById('custody-image-pool-modal').classList.add('hidden')" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.3rem;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div style="padding: 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: rgba(0,0,0,0.2);">
+            <div style="position: relative; flex: 1; min-width: 220px;">
+              <i class="fa-solid fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #14F195; font-size: 0.8rem;"></i>
+              <input type="text" id="custody-pool-search" placeholder="SAP Kodu veya Malzeme Adı ara..." oninput="window.renderCustodyImagePoolGrid(this.value)" style="width: 100%; height: 36px; background: rgba(10, 14, 23, 0.85); border: 1.5px solid #14F195; border-radius: 8px; color: #FFF; padding: 0 0.75rem 0 34px; font-size: 0.85rem; outline: none; box-shadow: 0 0 10px rgba(20, 241, 149, 0.2);" />
+            </div>
+            <button class="btn-cyber" onclick="document.getElementById('custody-pool-upload-input').click()" style="background: rgba(20, 241, 149, 0.15); border-color: rgba(20, 241, 149, 0.4); color: #14F195; gap: 6px;">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Yeni Resim Yükle
+            </button>
+            <input type="file" id="custody-pool-upload-input" accept="image/*" style="display: none;" onchange="window.uploadNewCustodyPoolImage(event)" />
+          </div>
+          <div id="custody-pool-grid-container" style="padding: 1.5rem; flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.25rem;">
+          </div>
+        </div>
+      </div>
+
       <!-- UPLOAD PROGRESS OVERLAY -->
       <div id="custody-upload-progress-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; gap: 1.5rem;">
         <div class="glass-panel" style="width: 400px; padding: 2rem; border: 1px solid rgba(255,255,255,0.08); text-align: center; border-radius: 12px;">
@@ -681,7 +860,7 @@ export const AssetCustodyPage = async () => {
           <div style="display: grid; grid-template-columns: 1.2fr 2fr 0.7fr; gap: 0.75rem;">
             <div>
               <label style="font-size: 0.6rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">MALZEME KODU</label>
-              <input type="text" id="custody-code" class="cyber-input" placeholder="SAP Kodu..." style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
+              <input type="text" id="custody-code" class="cyber-input" placeholder="SAP Kodu..." oninput="window.checkCustodySapImageAuto()" style="width: 100%; box-sizing: border-box; height: 34px; font-size: 0.75rem;">
             </div>
             <div>
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">MALZEME ADI (ZORUNLU)</label>
@@ -705,6 +884,7 @@ export const AssetCustodyPage = async () => {
                 <option value="El Aleti">🔧 El Aleti</option>
                 <option value="Ölçü Aleti">📏 Ölçü Aleti</option>
                 <option value="Elektrik Aleti">⚡ Elektrik Aleti</option>
+                <option value="Şarjlı El Aleti">🔋 Şarjlı El Aleti</option>
                 <option value="Güvenlik Ekipmanı">🦺 Güvenlik Ekipmanı</option>
                 <option value="Hidrolik Ekipman">🔴 Hidrolik Ekipman</option>
               </select>
@@ -765,9 +945,12 @@ export const AssetCustodyPage = async () => {
             </div>
             <div>
               <label style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; display: block;">ÜRÜN FOTOĞRAFI (Opsiyonel)</label>
-              <div style="display: flex; gap: 0.5rem; align-items: center; height: 34px;">
-                <button type="button" class="btn-cyber-outline" style="font-size: 0.7rem; padding: 0 10px; height: 34px; display: flex; align-items: center; gap: 4px; white-space: nowrap; justify-content: center;" onclick="document.getElementById('custody-photo-input').click()">
-                  <i class="fa-solid fa-camera"></i> Fotoğraf Seç
+              <div style="display: flex; gap: 0.4rem; align-items: center; height: 34px;">
+                <button type="button" class="btn-cyber-outline" style="font-size: 0.7rem; padding: 0 8px; height: 34px; display: flex; align-items: center; gap: 4px; white-space: nowrap; justify-content: center;" onclick="document.getElementById('custody-photo-input').click()">
+                  <i class="fa-solid fa-camera"></i> Seç
+                </button>
+                <button type="button" class="btn-cyber-outline" style="font-size: 0.7rem; padding: 0 8px; height: 34px; display: flex; align-items: center; gap: 4px; white-space: nowrap; justify-content: center; border-color: rgba(167, 139, 250, 0.4); color: #c084fc;" onclick="window.openCustodyImagePoolModal('custody-photo-url')">
+                  <i class="fa-solid fa-images"></i> Havuzdan Seç
                 </button>
                 <input type="file" id="custody-photo-input" accept="image/*" style="display: none;" onchange="window.handleCustodyPhotoUpload(event)">
                 <div id="custody-photo-preview-container" style="display: none; position: relative; width: 34px; height: 34px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); flex-shrink: 0;">
@@ -904,12 +1087,44 @@ export const AssetCustodyPage = async () => {
   `;
 };
 
+function normalizeItemText(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/i̇/g, 'i')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function findGlobalImageMatch(code?: string, _name?: string): string {
+  if (globalImagePoolMap.size === 0) return '';
+
+  const codeClean = (code || '').trim();
+  if (!codeClean || codeClean === '-') return '';
+
+  // Strictly match by Malzeme Kodu (SAP Code)
+  let img = globalImagePoolMap.get(codeClean) 
+         || globalImagePoolMap.get(codeClean.replace(/^0+/, '')) 
+         || globalImagePoolMap.get(codeClean.toLowerCase())
+         || globalImagePoolMap.get(codeClean.toUpperCase());
+
+  return img || '';
+}
+
 function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): string {
   const condLabel: Record<string, string> = { saglam: '✅ Sağlam', arizali: '⚠️ Arızalı', hurda: '❌ Hurda', kayip: '🔍 Kayıp' };
   const catColors: Record<string, string> = { 
     'El Aleti': 'rgba(245,158,11,0.15)', 
     'Ölçü Aleti': 'rgba(59,130,246,0.15)',
     'Elektrik Aleti': 'rgba(234,179,8,0.15)',
+    'Şarjlı El Aleti': 'rgba(16,185,129,0.15)',
     'Güvenlik Ekipmanı': 'rgba(16,185,129,0.15)',
     'Hidrolik Ekipman': 'rgba(239,68,68,0.15)',
     'Diğer': 'rgba(255,255,255,0.05)' 
@@ -919,18 +1134,20 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   const wh = warehouses.find(w => w.id === item.warehouseId);
   const warehouseName = wh ? wh.name.replace(/\s*[Dd]epo(su)?\s*$/, '').trim() : 'Depoda';
 
+  const displayImage = item.imageUrl || findGlobalImageMatch(item.productCode, item.productName);
+
   return `
     <tr data-team="${item.assignedTeam}" data-person="${item.assignedTo || ''}" data-condition="${item.condition}" data-location="${item.location}" data-warehouse-id="${item.warehouseId || ''}" data-search="${(item.productCode + ' ' + item.productName + ' ' + (item.serialNo || '') + ' ' + item.assignedTo + ' ' + item.description).toLowerCase()}">
       <td><span class="custody-code">${item.productCode || '-'}</span></td>
       <td>
         <div style="display: flex; align-items: center; gap: 8px;">
-          ${item.imageUrl ? `
-            <div style="position: relative; width: 32px; height: 32px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;" onclick="window.showCustodyImageModal('${item.productName.replace(/'/g, "\\'")}', '${item.imageUrl}')">
-              <img src="${item.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;">
+          ${displayImage ? `
+            <div style="position: relative; width: 32px; height: 32px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; flex-shrink: 0;" onclick="window.showCustodyImageModal('${item.productName.replace(/'/g, "\\'")}', '${displayImage}')">
+              <img src="${displayImage}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
             </div>
           ` : `
-            <div style="width: 32px; height: 32px; border-radius: 4px; background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.75rem;">
-              <i class="fa-solid fa-image"></i>
+            <div style="position: relative; width: 32px; height: 32px; border-radius: 4px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; color: var(--text-muted); flex-shrink: 0;">
+              <i class="fa-solid fa-image" style="font-size: 0.8rem; opacity: 0.5;"></i>
             </div>
           `}
           <span class="custody-name">${item.productName}</span>
@@ -1441,11 +1658,16 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   document.getElementById('custody-details-modal')?.classList.add('hidden');
 };
 
-(window as any).filterCustodyItems = () => {
-  searchQuery = ((document.getElementById('custody-search') as HTMLInputElement)?.value || '').toLowerCase();
+(window as any).filterCustodyItems = (page?: number) => {
+  if (page !== undefined) {
+    custodyCurrentPage = page;
+  }
+  searchQuery = ((document.getElementById('custody-search') as HTMLInputElement)?.value || '').toLowerCase().trim();
+  filterSite = (document.getElementById('custody-filter-site') as HTMLSelectElement)?.value || 'all';
   filterTeam = (document.getElementById('custody-filter-team') as HTMLSelectElement)?.value || 'all';
   localStorage.setItem('custody_filter_team', filterTeam);
   filterPerson = (document.getElementById('custody-filter-person') as HTMLSelectElement)?.value || 'all';
+  filterCategory = (document.getElementById('custody-filter-category') as HTMLSelectElement)?.value || 'all';
   filterCondition = (document.getElementById('custody-filter-condition') as HTMLSelectElement)?.value || 'all';
   filterLocation = (document.getElementById('custody-filter-location') as HTMLSelectElement)?.value || 'all';
   filterWarehouse = (document.getElementById('custody-filter-warehouse') as HTMLSelectElement)?.value || 'all';
@@ -1461,16 +1683,60 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     }
   }
 
-  const rows = document.querySelectorAll('#custody-table-body tr[data-team]');
-  rows.forEach((row: any) => {
-    const team = row.getAttribute('data-team');
-    const person = row.getAttribute('data-person');
-    const condition = row.getAttribute('data-condition');
-    const location = row.getAttribute('data-location');
-    const whId = row.getAttribute('data-warehouse-id') || '';
-    const searchStr = row.getAttribute('data-search');
-    
+  // Regional lookup data
+  let siteWarehouseIds = new Set<string>();
+  let sitePersonnelNames = new Set<string>();
+  let siteNameClean = '';
+
+  if (filterSite !== 'all') {
+    const siteObj = dataService.getAllSites().find(s => s.id === filterSite);
+    if (siteObj) {
+      siteNameClean = siteObj.name.toLowerCase().replace(/\s*res\s*$/, '').trim();
+
+      const warehouses = dataService.getWarehouses();
+      warehouses.forEach(w => {
+        if ((w as any).siteId === filterSite || (siteNameClean && w.name.toLowerCase().includes(siteNameClean))) {
+          siteWarehouseIds.add(w.id);
+        }
+      });
+
+      const allPersonnel = personnelService.getPersonnelDetailsList();
+      allPersonnel.forEach(p => {
+        const matchesBaseSite = p.baseSites && p.baseSites.includes(filterSite);
+        const matchesSiteName = siteNameClean && (p as any).site && (p as any).site.toLowerCase().includes(siteNameClean);
+        if (matchesBaseSite || matchesSiteName) {
+          sitePersonnelNames.add(p.name.toLowerCase().trim());
+        }
+      });
+    }
+  }
+
+  const filtered = allItems.filter(item => {
+    const team = item.assignedTeam || '';
+    const person = item.assignedTo || '';
+    const condition = item.condition || '';
+    const location = item.location || '';
+    const whId = item.warehouseId || '';
+    const searchStr = `${item.productCode || ''} ${item.productName || ''} ${item.serialNo || ''} ${person} ${team} ${item.conditionNote || ''}`.toLowerCase();
+
     let show = true;
+
+    if (filterSite !== 'all') {
+      const isDepoMatch = location === 'depo' && siteWarehouseIds.has(whId);
+      const isPersonMatch = person && sitePersonnelNames.has(person.toLowerCase().trim());
+      const isTextMatch = siteNameClean && (
+        team.toLowerCase().includes(siteNameClean) ||
+        person.toLowerCase().includes(siteNameClean) ||
+        (item.conditionNote || '').toLowerCase().includes(siteNameClean)
+      );
+
+      if (!isDepoMatch && !isPersonMatch && !isTextMatch) {
+        show = false;
+      }
+    }
+
+    if (filterCategory !== 'all' && item.category !== filterCategory) show = false;
+
     if (filterLocation === 'depo') {
       if (location !== 'depo') show = false;
       if (filterWarehouse !== 'all' && whId !== filterWarehouse) show = false;
@@ -1481,9 +1747,211 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
     }
     if (filterCondition !== 'all' && condition !== filterCondition) show = false;
     if (searchQuery && !searchStr.includes(searchQuery)) show = false;
-    
-    row.style.display = show ? '' : 'none';
+    return show;
   });
+
+  // Regional summary card rendering
+  const cardEl = document.getElementById('custody-regional-summary-card');
+  if (cardEl) {
+    if (filterSite !== 'all') {
+      const siteObj = dataService.getAllSites().find(s => s.id === filterSite);
+      const siteName = siteObj ? siteObj.name : 'Bölge';
+
+      let totalQty = 0;
+      let depoQty = 0;
+      let teamQty = 0;
+      let personQty = 0;
+      let saglamQty = 0;
+      let arizaliQty = 0;
+      let hurdaQty = 0;
+      let kayipQty = 0;
+
+      filtered.forEach(it => {
+        const q = it.quantity || 1;
+        totalQty += q;
+        if (it.location === 'depo') depoQty += q;
+        else if (it.location === 'team') teamQty += q;
+        else if (it.location === 'person') personQty += q;
+
+        if (it.condition === 'saglam') saglamQty += q;
+        else if (it.condition === 'arizali') arizaliQty += q;
+        else if (it.condition === 'hurda') hurdaQty += q;
+        else if (it.condition === 'kayip') kayipQty += q;
+      });
+
+      cardEl.style.display = 'block';
+      cardEl.innerHTML = `
+        <div class="glass-panel fade-in-up" style="padding: 1.25rem; background: rgba(0, 242, 254, 0.03); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.5rem;">
+              <span style="font-size: 1.4rem;">📍</span>
+              <h3 style="margin: 0; color: #fff; font-family: 'Rajdhani', sans-serif; font-size: 1.3rem; font-weight: 800; letter-spacing: 0.5px;">
+                ${siteName} Santrali Birleştirilmiş Envanter & Sayım Özeti
+              </h3>
+            </div>
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+              <span style="background: rgba(0,242,254,0.12); color: var(--accent-cyan); border: 1px solid rgba(0,242,254,0.3); padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 0.8rem;">
+                📦 Toplam: ${filtered.length} Kalem / ${totalQty} Adet
+              </span>
+              <span style="background: rgba(255,255,255,0.05); color: #E2E8F0; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                🏭 Depoda: <b>${depoQty}</b> | 👥 Ekipte: <b>${teamQty}</b> | 👤 Personelde: <b>${personQty}</b>
+              </span>
+              <span style="background: rgba(20,241,149,0.08); color: #14F195; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                ✅ Sağlam: <b>${saglamQty}</b>
+              </span>
+              ${arizaliQty > 0 ? `
+                <span style="background: rgba(234,179,8,0.1); color: #eab308; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                  ⚠️ Arızalı: <b>${arizaliQty}</b>
+                </span>
+              ` : ''}
+              ${hurdaQty > 0 ? `
+                <span style="background: rgba(239,68,68,0.1); color: #ef4444; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                  ❌ Hurda: <b>${hurdaQty}</b>
+                </span>
+              ` : ''}
+              ${kayipQty > 0 ? `
+                <span style="background: rgba(148,163,184,0.1); color: #94a3b8; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                  🔍 Kayıp: <b>${kayipQty}</b>
+                </span>
+              ` : ''}
+            </div>
+          </div>
+          <button onclick="window.exportRegionalCustodyExcel()" class="btn-cyber" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(20, 241, 149, 0.12); border-color: #14F195; color: #14F195; padding: 8px 16px; font-size: 0.8rem;">
+            <i class="fa-solid fa-file-excel"></i> SAYIM LİSTESİNİ EXCEL İNDİR
+          </button>
+        </div>
+      `;
+    } else {
+      cardEl.style.display = 'none';
+      cardEl.innerHTML = '';
+    }
+  }
+
+  (window as any)._currentFilteredCustodyList = filtered;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / CUSTODY_PAGE_SIZE));
+  if (custodyCurrentPage > totalPages) custodyCurrentPage = 1;
+  if (custodyCurrentPage < 1) custodyCurrentPage = 1;
+
+  const pageItems = filtered.slice((custodyCurrentPage - 1) * CUSTODY_PAGE_SIZE, custodyCurrentPage * CUSTODY_PAGE_SIZE);
+
+  const tbody = document.getElementById('custody-table-body');
+  if (tbody) {
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr><td colspan="10" style="text-align: center; padding: 3rem; color: var(--text-muted);">
+          <i class="fa-solid fa-folder-open" style="font-size: 2rem; opacity: 0.2; margin-bottom: 0.5rem; display: block;"></i>
+          Filtrelere uygun zimmet kaydı bulunamadı.
+        </td></tr>
+      `;
+    } else {
+      const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+      const isAdminUser = currentUser?.role?.toUpperCase() === 'ADMIN' || currentUser?.role?.toUpperCase() === 'MALZEME_YONETIMI';
+      const hasPermission = (window as any).hasCustodyPermission?.('assignCustody') ?? true;
+
+      tbody.innerHTML = pageItems.map(item => renderRow(item, hasPermission, isAdminUser)).join('');
+    }
+  }
+
+  // Render Pagination Controls
+  const pagEl = document.getElementById('custody-pagination-controls');
+  if (pagEl) {
+    pagEl.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: rgba(0,0,0,0.25); border-top: 1px solid rgba(255,255,255,0.05); font-family: 'Rajdhani', sans-serif; font-size: 0.85rem;">
+        <div style="color: var(--text-muted); font-weight: 600;">
+          Gösterilen: <span style="color: #FFF; font-weight: 800;">${filtered.length === 0 ? 0 : (custodyCurrentPage - 1) * CUSTODY_PAGE_SIZE + 1} - ${Math.min(custodyCurrentPage * CUSTODY_PAGE_SIZE, filtered.length)}</span> / Toplam <span style="color: var(--accent-cyan); font-weight: 800;">${filtered.length}</span> Kayıt
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button onclick="window.filterCustodyItems(${custodyCurrentPage - 1})" ${custodyCurrentPage <= 1 ? 'disabled' : ''} style="background: ${custodyCurrentPage <= 1 ? 'rgba(255,255,255,0.02)' : 'rgba(0, 242, 255, 0.1)'}; border: 1px solid ${custodyCurrentPage <= 1 ? 'rgba(255,255,255,0.05)' : 'var(--accent-cyan)'}; color: ${custodyCurrentPage <= 1 ? 'var(--text-muted)' : 'var(--accent-cyan)'}; padding: 4px 12px; border-radius: 6px; font-weight: 800; cursor: ${custodyCurrentPage <= 1 ? 'not-allowed' : 'pointer'}; transition: all 0.2s;">
+            <i class="fa-solid fa-chevron-left"></i> Önceki
+          </button>
+          <span style="color: #FFF; font-weight: 800; padding: 0 8px;">Sayfa ${custodyCurrentPage} / ${totalPages}</span>
+          <button onclick="window.filterCustodyItems(${custodyCurrentPage + 1})" ${custodyCurrentPage >= totalPages ? 'disabled' : ''} style="background: ${custodyCurrentPage >= totalPages ? 'rgba(255,255,255,0.02)' : 'rgba(0, 242, 255, 0.1)'}; border: 1px solid ${custodyCurrentPage >= totalPages ? 'rgba(255,255,255,0.05)' : 'var(--accent-cyan)'}; color: ${custodyCurrentPage >= totalPages ? 'var(--text-muted)' : 'var(--accent-cyan)'}; padding: 4px 12px; border-radius: 6px; font-weight: 800; cursor: ${custodyCurrentPage >= totalPages ? 'not-allowed' : 'pointer'}; transition: all 0.2s;">
+            Sonraki <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+};
+
+(window as any).exportRegionalCustodyExcel = () => {
+  const filtered: CustodyItem[] = (window as any)._currentFilteredCustodyList || [];
+  if (filtered.length === 0) {
+    alert('İndirilecek zimmet kaydı bulunamadı.');
+    return;
+  }
+
+  const siteObj = dataService.getAllSites().find(s => s.id === filterSite);
+  const siteName = siteObj ? siteObj.name : 'Tüm_Bölgeler';
+
+  const excelData = filtered.map(item => ({
+    'MALZEME KODU': item.productCode || '-',
+    'MALZEME ADI': item.productName,
+    'SERİ NUMARASI': item.serialNo || '-',
+    'ADET': item.quantity || 1,
+    'KATEGORİ': item.category,
+    'ZİMMETLİ KİŞİ / EKİP': item.location === 'person' ? (item.assignedTo || '-') : item.location === 'team' ? (item.assignedTeam || '-') : 'Depoda',
+    'LOKASYON (KONUM)': item.location === 'depo' ? 'Depoda' : item.location === 'team' ? 'Ekipte' : 'Kişide',
+    'DURUM': item.condition === 'saglam' ? 'Sağlam' : item.condition === 'arizali' ? 'Arızalı' : item.condition === 'hurda' ? 'Hurda' : 'Kayıp',
+    'NOT / AÇIKLAMA': item.conditionNote || '-'
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(excelData);
+  ws['!cols'] = [
+    { wch: 18 },
+    { wch: 45 },
+    { wch: 20 },
+    { wch: 10 },
+    { wch: 20 },
+    { wch: 30 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 35 }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `${siteName.substring(0, 25)} Sayım`);
+  XLSX.writeFile(wb, `${siteName}_Zimmet_Sayim_Listesi.xlsx`);
+  if ((window as any).showToast) (window as any).showToast('Başarılı', `${siteName} birleştirilmiş sayım Excel raporu indirildi.`, 'success');
+};
+
+(window as any).resetCustodyFilters = () => {
+  searchQuery = '';
+  filterSite = 'all';
+  filterTeam = 'all';
+  filterPerson = 'all';
+  filterCategory = 'all';
+  filterCondition = 'all';
+  filterLocation = 'all';
+  filterWarehouse = 'all';
+  custodyCurrentPage = 1;
+
+  const searchEl = document.getElementById('custody-search') as HTMLInputElement;
+  if (searchEl) searchEl.value = '';
+
+  const siteEl = document.getElementById('custody-filter-site') as HTMLSelectElement;
+  if (siteEl) siteEl.value = 'all';
+
+  const teamEl = document.getElementById('custody-filter-team') as HTMLSelectElement;
+  if (teamEl) teamEl.value = 'all';
+
+  const personEl = document.getElementById('custody-filter-person') as HTMLSelectElement;
+  if (personEl) personEl.value = 'all';
+
+  const catEl = document.getElementById('custody-filter-category') as HTMLSelectElement;
+  if (catEl) catEl.value = 'all';
+
+  const condEl = document.getElementById('custody-filter-condition') as HTMLSelectElement;
+  if (condEl) condEl.value = 'all';
+
+  const locEl = document.getElementById('custody-filter-location') as HTMLSelectElement;
+  if (locEl) locEl.value = 'all';
+
+  const whEl = document.getElementById('custody-filter-warehouse') as HTMLSelectElement;
+  if (whEl) whEl.value = 'all';
+
+  (window as any).filterCustodyItems?.();
 };
 
 (window as any).handleCustodyPhotoUpload = async (event: Event) => {
@@ -1680,7 +2148,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
           const quantity = Number(row['Adet'] || row['Miktar'] || 1);
           
           let category = String(row['Kategori'] || 'El Aleti').trim();
-          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
+          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Şarjlı El Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
           if (!validCategories.includes(category)) {
             category = 'El Aleti';
           }
@@ -2021,7 +2489,7 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
           const quantity = Number(row['Adet'] || row['Miktar'] || 1);
           
           let category = String(row['Kategori'] || 'El Aleti').trim();
-          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
+          const validCategories = ['El Aleti', 'Ölçü Aleti', 'Elektrik Aleti', 'Şarjlı El Aleti', 'Güvenlik Ekipmanı', 'Hidrolik Ekipman', 'Diğer'];
           if (!validCategories.includes(category)) {
             category = 'El Aleti';
           }
@@ -2164,5 +2632,124 @@ function renderRow(item: CustodyItem, canEdit: boolean, isAdminUser: boolean): s
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
+};
+
+// === RESİM HAVUZU (IMAGE POOL) WINDOW FUNCTIONS ===
+(window as any).openCustodyImagePoolModal = async (targetFieldId?: string) => {
+  (window as any)._imagePoolTargetFieldId = targetFieldId || '';
+  const modal = document.getElementById('custody-image-pool-modal');
+  if (!modal) return;
+
+  modal.classList.remove('hidden');
+
+  const pool = await warehouseService.getGlobalImagePool();
+  globalImagePoolMap = pool;
+  (window as any).renderCustodyImagePoolGrid();
+};
+
+(window as any).renderCustodyImagePoolGrid = (query: string = '') => {
+  const container = document.getElementById('custody-pool-grid-container');
+  if (!container) return;
+
+  const searchVal = (query || (document.getElementById('custody-pool-search') as HTMLInputElement)?.value || '').toLowerCase().trim();
+  const targetFieldId = (window as any)._imagePoolTargetFieldId;
+
+  const entries: Array<{ sapNo: string; imageUrl: string }> = [];
+  globalImagePoolMap.forEach((url, key) => {
+    if (url && !entries.some(e => e.imageUrl === url && e.sapNo === key)) {
+      entries.push({ sapNo: key, imageUrl: url });
+    }
+  });
+
+  const filtered = entries.filter(e => !searchVal || e.sapNo.toLowerCase().includes(searchVal));
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted);">
+        <i class="fa-solid fa-image" style="font-size: 2.5rem; opacity: 0.2; margin-bottom: 0.5rem; display: block;"></i>
+        Aramanıza uygun görsel bulunamadı.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => `
+    <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.25s; position: relative;" onmouseover="this.style.borderColor='#14F195'; this.style.transform='translateY(-2px)';" onmouseout="this.style.borderColor='rgba(255, 255, 255, 0.08)'; this.style.transform='translateY(0)';">
+      <div style="width: 100%; height: 130px; background: rgba(0,0,0,0.4); overflow: hidden; position: relative;">
+        <img src="${item.imageUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+      </div>
+      <div style="padding: 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; justify-content: space-between;">
+        <span style="font-family: monospace; font-size: 0.8rem; font-weight: 800; color: #14F195; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.sapNo}</span>
+        <button onclick="window.selectCustodyPoolImage('${item.imageUrl.replace(/'/g, "\\'")}', '${item.sapNo.replace(/'/g, "\\'")}')" style="background: rgba(20, 241, 149, 0.12); border: 1px solid rgba(20, 241, 149, 0.35); color: #14F195; border-radius: 6px; padding: 5px 8px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; font-family: 'Rajdhani', sans-serif;">
+          <i class="fa-solid fa-check"></i> ${targetFieldId ? 'Görseli Seç' : 'Görseli Kullan'}
+        </button>
+      </div>
+    </div>
+  `).join('');
+};
+
+(window as any).selectCustodyPoolImage = (imageUrl: string, sapNo: string) => {
+  const photoUrlInput = document.getElementById('custody-photo-url') as HTMLInputElement;
+  const previewContainer = document.getElementById('custody-photo-preview-container');
+  const previewImg = document.getElementById('custody-photo-preview') as HTMLImageElement;
+  const statusSpan = document.getElementById('custody-photo-status');
+
+  if (photoUrlInput) photoUrlInput.value = imageUrl;
+  if (previewImg) previewImg.src = imageUrl;
+  if (previewContainer) previewContainer.style.display = 'block';
+  if (statusSpan) statusSpan.innerHTML = `<span style="color: #14F195; font-weight: 800;">✓ Havuzdan Seçildi</span>`;
+
+  document.getElementById('custody-image-pool-modal')?.classList.add('hidden');
+  (window as any).showToast?.('BAŞARILI', `Görsel zimmet kaydına aktarıldı. (${sapNo})`, 'success');
+};
+
+(window as any).uploadNewCustodyPoolImage = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  const sapNo = prompt('Lütfen bu görsel için bir SAP Kodu veya Malzeme Adı giriniz:');
+  if (!sapNo || !sapNo.trim()) return;
+
+  try {
+    (window as any).showToast?.('BİLGİ', 'Görsel yükleniyor...', 'info');
+    const imageUrl = await fileService.uploadImage(file, '');
+    const cleanSapNo = sapNo.trim();
+    const safeSapNo = cleanSapNo.replace(/\//g, '_');
+    await setDoc(doc(db, 'GlobalMaterialImages', safeSapNo), { imageUrl, updatedAt: new Date().toISOString() }, { merge: true });
+
+    const pool = await warehouseService.getGlobalImagePool();
+    globalImagePoolMap = pool;
+    (window as any).renderCustodyImagePoolGrid();
+    (window as any).filterCustodyItems?.();
+    (window as any).showToast?.('BAŞARILI', 'Yeni görsel havuza eklendi ve tüm listelerde güncellendi.', 'success');
+  } catch (err) {
+    console.error(err);
+    (window as any).showToast?.('HATA', 'Görsel yüklenirken bir hata oluştu.', 'error');
+  }
+};
+
+(window as any).checkCustodySapImageAuto = async () => {
+  const codeInput = document.getElementById('custody-code') as HTMLInputElement;
+  const sapNo = codeInput?.value?.trim();
+  if (!sapNo) return;
+
+  if (globalImagePoolMap.size === 0) {
+    globalImagePoolMap = await warehouseService.getGlobalImagePool();
+  }
+
+  const foundUrl = globalImagePoolMap.get(sapNo) || globalImagePoolMap.get(sapNo.replace(/^0+/, ''));
+  if (foundUrl) {
+    const photoUrlInput = document.getElementById('custody-photo-url') as HTMLInputElement;
+    const previewContainer = document.getElementById('custody-photo-preview-container');
+    const previewImg = document.getElementById('custody-photo-preview') as HTMLImageElement;
+    const statusSpan = document.getElementById('custody-photo-status');
+    if (photoUrlInput && !photoUrlInput.value) {
+      photoUrlInput.value = foundUrl;
+      if (previewImg) previewImg.src = foundUrl;
+      if (previewContainer) previewContainer.style.display = 'block';
+      if (statusSpan) statusSpan.innerHTML = '<span style="color: #14F195; font-weight: 800;">✓ Havuzdan Otomatik Eşleşti</span>';
+    }
+  }
 };
 

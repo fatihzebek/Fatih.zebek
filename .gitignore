@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 *.xlsx
+*.apk
+_VERSIONS/
+.firebase/
+scratch/
+scratch_*
+*.zip

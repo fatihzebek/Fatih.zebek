@@ -8,39 +8,58 @@ import { fileService } from '../../services/FileService';
 import { ImageCompressor } from '../../utils/imageCompressor';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { personnelService } from '../../services/PersonnelService';
+
+export function ensureSingleModalInBody(modalId: string): HTMLElement | null {
+  const modals = Array.from(document.querySelectorAll(`#${modalId}`));
+  if (modals.length === 0) return null;
+
+  const targetModal = modals[modals.length - 1] as HTMLElement;
+  modals.forEach(m => {
+    if (m !== targetModal && m.parentElement) {
+      m.parentElement.removeChild(m);
+    }
+  });
+
+  if (targetModal.parentElement !== document.body) {
+    document.body.appendChild(targetModal);
+  }
+  return targetModal;
+}
 
 // --- Static Modals HTML ---
 export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolean) => {
   return `
     <!-- Add New Modal -->
-    <div id="add-new-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(10, 14, 23, 0.8); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
-      <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; width: 500px; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+    <div id="add-new-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(10, 14, 23, 0.8); z-index: 1000; justify-content: center; align-items: flex-start; padding: 40px 1rem; overflow-y: auto; backdrop-filter: blur(4px);">
+      <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; width: 650px; max-width: 95vw; max-height: 85vh; overflow-y: auto; padding: 1.75rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); box-sizing: border-box;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-          <h2 style="margin: 0; font-size: 1.25rem; color: #FFF;">Yeni Malzeme Ekle</h2>
+          <h2 style="margin: 0; font-size: 1.25rem; color: #FFF; font-weight: 700;">Yeni Malzeme Ekle</h2>
           <i class="fa-solid fa-times" onclick="window.closeAddNewModal()" style="cursor: pointer; color: #64748B; font-size: 1.25rem;"></i>
         </div>
         
-        <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
           <div>
-            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">SAP Numarası (Otomatik Aranır)</label>
+            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">SAP Numarası</label>
             <input id="new-sap-input" type="text" autocomplete="off" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #14F195; padding: 0 1rem; font-size: 1rem; outline: none; font-weight: 600;" placeholder="Örn: 32">
           </div>
           
           <div>
-            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Malzeme Tanımı</label>
+            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Malzeme Tanımı</label>
             <input id="new-name-input" type="text" style="width: 100%; height: 42px; background-color: rgba(10, 14, 23, 0.5); border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;" placeholder="Sözlükten bulunacak...">
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
             <div>
-              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Miktar</label>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Miktar</label>
               <input id="new-qty-input" type="number" min="0" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;" placeholder="0">
             </div>
             <div>
-              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Birim</label>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Birim</label>
               <select id="new-unit-input" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none; appearance: none;">
                 <option value="Adet">Adet</option>
                 <option value="Kutu">Kutu</option>
+                <option value="Metre">Metre</option>
                 <option value="Litre">Litre</option>
                 <option value="Set">Set</option>
               </select>
@@ -48,53 +67,64 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
           </div>
 
           <div>
-            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Raf Konumu</label>
+            <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Raf Konumu</label>
             <input id="new-loc-input" type="text" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;" placeholder="Örn: A-12">
           </div>
 
-          <div id="new-stock-entry-details" style="display: flex; flex-direction: column; gap: 0.75rem; border-top: 1px dashed #1E293B; padding-top: 0.75rem; margin-top: 0.5rem; text-align: left;">
+          <div style="grid-column: span 2; border-top: 1px dashed #1E293B; padding-top: 1rem; margin-top: 0.25rem;">
             <h4 style="font-size: 0.8rem; font-weight: 700; color: #14F195; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">Malzeme Giriş Bilgileri</h4>
-            <div>
-              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.25rem; text-transform: uppercase;">Malzeme Nereden Geldi?</label>
-              <input id="new-source-input" type="text" placeholder="Örn: Merkez Depo, Tedarikçi, Saha vb." style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
-              <div>
-                <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.25rem; text-transform: uppercase;">İrsaliye / Delivery Note</label>
-                <input id="new-delivery-input" type="text" placeholder="Varsa irsaliye no" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
-              </div>
-              <div>
-                <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.25rem; text-transform: uppercase;">Fatura Numarası</label>
-                <input id="new-invoice-input" type="text" placeholder="Varsa fatura no" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
-              </div>
-            </div>
-            <div>
-              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.25rem; text-transform: uppercase;">Güncelleyen Personel</label>
-              <input id="new-updatedby-input" type="text" placeholder="Ad Soyad" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
-            </div>
-            <div>
-              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.25rem; text-transform: uppercase;">Not / Açıklama</label>
-              <input id="new-entry-note-input" type="text" placeholder="Varsa eklemek istediğiniz not" style="width: 100%; height: 36px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
-            </div>
           </div>
 
           <div>
-            <label style="display: block; font-size: 0.8rem; color: #14F195; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;"><i class="fa-solid fa-image" style="margin-right:0.25rem;"></i> Malzeme Görseli</label>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Malzeme Nereden Geldi?</label>
+            <input id="new-source-input" type="text" placeholder="Örn: Merkez Depo, Tedarikçi, Saha vb." style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Güncelleyen Personel</label>
+            <input id="new-updatedby-input" type="text" list="personnel-list" placeholder="Ad Soyad" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+            <datalist id="personnel-list">
+              ${personnelService.getPersonnelList().map(name => `<option value="${name}"></option>`).join('')}
+            </datalist>
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">İrsaliye / Delivery Note</label>
+            <input id="new-delivery-input" type="text" placeholder="Varsa irsaliye no" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Fatura Numarası</label>
+            <input id="new-invoice-input" type="text" placeholder="Varsa fatura no" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+          </div>
+
+          <div style="grid-column: span 2;">
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase;">Not / Açıklama</label>
+            <input id="new-entry-note-input" type="text" placeholder="Varsa eklemek istediğiniz not" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 0.75rem; font-size: 0.85rem; outline: none;">
+          </div>
+
+          <div style="grid-column: span 2; border-top: 1px dashed #1E293B; padding-top: 1rem; margin-top: 0.25rem;">
+            <label style="display: block; font-size: 0.8rem; color: #14F195; margin: 0; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;"><i class="fa-solid fa-image" style="margin-right:0.25rem;"></i> Malzeme Görseli</label>
+          </div>
+
+          <div style="grid-column: span 2;">
             <div 
               onclick="document.getElementById('new-img-input').click()" 
-              style="width: 100%; height: 160px; background-color: #0A0E17; border: 1px dashed #334155; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"
+              style="width: 100%; height: 110px; background-color: #0A0E17; border: 1px dashed #334155; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;"
               onmouseover="this.style.borderColor='#14F195'; this.style.backgroundColor='#0d131f';"
               onmouseout="this.style.borderColor='#334155'; this.style.backgroundColor='#0A0E17';"
             >
-              <i class="fa-solid fa-camera" style="font-size: 2.5rem; color: #475569; margin-bottom: 0.75rem; transition: color 0.2s;"></i>
-              <div id="new-img-label" style="color: #94A3B8; font-size: 0.9rem; font-weight: 500;">Görsel Yükle</div>
+              <i class="fa-solid fa-camera" style="font-size: 1.8rem; color: #475569; margin-bottom: 0.4rem; transition: color 0.2s;"></i>
+              <div id="new-img-label" style="color: #94A3B8; font-size: 0.85rem; font-weight: 500;">Görsel Yükle</div>
               <input id="new-img-input" type="file" accept="image/*" style="display: none;" onchange="const label = document.getElementById('new-img-label'); if (label) { label.innerText = this.files[0] ? this.files[0].name : 'Görsel Yükle'; label.style.color = this.files[0] ? '#14F195' : '#94A3B8'; } const cameraIcon = this.previousElementSibling; if (cameraIcon) { (cameraIcon as HTMLElement).style.color = this.files[0] ? '#14F195' : '#475569'; }">
             </div>
           </div>
 
-          <button onclick="window.saveNewItem(this)" style="height: 42px; margin-top: 0.5rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.95rem; font-weight: 600; cursor: pointer; width: 100%;">
-            Malzemeyi Kaydet
-          </button>
+          <div style="grid-column: span 2; margin-top: 0.5rem;">
+            <button onclick="window.saveNewItem(this)" style="height: 42px; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.95rem; font-weight: 600; cursor: pointer; width: 100%;">
+              Malzemeyi Kaydet
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -180,44 +210,19 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
     </div>
 
     <!-- Edit Modal -->
-    <div id="new-warehouse-edit-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
-      <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 500px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div id="new-warehouse-edit-modal" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: flex-start; padding: 40px 1rem; overflow-y: auto; box-sizing: border-box;">
+      <div class="glass-panel" style="background: #0F172A; border: 1px solid rgba(100, 255, 218, 0.4); border-radius: 16px; width: 100%; max-width: 500px; padding: 1.5rem; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.95); position: relative; max-height: 85vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
           <h3 style="font-size: 1.25rem; font-weight: 600; color: #FFFFFF; margin: 0;">Malzemeyi Düzenle</h3>
           <button onclick="window.closeEditModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="edit-personnel-role-hint" style="display: none; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 12px; margin-bottom: 1rem; font-size: 0.76rem; color: #38bdf8; line-height: 1.4;">
+          <i class="fa-solid fa-lock" style="color: #fbbf24; margin-right: 4px;"></i> <strong>Saha Personeli Yetkisi:</strong> Yalnızca <strong>Raf Konumu</strong> ve <strong>Kritik Limit</strong> alanlarını güncelleyebilirsiniz. Stok giriş/çıkışları Malzeme Yönetimi faturası ile otomatik işlenir.
         </div>
         <div style="display: flex; flex-direction: column; gap: 1rem;">
           <input type="hidden" id="edit-item-id">
           
-          <div style="display: flex; gap: 1rem; align-items: flex-start;">
-              <div style="width: 100px; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
-                  <img id="edit-img-preview" src="" style="display: none; width: 100px; height: 100px; object-fit: cover; border-radius: 8px; border: 1px solid #1E293B; background: #111827;">
-                  <div style="display: flex; flex-direction: column; width: 100%; gap: 0.25rem;">
-                      <label for="edit-img-input" style="width: 100%; text-align: center; font-size: 0.75rem; color: #94A3B8; cursor: pointer; padding: 4px; border: 1px dashed #334155; border-radius: 6px; transition: color 0.2s;" onmouseover="this.style.color='#14F195'" onmouseout="this.style.color='#94A3B8'">
-                          <i class="fa-solid fa-camera" style="margin-right: 4px;"></i> Resmi Değiştir
-                      </label>
-                      <button onclick="window.deleteEditImage()" style="width: 100%; text-align: center; font-size: 0.75rem; color: #EF4444; background: transparent; cursor: pointer; padding: 4px; border: 1px solid #EF4444; border-radius: 6px; transition: background 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.1)'" onmouseout="this.style.background='transparent'">
-                          <i class="fa-solid fa-trash" style="margin-right: 4px;"></i> Resmi Sil
-                      </button>
-                  </div>
-                  <input id="edit-img-input" type="file" accept="image/*" style="display: none;" onchange="
-                      const file = this.files[0];
-                      if (file) {
-                          const reader = new FileReader();
-                          reader.onload = e => {
-                              const preview = document.getElementById('edit-img-preview');
-                              if (preview) {
-                                (preview as HTMLImageElement).src = e.target?.result as string;
-                                preview.style.display = 'block';
-                              }
-                          };
-                          reader.readAsDataURL(file);
-                      }
-                  ">
-              </div>
-              
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem;">
-                  <div>
+          <div>
             <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">SAP Numarası</label>
             <input id="edit-sap-input" type="text" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;">
           </div>
@@ -225,10 +230,20 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
             <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Malzeme Tanımı</label>
             <input id="edit-name-input" type="text" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;">
           </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
             <div>
               <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Miktar</label>
               <input id="edit-qty-input" type="number" min="0" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Birim</label>
+              <select id="edit-unit-input" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none; appearance: none;">
+                <option value="Adet">Adet</option>
+                <option value="Kutu">Kutu</option>
+                <option value="Metre">Metre</option>
+                <option value="Litre">Litre</option>
+                <option value="Set">Set</option>
+              </select>
             </div>
             <div>
               <label style="display: block; font-size: 0.8rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase;">Raf Konumu</label>
@@ -269,17 +284,14 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
             </div>
           </div>
           
-          </div> <!-- End of inputs flex: 1 -->
-          </div> <!-- End of main image+inputs flex container -->
-          
           <button onclick="window.saveEditItem(this)" style="height: 42px; margin-top: 0.5rem; border-radius: 8px; border: none; background-color: #14F195; color: #0A0E17; font-size: 0.95rem; font-weight: 600; cursor: pointer; width: 100%;">Değişiklikleri Kaydet</button>
         </div>
       </div>
     </div>
 
     <!-- Transfer Modal -->
-    <div id="new-warehouse-transfer-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
-      <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 400px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+    <div id="new-warehouse-transfer-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: flex-start; padding: 40px 1rem; overflow-y: auto;">
+      <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 400px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-height: 85vh; overflow-y: auto;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <h3 style="font-size: 1.25rem; font-weight: 600; color: #FFFFFF; margin: 0;">Transfer Et</h3>
           <button onclick="window.closeTransferModal()" style="background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
@@ -303,7 +315,8 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
     </div>
 
     <!-- History Modal -->
-    <div id="new-warehouse-history-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
+    <div id="new-warehouse-history-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: flex-start; padding: 40px 1rem; overflow-y: auto;">
+      <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 500px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); max-height: 85vh; overflow-y: auto;">
       <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 500px; padding: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <h3 id="history-title" style="font-size: 1.25rem; font-weight: 600; color: #FFFFFF; margin: 0;">Geçmiş</h3>
@@ -396,12 +409,65 @@ export const openAddNewModal = () => {
   const noteInput = document.getElementById('new-entry-note-input') as HTMLInputElement;
   if (noteInput) noteInput.value = '';
   
-  const userProfile = getUserProfile();
-  const user = userProfile ? userProfile.displayName || userProfile.email : '';
   const updatedByInput = document.getElementById('new-updatedby-input') as HTMLInputElement;
-  if (updatedByInput) updatedByInput.value = user;
+  if (updatedByInput) updatedByInput.value = '';
 
   const sapInput = document.getElementById('new-sap-input') as HTMLInputElement;
+  const nameInput = document.getElementById('new-name-input') as HTMLInputElement;
+  
+  // Set default state for nameInput (editable by default until SAP is typed)
+  if (nameInput) {
+    nameInput.value = '';
+    nameInput.readOnly = false;
+    nameInput.style.backgroundColor = '#0A0E17';
+    nameInput.placeholder = 'Sözlükten bulunacak veya manuel giriniz...';
+  }
+
+  // Attach search event listener (only once)
+  if (sapInput && !(sapInput as any)._listenerAttached) {
+    (sapInput as any)._listenerAttached = true;
+    let sapTimeout: any;
+    sapInput.addEventListener('input', (e) => {
+      clearTimeout(sapTimeout);
+      const val = (e.target as HTMLInputElement).value.trim();
+      if (val.length > 0) {
+        sapTimeout = setTimeout(async () => {
+          try {
+            const res = await warehouseAgent.resolveSapNumber(val);
+            if (res.found) {
+              if (nameInput) {
+                nameInput.value = res.name || '';
+                nameInput.style.backgroundColor = '#0A0E17';
+              }
+            } else {
+              if (nameInput && nameInput.value === 'Aranıyor...') {
+                nameInput.value = '';
+              }
+              if (nameInput) {
+                nameInput.readOnly = false;
+                nameInput.style.backgroundColor = '#0A0E17';
+                nameInput.placeholder = 'Sözlükte yoksa malzeme tanımını buraya giriniz...';
+              }
+            }
+          } catch (err) {
+            if (nameInput) {
+              nameInput.readOnly = false;
+              nameInput.style.backgroundColor = '#0A0E17';
+              nameInput.placeholder = 'Manuel malzeme tanımı giriniz...';
+            }
+          }
+        }, 400); // 400ms debounce
+      } else {
+        if (nameInput) {
+          nameInput.value = '';
+          nameInput.readOnly = false;
+          nameInput.style.backgroundColor = '#0A0E17';
+          nameInput.placeholder = 'Sözlükten bulunacak veya manuel giriniz...';
+        }
+      }
+    });
+  }
+
   setTimeout(() => sapInput?.focus(), 100);
 };
 
@@ -523,38 +589,111 @@ export const saveNewItem = async (btn: HTMLButtonElement) => {
   }
 };
 
-export const openEditModal = (id: string, sap: string, name: string, qty: number, loc: string, imageUrl?: string, minStock?: number) => {
-  const modal = document.getElementById('new-warehouse-edit-modal');
-  if(modal) {
-    (document.getElementById('edit-item-id') as HTMLInputElement).value = id;
-    (document.getElementById('edit-sap-input') as HTMLInputElement).value = sap;
-    (document.getElementById('edit-name-input') as HTMLInputElement).value = name;
-    (document.getElementById('edit-qty-input') as HTMLInputElement).value = qty.toString();
-    (document.getElementById('edit-loc-input') as HTMLInputElement).value = loc || '';
-    
-    const oldQtyInput = document.getElementById('edit-old-qty-input') as HTMLInputElement;
-    if (oldQtyInput) oldQtyInput.value = qty.toString();
+export const openEditModal = (id: string, sap: string, name: string, qty: number, loc: string, imageUrl?: string, minStock?: number, unit?: string) => {
+  let modal = ensureSingleModalInBody('new-warehouse-edit-modal');
+  if (modal) {
+    const editItemId = modal.querySelector('#edit-item-id') as HTMLInputElement;
+    const editSapInput = modal.querySelector('#edit-sap-input') as HTMLInputElement;
+    const editNameInput = modal.querySelector('#edit-name-input') as HTMLInputElement;
+    const editQtyInput = modal.querySelector('#edit-qty-input') as HTMLInputElement;
+    const editLocInput = modal.querySelector('#edit-loc-input') as HTMLInputElement;
+    const editUnitInput = modal.querySelector('#edit-unit-input') as HTMLSelectElement;
+    const oldQtyInput = modal.querySelector('#edit-old-qty-input') as HTMLInputElement;
+    const minStockInput = modal.querySelector('#edit-min-stock-input') as HTMLInputElement;
+    const sourceInput = modal.querySelector('#edit-source-input') as HTMLInputElement;
+    const deliveryInput = modal.querySelector('#edit-delivery-input') as HTMLInputElement;
+    const invoiceInput = modal.querySelector('#edit-invoice-input') as HTMLInputElement;
+    const noteInput = modal.querySelector('#edit-entry-note-input') as HTMLInputElement;
+    const updatedByInput = modal.querySelector('#edit-updatedby-input') as HTMLInputElement;
+    const detailsDiv = modal.querySelector('#edit-stock-entry-details') as HTMLElement;
+    const imgPreview = modal.querySelector('#edit-img-preview') as HTMLImageElement;
+    const imgInput = modal.querySelector('#edit-img-input') as HTMLInputElement;
 
-    const sourceInput = document.getElementById('edit-source-input') as HTMLInputElement;
+    if (editItemId) editItemId.value = id;
+    if (editSapInput) editSapInput.value = sap || '';
+    if (editNameInput) editNameInput.value = name || '';
+    if (editQtyInput) editQtyInput.value = qty.toString();
+    if (editLocInput) editLocInput.value = loc || '';
+    if (editUnitInput) editUnitInput.value = unit || 'Adet';
+    if (oldQtyInput) oldQtyInput.value = qty.toString();
     if (sourceInput) sourceInput.value = '';
-    const deliveryInput = document.getElementById('edit-delivery-input') as HTMLInputElement;
     if (deliveryInput) deliveryInput.value = '';
-    const invoiceInput = document.getElementById('edit-invoice-input') as HTMLInputElement;
     if (invoiceInput) invoiceInput.value = '';
-    const noteInput = document.getElementById('edit-entry-note-input') as HTMLInputElement;
     if (noteInput) noteInput.value = '';
-    
-    const userProfile = getUserProfile();
+    if (minStockInput) minStockInput.value = minStock !== undefined ? minStock.toString() : '0';
+
+    const userProfile = getUserProfile() || (window as any).currentUser;
     const user = userProfile ? userProfile.displayName || userProfile.email : '';
-    const updatedByInput = document.getElementById('edit-updatedby-input') as HTMLInputElement;
     if (updatedByInput) updatedByInput.value = user;
 
-    const detailsDiv = document.getElementById('edit-stock-entry-details');
+    const isMaterialManager = userProfile?.role === 'ADMIN' || 
+      userProfile?.role === 'MALZEME_YONETIMI' || 
+      userProfile?.role === 'TAMİR' ||
+      userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' ||
+      userProfile?.email?.toLowerCase() === 'emir.unver@demirerholding.com' ||
+      userProfile?.email?.toLowerCase()?.includes('fatih.zebek');
+
+    const hintContainer = modal.querySelector('#edit-personnel-role-hint') as HTMLElement;
+    if (isMaterialManager) {
+      if (editSapInput) {
+        editSapInput.readOnly = false;
+        editSapInput.style.backgroundColor = '#0A0E17';
+        editSapInput.style.color = '#E2E8F0';
+        editSapInput.style.cursor = 'text';
+      }
+      if (editNameInput) {
+        editNameInput.readOnly = false;
+        editNameInput.style.backgroundColor = '#0A0E17';
+        editNameInput.style.color = '#E2E8F0';
+        editNameInput.style.cursor = 'text';
+      }
+      if (editQtyInput) {
+        editQtyInput.readOnly = false;
+        editQtyInput.style.backgroundColor = '#0A0E17';
+        editQtyInput.style.color = '#E2E8F0';
+        editQtyInput.style.cursor = 'text';
+      }
+      if (editUnitInput) {
+        editUnitInput.disabled = false;
+        editUnitInput.style.backgroundColor = '#0A0E17';
+        editUnitInput.style.color = '#E2E8F0';
+        editUnitInput.style.cursor = 'pointer';
+      }
+      if (hintContainer) hintContainer.style.display = 'none';
+    } else {
+      // Saha Personeli Restricted View (Only Shelf Location & Critical Limit editable)
+      if (editSapInput) {
+        editSapInput.readOnly = true;
+        editSapInput.style.backgroundColor = 'rgba(30, 41, 59, 0.5)';
+        editSapInput.style.color = '#94a3b8';
+        editSapInput.style.cursor = 'not-allowed';
+      }
+      if (editNameInput) {
+        editNameInput.readOnly = true;
+        editNameInput.style.backgroundColor = 'rgba(30, 41, 59, 0.5)';
+        editNameInput.style.color = '#94a3b8';
+        editNameInput.style.cursor = 'not-allowed';
+      }
+      if (editQtyInput) {
+        editQtyInput.readOnly = true;
+        editQtyInput.style.backgroundColor = 'rgba(30, 41, 59, 0.5)';
+        editQtyInput.style.color = '#34d399';
+        editQtyInput.style.fontWeight = '800';
+        editQtyInput.style.cursor = 'not-allowed';
+      }
+      if (editUnitInput) {
+        editUnitInput.disabled = true;
+        editUnitInput.style.backgroundColor = 'rgba(30, 41, 59, 0.5)';
+        editUnitInput.style.color = '#94a3b8';
+        editUnitInput.style.cursor = 'not-allowed';
+      }
+      if (hintContainer) hintContainer.style.display = 'block';
+    }
+
     if (detailsDiv) detailsDiv.style.display = 'none';
 
-    const qtyInput = document.getElementById('edit-qty-input') as HTMLInputElement;
-    if (qtyInput) {
-        qtyInput.oninput = (e: any) => {
+    if (editQtyInput && isMaterialManager) {
+        editQtyInput.oninput = (e: any) => {
             const newQty = parseInt(e.target.value) || 0;
             if (detailsDiv) {
                 if (newQty > qty) {
@@ -564,12 +703,10 @@ export const openEditModal = (id: string, sap: string, name: string, qty: number
                 }
             }
         };
+    } else if (editQtyInput) {
+        editQtyInput.oninput = null;
     }
     
-    const minStockInput = document.getElementById('edit-min-stock-input') as HTMLInputElement;
-    if (minStockInput) minStockInput.value = minStock !== undefined ? minStock.toString() : '0';
-    
-    const imgPreview = document.getElementById('edit-img-preview') as HTMLImageElement;
     if (imgPreview) {
         if (imageUrl && imageUrl !== 'undefined' && imageUrl !== 'null') {
             imgPreview.src = imageUrl;
@@ -580,7 +717,6 @@ export const openEditModal = (id: string, sap: string, name: string, qty: number
         }
     }
     
-    const imgInput = document.getElementById('edit-img-input') as HTMLInputElement;
     if (imgInput) imgInput.value = '';
     
     modal.style.display = 'flex';
@@ -588,46 +724,80 @@ export const openEditModal = (id: string, sap: string, name: string, qty: number
 };
 
 export const closeEditModal = () => {
-  const modal = document.getElementById('new-warehouse-edit-modal');
-  if(modal) modal.style.display = 'none';
+  const modals = document.querySelectorAll('#new-warehouse-edit-modal');
+  modals.forEach((m: any) => {
+    m.style.display = 'none';
+  });
 };
 
 export const saveEditItem = async (btn: HTMLButtonElement) => {
-  const id = (document.getElementById('edit-item-id') as HTMLInputElement).value;
-  const sap = (document.getElementById('edit-sap-input') as HTMLInputElement).value;
-  const name = (document.getElementById('edit-name-input') as HTMLInputElement).value;
-  const qty = parseInt((document.getElementById('edit-qty-input') as HTMLInputElement).value);
-  const loc = (document.getElementById('edit-loc-input') as HTMLInputElement).value;
-  const minStockInput = document.getElementById('edit-min-stock-input') as HTMLInputElement;
-  const minStock = minStockInput && minStockInput.value ? parseInt(minStockInput.value) : 0;
+  const modal = (btn ? btn.closest('#new-warehouse-edit-modal') : null) || ensureSingleModalInBody('new-warehouse-edit-modal');
+  if (!modal) {
+    alert('Düzenleme penceresi bulunamadı.');
+    return;
+  }
+
+  const id = ((modal.querySelector('#edit-item-id') || document.getElementById('edit-item-id')) as HTMLInputElement)?.value || '';
+  const sap = ((modal.querySelector('#edit-sap-input') || document.getElementById('edit-sap-input')) as HTMLInputElement)?.value || '';
+  const name = ((modal.querySelector('#edit-name-input') || document.getElementById('edit-name-input')) as HTMLInputElement)?.value || '';
+  const qtyRaw = ((modal.querySelector('#edit-qty-input') || document.getElementById('edit-qty-input')) as HTMLInputElement)?.value || '0';
+  const qty = parseInt(qtyRaw);
+  const loc = ((modal.querySelector('#edit-loc-input') || document.getElementById('edit-loc-input')) as HTMLInputElement)?.value || '';
+  const unit = ((modal.querySelector('#edit-unit-input') || document.getElementById('edit-unit-input')) as HTMLSelectElement)?.value || 'Adet';
+  const minStockInput = (modal.querySelector('#edit-min-stock-input') || document.getElementById('edit-min-stock-input')) as HTMLInputElement;
+  const minStock = minStockInput && minStockInput.value !== '' ? parseInt(minStockInput.value) : 0;
   
-  const oldQty = parseInt((document.getElementById('edit-old-qty-input') as HTMLInputElement).value) || 0;
+  const oldQtyRaw = ((modal.querySelector('#edit-old-qty-input') || document.getElementById('edit-old-qty-input')) as HTMLInputElement)?.value || '0';
+  const oldQty = parseInt(oldQtyRaw) || 0;
   
+  if (!id) {
+    alert('Hata: Malzeme ID bilgisi alınamadı. Lütfen sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
   let logDetails: any = undefined;
   if (qty > oldQty) {
-      const source = (document.getElementById('edit-source-input') as HTMLInputElement).value.trim();
-      const delivery = (document.getElementById('edit-delivery-input') as HTMLInputElement).value.trim();
-      const invoice = (document.getElementById('edit-invoice-input') as HTMLInputElement).value.trim();
-      const updatedBy = (document.getElementById('edit-updatedby-input') as HTMLInputElement).value.trim();
+      const source = ((modal.querySelector('#edit-source-input') || document.getElementById('edit-source-input')) as HTMLInputElement)?.value?.trim() || '';
+      const delivery = ((modal.querySelector('#edit-delivery-input') || document.getElementById('edit-delivery-input')) as HTMLInputElement)?.value?.trim() || '';
+      const invoice = ((modal.querySelector('#edit-invoice-input') || document.getElementById('edit-invoice-input')) as HTMLInputElement)?.value?.trim() || '';
+      const updatedBy = ((modal.querySelector('#edit-updatedby-input') || document.getElementById('edit-updatedby-input')) as HTMLInputElement)?.value?.trim() || '';
+      const entryNote = ((modal.querySelector('#edit-entry-note-input') || document.getElementById('edit-entry-note-input')) as HTMLInputElement)?.value?.trim() || '';
       
       logDetails = {
           sourceWh: source || '-',
           deliveryNote: delivery || '-',
           invoiceNo: invoice || '-',
-          updatedBy: updatedBy
+          updatedBy: updatedBy,
+          entryNote: entryNote || '-'
       };
   }
   
   const originalText = btn.innerText;
   btn.innerText = 'Kaydediliyor...';
   btn.disabled = true;
+
+  const userProfile = getUserProfile() || (window as any).currentUser;
+  const isMaterialManager = userProfile?.role === 'ADMIN' || 
+    userProfile?.role === 'MALZEME_YONETIMI' || 
+    userProfile?.role === 'TAMİR' ||
+    userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' ||
+    userProfile?.email?.toLowerCase() === 'emir.unver@demirerholding.com' ||
+    userProfile?.email?.toLowerCase()?.includes('fatih.zebek');
   
   try {
-    await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
-      sapNo: sap, description: name, quantity: qty, shelfNo: loc, criticalLimit: minStock || 0
-    } as any, logDetails);
+    if (!isMaterialManager) {
+      // Saha Personeli: Sadece Raf Konumu ve Kritik Stok Limiti güncellenebilir!
+      await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
+        shelfNo: loc,
+        criticalLimit: isNaN(minStock) ? 0 : minStock
+      } as any);
+    } else {
+      await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
+        sapNo: sap, description: name, quantity: isNaN(qty) ? oldQty : qty, shelfNo: loc, criticalLimit: isNaN(minStock) ? 0 : minStock, unit
+      } as any, logDetails);
+    }
 
-    const imgInput = document.getElementById('edit-img-input') as HTMLInputElement;
+    const imgInput = (modal.querySelector('#edit-img-input') || document.getElementById('edit-img-input')) as HTMLInputElement;
     const path = `inventory/${warehouseState.currentWarehouse.id}/${id}_${Date.now()}`;
     if (imgInput && imgInput.files && imgInput.files.length > 0) {
        const file = imgInput.files[0];
@@ -650,10 +820,10 @@ export const saveEditItem = async (btn: HTMLButtonElement) => {
            
            const editBtn = document.getElementById(`edit-btn-${id}`);
            if (editBtn) {
-               const editQty = (document.getElementById('edit-qty-input') as HTMLInputElement).value;
-               const editLoc = (document.getElementById('edit-loc-input') as HTMLInputElement).value;
-               const minSt = (document.getElementById('edit-min-stock-input') as HTMLInputElement)?.value || 0;
-               editBtn.setAttribute('onclick', `window.openEditModal('${id}', '${sap}', '${safeNameForEdit}', ${editQty}, '${editLoc}', '${localPreviewUrl}', ${minSt})`);
+               const editQty = ((modal.querySelector('#edit-qty-input') || document.getElementById('edit-qty-input')) as HTMLInputElement)?.value || qty;
+               const editLoc = ((modal.querySelector('#edit-loc-input') || document.getElementById('edit-loc-input')) as HTMLInputElement)?.value || loc;
+               const minSt = ((modal.querySelector('#edit-min-stock-input') || document.getElementById('edit-min-stock-input')) as HTMLInputElement)?.value || minStock;
+               editBtn.setAttribute('onclick', `window.openEditModal('${id}', '${sap}', '${safeNameForEdit}', ${editQty}, '${editLoc}', '${localPreviewUrl}', ${minSt}, '${unit}')`);
            }
 
            let compressedFile: File;
@@ -680,8 +850,13 @@ export const saveEditItem = async (btn: HTMLButtonElement) => {
        }
     }
 
-  } catch(e) { console.error(e); alert('Hata oluştu'); }
-  finally { btn.innerText = originalText; btn.disabled = false; }
+  } catch(e: any) {
+    console.error(e);
+    alert('Hata oluştu: ' + (e?.message || e));
+  } finally {
+    btn.innerText = originalText;
+    btn.disabled = false;
+  }
 };
 
 export const deleteEditImage = async () => {
@@ -710,7 +885,7 @@ export const deleteEditImage = async () => {
       
       const editBtn = document.getElementById(`edit-btn-${id}`);
       if (editBtn && item) {
-          editBtn.setAttribute('onclick', `window.openEditModal('${item.id}', '${item.sapNo}', '${safeNameForEdit}', ${item.quantity}, '${item.shelfNo || ''}', '', ${item.minStock || 0})`);
+          editBtn.setAttribute('onclick', `window.openEditModal('${item.id}', '${item.sapNo}', '${safeNameForEdit}', ${item.quantity}, '${item.shelfNo || ''}', '', ${item.minStock || 0}, '${item.unit || 'Adet'}')`);
       }
       
       alert("Görsel başarıyla silindi!");
@@ -774,7 +949,7 @@ export const saveMtaEditItem = async (btn: HTMLButtonElement) => {
 };
 
 export const openDefectEditModal = (id: string, sap: string, name: string, serial: string, reportDocId: string = '') => {
-  const modal = document.getElementById('new-warehouse-defect-edit-modal');
+  let modal = ensureSingleModalInBody('new-warehouse-defect-edit-modal');
   if (modal) {
     (document.getElementById('defect-edit-item-id') as HTMLInputElement).value = id;
     const reportDocIdInput = document.getElementById('defect-edit-report-doc-id') as HTMLInputElement;
@@ -848,8 +1023,11 @@ export const saveDefectEditItem = async (btn: HTMLButtonElement) => {
 };
 
 export const openTransferModal = async (id: string, sap: string, name: string, maxQty: number, preselectedTargetWarehouseId?: string) => {
-  const modal = document.getElementById('new-warehouse-transfer-modal');
+  let modal = document.getElementById('new-warehouse-transfer-modal');
   if(modal) {
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
     (document.getElementById('transfer-item-id') as HTMLInputElement).value = id;
     const transferInfo = document.getElementById('transfer-info');
     if (transferInfo) transferInfo.innerText = `${sap} - ${name} (Mevcut: ${maxQty})`;
@@ -900,8 +1078,16 @@ export const openTransferModal = async (id: string, sap: string, name: string, m
 
        if (matchedWh) {
          optionsHtml = `<option value="${matchedWh.id}">${matchedWh.name}</option>`;
+       } else if (warehouseState.currentWarehouse.id.startsWith('team_')) {
+         const allowedMain = (warehouseState.targetOptions || []).filter(w => !w.id.startsWith('team_'));
+         optionsHtml = allowedMain.length > 0 
+           ? allowedMain.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
+           : `<option value="">İade edilecek yetkili depo bulunamadı</option>`;
        } else {
-         optionsHtml = warehouseState.targetOptions.map(w => `<option value="${w.id}">${w.name}</option>`).join('');
+         const allowedTeams = (warehouseState.targetOptions || []).filter(w => w.id.startsWith('team_'));
+         optionsHtml = allowedTeams.length > 0 
+           ? allowedTeams.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
+           : `<option value="">Sevk edilecek ekip zimmet deposu bulunamadı</option>`;
        }
        
        targetSelect.innerHTML = optionsHtml;
@@ -1655,9 +1841,13 @@ export const scrapDefectiveItem = async (itemId: string, sapNo: string, descript
       try {
         const currentUser = (window as any).currentUser;
         const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+        const currentWh = warehouseState.currentWarehouse;
+        const warehouseId = currentWh?.id || 'MTA';
+        const warehouseName = currentWh?.name || warehouseId;
+        const itemObj = warehouseState.inventoryItems?.find((i: any) => i.sapNo === sapNo);
 
         await warehouseService.updateStockBySap(
-          warehouseState.currentWarehouse.id,
+          warehouseId,
           sapNo,
           -qty,
           {
@@ -1668,7 +1858,7 @@ export const scrapDefectiveItem = async (itemId: string, sapNo: string, descript
         );
 
         await warehouseService.updateStockBySap(
-          warehouseState.currentWarehouse.id,
+          warehouseId,
           sapNo,
           qty,
           {
@@ -1678,11 +1868,23 @@ export const scrapDefectiveItem = async (itemId: string, sapNo: string, descript
           'SCRAP'
         );
 
-        (window as any).showToast?.('Başarılı', 'Malzeme başarıyla hurdaya ayrıldı ve hurda stoğuna eklendi.', 'success');
+        // Record to central Field Scraps pool
+        await warehouseService.addFieldScrap({
+          warehouseId: warehouseId,
+          warehouseName: warehouseName,
+          sapNo: sapNo,
+          serialNo: itemObj?.serialNo || '-',
+          description: description || itemObj?.name || 'Hurda Malzeme',
+          quantity: qty,
+          scrapReason: note,
+          scrappedBy: userEmail
+        });
+
+        (window as any).showToast?.('Başarılı', 'Malzeme başarıyla hurdaya ayrıldı ve Saha Hurda Listesine eklendi.', 'success');
         modal.remove();
 
         if ((window as any).selectWarehouseAndNavigate) {
-          (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
+          (window as any).selectWarehouseAndNavigate(warehouseId);
         }
       } catch (e) {
         console.error(e);
@@ -1799,19 +2001,62 @@ export const openBulkSendToRepairModal = (items: Array<{
             sentBy: userEmail,
             faultCode: item.faultCode,
             faultDesc: item.faultDesc,
-            dispatchNo: dispatchNo
+            dispatchNo: dispatchNo,
+            status: 'PENDING_ARRIVAL'
           } as any);
 
-          await warehouseService.updateStockBySap(
-            warehouseState.currentWarehouse.id,
-            item.sapNo,
-            -item.sendQty,
-            {
-              user: userEmail,
-              reason: `Toplu sevk kapsamında tamir atölyesine gönderildi. Sevk No: ${dispatchNo}`
-            },
-            'DEFECT'
-          );
+          // Direct defect item status update in Firestore
+          if (item.id) {
+            try {
+              const { doc, getDoc, updateDoc, setDoc, collection, serverTimestamp } = await import('firebase/firestore');
+              const { db } = await import('../../firebase');
+              const docRef = doc(db, 'warehouses', warehouseState.currentWarehouse.id, 'inventory_v2', item.id);
+              const docSnap = await getDoc(docRef);
+              if (docSnap.exists()) {
+                const invData = docSnap.data();
+                const curQty = invData.quantity || 0;
+                if (item.sendQty >= curQty) {
+                  await updateDoc(docRef, {
+                    quantity: 0,
+                    status: 'TAMIRE_SEVK_EDILDI',
+                    dispatchedQty: item.sendQty,
+                    dispatchNo: dispatchNo,
+                    dispatchedAt: serverTimestamp(),
+                    dispatchedBy: userEmail,
+                    lastUpdated: serverTimestamp()
+                  });
+                } else {
+                  await updateDoc(docRef, {
+                    quantity: curQty - item.sendQty,
+                    lastUpdated: serverTimestamp()
+                  });
+                  const newDocRef = doc(collection(db, 'warehouses', warehouseState.currentWarehouse.id, 'inventory_v2'));
+                  await setDoc(newDocRef, {
+                    ...invData,
+                    quantity: 0,
+                    status: 'TAMIRE_SEVK_EDILDI',
+                    dispatchedQty: item.sendQty,
+                    dispatchNo: dispatchNo,
+                    dispatchedAt: serverTimestamp(),
+                    dispatchedBy: userEmail,
+                    lastUpdated: serverTimestamp()
+                  });
+                }
+              }
+            } catch (invErr) {
+              console.warn("Direct defect inventory repair update failed:", invErr);
+            }
+          }
+
+          await warehouseService.addLog(warehouseState.currentWarehouse.id, {
+            itemId: item.id,
+            sapNo: item.sapNo,
+            materialName: item.description,
+            quantity: item.sendQty,
+            type: 'REMOVE',
+            user: userEmail,
+            note: `Tamir atölyesine sevk edildi. Sevk No: ${dispatchNo}`
+          }).catch(() => {});
         }
 
         (window as any).showToast?.('Başarılı', `Malzemeler ${dispatchNo} sevk numarası ile başarıyla sevk edildi.`, 'success');
@@ -1835,6 +2080,12 @@ export const openBulkScrapModal = (items: Array<{
   sapNo: string;
   description: string;
   quantity: number;
+  serialNo?: string;
+  faultCode?: string;
+  faultDesc?: string;
+  turbine?: string;
+  reportNo?: string;
+  mcfNo?: string;
 }>) => {
   const modal = document.createElement('div');
   modal.id = 'bulk-scrap-modal';
@@ -1917,36 +2168,88 @@ export const openBulkScrapModal = (items: Array<{
       try {
         const currentUser = (window as any).currentUser;
         const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+        const currentWh = warehouseState.currentWarehouse;
+        const warehouseId = currentWh?.id || 'MTA';
+        const warehouseName = currentWh?.name || warehouseId;
 
         for (const item of itemsWithQty) {
-          await warehouseService.updateStockBySap(
-            warehouseState.currentWarehouse.id,
-            item.sapNo,
-            -item.scrapQty,
-            {
-              user: userEmail,
-              reason: `Toplu hurdaya ayrıldı. Gerekçe: ${note}`
-            },
-            'DEFECT'
-          );
+          // Direct defect item status update in Firestore
+          if (item.id) {
+            try {
+              const { doc, getDoc, updateDoc, setDoc, collection, serverTimestamp } = await import('firebase/firestore');
+              const { db } = await import('../../firebase');
+              const docRef = doc(db, 'warehouses', warehouseId, 'inventory_v2', item.id);
+              const docSnap = await getDoc(docRef);
+              if (docSnap.exists()) {
+                const invData = docSnap.data();
+                const curQty = invData.quantity || 0;
+                if (item.scrapQty >= curQty) {
+                  await updateDoc(docRef, {
+                    quantity: 0,
+                    status: 'HURDAYA_AYRILDI',
+                    scrappedQty: item.scrapQty,
+                    scrappedAt: serverTimestamp(),
+                    scrappedBy: userEmail,
+                    scrapReason: note,
+                    lastUpdated: serverTimestamp()
+                  });
+                } else {
+                  await updateDoc(docRef, {
+                    quantity: curQty - item.scrapQty,
+                    lastUpdated: serverTimestamp()
+                  });
+                  const newDocRef = doc(collection(db, 'warehouses', warehouseId, 'inventory_v2'));
+                  await setDoc(newDocRef, {
+                    ...invData,
+                    quantity: 0,
+                    status: 'HURDAYA_AYRILDI',
+                    scrappedQty: item.scrapQty,
+                    scrappedAt: serverTimestamp(),
+                    scrappedBy: userEmail,
+                    scrapReason: note,
+                    lastUpdated: serverTimestamp()
+                  });
+                }
+              }
+            } catch (invErr) {
+              console.warn("Direct defect inventory scrap update failed:", invErr);
+            }
+          }
 
-          await warehouseService.updateStockBySap(
-            warehouseState.currentWarehouse.id,
-            item.sapNo,
-            item.scrapQty,
-            {
-              user: userEmail,
-              reason: `Toplu hurda stok girişi. Gerekçe: ${note}`
-            },
-            'SCRAP'
-          );
+          // Add to central Field Scraps pool
+          await warehouseService.addFieldScrap({
+            warehouseId: warehouseId,
+            warehouseName: warehouseName,
+            itemId: item.id,
+            sapNo: item.sapNo,
+            serialNo: item.serialNo || '-',
+            description: item.description,
+            quantity: item.scrapQty,
+            turbine: item.turbine || '-',
+            reportNo: item.reportNo || '-',
+            mcfNo: item.mcfNo || '-',
+            faultCode: item.faultCode || '-',
+            faultDesc: item.faultDesc || '-',
+            scrapReason: note,
+            scrappedBy: userEmail
+          });
+
+          await warehouseService.addLog(warehouseId, {
+            itemId: item.id,
+            sapNo: item.sapNo,
+            materialName: item.description,
+            quantity: item.scrapQty,
+            type: 'REMOVE',
+            user: userEmail,
+            note: `Hurdaya ayrıldı. Gerekçe: ${note}`
+          }).catch(() => {});
         }
 
-        (window as any).showToast?.('Başarılı', 'Seçilen malzemeler başarıyla hurdaya ayrıldı.', 'success');
+        (window as any).showToast?.('Başarılı', 'Seçilen malzemeler başarıyla hurdaya ayrıldı ve Saha Hurda Listesine eklendi.', 'success');
         modal.remove();
 
         if ((window as any).selectWarehouseAndNavigate) {
-          (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
+          (window as any).selectWarehouseAndNavigate(warehouseId);
         }
       } catch (e: any) {
         console.error(e);

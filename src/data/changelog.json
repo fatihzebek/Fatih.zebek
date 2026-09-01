@@ -1,0 +1,97 @@
+[
+  {
+    "version": "v1.3.0",
+    "date": "1 Eylül 2026",
+    "title": "Merkez Tamir Atölyesi Süreçleri, Canlı Sayaçlar, Görsel Hurda & Akıllı Not Yönetimi",
+    "badge": "En Son Sürüm",
+    "changes": [
+      "🛠️ Sol Menüde 'Merkez Tamir Atölyesi' Bölümü: Tüm kart iş emirleri, tamir hareketleri, atölye stoğu, malzeme stoğu ve sevkiyat sekmeleri müstakil bir başlık altında toplandı.",
+      "⏱️ Canlı Onarım Süresi Takip Sayaçları: Masadaki kartlarda 0-6 Saat (Yeşil), 6-24 Saat (Mavi), 1-4 Gün (Turuncu) ve 5+ Gün (Kırmızı - Kritik Gecikme) renk kodlu dinamik süre sayaçları devreye alındı.",
+      "📝 Parça Parça Not Ekleme & Düzenleme: Teknisyenlerin gün gün aşama notları girebileceği kompakt [ ➕ Notu Kaydet ] butonu, sadeleştirilmiş not kutusu ve geçmiş notları anında düzenleme/silme desteği eklendi.",
+      "🔥 Dinamik Hurdaya Gönder & Zorunlu Fotoğraf Kanıtı: Onarım aşamasından '5. Hurdaya Ayrılacak' seçildiğinde buton anında kırmızı [ 🔥 HURDAYA GÖNDER ] butonuna dönüşür; hasar/yanık fotoğrafı yüklenmesi zorunlu kılınarak Hurda Envanterine aktarılır.",
+      "⚡ Hızlı Klavye (Enter) Akışı: SAP no ve Seri no alanlarında fareden bağımsız Enter tuşuyla anında kart doğrulama ve masaya alma akışı sağlandı.",
+      "🗑️ Malzeme Stoğu Yönetimi: Malzeme Stoğu (Komponent) tablosuna doğrudan satır silme özelliği eklendi ve sol menü yerleşimi tek satırda optimize edildi.",
+      "🛡️ Seri No Güvenlik Kilidi: İş emri açarken seri numarası zorunlu kılınarak rastgele kart seçimi engellendi."
+    ]
+  },
+  {
+    "version": "v1.2.0",
+    "date": "28 Ağustos 2026",
+    "title": "Depo Sayım Yönetici Onay Güvenliği, Düzeltme Talimatı & Saha Hurda Yönetimi",
+    "changes": [
+      "🔒 Depo Sayım Yönetici Onay Disiplini: Personel sayımı tamamladığında stoklar otomatik güncellenmez; Fatih Zebek, Hurşit Akter ve Emir Ünver'in kontrol ve onayına sunulur.",
+      "📧 Otomatik Renkli HTML Sayım Raporu: Sayım gönderildiği an yöneticilere sayılan adetleri, mevcut stokları ve sapma (fark) detaylarını içeren şık e-posta raporu iletilir.",
+      "↩️ Sayım Düzeltme & Ekibe E-Posta Talimatı: Yöneticiler Sayım Geçmişi ekranından [ ↩️ Düzeltme İste ] butonuyla sayımı yapan ekibin e-posta adresine doğrudan yeniden sayım / kontrol talimatı gönderebilir.",
+      "♻️ Sahalardan Çıkan Hurda Malzemeler Modülü: Sahalarda sökülen ve tamiri mümkün olmayan hurda malzemeler için merkezi takip ekranı ve Excel indirme desteği devreye alındı.",
+      "🗑️ Defect Listesinden Tek Tıkla Hurdaya Ayırma: Saha depolarındaki arızalı malzemeler gerekçe notuyla birlikte tek tıkla merkezi hurda havuzuna aktarılır.",
+      "🛡️ Malzeme Yönetimi & Atölye Ekran Koruması: Malzeme Yönetimi ekranındaki silme butonları merkez atölye ve yetkisiz rollerden kaldırılarak veri bütünlüğü güvenceye alındı."
+    ]
+  },
+  {
+    "version": "v1.1.2",
+    "date": "19 Ağustos 2026",
+    "title": "Depo Sayfalar Arası QR Seçimi & Akıllı SAP Eşleşmesi",
+    "changes": [
+      "💾 Depo envanterinde sayfalar arası kalıcı seçim (Cross-Page Selection) hafızası eklendi; farklı sayfalardan seçilen malzemeler kaybolmaz.",
+      "🏷️ Canlı sayaçlı 'QR Etiket Bas (X Seçili)' butonu ve tek tıkla 'Seçimi Temizle' desteği devreye alındı.",
+      "🔍 Akıllı SAP Arama Motoru güçlendirildi; T70711, R70711 gibi harf önekleri ve sıfırlar otomatik ayıklanarak doğru parça tanımı getirildi.",
+      "✍️ Yeni Malzeme Ekleme ekranında SAP no yazarken imlecin alt satıra atlaması sorunu giderildi."
+    ]
+  },
+  {
+    "version": "v1.1.0",
+    "date": "19 Ağustos 2026",
+    "title": "Performans Analitiği, PDF Karnesi & Depo Ses/Kamera İyileştirmeleri",
+    "changes": [
+      "🔊 Depo Hızlı Sayım ve QR taramalarına market kasası 'BİP' ses efekti ve dokunsal titreşim (Haptic Feedback) eklendi.",
+      "📱 Tabletlerdeki QR/Barkod tarama performansı için BarcodeDetector donanım hızlandırma ve 20 FPS modu devreye alındı.",
+      "📄 Tek tıkla resmi 'Teknisyen Performans ve Mesai Karnesi' (PDF) indirme özelliği eklendi.",
+      "🔥 Adam-Saat analizindeki mesai hesaplamaları yöneticinin 'Onayladığı Net Mesai Saatleri'ne bağlandı.",
+      "🏛️ Personel Yönetimi'ndeki resmi sorumlu santraller (baseSites) ve ekipler (Team) analize senkronize edildi.",
+      "🔀 Personel tablosuna İsim, Görev Sayısı, Toplam Efor, Onaylı Mesai ve Ustalık Skoru bazlı çift yönlü dinamik sıralama eklendi.",
+      "⚠️ En çok duruş ve arıza müdahalesi alan ilk 6 kritik türbin analizi eklendi.",
+      "👥 Team 01 - 15 ekiplerinin iş yükü ve çalışma saatleri karşılaştırma paneli eklendi.",
+      "📦 Bakım ve arızalarda kullanılan SAP malzeme ve yedek parça tüketim dökümü eklendi."
+    ]
+  },
+  {
+    "version": "v1.0.78",
+    "date": "19 Ağustos 2026",
+    "title": "Gelişmiş Analitik & Ofis Excel Yazdırma İyileştirmeleri",
+    "changes": [
+      "🖨️ Ofise Gönder Mesai Excel raporunun her sayfasına şirket ve dönem tarih başlıkları eklendi.",
+      "📐 Excel yazdırma şablonuna otomatik Yatay (Landscape) ve tek sayfaya tam sığdırma (Fit to Width) kuralları tanımlandı.",
+      "📊 Adam-Saat Analiz sayfasına Santral & Saha Bazlı Efor Dağılımı ve Top 5 Arıza Kodları panelleri eklendi.",
+      "🔍 Personel Yetkinlik tablosuna anlık canlı arama kutusu eklendi.",
+      "🛡️ Analitik sayfasındaki olası boş veri hatalarına karşı emniyet kalkanı güçlendirildi."
+    ]
+  },
+  {
+    "version": "v1.0.73",
+    "date": "18 Ağustos 2026",
+    "title": "Depo Defect Arama & Mükerrer Log Temizliği",
+    "changes": [
+      "🔍 Defect (Sökülen) Listesinde SAP No, Malzeme Adı, Türbin ve MÇF no bazlı anlık canlı arama filtresi eklendi.",
+      "🧹 Zimmet & Depo Hareketleri sayfa açılışında mükerrer log üreten arka plan döngüsü kaldırıldı ve geçmiş loglar tekilleştirildi."
+    ]
+  },
+  {
+    "version": "v1.0.71",
+    "date": "18 Ağustos 2026",
+    "title": "QR Barkod Birebir Eşleşme & Stok Doğruluğu",
+    "changes": [
+      "🎯 QR Barkod okuma motoruna %100 birebir tam eşleşme (Exact Match) getirildi; kısa SAP kodları (721 vb.) ve harfli kodların (DE010 vb.) karışması tamamen engellendi.",
+      "🔍 Depo 'Kullanımlar' sekmesine canlı SAP / Malzeme arama ve hızlı temizleme butonu eklendi.",
+      "📥 Kritik stok sipariş listesini Excel olarak indirme özelliği eklendi."
+    ]
+  },
+  {
+    "version": "v1.0.65",
+    "date": "17 Ağustos 2026",
+    "title": "Zimmet & Bölgesel Sayım Yönetimi",
+    "changes": [
+      "📦 Bölge Birleştirilmiş Sayım Modülü ve Excel dışa aktarım desteği devreye alındı.",
+      "🛠️ El aletleri ve cihaz kalibrasyon takibinde kategori bazlı görsel listeleme sağlandı."
+    ]
+  }
+]

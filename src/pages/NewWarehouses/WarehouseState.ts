@@ -41,6 +41,12 @@ export const warehouseState = {
 
   // Global scanner reference
   html5QrcodeScanner: null as any,
+
+  // Defect view filter (default: only show pending/unprocessed defects)
+  defectShowCompleted: false,
+
+  // Selected materials for bulk operations & QR label printing across pages
+  selectedMaterialIds: new Set<string>(),
 };
 
 export const getUserProfile = (): any => {

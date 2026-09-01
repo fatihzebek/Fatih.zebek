@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { soundService } from './SoundService';
 
 class QRService {
     async generateDataURL(text: string): Promise<string> {
@@ -212,17 +213,316 @@ class QRService {
     }
 
     initScanner(elementId: string, onScan: (decodedText: string) => void) {
+        const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const edge = Math.max(220, Math.floor(minEdge * 0.75));
+            return { width: edge, height: edge };
+        };
+
         const scanner = new Html5QrcodeScanner(elementId, {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0
+            fps: 20,
+            qrbox: qrboxFunction,
+            aspectRatio: 1.0,
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
         }, false);
 
-        scanner.render(onScan, (_err) => {
+        scanner.render((decodedText) => {
+            soundService.playScannerBeep();
+            onScan(decodedText);
+        }, (_err) => {
             // Silence errors as they happen every frame if no QR is found
         });
 
         return scanner;
+    }
+
+    async printWorkshopCardLabel(card: {
+        id?: string;
+        sapNo: string;
+        serialNo?: string;
+        description: string;
+        testStatus?: 'TESTED' | 'UNTESTED';
+        repairDate?: string;
+        repairNotes?: string;
+        shelfNo?: string;
+    }) {
+        return this.printBulkWorkshopCardLabels([card]);
+    }
+
+    async printBulkWorkshopCardLabels(cards: Array<{
+        id?: string;
+        sapNo: string;
+        serialNo?: string;
+        description: string;
+        testStatus?: 'TESTED' | 'UNTESTED';
+        repairDate?: string;
+        repairNotes?: string;
+        shelfNo?: string;
+    }>) {
+        if (!cards || cards.length === 0) {
+            alert('Yazdırılacak kart seçilmedi.');
+            return;
+        }
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Açılır pencere engellendi. Lütfen tarayıcınızın üst kısmından bu site için açılır pencerelere izin verin.');
+            return;
+        }
+
+        printWindow.document.write(`
+            <html><head><title>Etiketler Hazırlanıyor...</title></head>
+            <body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif;">
+                <h3>Xprinter XP-470B Etiketleri Hazırlanıyor, Lütfen Bekleyin...</h3>
+            </body></html>
+        `);
+
+        const cardsWithQR = await Promise.all(cards.map(async card => {
+            const qrUrl = `${window.location.origin}/?page=card-passport&id=${card.id || ''}&sap=${card.sapNo}&serial=${encodeURIComponent(card.serialNo || '')}`;
+            let qrDataUrl = '';
+            try {
+                qrDataUrl = await QRCode.toDataURL(qrUrl, {
+                    width: 350,
+                    margin: 0,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                });
+            } catch(e) {
+                qrDataUrl = await this.generateDataURL(qrUrl);
+            }
+            return { ...card, qrDataUrl };
+        }));
+
+        const labelsHtml = cardsWithQR.map(c => {
+            const testBadge = c.testStatus === 'UNTESTED'
+                ? `<span class="test-badge untested">⚠️ ONARILDI - TÜRBİNDE TEST EDİLECEK</span>`
+                : `<span class="test-badge tested">✓ ONARILDI & TEST EDİLDİ</span>`;
+
+            const dateStr = c.repairDate || new Date().toLocaleDateString('tr-TR');
+            const cleanDesc = (c.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            return `
+                <div class="label-page">
+                    <div class="label-box">
+                        <div class="header">
+                            <span>DEMİRER HOLDİNG</span>
+                            <span>MERKEZ TAMİR ATÖLYESİ</span>
+                        </div>
+                        <div class="body-content">
+                            <div class="details">
+                                <div class="sap-num">SAP: ${c.sapNo}</div>
+                                <div class="serial-num">SERİ: ${c.serialNo && c.serialNo !== '-' ? c.serialNo : '-'}</div>
+                                <div class="desc-text" title="${cleanDesc}">
+                                    ${cleanDesc}
+                                </div>
+                                <div style="margin-top: 2px;">
+                                    ${testBadge}
+                                </div>
+                            </div>
+                            <div class="qr-container">
+                                <img class="qr-img" src="${c.qrDataUrl}" alt="QR Code" />
+                                <div class="qr-label">DİJİTAL KARNE</div>
+                            </div>
+                        </div>
+                        <div class="footer">
+                            <span>TARİH: ${dateStr}</span>
+                            ${c.shelfNo ? `<span>RAF: ${c.shelfNo}</span>` : '<span></span>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        printWindow.document.open();
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Etiket</title>
+                <style>
+                    @page {
+                        size: 80mm 40mm;
+                        margin: 0 !important;
+                    }
+                    * {
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    html, body {
+                        width: 80mm;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: #fff;
+                        color: #000;
+                        font-family: Arial, Helvetica, sans-serif;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    .label-page {
+                        width: 80mm;
+                        height: 40mm;
+                        box-sizing: border-box;
+                        page-break-after: always;
+                        break-after: page;
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 1mm;
+                    }
+                    .label-page:last-child {
+                        page-break-after: auto;
+                        break-after: auto;
+                    }
+                    .label-box {
+                        width: 78mm;
+                        height: 38mm;
+                        padding: 1.5mm 2mm;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: space-between;
+                        border: 1.5px solid #000;
+                        border-radius: 2mm;
+                        overflow: hidden;
+                        box-sizing: border-box;
+                    }
+                    .header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-bottom: 1.2px solid #000;
+                        padding-bottom: 1px;
+                        font-size: 7pt;
+                        font-weight: 900;
+                        letter-spacing: 0.2px;
+                    }
+                    .body-content {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 1.5mm;
+                        flex: 1;
+                        padding: 1px 0;
+                        overflow: hidden;
+                    }
+                    .details {
+                        flex: 1;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 1px;
+                        overflow: hidden;
+                    }
+                    .sap-serial-row {
+                        display: flex;
+                        align-items: baseline;
+                        gap: 2mm;
+                        white-space: nowrap;
+                    }
+                    .sap-num {
+                        font-size: 11pt;
+                        font-weight: 900;
+                        letter-spacing: 0.3px;
+                        line-height: 1.1;
+                    }
+                    .serial-num {
+                        font-size: 9.5pt;
+                        font-weight: 900;
+                        line-height: 1.1;
+                    }
+                    .desc-text {
+                        font-size: 7pt;
+                        font-weight: 700;
+                        line-height: 1.1;
+                        max-height: 2.2em;
+                        overflow: hidden;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        margin-top: 1px;
+                    }
+                    .test-badge {
+                        display: inline-block;
+                        font-size: 5.6pt;
+                        font-weight: 900;
+                        padding: 1px 3px;
+                        border-radius: 2px;
+                        margin-top: 1px;
+                        white-space: nowrap;
+                        background: #fff;
+                        color: #000;
+                        letter-spacing: -0.15px;
+                    }
+                    .test-badge.tested {
+                        font-size: 6.2pt;
+                        background: #fff;
+                        color: #000;
+                        border: 1.2px solid #000;
+                    }
+                    .test-badge.untested {
+                        font-size: 5.4pt;
+                        background: #fff;
+                        color: #000;
+                        border: 1.2px dashed #000;
+                    }
+                    .note-text {
+                        font-size: 6pt;
+                        font-weight: 700;
+                        color: #000;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        max-width: 52mm;
+                    }
+                    .qr-container {
+                        width: 25mm;
+                        height: 26mm;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        flex-shrink: 0;
+                    }
+                    .qr-img {
+                        width: 23mm;
+                        height: 23mm;
+                        display: block;
+                    }
+                    .qr-label {
+                        font-size: 5pt;
+                        font-weight: 900;
+                        letter-spacing: 0.3px;
+                        margin-top: 1px;
+                        text-align: center;
+                    }
+                    .footer {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-top: 1px solid #000;
+                        padding-top: 1px;
+                        font-size: 6pt;
+                        font-weight: 800;
+                    }
+                </style>
+            </head>
+            <body>
+                ${labelsHtml}
+                <script>
+                    window.onload = () => {
+                        window.print();
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
     }
 
     scanQRCode(): Promise<string> {
@@ -248,8 +548,23 @@ class QRService {
             
             document.body.appendChild(modal);
 
-            const scanner = new Html5QrcodeScanner('temp-qr-reader', { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, false);
+            const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+                const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                const edge = Math.max(220, Math.floor(minEdge * 0.75));
+                return { width: edge, height: edge };
+            };
+
+            const scanner = new Html5QrcodeScanner('temp-qr-reader', { 
+                fps: 20, 
+                qrbox: qrboxFunction, 
+                aspectRatio: 1.0,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
+            }, false);
+
             scanner.render((decodedText) => {
+                soundService.playScannerBeep();
                 scanner.clear();
                 modal.remove();
                 resolve(decodedText);

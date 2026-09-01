@@ -141,55 +141,55 @@ export class DataService {
       { no: 55, serial: "826432", controlType: "CS82", type: "E-82", commissioningDate: "12/2/2016", latitude: 38.28596, longitude: 26.51119 }
     ],
     '2688': [
-      { no: 1, serial: "48886", controlType: "CS48", type: "E-48", commissioningDate: "6/7/2007", latitude: 40.040866, longitude: 26.387541 },
-      { no: 2, serial: "48895", controlType: "CS48", type: "E-48", commissioningDate: "3/27/2007", latitude: 40.040249, longitude: 26.388354 },
-      { no: 3, serial: "48896", controlType: "CS48", type: "E-48", commissioningDate: "3/19/2007", latitude: 40.039706, longitude: 26.389161 },
-      { no: 4, serial: "48897", controlType: "CS48", type: "E-48", commissioningDate: "3/26/2007", latitude: 40.03916, longitude: 26.390058 },
-      { no: 5, serial: "48898", controlType: "CS48", type: "E-48", commissioningDate: "3/30/2007", latitude: 40.038744, longitude: 26.391036 },
-      { no: 6, serial: "48899", controlType: "CS48", type: "E-48", commissioningDate: "3/29/2007", latitude: 40.038344, longitude: 26.392044 },
-      { no: 7, serial: "48900", controlType: "CS48", type: "E-48", commissioningDate: "4/2/2007", latitude: 40.037809, longitude: 26.392918 },
-      { no: 8, serial: "48901", controlType: "CS48", type: "E-48", commissioningDate: "4/7/2007", latitude: 40.037334, longitude: 26.393884 },
-      { no: 9, serial: "48902", controlType: "CS48", type: "E-48", commissioningDate: "4/7/2007", latitude: 40.036873, longitude: 26.394821 },
-      { no: 10, serial: "48903", controlType: "CS48", type: "E-48", commissioningDate: "4/12/2007", latitude: 40.036526, longitude: 26.39587 },
-      { no: 11, serial: "48904", controlType: "CS48", type: "E-48", commissioningDate: "4/15/2007", latitude: 40.036125, longitude: 26.396838 },
-      { no: 12, serial: "48905", controlType: "CS48", type: "E-48", commissioningDate: "4/19/2007", latitude: 40.035217, longitude: 26.398316 },
-      { no: 13, serial: "48906", controlType: "CS48", type: "E-48", commissioningDate: "4/23/2007", latitude: 40.034805, longitude: 26.399317 },
-      { no: 14, serial: "48907", controlType: "CS48", type: "E-48", commissioningDate: "4/30/2007", latitude: 40.034126, longitude: 26.400047 },
-      { no: 15, serial: "48908", controlType: "CS48", type: "E-48", commissioningDate: "5/7/2007", latitude: 40.033331, longitude: 26.400551 },
-      { no: 16, serial: "48909", controlType: "CS48", type: "E-48", commissioningDate: "2/14/2007", latitude: 40.033667, longitude: 26.406858 },
-      { no: 17, serial: "48910", controlType: "CS48", type: "E-48", commissioningDate: "2/12/2007", latitude: 40.033348, longitude: 26.407874 },
-      { no: 18, serial: "48911", controlType: "CS48", type: "E-48", commissioningDate: "2/8/2007", latitude: 40.032945, longitude: 26.408847 },
-      { no: 19, serial: "48912", controlType: "CS48", type: "E-48", commissioningDate: "2/8/2007", latitude: 40.032677, longitude: 26.409917 },
-      { no: 20, serial: "48913", controlType: "CS48", type: "E-48", commissioningDate: "2/7/2007", latitude: 40.032325, longitude: 26.41096 },
-      { no: 21, serial: "48914", controlType: "CS48", type: "E-48", commissioningDate: "2/9/2007", latitude: 40.032061, longitude: 26.412513 },
-      { no: 22, serial: "48915", controlType: "CS48", type: "E-48", commissioningDate: "2/6/2007", latitude: 40.031787, longitude: 26.41425 },
-      { no: 23, serial: "48916", controlType: "CS48", type: "E-48", commissioningDate: "2/6/2007", latitude: 40.031594, longitude: 26.415368 },
-      { no: 24, serial: "48917", controlType: "CS48", type: "E-48", commissioningDate: "2/1/2007", latitude: 40.031211, longitude: 26.416366 },
-      { no: 25, serial: "48887", controlType: "CS48", type: "E-48", commissioningDate: "6/8/2007", latitude: 40.030782, longitude: 26.417331 },
-      { no: 26, serial: "48888", controlType: "CS48", type: "E-48", commissioningDate: "6/12/2007", latitude: 40.030249, longitude: 26.418231 },
-      { no: 27, serial: "48889", controlType: "CS48", type: "E-48", commissioningDate: "6/8/2007", latitude: 40.02963, longitude: 26.418999 },
-      { no: 28, serial: "48890", controlType: "CS48", type: "E-48", commissioningDate: "6/25/2007", latitude: 40.028878, longitude: 26.419551 },
-      { no: 29, serial: "48918", controlType: "CS48", type: "E-48", commissioningDate: "2/14/2007", latitude: 40.027913, longitude: 26.419852 },
-      { no: 30, serial: "48919", controlType: "CS48", type: "E-48", commissioningDate: "6/5/2007", latitude: 40.026322, longitude: 26.425714 },
-      { no: 31, serial: "48920", controlType: "CS48", type: "E-48", commissioningDate: "5/30/2007", latitude: 40.026131, longitude: 26.426735 },
-      { no: 32, serial: "48891", controlType: "CS48", type: "E-48", commissioningDate: "6/5/2007", latitude: 40.02595, longitude: 26.428127 },
-      { no: 33, serial: "48892", controlType: "CS48", type: "E-48", commissioningDate: "5/24/2007", latitude: 40.025955, longitude: 26.429245 },
-      { no: 34, serial: "48893", controlType: "CS48", type: "E-48", commissioningDate: "6/5/2007", latitude: 40.025856, longitude: 26.430348 },
-      { no: 35, serial: "48884", controlType: "CS48", type: "E-48", commissioningDate: "5/11/2007", latitude: 40.025394, longitude: 26.431892 },
-      { no: 36, serial: "48885", controlType: "CS48", type: "E-48", commissioningDate: "5/21/2007", latitude: 40.024974, longitude: 26.433268 },
-      { no: 37, serial: "48894", controlType: "CS48", type: "E-48", commissioningDate: "5/30/2007", latitude: 40.025121, longitude: 26.434409 },
-      { no: 38, serial: "48921", controlType: "CS48", type: "E-48", commissioningDate: "5/4/2007", latitude: 40.024997, longitude: 26.435832 },
-      { no: 39, serial: "825762", controlType: "CS82", type: "E-82", commissioningDate: "1/22/2014", latitude: 40.0350924815518, longitude: 26.3861650771718 },
-      { no: 40, serial: "825763", controlType: "CS82", type: "E-82", commissioningDate: "1/17/2014", latitude: 40.0384481100246, longitude: 26.3818449052751 },
-      { no: 41, serial: "826414", controlType: "CS82", type: "E-82", commissioningDate: "5/4/2016", latitude: 40.0252604508035, longitude: 26.4135005284978 },
-      { no: 42, serial: "826415", controlType: "CS82", type: "E-82", commissioningDate: "5/19/2016", latitude: 40.0306120062927, longitude: 26.394210136848 },
-      { no: 43, serial: "826416", controlType: "CS82", type: "E-82", commissioningDate: "7/20/2016", latitude: 40.03255, longitude: 26.402855 },
-      { no: 44, serial: "826417", controlType: "CS82", type: "E-82", commissioningDate: "5/19/2016", latitude: 40.0315172481149, longitude: 26.3915884909899 },
-      { no: 45, serial: "826418", controlType: "CS82", type: "E-82", commissioningDate: "5/19/2016", latitude: 40.0296795548501, longitude: 26.3968085131298 },
-      { no: 46, serial: "826419", controlType: "CS82", type: "E-82", commissioningDate: "5/19/2016", latitude: 40.0285853529655, longitude: 26.401240399984 },
-      { no: 47, serial: "826420", controlType: "CS82", type: "E-82", commissioningDate: "5/1/2016", latitude: 40.0279992912984, longitude: 26.4046521019477 },
-      { no: 48, serial: "826421", controlType: "CS82", type: "E-82", commissioningDate: "5/3/2016", latitude: 40.0270148330103, longitude: 26.4076974376482 },
-      { no: 49, serial: "826422", controlType: "CS82", type: "E-82", commissioningDate: "5/3/2016", latitude: 40.026278865459, longitude: 26.4106209790451 }
+      { no: 1, serial: "48886", controlType: "CS48", type: "E44-E48", commissioningDate: "6/7/2007", latitude: 40.040866, longitude: 26.387541 },
+      { no: 2, serial: "48895", controlType: "CS48", type: "E44-E48", commissioningDate: "3/27/2007", latitude: 40.040249, longitude: 26.388354 },
+      { no: 3, serial: "48896", controlType: "CS48", type: "E44-E48", commissioningDate: "3/19/2007", latitude: 40.039706, longitude: 26.389161 },
+      { no: 4, serial: "48897", controlType: "CS48", type: "E44-E48", commissioningDate: "3/26/2007", latitude: 40.03916, longitude: 26.390058 },
+      { no: 5, serial: "48898", controlType: "CS48", type: "E44-E48", commissioningDate: "3/30/2007", latitude: 40.038744, longitude: 26.391036 },
+      { no: 6, serial: "48899", controlType: "CS48", type: "E44-E48", commissioningDate: "3/29/2007", latitude: 40.038344, longitude: 26.392044 },
+      { no: 7, serial: "48900", controlType: "CS48", type: "E44-E48", commissioningDate: "4/2/2007", latitude: 40.037809, longitude: 26.392918 },
+      { no: 8, serial: "48901", controlType: "CS48", type: "E44-E48", commissioningDate: "4/7/2007", latitude: 40.037334, longitude: 26.393884 },
+      { no: 9, serial: "48902", controlType: "CS48", type: "E44-E48", commissioningDate: "4/7/2007", latitude: 40.036873, longitude: 26.394821 },
+      { no: 10, serial: "48903", controlType: "CS48", type: "E44-E48", commissioningDate: "4/12/2007", latitude: 40.036526, longitude: 26.39587 },
+      { no: 11, serial: "48904", controlType: "CS48", type: "E44-E48", commissioningDate: "4/15/2007", latitude: 40.036125, longitude: 26.396838 },
+      { no: 12, serial: "48905", controlType: "CS48", type: "E44-E48", commissioningDate: "4/19/2007", latitude: 40.035217, longitude: 26.398316 },
+      { no: 13, serial: "48906", controlType: "CS48", type: "E44-E48", commissioningDate: "4/23/2007", latitude: 40.034805, longitude: 26.399317 },
+      { no: 14, serial: "48907", controlType: "CS48", type: "E44-E48", commissioningDate: "4/30/2007", latitude: 40.034126, longitude: 26.400047 },
+      { no: 15, serial: "48908", controlType: "CS48", type: "E44-E48", commissioningDate: "5/7/2007", latitude: 40.033331, longitude: 26.400551 },
+      { no: 16, serial: "48909", controlType: "CS48", type: "E44-E48", commissioningDate: "2/14/2007", latitude: 40.033667, longitude: 26.406858 },
+      { no: 17, serial: "48910", controlType: "CS48", type: "E44-E48", commissioningDate: "2/12/2007", latitude: 40.033348, longitude: 26.407874 },
+      { no: 18, serial: "48911", controlType: "CS48", type: "E44-E48", commissioningDate: "2/8/2007", latitude: 40.032945, longitude: 26.408847 },
+      { no: 19, serial: "48912", controlType: "CS48", type: "E44-E48", commissioningDate: "2/8/2007", latitude: 40.032677, longitude: 26.409917 },
+      { no: 20, serial: "48913", controlType: "CS48", type: "E44-E48", commissioningDate: "2/7/2007", latitude: 40.032325, longitude: 26.41096 },
+      { no: 21, serial: "48914", controlType: "CS48", type: "E44-E48", commissioningDate: "2/9/2007", latitude: 40.032061, longitude: 26.412513 },
+      { no: 22, serial: "48915", controlType: "CS48", type: "E44-E48", commissioningDate: "2/6/2007", latitude: 40.031787, longitude: 26.41425 },
+      { no: 23, serial: "48916", controlType: "CS48", type: "E44-E48", commissioningDate: "2/6/2007", latitude: 40.031594, longitude: 26.415368 },
+      { no: 24, serial: "48917", controlType: "CS48", type: "E44-E48", commissioningDate: "2/1/2007", latitude: 40.031211, longitude: 26.416366 },
+      { no: 25, serial: "48887", controlType: "CS48", type: "E44-E48", commissioningDate: "6/8/2007", latitude: 40.030782, longitude: 26.417331 },
+      { no: 26, serial: "48888", controlType: "CS48", type: "E44-E48", commissioningDate: "6/12/2007", latitude: 40.030249, longitude: 26.418231 },
+      { no: 27, serial: "48889", controlType: "CS48", type: "E44-E48", commissioningDate: "6/8/2007", latitude: 40.02963, longitude: 26.418999 },
+      { no: 28, serial: "48890", controlType: "CS48", type: "E44-E48", commissioningDate: "6/25/2007", latitude: 40.028878, longitude: 26.419551 },
+      { no: 29, serial: "48918", controlType: "CS48", type: "E44-E48", commissioningDate: "2/14/2007", latitude: 40.027913, longitude: 26.419852 },
+      { no: 30, serial: "48919", controlType: "CS48", type: "E44-E48", commissioningDate: "6/5/2007", latitude: 40.026322, longitude: 26.425714 },
+      { no: 31, serial: "48920", controlType: "CS48", type: "E44-E48", commissioningDate: "5/30/2007", latitude: 40.026131, longitude: 26.426735 },
+      { no: 32, serial: "48891", controlType: "CS48", type: "E44-E48", commissioningDate: "6/5/2007", latitude: 40.02595, longitude: 26.428127 },
+      { no: 33, serial: "48892", controlType: "CS48", type: "E44-E48", commissioningDate: "5/24/2007", latitude: 40.025955, longitude: 26.429245 },
+      { no: 34, serial: "48893", controlType: "CS48", type: "E44-E48", commissioningDate: "6/5/2007", latitude: 40.025856, longitude: 26.430348 },
+      { no: 35, serial: "48884", controlType: "CS48", type: "E44-E48", commissioningDate: "5/11/2007", latitude: 40.025394, longitude: 26.431892 },
+      { no: 36, serial: "48885", controlType: "CS48", type: "E44-E48", commissioningDate: "5/21/2007", latitude: 40.024974, longitude: 26.433268 },
+      { no: 37, serial: "48894", controlType: "CS48", type: "E44-E48", commissioningDate: "5/30/2007", latitude: 40.025121, longitude: 26.434409 },
+      { no: 38, serial: "48921", controlType: "CS48", type: "E44-E48", commissioningDate: "5/4/2007", latitude: 40.024997, longitude: 26.435832 },
+      { no: 39, serial: "825762", controlType: "CS82", type: "E82/E2", commissioningDate: "1/22/2014", latitude: 40.0350924815518, longitude: 26.3861650771718 },
+      { no: 40, serial: "825763", controlType: "CS82", type: "E82/E2", commissioningDate: "1/17/2014", latitude: 40.0384481100246, longitude: 26.3818449052751 },
+      { no: 41, serial: "826414", controlType: "CS82", type: "E82/E2", commissioningDate: "5/4/2016", latitude: 40.0252604508035, longitude: 26.4135005284978 },
+      { no: 42, serial: "826415", controlType: "CS82", type: "E82/E2", commissioningDate: "5/19/2016", latitude: 40.0306120062927, longitude: 26.394210136848 },
+      { no: 43, serial: "826416", controlType: "CS82", type: "E82/E2", commissioningDate: "7/20/2016", latitude: 40.03255, longitude: 26.402855 },
+      { no: 44, serial: "826417", controlType: "CS82", type: "E82/E2", commissioningDate: "5/19/2016", latitude: 40.0315172481149, longitude: 26.3915884909899 },
+      { no: 45, serial: "826418", controlType: "CS82", type: "E82/E2", commissioningDate: "5/19/2016", latitude: 40.0296795548501, longitude: 26.3968085131298 },
+      { no: 46, serial: "826419", controlType: "CS82", type: "E82/E2", commissioningDate: "5/19/2016", latitude: 40.0285853529655, longitude: 26.401240399984 },
+      { no: 47, serial: "826420", controlType: "CS82", type: "E82/E2", commissioningDate: "5/1/2016", latitude: 40.0279992912984, longitude: 26.4046521019477 },
+      { no: 48, serial: "826421", controlType: "CS82", type: "E82/E2", commissioningDate: "5/3/2016", latitude: 40.0270148330103, longitude: 26.4076974376482 },
+      { no: 49, serial: "826422", controlType: "CS82", type: "E82/E2", commissioningDate: "5/3/2016", latitude: 40.026278865459, longitude: 26.4106209790451 }
     ],
     '2990': [
       { no: 1, serial: "450052", controlType: "CS48", type: "E-44", commissioningDate: "5/24/2008", latitude: 39.1745813999417, longitude: 27.8952378854168 },
@@ -535,18 +535,40 @@ export class DataService {
 
   getTurbinesBySite(siteId: string): Turbine[] {
     const rawData = this.turbineData[siteId] || [];
-    return rawData.map(d => ({
-      id: d.serial,
-      siteId,
-      no: d.no,
-      status: 'online', 
-      label: d.label,
-      latitude: d.latitude,
-      longitude: d.longitude,
-      controlType: d.controlType,
-      commissioningDate: d.commissioningDate,
-      type: d.type
-    }));
+    return rawData.map(d => {
+      let resolvedType = (d.type || '').trim();
+      const serialStr = String(d.serial || '').trim();
+      
+      // Automatic model resolution based on serial prefix or explicit model
+      if (serialStr.startsWith('41')) {
+        resolvedType = 'E40';
+      } else if (serialStr.startsWith('45')) {
+        resolvedType = 'E44';
+      } else if (serialStr.startsWith('48')) {
+        resolvedType = 'E48';
+      } else if (serialStr.startsWith('78')) {
+        resolvedType = 'E70';
+      } else if (serialStr.startsWith('92')) {
+        resolvedType = 'E92';
+      } else if (resolvedType === 'E82/E2' || serialStr.startsWith('8264') || serialStr.startsWith('8257') || serialStr.startsWith('8241')) {
+        resolvedType = 'E82/E2';
+      } else if (serialStr.startsWith('82')) {
+        resolvedType = 'E82';
+      }
+
+      return {
+        id: d.serial,
+        siteId,
+        no: d.no,
+        status: 'online', 
+        label: d.label,
+        latitude: d.latitude,
+        longitude: d.longitude,
+        controlType: d.controlType,
+        commissioningDate: d.commissioningDate,
+        type: resolvedType
+      };
+    });
   }
 
   getStats() {

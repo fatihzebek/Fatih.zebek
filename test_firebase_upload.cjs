@@ -4,7 +4,7 @@ const { getStorage, ref, uploadString, getDownloadURL } = require('firebase/stor
 const firebaseConfig = {
   projectId: "dh-servis-rapor",
   appId: "1:220905699849:web:1362783809b23ce6a316d8",
-  storageBucket: "dh-servis-rapor.appspot.com",
+  storageBucket: "dh-servis-rapor.firebasestorage.app",
   apiKey: "AIzaSyBX6q4ed3OtahicugSVLRgtn81WF_avcxY",
   authDomain: "dh-servis-rapor.firebaseapp.com",
   messagingSenderId: "220905699849"
