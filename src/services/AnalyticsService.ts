@@ -26,6 +26,8 @@ export interface PerformanceMetric {
   arizaHours: number;
   bakimCount: number;
   arizaCount: number;
+  totalJobs: number;
+  avgJobDuration: number;
   repeatFaultCount: number;
   totalHours: number;
   overtimeHours: number;
@@ -529,6 +531,7 @@ class AnalyticsService {
 
         const totalPWorkHours = pBakimHours + pArizaHours;
         const totalJobs = pBakimCount + pArizaCount;
+        const avgJobDuration = totalJobs > 0 ? parseFloat((totalPWorkHours / totalJobs).toFixed(1)) : 0;
         const repeatRate = pArizaCount > 0 ? (pRepeatCount / pArizaCount) : 0;
         const avgEff = pValidCount > 0 ? (pEfficiencySum / pValidCount) : 0;
 
@@ -611,6 +614,8 @@ class AnalyticsService {
           arizaHours: Number(pArizaHours.toFixed(1)),
           bakimCount: pBakimCount,
           arizaCount: pArizaCount,
+          totalJobs,
+          avgJobDuration,
           repeatFaultCount: pRepeatCount,
           totalHours: Number(totalPWorkHours.toFixed(1)),
           overtimeHours: Number(pOvertimeHours.toFixed(1)),

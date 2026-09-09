@@ -384,14 +384,14 @@ export const OvertimeApprovalsPage = async () => {
     }
   };
 
-  w.deleteSessionOvertime = async (reportId: string, personnelName: string) => {
+  w.deleteSessionOvertime = async (reportId: string, personnelName: string, date?: string) => {
     if (!confirm(`${personnelName} için bu mesai kaydını listeden kaldırmak istediğinize emin misiniz?`)) return;
 
     const report = reports.find((r: any) => r.id === reportId);
     if (!report) return;
 
     const groupedRows = w.getFilteredOvertimeRows(false);
-    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName);
+    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName && (!date || r.date === date));
     if (!row) return;
 
     const currentApprovals = report.overtimeApprovals || {};
@@ -419,12 +419,12 @@ export const OvertimeApprovalsPage = async () => {
     }
   };
 
-  w.restoreSessionOvertime = async (reportId: string, personnelName: string) => {
+  w.restoreSessionOvertime = async (reportId: string, personnelName: string, date?: string) => {
     const report = reports.find((r: any) => r.id === reportId);
     if (!report) return;
 
     const groupedRows = w.getFilteredOvertimeRows(false);
-    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName);
+    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName && (!date || r.date === date));
     if (!row) return;
 
     const currentApprovals = report.overtimeApprovals || {};
@@ -446,18 +446,19 @@ export const OvertimeApprovalsPage = async () => {
     }
   };
 
-  w.approveSessionOvertime = async (reportId: string, personnelName: string) => {
+  w.approveSessionOvertime = async (reportId: string, personnelName: string, date?: string) => {
     const report = reports.find((r: any) => r.id === reportId);
     if (!report) return;
 
     const groupedRows = w.getFilteredOvertimeRows(false);
-    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName);
+    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName && (!date || r.date === date));
     if (!row) return;
 
     const keyName = personnelName.replace(/\s+/g, '_');
-    const hoursInput = document.getElementById(`hours-${reportId}-${keyName}`) as HTMLInputElement;
-    const sodexoInput = document.getElementById(`sodexo-${reportId}-${keyName}`) as HTMLInputElement;
-    const harcirahInput = document.getElementById(`harcirah-${reportId}-${keyName}`) as HTMLInputElement;
+    const dateKey = (row.date || '').replace(/[^0-9]/g, '');
+    const hoursInput = (document.getElementById(`hours-${reportId}-${keyName}-${dateKey}`) || document.getElementById(`hours-${reportId}-${keyName}`)) as HTMLInputElement;
+    const sodexoInput = (document.getElementById(`sodexo-${reportId}-${keyName}-${dateKey}`) || document.getElementById(`sodexo-${reportId}-${keyName}`)) as HTMLInputElement;
+    const harcirahInput = (document.getElementById(`harcirah-${reportId}-${keyName}-${dateKey}`) || document.getElementById(`harcirah-${reportId}-${keyName}`)) as HTMLInputElement;
     
     const totalApprovedHours = hoursInput ? timeStrToDecimal(hoursInput.value) : 0;
     const sodexo = sodexoInput ? sodexoInput.checked : false;
@@ -500,14 +501,14 @@ export const OvertimeApprovalsPage = async () => {
     }
   };
 
-  w.rejectSessionOvertime = async (reportId: string, personnelName: string) => {
+  w.rejectSessionOvertime = async (reportId: string, personnelName: string, date?: string) => {
     if (!confirm(`${personnelName} için mesaiyi reddetmek istediğinize emin misiniz?`)) return;
 
     const report = reports.find((r: any) => r.id === reportId);
     if (!report) return;
 
     const groupedRows = w.getFilteredOvertimeRows(false);
-    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName);
+    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName && (!date || r.date === date));
     if (!row) return;
 
     const currentApprovals = report.overtimeApprovals || {};
@@ -535,12 +536,12 @@ export const OvertimeApprovalsPage = async () => {
     }
   };
 
-  w.editApprovedOvertime = async (reportId: string, personnelName: string) => {
+  w.editApprovedOvertime = async (reportId: string, personnelName: string, date?: string) => {
     const report = reports.find((r: any) => r.id === reportId);
     if (!report) return;
 
     const groupedRows = w.getFilteredOvertimeRows(false);
-    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName);
+    const row = groupedRows.find((r: any) => r.reportId === reportId && r.rawName === personnelName && (!date || r.date === date));
     if (!row) return;
 
     const currentApprovals = report.overtimeApprovals || {};
@@ -755,23 +756,24 @@ export const OvertimeApprovalsPage = async () => {
       }
 
       const workSessions = report.workSessions || [];
-      const personnelMap = new Map<string, string>();
+      const personnelDateMap = new Map<string, { name: string; date: string }>();
       workSessions.forEach((session: any) => {
-        if (!session.date || getSessionPayrollPeriod(session.date) !== selectedMonth) return;
+        const sDate = session.date || report.date;
+        if (!sDate || getSessionPayrollPeriod(sDate) !== selectedMonth) return;
         const sessionTypeUpper = (session.type || '').toUpperCase();
         if (sessionTypeUpper && !['ÇALIŞMA', 'YOL', 'EVDEN TÜRBİNE', 'TÜRBİNDEN EVE', 'TÜRBİNDEN TÜRBİNE'].includes(sessionTypeUpper)) return;
         
         const pList = session.personnel || [];
         pList.forEach((name: string) => {
           if (!name || !name.trim()) return;
-          const key = norm(name);
-          if (!personnelMap.has(key)) {
-            personnelMap.set(key, name.trim());
+          const key = `${norm(name)}__${sDate}`;
+          if (!personnelDateMap.has(key)) {
+            personnelDateMap.set(key, { name: name.trim(), date: sDate });
           }
         });
       });
 
-      personnelMap.forEach((name: string) => {
+      personnelDateMap.forEach(({ name, date }) => {
         // Skip exempt office personnel
         const nameLower = name.toLocaleLowerCase('tr-TR').trim();
         if (nameLower === 'fatih zebek' || nameLower === 'furkan yıldırım') return;
@@ -814,9 +816,11 @@ export const OvertimeApprovalsPage = async () => {
         // Apply personnel filter
         if (selectedPersonnel !== 'all' && canonicalName !== selectedPersonnel) return;
 
-        // Find all sessions of this personnel in this report
+        // Find all sessions of this personnel in this report for THIS SPECIFIC DATE
         const sessions = workSessions.filter((session: any) => {
-          if (!session.date || getSessionPayrollPeriod(session.date) !== selectedMonth) return false;
+          const sDate = session.date || report.date;
+          if (sDate !== date) return false;
+          if (getSessionPayrollPeriod(sDate) !== selectedMonth) return false;
           const sessionTypeUpper = (session.type || '').toUpperCase();
           if (sessionTypeUpper && !['ÇALIŞMA', 'YOL', 'EVDEN TÜRBİNE', 'TÜRBİNDEN EVE', 'TÜRBİNDEN TÜRBİNE'].includes(sessionTypeUpper)) return false;
           
@@ -826,7 +830,7 @@ export const OvertimeApprovalsPage = async () => {
 
         if (sessions.length === 0) return;
 
-        // Calculate aggregated suggested values
+        // Calculate aggregated suggested values for THIS SPECIFIC DATE
         let suggestedHoursSum = 0;
         let suggestedSodexo = false;
         let suggestedHarcirah = false;
@@ -837,7 +841,7 @@ export const OvertimeApprovalsPage = async () => {
 
         sessions.forEach((session: any) => {
           const suggestedHours = DateTimeUtils.calculateOvertimeHours(
-            session.date,
+            session.date || date,
             session.startTime,
             session.endTime,
             session.isOffDay || false,
@@ -846,11 +850,9 @@ export const OvertimeApprovalsPage = async () => {
           suggestedHoursSum += suggestedHours;
         });
 
-        const firstSession = sessions[0];
-        const rDate = firstSession?.date || report?.date;
-        const totalDailyWorkOt = dailyWorkOtMap.get(canonicalName)?.get(rDate) || 0;
-        const firstReportId = dailyFirstReportMap.get(canonicalName)?.get(rDate);
-        const isOffDayOrHoliday = rDate && (DateTimeUtils.isPublicHoliday(rDate) || (sessions && sessions.some((s: any) => s.isOffDay)));
+        const totalDailyWorkOt = dailyWorkOtMap.get(canonicalName)?.get(date) || 0;
+        const firstReportId = dailyFirstReportMap.get(canonicalName)?.get(date);
+        const isOffDayOrHoliday = date && (DateTimeUtils.isPublicHoliday(date) || (sessions && sessions.some((s: any) => s.isOffDay)));
         suggestedHarcirah = !isAtBaseSite && (suggestedHoursSum > 0 || isOffDayOrHoliday);
 
         suggestedSodexo = (totalDailyWorkOt >= 3.0) && (report.id === firstReportId);
@@ -881,7 +883,7 @@ export const OvertimeApprovalsPage = async () => {
           const approval = report.overtimeApprovals?.[s.id]?.[name] || {};
           
           const sHours = DateTimeUtils.calculateOvertimeHours(
-            s.date,
+            s.date || date,
             s.startTime,
             s.endTime,
             s.isOffDay || false
@@ -922,7 +924,7 @@ export const OvertimeApprovalsPage = async () => {
           personnel: canonicalName,
           rawName: name,
           company,
-          date: report.date || firstSession.date,
+          date: date,
           reportNo: report.reportNo,
           siteName: report.siteName || 'Bilinmeyen Saha',
           turbineNo: report.turbineNo || '---',
@@ -952,11 +954,11 @@ export const OvertimeApprovalsPage = async () => {
       });
     });
 
-    // Deduplicate rows by reportNo/reportId + normalized personnel name to guarantee no double entries
+    // Deduplicate rows by reportNo/reportId + normalized personnel name + date to guarantee no double entries
     const normKey = (s: string) => (s || '').toLocaleLowerCase('tr-TR').replace(/[^a-z0-9]/gi, '');
     const uniqueRowsMap = new Map<string, any>();
     rows.forEach(r => {
-      const rowKey = `${r.reportNo || r.reportId}_${normKey(r.personnel)}`;
+      const rowKey = `${r.reportNo || r.reportId}_${normKey(r.personnel)}_${r.date}`;
       if (!uniqueRowsMap.has(rowKey)) {
         uniqueRowsMap.set(rowKey, r);
       }
@@ -1077,201 +1079,311 @@ export const OvertimeApprovalsPage = async () => {
       return;
     }
 
-    container.innerHTML = filteredRows.map((row: any) => {
-      let badgeColor = 'rgba(255, 171, 0, 0.15)';
-      let badgeText = 'Bekliyor';
-      let textColor = 'var(--accent-orange)';
-      if (row.status === 'approved') {
-        badgeColor = 'rgba(0, 230, 118, 0.1)';
-        badgeText = 'Onaylandı';
-        textColor = 'var(--accent-green)';
-      } else if (row.status === 'rejected') {
-        badgeColor = 'rgba(255, 77, 77, 0.1)';
-        badgeText = 'Reddedildi';
-        textColor = 'var(--accent-red)';
-      } else if (row.status === 'deleted') {
-        badgeColor = 'rgba(239, 68, 68, 0.1)';
-        badgeText = 'Silindi';
-        textColor = '#EF4444';
+    // Group rows by Report -> then by Date
+    const reportGroupsMap = new Map<string, {
+      reportId: string;
+      reportNo: string;
+      siteName: string;
+      turbineNo: string;
+      turbineSerial: string;
+      faultCode: string;
+      latestDate: string;
+      earliestDate: string;
+      totalPersons: Set<string>;
+      days: Map<string, any[]>;
+    }>();
+
+    filteredRows.forEach((row: any) => {
+      const repKey = row.reportNo || row.reportId;
+      if (!reportGroupsMap.has(repKey)) {
+        reportGroupsMap.set(repKey, {
+          reportId: row.reportId,
+          reportNo: row.reportNo,
+          siteName: row.siteName,
+          turbineNo: row.turbineNo,
+          turbineSerial: row.turbineSerial,
+          faultCode: row.faultCode,
+          latestDate: row.date,
+          earliestDate: row.date,
+          totalPersons: new Set(),
+          days: new Map()
+        });
       }
+      const group = reportGroupsMap.get(repKey)!;
+      if (row.date > group.latestDate) group.latestDate = row.date;
+      if (row.date < group.earliestDate) group.earliestDate = row.date;
+      group.totalPersons.add(row.personnel);
 
-      const keyName = row.rawName.replace(/\s+/g, '_');
-      const inputId = `hours-${row.reportId}-${keyName}`;
-      const sodexoId = `sodexo-${row.reportId}-${keyName}`;
-      const harcirahId = `harcirah-${row.reportId}-${keyName}`;
-
-      // Date conversion to dd.mm.yyyy for readability
-      let formattedDate = row.date;
-      if (row.date && row.date.includes('-')) {
-        const [y, m, d] = row.date.split('-');
-        formattedDate = `${d}.${m}.${y}`;
+      const dKey = row.date || 'Tarih Yok';
+      if (!group.days.has(dKey)) {
+        group.days.set(dKey, []);
       }
+      group.days.get(dKey)!.push(row);
+    });
 
-      // Calculate past rounding balance for personnel (suggested - approved)
-      const balance = w.getPersonnelPastBalance(row.personnel, selectedMonth);
-      let balanceHtml = '';
-      if (balance > 0) {
-        balanceHtml = `<span class="badge-balance" style="background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönemlerden hak ettiği ama yuvarlama sebebiyle alamadığı süre (Alacaklı)">+${balance} dk</span>`;
-      } else if (balance < 0) {
-        balanceHtml = `<span class="badge-balance" style="background: rgba(251, 146, 60, 0.08); color: var(--accent-orange); border: 1px solid rgba(251, 146, 60, 0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönemlerde hak ettiğinden fazla yuvarlanan süre (Borçlu)">${balance} dk</span>`;
-      } else {
-        balanceHtml = `<span class="badge-balance" style="background: rgba(255,255,255,0.03); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönem kumbara bakiyesi dengede (0 dk)">0 dk</span>`;
+    const reportGroups = Array.from(reportGroupsMap.values());
+
+    // Sort report groups
+    reportGroups.sort((a, b) => {
+      if (selectedSort === 'date-asc') {
+        return a.earliestDate.localeCompare(b.earliestDate);
+      } else if (selectedSort === 'name-asc') {
+        return (a.siteName || '').localeCompare(b.siteName || '', 'tr-TR');
+      } else if (selectedSort === 'name-desc') {
+        return (b.siteName || '').localeCompare(a.siteName || '', 'tr-TR');
       }
+      return b.latestDate.localeCompare(a.latestDate);
+    });
 
-      return `
-        <tr class="table-row-hover" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
-          <td style="padding: 1rem 0.75rem; vertical-align: middle;">
-            <div style="font-weight: 700; color: #fff; font-size: 0.9rem; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
-              ${row.personnel} ${balanceHtml}
-            </div>
-            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${row.company || 'Bilinmeyen Şirket'}</div>
-          </td>
-          <td style="padding: 1rem 0.75rem; vertical-align: middle;">
-            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-              <span style="color: #fff; font-size: 0.85rem; font-family: monospace;">${formattedDate}</span>
-              ${DateTimeUtils.isPublicHoliday(row.date) 
-                ? `<span style="background: rgba(239, 68, 68, 0.12); color: #ff4a4a; border: 1px solid rgba(239, 68, 68, 0.25); padding: 1px 5px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; font-family: sans-serif; letter-spacing: 0.3px;"><i class="fa-solid fa-calendar-star" style="margin-right: 3px;"></i>RESMİ TATİL</span>` 
-                : DateTimeUtils.isWeekend(row.date) 
-                  ? `<span style="background: rgba(249, 115, 22, 0.12); color: #ff9d42; border: 1px solid rgba(249, 115, 22, 0.25); padding: 1px 5px; border-radius: 4px; font-size: 0.6rem; font-weight: 800; font-family: sans-serif; letter-spacing: 0.3px;"><i class="fa-solid fa-calendar-days" style="margin-right: 3px;"></i>HAFTA SONU</span>` 
-                  : ''}
-            </div>
-            <div style="font-size: 0.7rem; color: var(--accent-cyan); font-weight: 600;">${row.reportNo}</div>
-            <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 3px;">
-              <i class="fa-solid fa-map-pin" style="font-size: 0.6rem; color: var(--accent-cyan); margin-right: 3px;"></i> ${row.siteName} - ${row.turbineNo}
-            </div>
-            ${row.faultCode ? `
-              <div style="font-size: 0.65rem; color: #ff6b6b; margin-top: 2px; font-weight: 600;">
-                <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.6rem; margin-right: 3px;"></i> Kod: ${row.faultCode}
+    let html = '';
+
+    reportGroups.forEach((group) => {
+      const dayKeys = Array.from(group.days.keys()).sort();
+      const totalDays = dayKeys.length;
+      const totalPersonnelCount = group.totalPersons.size;
+
+      // Report Header Row Banner
+      html += `
+        <tr style="background: rgba(0, 242, 254, 0.05); border-top: 2px solid rgba(0, 242, 254, 0.3); border-bottom: 1px solid rgba(0, 242, 254, 0.15);">
+          <td colspan="9" style="padding: 10px 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="background: rgba(0, 242, 254, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.3); padding: 4px 10px; border-radius: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; letter-spacing: 0.5px;">
+                  <i class="fa-solid fa-file-lines" style="margin-right: 6px;"></i>${group.reportNo}
+                </span>
+                <span style="font-weight: 700; color: #fff; font-size: 0.9rem;">
+                  <i class="fa-solid fa-location-dot" style="color: var(--accent-cyan); font-size: 0.8rem; margin-right: 4px;"></i>${group.siteName} - ${group.turbineNo}
+                </span>
+                <span style="color: ${group.faultCode ? '#ff6b6b' : 'var(--text-muted)'}; font-size: 0.8rem; font-weight: 600;">
+                  ${group.faultCode ? `<i class="fa-solid fa-triangle-exclamation" style="margin-right: 4px;"></i>${group.faultCode}` : '<i class="fa-solid fa-wrench" style="margin-right: 4px;"></i>Bakım'}
+                </span>
               </div>
-            ` : `
-              <div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">
-                <i class="fa-solid fa-wrench" style="font-size: 0.6rem; margin-right: 3px;"></i> Bakım
+              <div style="display: flex; align-items: center; gap: 12px; font-size: 0.75rem; color: var(--text-muted);">
+                <span><i class="fa-solid fa-calendar-days" style="color: var(--accent-cyan); margin-right: 4px;"></i><strong>${totalDays}</strong> Çalışma Günü</span>
+                <span><i class="fa-solid fa-users" style="color: var(--accent-green); margin-right: 4px;"></i><strong>${totalPersonnelCount}</strong> Personel</span>
               </div>
-            `}
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: left; vertical-align: middle; font-family: monospace; font-size: 0.8rem; color: #fff; min-width: 270px;">
-            ${(() => {
-              const sortedSessions = [...row.sessions].sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
-              const overtimeOnlySessions = sortedSessions.filter((s: any) => {
-                const sDate = s.date || row.date;
-                const ot = DateTimeUtils.calculateOvertimeHours(sDate, s.startTime, s.endTime, s.isOffDay || false, row.personnel);
-                return ot > 0;
-              });
-              const displaySessions = overtimeOnlySessions.length > 0 ? overtimeOnlySessions : sortedSessions;
-              return displaySessions.map((s: any) => {
-                const sType = s.type || 'ÇALIŞMA';
-                const isTravel = ['EVDEN TÜRBİNE', 'TÜRBİNDEN EVE', 'TÜRBİNDEN TÜRBİNE', 'YOL'].includes(sType.toUpperCase());
-                const badge = isTravel 
-                  ? `<span style="background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1px 4.5px; border-radius: 3px; font-size: 0.6rem; font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-car"></i> ${sType}</span>`
-                  : `<span style="background: rgba(255,255,255,0.03); color: #bbb; border: 1px solid rgba(255,255,255,0.05); padding: 1px 4.5px; border-radius: 3px; font-size: 0.6rem; white-space: nowrap;">Çalışma</span>`;
-                return `
-                  <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.02); padding-bottom: 2px; width: 100%;">
-                    <span style="width: 105px; flex-shrink: 0; white-space: nowrap; display: inline-block;">${s.startTime} - ${s.endTime}</span>
-                    <span style="color: var(--text-muted); font-size: 0.7rem; width: 50px; flex-shrink: 0; text-align: right; display: inline-block;">(${s.duration})</span>
-                    <div style="flex-grow: 1; display: flex; justify-content: flex-end; align-items: center; min-width: 0;">
-                      ${badge}
-                    </div>
-                  </div>
-                `;
-              }).join('');
-            })()}
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: center; vertical-align: middle; font-family: monospace;">
-            <span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: #bbb; font-size: 0.8rem;">
-              ${decimalToTimeStr(row.suggestedHours)}
-            </span>
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: center; vertical-align: middle;">
-            <input type="text" id="${inputId}" class="cyber-input" value="${decimalToTimeStr(row.approvedHours)}" 
-                   placeholder="Örn: 08:00 veya 8"
-                   style="width: 85px; text-align: center; height: 32px; font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.2);"
-                   onkeydown="if(event.key==='Enter') { window.approveSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}'); }"
-                   ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
-            ${balance !== 0 ? `
-              <div style="font-size: 0.65rem; color: ${balance > 0 ? 'var(--accent-cyan)' : 'var(--accent-orange)'}; margin-top: 3px; font-family: monospace;" title="Geçmiş dönem kumbara bakiyesi">
-                Kumbara: ${balance > 0 ? '+' : ''}${balance} dk
-              </div>
-            ` : ''}
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: center; vertical-align: middle;">
-            <label style="position: relative; display: inline-flex; align-items: center; cursor: pointer;">
-              <input type="checkbox" id="${sodexoId}" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-orange);" 
-                     ${row.sodexo ? 'checked' : ''} 
-                     ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
-            </label>
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: center; vertical-align: middle;">
-            <label style="position: relative; display: inline-flex; align-items: center; cursor: pointer;">
-              <input type="checkbox" id="${harcirahId}" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-cyan);" 
-                     ${row.harcirah ? 'checked' : ''} 
-                     ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
-            </label>
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: center; vertical-align: middle;">
-            <span style="display: inline-block; background: ${badgeColor}; color: ${textColor}; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; border: 1px solid ${textColor}22;">
-              ${badgeText}
-            </span>
-            ${row.approvedBy ? `
-              <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 3px; font-family: monospace;">
-                ${formatDisplayName(row.approvedBy)}
-              </div>
-            ` : ''}
-          </td>
-          <td style="padding: 1rem 0.75rem; text-align: right; vertical-align: middle;">
-            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
-              ${isLeader ? `
-                <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic; border: 1px dashed rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 6px; font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 0.5px;">SALT OKUNUR</span>
-              ` : `
-                ${row.status === 'deleted' ? `
-                  <button onclick="window.restoreSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}')" 
-                          class="btn-cyber-outline" 
-                          style="height: 28px; font-size: 0.65rem; padding: 0 10px; border-radius: 6px; border: 1px solid var(--accent-cyan); background: transparent; color: var(--accent-cyan); cursor: pointer; transition: all 0.2s;"
-                          onmouseover="this.style.background='rgba(0, 242, 254, 0.1)'"
-                          onmouseout="this.style.background='transparent'">
-                    GERİ YÜKLE
-                  </button>
-                ` : row.status === 'pending' ? `
-                  <button onclick="window.approveSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}')" 
-                          class="action-icon-btn" 
-                          style="width: 32px; height: 32px; border-radius: 6px; background: rgba(0, 230, 118, 0.1); border: 1px solid rgba(0, 230, 118, 0.2); color: var(--accent-green); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
-                          onmouseover="this.style.background='var(--accent-green)'; this.style.color='#000'"
-                          onmouseout="this.style.background='rgba(0, 230, 118, 0.1)'; this.style.color='var(--accent-green)'"
-                          title="Onayla">
-                    <i class="fa-solid fa-check" style="font-size: 0.85rem;"></i>
-                  </button>
-                  <button onclick="window.rejectSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}')" 
-                          class="action-icon-btn red" 
-                          style="width: 32px; height: 32px; border-radius: 6px; background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--accent-red); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
-                          onmouseover="this.style.background='var(--accent-red)'; this.style.color='#fff'"
-                          onmouseout="this.style.background='rgba(255, 77, 77, 0.1)'; this.style.color='var(--accent-red)'"
-                          title="Reddet">
-                    <i class="fa-solid fa-xmark" style="font-size: 0.85rem;"></i>
-                  </button>
-                ` : `
-                  <button onclick="window.editApprovedOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}')" 
-                          class="btn-cyber-outline" 
-                          style="height: 28px; font-size: 0.65rem; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); background: transparent; color: var(--text-muted); cursor: pointer;"
-                          onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'"
-                          onmouseout="this.style.borderColor='rgba(255, 255, 255, 0.1)'; this.style.color='var(--text-muted)'">
-                    DÜZENLE
-                  </button>
-                `}
-                ${row.status !== 'deleted' ? `
-                  <button onclick="window.deleteSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}')" 
-                          class="action-icon-btn red" 
-                          style="width: 32px; height: 32px; border-radius: 6px; background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--accent-red); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
-                          onmouseover="this.style.background='var(--accent-red)'; this.style.color='#fff'"
-                          onmouseout="this.style.background='rgba(255, 77, 77, 0.1)'; this.style.color='var(--accent-red)'"
-                          title="Kayıt Sil">
-                    <i class="fa-solid fa-trash" style="font-size: 0.85rem;"></i>
-                  </button>
-                ` : ''}
-              `}
             </div>
           </td>
         </tr>
       `;
-    }).join('');
+
+      // Render each day in the report
+      dayKeys.forEach(dKey => {
+        const dayRows = group.days.get(dKey)!;
+        dayRows.sort((a, b) => a.personnel.localeCompare(b.personnel, 'tr-TR'));
+
+        let formattedDate = dKey;
+        let dayName = '';
+        if (dKey && dKey.includes('-')) {
+          const [y, m, d] = dKey.split('-');
+          formattedDate = `${d}.${m}.${y}`;
+          try {
+            const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+            dayName = dateObj.toLocaleDateString('tr-TR', { weekday: 'long' });
+          } catch (e) {}
+        }
+
+        const isPublicHoliday = DateTimeUtils.isPublicHoliday(dKey);
+        const isWeekend = DateTimeUtils.isWeekend(dKey);
+
+        // Day Subheader Banner
+        html += `
+          <tr style="background: rgba(255, 255, 255, 0.02); border-left: 3px solid var(--accent-cyan);">
+            <td colspan="9" style="padding: 6px 14px; font-size: 0.8rem; color: #fff;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-family: monospace; color: var(--accent-cyan);">
+                  <i class="fa-regular fa-calendar-check" style="margin-right: 5px;"></i>${formattedDate} ${dayName ? `(${dayName})` : ''}
+                </span>
+                ${isPublicHoliday ? `<span style="background: rgba(239, 68, 68, 0.15); color: #ff4a4a; border: 1px solid rgba(239, 68, 68, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;"><i class="fa-solid fa-calendar-star" style="margin-right: 3px;"></i>RESMİ TATİL</span>` : ''}
+                ${isWeekend ? `<span style="background: rgba(249, 115, 22, 0.15); color: #ff9d42; border: 1px solid rgba(249, 115, 22, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; font-weight: 800;"><i class="fa-solid fa-calendar-days" style="margin-right: 3px;"></i>HAFTA SONU</span>` : ''}
+                <span style="color: var(--text-muted); font-size: 0.7rem; margin-left: auto;">${dayRows.length} Personel Kaydı</span>
+              </div>
+            </td>
+          </tr>
+        `;
+
+        // Render rows for that day
+        dayRows.forEach(row => {
+          let badgeColor = 'rgba(255, 171, 0, 0.15)';
+          let badgeText = 'Bekliyor';
+          let textColor = 'var(--accent-orange)';
+          if (row.status === 'approved') {
+            badgeColor = 'rgba(0, 230, 118, 0.1)';
+            badgeText = 'Onaylandı';
+            textColor = 'var(--accent-green)';
+          } else if (row.status === 'rejected') {
+            badgeColor = 'rgba(255, 77, 77, 0.1)';
+            badgeText = 'Reddedildi';
+            textColor = 'var(--accent-red)';
+          } else if (row.status === 'deleted') {
+            badgeColor = 'rgba(239, 68, 68, 0.1)';
+            badgeText = 'Silindi';
+            textColor = '#EF4444';
+          }
+
+          const keyName = row.rawName.replace(/\s+/g, '_');
+          const dateKey = (row.date || '').replace(/[^0-9]/g, '');
+          const inputId = `hours-${row.reportId}-${keyName}-${dateKey}`;
+          const sodexoId = `sodexo-${row.reportId}-${keyName}-${dateKey}`;
+          const harcirahId = `harcirah-${row.reportId}-${keyName}-${dateKey}`;
+
+          // Calculate past rounding balance for personnel (suggested - approved)
+          const balance = w.getPersonnelPastBalance(row.personnel, selectedMonth);
+          let balanceHtml = '';
+          if (balance > 0) {
+            balanceHtml = `<span class="badge-balance" style="background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönemlerden hak ettiği ama yuvarlama sebebiyle alamadığı süre (Alacaklı)">+${balance} dk</span>`;
+          } else if (balance < 0) {
+            balanceHtml = `<span class="badge-balance" style="background: rgba(251, 146, 60, 0.08); color: var(--accent-orange); border: 1px solid rgba(251, 146, 60, 0.2); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönemlerde hak ettiğinden fazla yuvarlanan süre (Borçlu)">${balance} dk</span>`;
+          } else {
+            balanceHtml = `<span class="badge-balance" style="background: rgba(255,255,255,0.03); color: var(--text-muted); border: 1px solid rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-left: 6px; font-family: monospace; font-weight: 700; cursor: help;" title="Geçmiş dönem kumbara bakiyesi dengede (0 dk)">0 dk</span>`;
+          }
+
+          html += `
+            <tr class="table-row-hover" style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
+              <td style="padding: 0.75rem 1rem; vertical-align: middle;">
+                <div style="font-weight: 700; color: #fff; font-size: 0.9rem; display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+                  ${row.personnel} ${balanceHtml}
+                </div>
+                <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">${row.company || 'Bilinmeyen Şirket'}</div>
+              </td>
+              <td style="padding: 0.75rem 1rem; vertical-align: middle;">
+                <div style="font-size: 0.8rem; color: #fff; font-family: monospace; font-weight: 600;">
+                  ${formattedDate}
+                </div>
+                <div style="font-size: 0.65rem; color: var(--accent-cyan); margin-top: 2px; font-weight: 600;">
+                  ${row.reportNo}
+                </div>
+                <div style="font-size: 0.65rem; color: var(--text-muted);">
+                  ${row.siteName} - ${row.turbineNo}
+                </div>
+              </td>
+              <td style="padding: 0.75rem; text-align: left; vertical-align: middle; font-family: monospace; font-size: 0.8rem; color: #fff; min-width: 270px;">
+                ${(() => {
+                  const sortedSessions = [...row.sessions].sort((a: any, b: any) => a.startTime.localeCompare(b.startTime));
+                  const overtimeOnlySessions = sortedSessions.filter((s: any) => {
+                    const sDate = s.date || row.date;
+                    const ot = DateTimeUtils.calculateOvertimeHours(sDate, s.startTime, s.endTime, s.isOffDay || false, row.personnel);
+                    return ot > 0;
+                  });
+                  const displaySessions = overtimeOnlySessions.length > 0 ? overtimeOnlySessions : sortedSessions;
+                  return displaySessions.map((s: any) => {
+                    const sType = s.type || 'ÇALIŞMA';
+                    const isTravel = ['EVDEN TÜRBİNE', 'TÜRBİNDEN EVE', 'TÜRBİNDEN TÜRBİNE', 'YOL'].includes(sType.toUpperCase());
+                    const badge = isTravel 
+                      ? `<span style="background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2); padding: 1px 4.5px; border-radius: 3px; font-size: 0.6rem; font-weight: bold; white-space: nowrap;"><i class="fa-solid fa-car"></i> ${sType}</span>`
+                      : `<span style="background: rgba(255,255,255,0.03); color: #bbb; border: 1px solid rgba(255,255,255,0.05); padding: 1px 4.5px; border-radius: 3px; font-size: 0.6rem; white-space: nowrap;">Çalışma</span>`;
+                    return `
+                      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.02); padding-bottom: 2px; width: 100%;">
+                        <span style="width: 105px; flex-shrink: 0; white-space: nowrap; display: inline-block;">${s.startTime} - ${s.endTime}</span>
+                        <span style="color: var(--text-muted); font-size: 0.7rem; width: 50px; flex-shrink: 0; text-align: right; display: inline-block;">(${s.duration})</span>
+                        <div style="flex-grow: 1; display: flex; justify-content: flex-end; align-items: center; min-width: 0;">
+                          ${badge}
+                        </div>
+                      </div>
+                    `;
+                  }).join('');
+                })()}
+              </td>
+              <td style="padding: 0.75rem; text-align: center; vertical-align: middle; font-family: monospace;">
+                <span style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; color: #bbb; font-size: 0.8rem;">
+                  ${decimalToTimeStr(row.suggestedHours)}
+                </span>
+              </td>
+              <td style="padding: 0.75rem; text-align: center; vertical-align: middle;">
+                <input type="text" id="${inputId}" class="cyber-input" value="${decimalToTimeStr(row.approvedHours)}" 
+                       placeholder="Örn: 08:00 veya 8"
+                       style="width: 85px; text-align: center; height: 32px; font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.2);"
+                       onkeydown="if(event.key==='Enter') { window.approveSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}'); }"
+                       ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
+                ${balance !== 0 ? `
+                  <div style="font-size: 0.65rem; color: ${balance > 0 ? 'var(--accent-cyan)' : 'var(--accent-orange)'}; margin-top: 3px; font-family: monospace;" title="Geçmiş dönem kumbara bakiyesi">
+                    Kumbara: ${balance > 0 ? '+' : ''}${balance} dk
+                  </div>
+                ` : ''}
+              </td>
+              <td style="padding: 0.75rem; text-align: center; vertical-align: middle;">
+                <label style="position: relative; display: inline-flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" id="${sodexoId}" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-orange);" 
+                         ${row.sodexo ? 'checked' : ''} 
+                         ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
+                </label>
+              </td>
+              <td style="padding: 0.75rem; text-align: center; vertical-align: middle;">
+                <label style="position: relative; display: inline-flex; align-items: center; cursor: pointer;">
+                  <input type="checkbox" id="${harcirahId}" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent-cyan);" 
+                         ${row.harcirah ? 'checked' : ''} 
+                         ${(row.status !== 'pending' || isLeader) ? 'disabled' : ''}>
+                </label>
+              </td>
+              <td style="padding: 0.75rem; text-align: center; vertical-align: middle;">
+                <span style="display: inline-block; background: ${badgeColor}; color: ${textColor}; padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; border: 1px solid ${textColor}22;">
+                  ${badgeText}
+                </span>
+                ${row.approvedBy ? `
+                  <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 3px; font-family: monospace;">
+                    ${formatDisplayName(row.approvedBy)}
+                  </div>
+                ` : ''}
+              </td>
+              <td style="padding: 0.75rem; text-align: right; vertical-align: middle;">
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center;">
+                  ${isLeader ? `
+                    <span style="font-size: 0.75rem; color: var(--text-muted); font-style: italic; border: 1px dashed rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 6px; font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 0.5px;">SALT OKUNUR</span>
+                  ` : `
+                    ${row.status === 'deleted' ? `
+                      <button onclick="window.restoreSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}')" 
+                              class="btn-cyber-outline" 
+                              style="height: 28px; font-size: 0.65rem; padding: 0 10px; border-radius: 6px; border: 1px solid var(--accent-cyan); background: transparent; color: var(--accent-cyan); cursor: pointer; transition: all 0.2s;"
+                              onmouseover="this.style.background='rgba(0, 242, 254, 0.1)'"
+                              onmouseout="this.style.background='transparent'">
+                        GERİ YÜKLE
+                      </button>
+                    ` : row.status === 'pending' ? `
+                      <button onclick="window.approveSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}')" 
+                              class="action-icon-btn" 
+                              style="width: 32px; height: 32px; border-radius: 6px; background: rgba(0, 230, 118, 0.1); border: 1px solid rgba(0, 230, 118, 0.2); color: var(--accent-green); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                              onmouseover="this.style.background='var(--accent-green)'; this.style.color='#000'"
+                              onmouseout="this.style.background='rgba(0, 230, 118, 0.1)'; this.style.color='var(--accent-green)'"
+                              title="Onayla">
+                        <i class="fa-solid fa-check" style="font-size: 0.85rem;"></i>
+                      </button>
+                      <button onclick="window.rejectSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}')" 
+                              class="action-icon-btn red" 
+                              style="width: 32px; height: 32px; border-radius: 6px; background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--accent-red); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                              onmouseover="this.style.background='var(--accent-red)'; this.style.color='#fff'"
+                              onmouseout="this.style.background='rgba(255, 77, 77, 0.1)'; this.style.color='var(--accent-red)'"
+                              title="Reddet">
+                        <i class="fa-solid fa-xmark" style="font-size: 0.85rem;"></i>
+                      </button>
+                    ` : `
+                      <button onclick="window.editApprovedOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}')" 
+                              class="btn-cyber-outline" 
+                              style="height: 28px; font-size: 0.65rem; padding: 0 10px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.1); background: transparent; color: var(--text-muted); cursor: pointer;"
+                              onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'"
+                              onmouseout="this.style.borderColor='rgba(255, 255, 255, 0.1)'; this.style.color='var(--text-muted)'">
+                        DÜZENLE
+                      </button>
+                    `}
+                    ${row.status !== 'deleted' ? `
+                      <button onclick="window.deleteSessionOvertime('${row.reportId}', '${row.rawName.replace(/'/g, "\\'")}', '${row.date}')" 
+                              class="action-icon-btn red" 
+                              style="width: 32px; height: 32px; border-radius: 6px; background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.2); color: var(--accent-red); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                              onmouseover="this.style.background='var(--accent-red)'; this.style.color='#fff'"
+                              onmouseout="this.style.background='rgba(255, 77, 77, 0.1)'; this.style.color='var(--accent-red)'"
+                              title="Kayıt Sil">
+                        <i class="fa-solid fa-trash" style="font-size: 0.85rem;"></i>
+                      </button>
+                    ` : ''}
+                  `}
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+      });
+    });
+
+    container.innerHTML = html;
   };
 
   // Build month options dynamically:

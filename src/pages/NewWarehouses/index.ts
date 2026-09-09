@@ -2,11 +2,12 @@ import { formatTeamName } from '../../utils/formatters';
 import { dataService } from '../../services/DataService';
 import { db } from '../../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getCountFromServer, orderBy, getDocs, updateDoc } from 'firebase/firestore';
-import { warehouseState, getUserProfile, getTeamResponsibleSites, getWarehouseSite } from './WarehouseState';
+import { warehouseState, getUserProfile, getTeamResponsibleSites, getWarehouseSite, canViewWarehousePrices, isUserFatihZebek, getAvailableCabinets, getAvailableTurbineTypes, PREDEFINED_TURBINE_TYPES, isPcbMaterial, isIgbtMaterial, fetchSapMetadata, getEffectiveCabinet, getEffectiveTurbineType, saveSapMetadata, sapMetadataMap } from './WarehouseState';
 import { renderTabsHTML } from './WarehouseTabs';
 import { renderModalsHTML } from './WarehouseModals';
 import { inventoryService } from '../../services/InventoryService';
 import { warehouseService } from '../../services/WarehouseService';
+import { priceService } from '../../services/PriceService';
 import QRCode from 'qrcode';
 
 // Import sub-modules to register their window-attached functions
@@ -259,11 +260,13 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
   const isMaterialManager = userProfile?.role === 'ADMIN' || userProfile?.role === 'MALZEME_YONETIMI' || userProfile?.role === 'TAMİR' || userProfile?.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
   const hasWarehouseDeletePerm = isMaterialManager || userProfile?.allowedTabs?.warehouses?.deleteItem || userProfile?.allowedTabs?.team_warehouses?.deleteItem;
   const hasWarehouseManagePerm = isMaterialManager || userProfile?.allowedTabs?.warehouses?.manageStock || userProfile?.allowedTabs?.team_warehouses?.manageStock;
+  const canViewPrices = canViewWarehousePrices(userProfile);
 
   warehouseState.userProfile = userProfile;
   warehouseState.isMaterialManager = isMaterialManager;
   warehouseState.hasWarehouseDeletePerm = hasWarehouseDeletePerm;
   warehouseState.hasWarehouseManagePerm = hasWarehouseManagePerm;
+  warehouseState.canViewPrices = canViewPrices;
 
   if (!warehouseId) {
     const allowedMainWarehouses = userProfile?.role === 'ADMIN' || isMaterialManager
@@ -631,7 +634,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             <div style="font-size: 0.85rem; color: #64748B; margin-top: 0.25rem;">Stok ve Envanter Sistemi</div>
           </div>
         </div>
-        <div id="inventory-action-bar" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'flex' : 'none'}; gap: 0.5rem; align-items: center;">
+        <div id="inventory-action-bar" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' || currentTab === 'PCB' || currentTab === 'IGBT' ? 'flex' : 'none'}; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
           <input 
             id="inventory-search-input"
             oninput="window.filterInventory()"
@@ -641,6 +644,26 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
             onfocus="this.style.borderColor='#14F195'; this.style.boxShadow='0 0 20px rgba(20, 241, 149, 0.65)';"
             onblur="this.style.borderColor='#14F195'; this.style.boxShadow='0 0 12px rgba(20, 241, 149, 0.35)';"
           />
+          ${isUserFatihZebek() ? `
+            <select 
+              id="cabinet-filter-select" 
+              onchange="window.onCabinetFilterChange(this.value)"
+              style="height: 36px; background-color: rgba(10, 14, 23, 0.85); border: 2px solid #8B5CF6; border-radius: 8px; color: #C4B5FD; padding: 0 0.75rem; font-size: 0.82rem; font-weight: 700; outline: none; cursor: pointer; box-shadow: 0 0 10px rgba(139, 92, 246, 0.25); max-width: 230px;"
+              title="Kabin / Pano Filtresi (Sadece Size Özel)">
+              <option value="ALL" ${warehouseState.selectedCabinetFilter === 'ALL' ? 'selected' : ''}>🏢 Tüm Kabinler / Panolar</option>
+              ${getAvailableCabinets().map(c => `<option value="${c.replace(/"/g, '&quot;')}" ${warehouseState.selectedCabinetFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+              <option value="UNASSIGNED" ${warehouseState.selectedCabinetFilter === 'UNASSIGNED' ? 'selected' : ''}>⚠️ Tanımsız (Kabin Seçilmemiş)</option>
+            </select>
+            <select 
+              id="turbinetype-filter-select" 
+              onchange="window.onTurbineTypeFilterChange(this.value)"
+              style="height: 36px; background-color: rgba(10, 14, 23, 0.85); border: 2px solid #00F3FF; border-radius: 8px; color: #38BDF8; padding: 0 0.75rem; font-size: 0.82rem; font-weight: 700; outline: none; cursor: pointer; box-shadow: 0 0 10px rgba(0, 243, 255, 0.25); max-width: 200px;"
+              title="Türbin Tipi Filtresi (Sadece Size Özel)">
+              <option value="ALL" ${warehouseState.selectedTurbineTypeFilter === 'ALL' ? 'selected' : ''}>🌀 Tüm Türbin Tipleri</option>
+              ${getAvailableTurbineTypes().map(t => `<option value="${t.replace(/"/g, '&quot;')}" ${warehouseState.selectedTurbineTypeFilter === t ? 'selected' : ''}>${t}</option>`).join('')}
+              <option value="UNASSIGNED" ${warehouseState.selectedTurbineTypeFilter === 'UNASSIGNED' ? 'selected' : ''}>⚠️ Tanımsız (Tip Seçilmemiş)</option>
+            </select>
+          ` : ''}
           ${currentWarehouse.id === 'MTA' ? '' : `
             ${isMobileWarehouse ? '' : `
             <button onclick="window.startFastAudit()" style="height: 34px; padding: 0 0.75rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
@@ -678,25 +701,37 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
       ${renderTabsHTML(currentWarehouse.id, currentTab, isMobileWarehouse)}
 
       <!-- ENVANTER View -->
-      <div id="view-ENVANTER" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' ? 'block' : 'none'};">
+      <div id="view-ENVANTER" style="display: ${currentTab === 'INVENTORY' || currentTab === 'ENVANTER' || currentTab === 'PCB' || currentTab === 'IGBT' ? 'block' : 'none'};">
         <!-- Summary Cards -->
         ${(currentWarehouse.id !== 'MTA' && !isMobileWarehouse) ? `
-        <div style="display: grid; grid-template-columns: 260px 1fr; gap: 0.75rem; margin-bottom: 1.5rem; align-items: start;">
-          <div style="display: flex; flex-direction: column; gap: 0.6rem; justify-content: space-between; height: 86px; box-sizing: border-box;">
-            <div id="total-kalem-card" onclick="window.setInventoryCriticalFilter(false)" style="background-color: ${warehouseState.onlyShowCritical ? '#111827' : 'rgba(59, 130, 246, 0.05)'}; border: 1px solid ${warehouseState.onlyShowCritical ? '#1E293B' : '#3B82F6'}; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+        <div style="display: grid; grid-template-columns: 280px 1fr; gap: 0.75rem; margin-bottom: 1.5rem; align-items: stretch;">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; justify-content: space-between; box-sizing: border-box;">
+            <div id="total-kalem-card" onclick="window.setInventoryCriticalFilter(false)" style="background-color: ${warehouseState.onlyShowCritical ? '#111827' : 'rgba(59, 130, 246, 0.05)'}; border: 1px solid ${warehouseState.onlyShowCritical ? '#1E293B' : '#3B82F6'}; border-radius: 10px; padding: 0.45rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
                 <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Kalem</div>
               </div>
-              <div id="total-kalem-count" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT').length}</div>
+              <div id="total-kalem-count" style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI').length}</div>
             </div>
-            <div id="kritik-stok-card" onclick="window.setInventoryCriticalFilter(true)" style="background-color: ${warehouseState.onlyShowCritical ? 'rgba(239, 68, 68, 0.1)' : '#111827'}; border: 1px solid ${warehouseState.onlyShowCritical ? '#EF4444' : 'rgba(239, 68, 68, 0.25)'}; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
+            <div id="kritik-stok-card" onclick="window.setInventoryCriticalFilter(true)" style="background-color: ${warehouseState.onlyShowCritical ? 'rgba(239, 68, 68, 0.1)' : '#111827'}; border: 1px solid ${warehouseState.onlyShowCritical ? '#EF4444' : 'rgba(239, 68, 68, 0.25)'}; border-radius: 10px; padding: 0.45rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform='none'">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <i class="fa-solid fa-triangle-exclamation" style="color: #EF4444; font-size: 0.9rem;"></i>
                 <div style="font-size: 0.75rem; color: #EF4444; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Kritik Stok</div>
               </div>
-              <div id="kritik-stok-count" style="font-size: 1.15rem; font-weight: 800; color: #EF4444;">${warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length}</div>
+              <div id="kritik-stok-count" style="font-size: 1.15rem; font-weight: 800; color: #EF4444;">${warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI' && i.quantity <= (i.minStock || 0)).length}</div>
             </div>
+            ${canViewPrices ? `
+            <div id="depo-degeri-card" style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.45rem 0.85rem; display: flex; align-items: center; justify-content: space-between; flex: 1;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-coins" style="color: #34d399; font-size: 0.9rem;"></i>
+                <div>
+                  <div style="font-size: 0.72rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Depo Stok Değeri</div>
+                  <div id="depo-fiyat-kapsami" style="font-size: 0.65rem; color: #34d399;">Hesaplanıyor...</div>
+                </div>
+              </div>
+              <div id="depo-degeri-count" style="font-size: 1.15rem; font-weight: 800; color: #10B981; font-family: monospace;">0,00 €</div>
+            </div>
+            ` : ''}
           </div>
 
           <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.6rem 0.85rem; display: flex; flex-direction: column; min-height: 86px; max-height: 350px; height: auto; box-sizing: border-box;">
@@ -724,7 +759,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         </div>
         ` : `
           ${currentWarehouse.id === 'MTA' ? `
-            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
               <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 260px; box-sizing: border-box;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
@@ -732,16 +767,40 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 </div>
                 <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${warehouseState.inventoryItems.length}</div>
               </div>
+              ${canViewPrices ? `
+                <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 280px; box-sizing: border-box;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-coins" style="color: #34d399; font-size: 0.9rem;"></i>
+                    <div>
+                      <div style="font-size: 0.72rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Depo Stok Değeri</div>
+                      <div id="depo-fiyat-kapsami" style="font-size: 0.65rem; color: #34d399;">Hesaplanıyor...</div>
+                    </div>
+                  </div>
+                  <div id="depo-degeri-count" style="font-size: 1.15rem; font-weight: 800; color: #10B981; font-family: monospace;">0,00 €</div>
+                </div>
+              ` : ''}
             </div>
           ` : `
-            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
               <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 260px; box-sizing: border-box;">
                 <div style="display: flex; align-items: center; gap: 0.5rem;">
                   <i class="fa-solid fa-boxes-stacked" style="color: #00f3ff; font-size: 0.9rem;"></i>
                   <div style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Toplam Zimmetli Kalem</div>
                 </div>
-                <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT' && (item.quantity > 0 || (item.reservedQuantity || 0) > 0)).length}</div>
+                <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">${warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT' && item.condition !== 'SCRAP' && item.status !== 'HURDAYA_AYRILDI' && (item.quantity > 0 || (item.reservedQuantity || 0) > 0)).length}</div>
               </div>
+              ${canViewPrices ? `
+                <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 0.5rem 0.85rem; display: flex; align-items: center; justify-content: space-between; width: 280px; box-sizing: border-box;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-coins" style="color: #34d399; font-size: 0.9rem;"></i>
+                    <div>
+                      <div style="font-size: 0.72rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Depo Stok Değeri</div>
+                      <div id="depo-fiyat-kapsami" style="font-size: 0.65rem; color: #34d399;">Hesaplanıyor...</div>
+                    </div>
+                  </div>
+                  <div id="depo-degeri-count" style="font-size: 1.15rem; font-weight: 800; color: #10B981; font-family: monospace;">0,00 €</div>
+                </div>
+              ` : ''}
             </div>
           `}
         `}
@@ -796,26 +855,89 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
         ` : ''}
 
         <!-- Inventory Table -->
-        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow: hidden;">
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <div style="background-color: #111827; border: 1px solid #1E293B; border-radius: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 780px;">
             <thead>
               <tr>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; width: 40px;"><input type="checkbox" id="select-all-checkbox" onclick="window.toggleSelectAll(this)" /></th>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">SAP No</th>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Malzeme Tanımı</th>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Stok</th>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Rezerve</th>
-                <th style="padding: 1rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Konum</th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; width: 40px;"><input type="checkbox" id="select-all-checkbox" onclick="window.toggleSelectAll(this)" /></th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; white-space: nowrap; min-width: 80px;">SAP No</th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; min-width: 220px;">Malzeme Tanımı</th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; white-space: nowrap; min-width: 95px;">Stok</th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; white-space: nowrap; min-width: 80px;">Rezerve</th>
+                <th style="padding: 1rem 0.75rem; text-align: left; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase; white-space: nowrap; min-width: 90px;">Konum</th>
+                ${isUserFatihZebek() ? `
+                  <th style="padding: 1rem; text-align: left; color: #C4B5FD; font-weight: 700; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">
+                    <i class="fa-solid fa-server" style="color: #A855F7; margin-right: 4px;"></i> Kabin / Pano
+                  </th>
+                  <th style="padding: 1rem; text-align: left; color: #38BDF8; font-weight: 700; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">
+                    <i class="fa-solid fa-fan" style="color: #00F3FF; margin-right: 4px;"></i> Türbin Tipi
+                  </th>
+                ` : ''}
+                ${canViewPrices ? `
+                  <th style="padding: 1rem; text-align: center; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Birim Fiyat</th>
+                  <th style="padding: 1rem; text-align: right; color: #10B981; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Toplam Tutar</th>
+                ` : ''}
                 <th style="padding: 1rem; text-align: right; color: #64748B; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Aksiyonlar</th>
               </tr>
             </thead>
             <tbody id="inventory-tbody">
-              <tr><td colspan="7" style="padding: 2rem; text-align: center; color: #94A3B8;">Yükleniyor...</td></tr>
+              <tr><td colspan="${(canViewPrices ? 9 : 7) + (isUserFatihZebek() ? 2 : 0)}" style="padding: 2rem; text-align: center; color: #94A3B8;">Yükleniyor...</td></tr>
             </tbody>
           </table>
           <div id="inventory-pagination"></div>
         </div>
       </div>
+
+      <!-- FİYATI GİRİLMEYENLER View (Sadece Yetkililere) -->
+      ${canViewPrices ? `
+      <div id="view-UNPRICED" style="display: ${currentTab === 'UNPRICED' ? 'block' : 'none'};">
+        <div style="background-color: #111827; border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 12px; overflow: hidden; padding: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); display: flex; align-items: center; justify-content: center; color: #F59E0B;">
+                  <i class="fa-solid fa-tags"></i>
+                </div>
+                <h2 style="color: #FFFFFF; margin: 0; font-size: 1.25rem; font-family: 'Rajdhani', sans-serif; font-weight: 700;">Fiyatı Tanımlanmamış Depo Malzemeleri</h2>
+              </div>
+              <div style="color: #94A3B8; font-size: 0.85rem; margin-top: 0.35rem;">
+                Bu depoda stoğu bulunan ancak SAP fiyat listesinde henüz birim fiyatı girilmemiş malzemeler aşağıda listelenmiştir.
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <input 
+                id="unpriced-search-input" 
+                type="text" 
+                placeholder="Fiyatsız malzeme veya SAP no ara..." 
+                oninput="window.filterUnpricedList(this.value)"
+                style="height: 36px; background-color: rgba(10, 14, 23, 0.85); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; color: #FFFFFF; padding: 0 0.85rem; font-size: 0.85rem; width: 260px; outline: none;"
+              />
+              <button onclick="window.refreshUnpricedTable()" style="height: 36px; padding: 0 1rem; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.08); color: #F59E0B; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif;">
+                <i class="fa-solid fa-rotate"></i> Yenile
+              </button>
+            </div>
+          </div>
+
+          <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 10px; overflow: hidden;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.02); color: #64748B;">
+                  <th style="padding: 1rem; text-align: left; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">SAP No</th>
+                  <th style="padding: 1rem; text-align: left; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Malzeme Tanımı</th>
+                  <th style="padding: 1rem; text-align: center; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Mevcut Stok</th>
+                  <th style="padding: 1rem; text-align: left; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Konum</th>
+                  <th style="padding: 1rem; text-align: right; font-weight: 600; border-bottom: 1px solid #1E293B; font-size: 0.85rem; text-transform: uppercase;">Fiyatlandırma Aksiyonu</th>
+                </tr>
+              </thead>
+              <tbody id="unpriced-tbody">
+                <tr><td colspan="5" style="padding: 2rem; text-align: center; color: #94A3B8;">Yükleniyor...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="unpriced-pagination" style="margin-top: 1rem;"></div>
+        </div>
+      </div>
+      ` : ''}
 
       <!-- ANALİZ View -->
       <div id="view-ANALİZ" style="display: ${currentTab === 'ANALİZ' ? 'block' : 'none'};">
@@ -978,7 +1100,7 @@ export const NewWarehousePage = async (warehouseId?: string | null) => {
                 </button>
                 ` : ''}
                 <button onclick="window.saveManualAudit(this)" style="height: 35px; padding: 0 1rem; border-radius: 6px; border: 1px solid rgba(20, 241, 149, 0.25); background-color: rgba(20, 241, 149, 0.06); color: #14F195; font-size: 0.8rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; white-space: nowrap; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.backgroundColor='rgba(20, 241, 149, 0.15)'; this.style.borderColor='rgba(20, 241, 149, 0.5)';" onmouseout="this.style.backgroundColor='rgba(20, 241, 149, 0.06)'; this.style.borderColor='rgba(20, 241, 149, 0.25)';">
-                  <i class="fa-solid fa-save"></i> Tüm Sayımı Kaydet
+                  <i class="fa-solid fa-paper-plane"></i> Sayımı Tamamla & Onaya Gönder
                 </button>
               </div>
             </div>
@@ -1526,19 +1648,157 @@ function setupWarehouseLogic(currentWarehouse: any) {
     renderRetryCount = 0; 
 
     try {
+      await fetchSapMetadata();
       const searchInput = document.getElementById('inventory-search-input') as HTMLInputElement;
       const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+      // Pre-calculate prices and warehouse value if user has permission
+      const canViewPrices = warehouseState.canViewPrices;
+      const pricesMap = new Map<string, { price: number; currency: string }>();
+      const unpricedList: any[] = [];
+      let totalWarehouseEUR = 0;
+      let pricedCount = 0;
+
+      if (canViewPrices) {
+        try {
+          const allPrices = await priceService.getAllPrices();
+          const validNonDefectItems = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI');
+          const isCurrentAnemon = (currentWarehouse.name?.toLowerCase().includes('anemon') || currentWarehouse.id === '2688');
+          
+          validNonDefectItems.forEach(item => {
+            const cleanSap = String(item.sapNo || '').trim();
+            if (!cleanSap) return;
+
+            // Find matching price in warehouse
+            let match = allPrices.find(p => {
+              if (String(p.sapNo).trim() !== cleanSap || p.price <= 0) return false;
+              
+              const isEntryAnemon = (p.warehouseId === '2688' || (p.warehouseName && p.warehouseName.toLowerCase().includes('anemon')));
+              if (isEntryAnemon) {
+                return isCurrentAnemon;
+              }
+
+              if (currentWarehouse.id && p.warehouseId === currentWarehouse.id) return true;
+              if (currentWarehouse.name && p.warehouseName && p.warehouseName.toLowerCase().includes(currentWarehouse.name.toLowerCase())) return true;
+              if (p.warehouseId === 'GENEL') return true;
+
+              return false;
+            });
+
+            if (match && match.price > 0) {
+              pricesMap.set(cleanSap, { price: match.price, currency: match.currency || 'EUR' });
+              pricedCount++;
+              totalWarehouseEUR += (item.quantity || 0) * match.price;
+            } else {
+              unpricedList.push(item);
+            }
+          });
+
+          warehouseState.unpricedItems = unpricedList;
+
+          // Update header badges and unpriced tab counter
+          const unpricedCountEl = document.getElementById('unpriced-tab-count');
+          if (unpricedCountEl) unpricedCountEl.textContent = String(unpricedList.length);
+
+          const totalValEl = document.getElementById('depo-degeri-count');
+          if (totalValEl) totalValEl.textContent = `${totalWarehouseEUR.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+          const coverageEl = document.getElementById('depo-fiyat-kapsami');
+          if (coverageEl) {
+            const pct = validNonDefectItems.length > 0 ? ((pricedCount / validNonDefectItems.length) * 100).toFixed(1) : '0';
+            coverageEl.textContent = `${pricedCount}/${validNonDefectItems.length} Kalem Fiyatlı (%${pct})`;
+          }
+        } catch (e) {
+          console.warn("Failed to load prices in inventory table:", e);
+        }
+      }
+
+      const isFatihZebek = isUserFatihZebek();
+      const currentTab = ((window as any).currentWarehouseTab || 'INVENTORY').toUpperCase();
+
+      // Update cabinet and turbine type filter dropdowns dynamically
+      if (isFatihZebek) {
+        const cabinetSelect = document.getElementById('cabinet-filter-select') as HTMLSelectElement;
+        if (cabinetSelect) {
+          const availCabs = getAvailableCabinets();
+          const currentVal = warehouseState.selectedCabinetFilter || 'ALL';
+          const optionsHtml = `
+            <option value="ALL" ${currentVal === 'ALL' ? 'selected' : ''}>🏢 Tüm Kabinler / Panolar</option>
+            ${availCabs.map(c => `<option value="${c.replace(/"/g, '&quot;')}" ${currentVal.toLowerCase() === c.toLowerCase() ? 'selected' : ''}>${c}</option>`).join('')}
+            <option value="UNASSIGNED" ${currentVal === 'UNASSIGNED' ? 'selected' : ''}>⚠️ Tanımsız (Kabin Seçilmemiş)</option>
+          `;
+          if (cabinetSelect.innerHTML !== optionsHtml) {
+            cabinetSelect.innerHTML = optionsHtml;
+          }
+        }
+
+        const turbineSelect = document.getElementById('turbinetype-filter-select') as HTMLSelectElement;
+        if (turbineSelect) {
+          const availTurbines = getAvailableTurbineTypes();
+          const currentTurbVal = warehouseState.selectedTurbineTypeFilter || 'ALL';
+          const turbOptionsHtml = `
+            <option value="ALL" ${currentTurbVal === 'ALL' ? 'selected' : ''}>🌀 Tüm Türbin Tipleri</option>
+            ${availTurbines.map(t => `<option value="${t.replace(/"/g, '&quot;')}" ${currentTurbVal.toLowerCase() === t.toLowerCase() ? 'selected' : ''}>${t}</option>`).join('')}
+            <option value="UNASSIGNED" ${currentTurbVal === 'UNASSIGNED' ? 'selected' : ''}>⚠️ Tanımsız (Tip Seçilmemiş)</option>
+          `;
+          if (turbineSelect.innerHTML !== turbOptionsHtml) {
+            turbineSelect.innerHTML = turbOptionsHtml;
+          }
+        }
+      }
+
+      // Update header badges, unpriced, PCB and IGBT tab counters
+      const pcbTabCountEl = document.getElementById('pcb-tab-count');
+      if (pcbTabCountEl) {
+        const pcbCnt = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI' && isPcbMaterial(i)).length;
+        pcbTabCountEl.textContent = String(pcbCnt);
+      }
+      const igbtTabCountEl = document.getElementById('igbt-tab-count');
+      if (igbtTabCountEl) {
+        const igbtCnt = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI' && isIgbtMaterial(i)).length;
+        igbtTabCountEl.textContent = String(igbtCnt);
+      }
 
       const sortedItems = [...warehouseState.inventoryWithQRs]
         .filter(item => {
           if (currentWarehouse.id === 'MTA') return true;
-          if (item.condition === 'DEFECT') return false;
+          if (item.condition === 'DEFECT' || item.condition === 'SCRAP' || item.status === 'HURDAYA_AYRILDI') return false;
           if (isMobileWarehouse && item.quantity <= 0 && (item.reservedQuantity || 0) <= 0) {
             return false;
           }
           if (warehouseState.onlyShowCritical) {
             if (item.quantity > (item.minStock || 0)) {
               return false;
+            }
+          }
+          if (currentTab === 'PCB' && !isPcbMaterial(item)) {
+            return false;
+          }
+          if (currentTab === 'IGBT' && !isIgbtMaterial(item)) {
+            return false;
+          }
+          if (isFatihZebek) {
+            const effectiveCab = getEffectiveCabinet(item);
+            const effectiveTurb = getEffectiveTurbineType(item);
+
+            if (warehouseState.selectedCabinetFilter && warehouseState.selectedCabinetFilter !== 'ALL') {
+              if (warehouseState.selectedCabinetFilter === 'UNASSIGNED') {
+                if (effectiveCab && effectiveCab.trim() !== '') return false;
+              } else {
+                const sel = warehouseState.selectedCabinetFilter.toLowerCase().trim();
+                const cab = effectiveCab.toLowerCase().trim();
+                if (cab !== sel && !cab.includes(sel)) return false;
+              }
+            }
+
+            if (warehouseState.selectedTurbineTypeFilter && warehouseState.selectedTurbineTypeFilter !== 'ALL') {
+              if (warehouseState.selectedTurbineTypeFilter === 'UNASSIGNED') {
+                if (effectiveTurb && effectiveTurb.trim() !== '') return false;
+              } else {
+                const selTurb = warehouseState.selectedTurbineTypeFilter.toLowerCase().trim();
+                const turb = effectiveTurb.toLowerCase().trim();
+                if (turb !== selTurb && !turb.includes(selTurb)) return false;
+              }
             }
           }
           return true;
@@ -1589,10 +1849,8 @@ function setupWarehouseLogic(currentWarehouse: any) {
         }
       }));
 
-
-
       if (paginatedItems.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #94A3B8;">Aramaya uygun malzeme bulunamadı.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${(canViewPrices ? 9 : 7) + (isFatihZebek ? 2 : 0)}" style="padding: 2rem; text-align: center; color: #94A3B8;">Aramaya uygun malzeme bulunamadı.</td></tr>`;
       } else {
         tbody.innerHTML = paginatedItems.map(item => {
           const kritik = (item.minStock || 0);
@@ -1601,7 +1859,12 @@ function setupWarehouseLogic(currentWarehouse: any) {
           
           const cleanName = item.name.replace(/'/g, "");
           const cleanNameEscaped = item.name.replace(/'/g, "\\'");
-          
+          const effectiveCab = getEffectiveCabinet(item);
+          const effectiveTurb = getEffectiveTurbineType(item);
+          const cleanCabinetEscaped = effectiveCab.replace(/'/g, "\\'");
+          const cleanTurbineTypeEscaped = effectiveTurb.replace(/'/g, "\\'");
+          const cleanSap = String(item.sapNo || '').trim();
+          const priceInfo = pricesMap.get(cleanSap);
 
           return `
             <tr class="inventory-row" 
@@ -1612,9 +1875,9 @@ function setupWarehouseLogic(currentWarehouse: any) {
                 data-name="${item.name.toLowerCase()}"
                 style="cursor: grab;"
                 title="Sürükleyip açılan sağ menüdeki depolara bırakarak hızlı transfer başlatabilirsiniz">
-              <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);"><input type="checkbox" class="item-checkbox" value="${item.id}" ${warehouseState.selectedMaterialIds?.has(item.id) ? 'checked' : ''} onclick="window.onItemCheckboxClick(this, '${item.id}')" /></td>
-              <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600;">${item.sapNo}</td>
-              <td id="img-cell-${item.id}" style="padding: 1rem; color: #E2E8F0; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 500; display: flex; align-items: center;">
+              <td style="padding: 1rem 0.75rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); width: 40px;"><input type="checkbox" class="item-checkbox" value="${item.id}" ${warehouseState.selectedMaterialIds?.has(item.id) ? 'checked' : ''} onclick="window.onItemCheckboxClick(this, '${item.id}')" /></td>
+              <td style="padding: 1rem 0.75rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 600; white-space: nowrap;">${item.sapNo}</td>
+              <td id="img-cell-${item.id}" style="padding: 1rem 0.75rem; color: #E2E8F0; border-bottom: 1px solid rgba(30, 41, 59, 0.5); font-weight: 500; display: flex; align-items: center;">
                 ${item.qrDataUrl ? `<div onclick="window.showBigQR('${item.id}', '${item.sapNo}', '${cleanName}', '${item.qrDataUrl}')" style="width:36px; height:36px; border-radius:6px; background-color: #111827; border: 1px solid #1E293B; margin-right:8px; display:flex; align-items:center; justify-content:center; color:#14F195; cursor: pointer; transition: all 0.2s;" title="Büyük QR Gör" onmouseover="this.style.backgroundColor='#1E293B'" onmouseout="this.style.backgroundColor='#111827'"><i class="fa-solid fa-qrcode"></i></div>` : ''}
                 <div style="display: flex; flex-direction: column; flex: 1; min-width: 0;">
                   <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -1663,12 +1926,12 @@ function setupWarehouseLogic(currentWarehouse: any) {
                   })() : ''}
                 </div>
               </td>
-              <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
-                <span style="background-color: ${isKritik ? 'rgba(239, 68, 68, 0.1)' : 'rgba(20, 241, 149, 0.1)'}; color: ${isKritik ? '#EF4444' : '#14F195'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
+              <td style="padding: 1rem 0.75rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); white-space: nowrap;">
+                <span style="background-color: ${isKritik ? 'rgba(239, 68, 68, 0.1)' : 'rgba(20, 241, 149, 0.1)'}; color: ${isKritik ? '#EF4444' : '#14F195'}; padding: 0.3rem 0.65rem; border-radius: 6px; font-size: 0.82rem; font-weight: 700; white-space: nowrap; display: inline-block; border: 1px solid ${isKritik ? 'rgba(239, 68, 68, 0.25)' : 'rgba(20, 241, 149, 0.25)'};">
                   ${item.quantity} ${item.unit || 'Adet'}
                 </span>
               </td>
-              <td style="padding: 1rem; color: ${rezerve > 0 ? '#F59E0B' : '#94A3B8'}; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
+              <td style="padding: 1rem 0.75rem; color: ${rezerve > 0 ? '#F59E0B' : '#94A3B8'}; border-bottom: 1px solid rgba(30, 41, 59, 0.5); white-space: nowrap;">
                 ${(() => {
                   if (rezerve > 0) {
                     const resDetails: string[] = [];
@@ -1682,17 +1945,61 @@ function setupWarehouseLogic(currentWarehouse: any) {
                     }
                     if (resDetails.length > 0) {
                       return `
-                        <span style="font-weight: 700; color: #F59E0B;" title="${resDetails.join(', ')}">
+                        <span style="font-weight: 700; color: #F59E0B; white-space: nowrap;" title="${resDetails.join(', ')}">
                           ${rezerve} <span style="font-size: 0.75rem; font-weight: 500; color: #94A3B8; margin-left: 2px;">(${resDetails.join(', ')})</span>
                         </span>
                       `;
                     }
-                    return `<span style="font-weight: 700; color: #F59E0B;">${rezerve}</span>`;
+                    return `<span style="font-weight: 700; color: #F59E0B; white-space: nowrap;">${rezerve}</span>`;
                   }
                   return '0';
                 })()}
               </td>
-              <td style="padding: 1rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">${item.shelfNo || '-'}</td>
+              <td style="padding: 1rem 0.75rem; color: #94A3B8; border-bottom: 1px solid rgba(30, 41, 59, 0.5); white-space: nowrap;">${item.shelfNo || '-'}</td>
+              ${isFatihZebek ? `
+                <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); white-space: nowrap;">
+                  <div onclick="window.openQuickCabinetModal('${item.id}', '${cleanSap}', '${cleanNameEscaped}', '${cleanCabinetEscaped}')" 
+                       style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: ${effectiveCab ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${effectiveCab ? 'rgba(139, 92, 246, 0.4)' : 'rgba(255, 255, 255, 0.1)'}; color: ${effectiveCab ? '#C4B5FD' : '#94A3B8'}; font-size: 0.78rem; font-weight: ${effectiveCab ? '700' : '500'}; transition: all 0.2s;" 
+                       title="Kabin Değiştir / Belirle"
+                       onmouseover="this.style.borderColor='#8B5CF6'; this.style.color='#FFF'"
+                       onmouseout="this.style.borderColor='${effectiveCab ? 'rgba(139, 92, 246, 0.4)' : 'rgba(255, 255, 255, 0.1)'}'; this.style.color='${effectiveCab ? '#C4B5FD' : '#94A3B8'}'">
+                    <i class="fa-solid fa-server" style="color: ${effectiveCab ? '#A855F7' : '#64748B'}; font-size: 0.75rem;"></i>
+                    <span>${effectiveCab || '+ Kabin Seç'}</span>
+                  </div>
+                </td>
+                <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); white-space: nowrap;">
+                  <div onclick="window.openQuickTurbineTypeModal('${item.id}', '${cleanSap}', '${cleanNameEscaped}', '${cleanTurbineTypeEscaped}')" 
+                       style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: ${effectiveTurb ? 'rgba(0, 243, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)'}; border: 1px solid ${effectiveTurb ? 'rgba(0, 243, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)'}; color: ${effectiveTurb ? '#38BDF8' : '#94A3B8'}; font-size: 0.78rem; font-weight: ${effectiveTurb ? '700' : '500'}; transition: all 0.2s;" 
+                       title="Türbin Tipi Değiştir / Belirle"
+                       onmouseover="this.style.borderColor='#00F3FF'; this.style.color='#FFF'"
+                       onmouseout="this.style.borderColor='${effectiveTurb ? 'rgba(0, 243, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)'}'; this.style.color='${effectiveTurb ? '#38BDF8' : '#94A3B8'}'">
+                    <i class="fa-solid fa-fan" style="color: ${effectiveTurb ? '#00F3FF' : '#64748B'}; font-size: 0.75rem;"></i>
+                    <span>${effectiveTurb || '+ Tip Seç'}</span>
+                  </div>
+                </td>
+              ` : ''}
+              ${canViewPrices ? `
+                <td style="padding: 1rem; text-align: center; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
+                  ${priceInfo ? `
+                    <span style="font-family: monospace; font-weight: 700; color: #94A3B8; font-size: 0.85rem;">
+                      ${priceInfo.price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${priceInfo.currency}
+                    </span>
+                  ` : `
+                    <button onclick="window.openQuickPriceModal('${item.sapNo}')" style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); color: #F59E0B; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; cursor: pointer;" title="Fiyat Tanımla">
+                      + Fiyat Gir
+                    </button>
+                  `}
+                </td>
+                <td style="padding: 1rem; text-align: right; border-bottom: 1px solid rgba(30, 41, 59, 0.5);">
+                  ${priceInfo ? `
+                    <span style="font-family: monospace; font-weight: 800; color: #10B981; font-size: 0.9rem;">
+                      ${(item.quantity * priceInfo.price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${priceInfo.currency}
+                    </span>
+                  ` : `
+                    <span style="color: #64748B; font-family: monospace;">—</span>
+                  `}
+                </td>
+              ` : ''}
               <td style="padding: 1rem; border-bottom: 1px solid rgba(30, 41, 59, 0.5); text-align: right; white-space: nowrap;">
                 ${currentWarehouse.id === 'MTA' ? `
                   <i id="edit-btn-${item.id}" onclick="window.openMtaEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${item.serialNo || ''}', '${item.note || ''}', '${item.shelfNo || ''}', ${item.quantity})" class="fa-solid fa-pen-to-square" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s; font-size: 1.15rem;" onmouseover="this.style.opacity='1'; this.style.color='#00cc6a'" onmouseout="this.style.opacity='0.7'; this.style.color='#14F195'" title="Seri No / Not Düzenle"></i>
@@ -1703,7 +2010,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
                   ${isMobileWarehouse ? `
                     <i onclick="window.openP2PTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-qrcode" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="QR Transfer Kodu Oluştur"></i>
                     <i onclick="window.openHistoryModal('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-clock-rotate-left" style="cursor: pointer; opacity: 0.7; color: #3B82F6; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Geçmiş"></i>
-                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}', '${cleanCabinetEscaped}', '${cleanTurbineTypeEscaped}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
                   ` : `
                     ${item.condition === 'DEFECT' && hasWarehouseManagePerm ? `
                       <i onclick="window.openSendToRepairModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-screwdriver-wrench" style="cursor: pointer; opacity: 0.7; color: #14F195; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Tamire Gönder"></i>
@@ -1713,7 +2020,7 @@ function setupWarehouseLogic(currentWarehouse: any) {
                     ${hasWarehouseManagePerm ? `
                       <i onclick="window.openTransferModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity})" class="fa-solid fa-truck-fast" style="cursor: pointer; opacity: 0.7; color: #F59E0B; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Transfer Et"></i>
                     ` : ''}
-                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
+                    <i id="edit-btn-${item.id}" onclick="window.openEditModal('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', ${item.quantity}, '${item.shelfNo || ''}', '${item.imageUrl || ''}', ${item.minStock || 0}, '${item.unit || 'Adet'}', '${cleanCabinetEscaped}', '${cleanTurbineTypeEscaped}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.7; color: #E2E8F0; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Düzenle"></i>
                     ${hasWarehouseDeletePerm ? `
                       <i onclick="window.deleteItem('${item.id}', '${cleanNameEscaped}')" class="fa-solid fa-trash" style="cursor: pointer; opacity: 0.7; color: #EF4444; margin-left: 0.75rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Sil"></i>
                     ` : ''}
@@ -1735,40 +2042,29 @@ function setupWarehouseLogic(currentWarehouse: any) {
         }
       }
 
-      const paginationDiv = document.getElementById('inventory-pagination');
-      if (paginationDiv) {
-        if (totalItems === 0) {
-          paginationDiv.innerHTML = '';
-          return;
-        }
-
-        const showingStart = totalItems === 0 ? 0 : startIndex + 1;
-        const showingEnd = endIndex;
-        
-        let selectOptions = '';
-        [25, 50, 100, 250].forEach(opt => {
-          selectOptions += `<option value="${opt}" ${warehouseState.itemsPerPage === opt ? 'selected' : ''}>${opt} Satır</option>`;
-        });
-        selectOptions += `<option value="all" ${warehouseState.itemsPerPage > 10000 ? 'selected' : ''}>Tümü</option>`;
-
-        paginationDiv.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background-color: #111827; border-top: 1px solid #1E293B; flex-wrap: wrap; gap: 1rem;">
-            <div style="color: #64748B; font-size: 0.85rem; display: flex; align-items: center; gap: 0.75rem;">
-              <span>${totalItems} malzeme arasından <strong>${showingStart}-${showingEnd}</strong> arası gösteriliyor</span>
-              <select onchange="window.changeItemsPerPage(this.value)" style="background: #0A0E17; border: 1px solid #1E293B; border-radius: 6px; color: #E2E8F0; padding: 2px 6px; font-size: 0.8rem; outline: none; cursor: pointer;">
-                ${selectOptions}
+      const paginationContainer = document.getElementById('inventory-pagination');
+      if (paginationContainer) {
+        paginationContainer.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-top: 1px solid #1E293B; flex-wrap: wrap; gap: 1rem;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <span style="color: #94A3B8; font-size: 0.85rem;">${totalItems} malzeme arasından ${totalItems > 0 ? startIndex + 1 : 0}-${endIndex} arası gösteriliyor</span>
+              <select onchange="window.changeItemsPerPage(this.value)" style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
+                <option value="15" ${warehouseState.itemsPerPage === 15 ? 'selected' : ''}>15 Satır</option>
+                <option value="25" ${warehouseState.itemsPerPage === 25 ? 'selected' : ''}>25 Satır</option>
+                <option value="50" ${warehouseState.itemsPerPage === 50 ? 'selected' : ''}>50 Satır</option>
+                <option value="100" ${warehouseState.itemsPerPage === 100 ? 'selected' : ''}>100 Satır</option>
+                <option value="all" ${warehouseState.itemsPerPage > 1000 ? 'selected' : ''}>Tümü</option>
               </select>
             </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
+            
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
               <button onclick="window.changePage(1)" ${warehouseState.currentPage === 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
                 <i class="fa-solid fa-angles-left"></i>
               </button>
               <button onclick="window.changePage(${warehouseState.currentPage - 1})" ${warehouseState.currentPage === 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
                 <i class="fa-solid fa-angle-left"></i>
               </button>
-              
-              <span style="color: #E2E8F0; font-size: 0.85rem; padding: 0 0.5rem; font-weight: 600;">Sayfa ${warehouseState.currentPage} / ${totalPages}</span>
-              
+              <span style="color: #E2E8F0; font-size: 0.85rem; padding: 0 0.5rem; font-weight: 600;">${warehouseState.currentPage} / ${totalPages}</span>
               <button onclick="window.changePage(${warehouseState.currentPage + 1})" ${warehouseState.currentPage === totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''} style="background: #1E293B; border: 1px solid #334155; color: #E2E8F0; width: 32px; height: 32px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
                 <i class="fa-solid fa-angle-right"></i>
               </button>
@@ -1800,6 +2096,117 @@ function setupWarehouseLogic(currentWarehouse: any) {
   (window as any).filterInventory = () => {
      warehouseState.currentPage = 1;
      (window as any).renderInventoryTable();
+  };
+
+  (window as any).onCabinetFilterChange = (val: string) => {
+     warehouseState.selectedCabinetFilter = val;
+     warehouseState.currentPage = 1;
+     (window as any).renderInventoryTable();
+  };
+
+  (window as any).onTurbineTypeFilterChange = (val: string) => {
+     warehouseState.selectedTurbineTypeFilter = val;
+     warehouseState.currentPage = 1;
+     (window as any).renderInventoryTable();
+  };
+
+  // Unpriced items state and table renderer
+  (window as any).unpricedSearchTerm = '';
+  (window as any).unpricedCurrentPage = 1;
+  (window as any).unpricedItemsPerPage = 25;
+
+  (window as any).filterUnpricedList = (val: string) => {
+    (window as any).unpricedSearchTerm = (val || '').toLowerCase().trim();
+    (window as any).unpricedCurrentPage = 1;
+    (window as any).renderUnpricedTable();
+  };
+
+  (window as any).refreshUnpricedTable = async () => {
+    if (typeof (window as any).renderInventoryTable === 'function') {
+      await (window as any).renderInventoryTable();
+    }
+    if (typeof (window as any).renderUnpricedTable === 'function') {
+      await (window as any).renderUnpricedTable();
+    }
+  };
+
+  (window as any).changeUnpricedPage = (page: number) => {
+    (window as any).unpricedCurrentPage = page;
+    (window as any).renderUnpricedTable();
+  };
+
+  (window as any).renderUnpricedTable = async () => {
+    const tbody = document.getElementById('unpriced-tbody');
+    if (!tbody) return;
+
+    try {
+      const term = (window as any).unpricedSearchTerm || '';
+      const items = (warehouseState.unpricedItems || []).filter((item: any) => {
+        const sap = String(item.sapNo || '').toLowerCase();
+        const name = String(item.name || '').toLowerCase();
+        return term === '' || sap.includes(term) || name.includes(term);
+      });
+
+      const totalItems = items.length;
+      const itemsPerPage = (window as any).unpricedItemsPerPage || 25;
+      const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+      let currentPage = (window as any).unpricedCurrentPage || 1;
+      if (currentPage > totalPages) currentPage = totalPages;
+      if (currentPage < 1) currentPage = 1;
+      (window as any).unpricedCurrentPage = currentPage;
+
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+      const paginated = items.slice(startIndex, endIndex);
+
+      if (paginated.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="padding: 2.5rem; text-align: center; color: #10B981;"><i class="fa-solid fa-circle-check" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>Harika! Bu depoda fiyatı girilmemiş hiçbir malzeme kalmadı veya aranan kritere uygun malzeme yok.</td></tr>`;
+      } else {
+        tbody.innerHTML = paginated.map((item: any) => {
+          const cleanNameEscaped = (item.name || '').replace(/'/g, "\\'");
+          return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+              <td style="padding: 1rem; color: #00f3ff; font-weight: 700; font-family: monospace;">${item.sapNo}</td>
+              <td style="padding: 1rem; color: #E2E8F0; font-weight: 500;">
+                <div>${item.name}</div>
+                ${item.condition && item.condition !== 'NEW' ? `<span style="font-size: 0.7rem; color: #EF4444; font-weight: 700;">[${item.condition}]</span>` : ''}
+              </td>
+              <td style="padding: 1rem 0.75rem; text-align: center; white-space: nowrap;">
+                <span style="background: rgba(20, 241, 149, 0.1); color: #14F195; padding: 0.3rem 0.65rem; border-radius: 6px; font-size: 0.82rem; font-weight: 700; white-space: nowrap; display: inline-block; border: 1px solid rgba(20, 241, 149, 0.25);">
+                  ${item.quantity} ${item.unit || 'Adet'}
+                </span>
+              </td>
+              <td style="padding: 1rem; color: #94A3B8;">${item.shelfNo || '-'}</td>
+              <td style="padding: 1rem; text-align: right;">
+                <button onclick="window.openQuickPriceModal('${item.sapNo}')" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.05)); border: 1px solid #F59E0B; color: #FCD34D; font-weight: 700; padding: 0.4rem 0.85rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; transition: all 0.2s;" onmouseover="this.style.background='rgba(245, 158, 11, 0.3)'" onmouseout="this.style.background='linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.05))'">
+                  <i class="fa-solid fa-plus"></i> Fiyat Belirle
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      const paginationDiv = document.getElementById('unpriced-pagination');
+      if (paginationDiv) {
+        if (totalItems <= itemsPerPage) {
+          paginationDiv.innerHTML = `<div style="font-size: 0.8rem; color: #64748B; text-align: right; padding: 0.5rem 0;">Toplam ${totalItems} fiyatsız malzeme</div>`;
+        } else {
+          paginationDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0;">
+              <div style="font-size: 0.8rem; color: #94A3B8;">Gösterilen: ${startIndex + 1} - ${endIndex} / Toplam ${totalItems}</div>
+              <div style="display: flex; gap: 6px;">
+                <button onclick="window.changeUnpricedPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : 'style="cursor:pointer;"'} style="padding: 4px 10px; font-size: 0.75rem; border-radius: 4px; background: rgba(255,255,255,0.05); color: #FFF; border: 1px solid #334155;">Önceki</button>
+                <span style="color: #00f3ff; font-weight: 700; font-size: 0.85rem; padding: 4px 8px;">${currentPage} / ${totalPages}</span>
+                <button onclick="window.changeUnpricedPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled style="opacity:0.4; cursor:not-allowed;"' : 'style="cursor:pointer;"'} style="padding: 4px 10px; font-size: 0.75rem; border-radius: 4px; background: rgba(255,255,255,0.05); color: #FFF; border: 1px solid #334155;">Sonraki</button>
+              </div>
+            </div>
+          `;
+        }
+      }
+    } catch (e) {
+      console.error("renderUnpricedTable error:", e);
+    }
   };
 
   (window as any).setInventoryCriticalFilter = (val: boolean) => {
@@ -1839,8 +2246,8 @@ function setupWarehouseLogic(currentWarehouse: any) {
     const totalKalemEl = document.getElementById('total-kalem-count');
     const kritikStokEl = document.getElementById('kritik-stok-count');
     
-    const totalKalemCount = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT').length;
-    const kritikStokCount = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.quantity <= (i.minStock || 0)).length;
+    const totalKalemCount = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI').length;
+    const kritikStokCount = warehouseState.inventoryItems.filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI' && i.quantity <= (i.minStock || 0)).length;
     
     if (totalKalemEl) totalKalemEl.innerText = String(totalKalemCount);
     if (kritikStokEl) kritikStokEl.innerText = String(kritikStokCount);

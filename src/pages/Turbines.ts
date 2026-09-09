@@ -20,6 +20,12 @@ const cleanSablonName = (sablonName: string) => {
     .trim();
 };
 
+const isFatihZebek = (): boolean => {
+  const user = (window as any).currentUser || authService.getCurrentUser();
+  const email = (user?.email || '').toLowerCase().trim();
+  return email === 'fatih.zebek@demirerholding.com';
+};
+
 export const TurbinesPage = () => {
   // Request notification permissions
   notificationService.requestPermission();
@@ -396,7 +402,7 @@ export const TurbinesPage = () => {
               <div style="pointer-events: none; display: flex; justify-content: center; align-items: center;">
                 ${iconHtml}
               </div>
-              ${siteId === '2688' || siteId === '3439' || siteId === '2990' || siteId === '3793' || siteId === '3213' ? `
+              ${isFatihZebek() ? `
                 <button class="cyber-reset-btn" 
                         data-action="reset-turbine"
                         data-turbine-no="${t.no !== undefined ? t.no : (labelText === 'RTU' ? 0 : '')}"
@@ -763,8 +769,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
   // Reset button container logic for Anemon
   const resetBtnContainer = document.getElementById('modal-reset-btn-container');
   if (resetBtnContainer) {
-    // Only show for Anemon (2688), Sarıkaya (3439), Sayalar (2990), Kuyucak (3793), and Datça (3213)
-    if (siteId === '2688' || siteId === '3439' || siteId === '2990' || siteId === '3793' || siteId === '3213') {
+    if (isFatihZebek()) {
       // Extract turbine number from label (e.g., T-01 -> 1, T-25 -> 25)
       const numMatch = turbineLabel.match(/\d+/);
       let turbineNo = numMatch ? parseInt(numMatch[0]) : null;
@@ -779,7 +784,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
                   style="background: rgba(129, 140, 248, 0.08); color: #818cf8; border: 1px solid rgba(129, 140, 248, 0.35); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;"
                   onmouseover="this.style.background='#818cf8'; this.style.color='#060912'; this.style.borderColor='#818cf8'"
                   onmouseout="this.style.background='rgba(129, 140, 248, 0.08)'; this.style.color='#818cf8'; this.style.borderColor='rgba(129, 140, 248, 0.35)'">
-            <i class="fa-solid fa-bolt"></i> Reset ⚡
+            <i class="fa-solid fa-bolt"></i> SCADA Reset ⚡
           </button>
         `;
       } else {
@@ -2014,8 +2019,8 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
 
   (window as any).sitesMapInstance = map;
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16
   }).addTo(map);
 
   const bounds: any[] = [];
@@ -2134,6 +2139,10 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
   if (bounds.length > 0) {
     map.fitBounds(bounds, { padding: [50, 50] });
   }
+
+  setTimeout(() => {
+    map.invalidateSize();
+  }, 150);
 };
 
 (window as any).switchSiteViewMode = (mode: 'grid' | 'map') => {
@@ -2328,10 +2337,13 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
 };
 
 // Add global styles for leaflet custom nodes
-if (!document.getElementById('leaflet-cyber-styles')) {
-  const style = document.createElement('style');
-  style.id = 'leaflet-cyber-styles';
-  style.innerHTML = `
+let cyberStyleEl = document.getElementById('leaflet-cyber-styles') as HTMLStyleElement;
+if (!cyberStyleEl) {
+  cyberStyleEl = document.createElement('style');
+  cyberStyleEl.id = 'leaflet-cyber-styles';
+  document.head.appendChild(cyberStyleEl);
+}
+cyberStyleEl.innerHTML = `
     .cyber-pulse-marker {
       width: 14px;
       height: 14px;
@@ -2387,9 +2399,18 @@ if (!document.getElementById('leaflet-cyber-styles')) {
       background: #0b0f19 !important;
     }
     
+    .leaflet-container img.leaflet-tile,
+    .leaflet-tile-container img,
     .leaflet-tile {
-      margin: -1px !important;
-      padding: 1px !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      outline: none !important;
+      box-shadow: none !important;
+      -webkit-backface-visibility: hidden !important;
+      backface-visibility: hidden !important;
     }
 
     /* Cyber Toggle Buttons */
@@ -2474,8 +2495,6 @@ if (!document.getElementById('leaflet-cyber-styles')) {
       text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
     }
   `;
-  document.head.appendChild(style);
-}
 
 const switchMapInstanceLayer = (mapInstance: any, mode: 'dark' | 'satellite') => {
   if (!mapInstance) return;
@@ -2493,8 +2512,8 @@ const switchMapInstanceLayer = (mapInstance: any, mode: 'dark' | 'satellite') =>
       maxZoom: 20
     }).addTo(mapInstance);
   } else {
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16
     }).addTo(mapInstance);
   }
 };

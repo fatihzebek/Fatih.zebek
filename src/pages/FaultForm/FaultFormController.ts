@@ -930,15 +930,35 @@ export class FaultFormController {
             `).join('');
         };
 
+        const getValidPersonnelList = (): string[] => {
+            const fromTeam = (w.teamPersonnel || []).filter((p: string) => p && typeof p === 'string' && p.trim() !== '' && p !== '-- Personel Yok --');
+            if (fromTeam.length > 0) return fromTeam;
+            const fromSessions = (w.workSessions || []).flatMap((s: any) => {
+                if (Array.isArray(s.personnel)) return s.personnel;
+                if (typeof s.personnel === 'string') return [s.personnel];
+                return [];
+            }).filter((p: string) => p && typeof p === 'string' && p.trim() !== '' && p !== '-- Personel Yok --');
+            return Array.from(new Set(fromSessions));
+        };
+
         w.addGlobalPersonnelInput = () => {
             w.teamPersonnel.push("");
             w.renderGlobalPersonnelInputs();
             w.renderWorkSessionsUI();
-            if (typeof w.saveMaintenanceDraft === 'function') w.saveMaintenanceDraft(true);
+            setTimeout(() => {
+                const inputs = document.querySelectorAll('#global-personnel-inputs-container input');
+                if (inputs.length > 0) {
+                    const lastInput = inputs[inputs.length - 1] as HTMLInputElement;
+                    lastInput.focus();
+                }
+            }, 50);
         };
 
         w.updateGlobalPersonnelName = (index: number, name: string) => {
             w.teamPersonnel[index] = name;
+            if (typeof w.renderWorkSessionsUI === 'function') {
+                w.renderWorkSessionsUI();
+            }
         };
 
         w.removeGlobalPersonnel = (index: number) => {
@@ -1012,18 +1032,23 @@ export class FaultFormController {
         w.renderGlobalPersonnelInputs = () => {
             const container = document.getElementById('global-personnel-inputs-container');
             if (!container) return;
-            container.innerHTML = w.teamPersonnel.map((p: string, idx: number) => `
-                <div class="glass-panel" style="display: flex; align-items: center; gap: 0.4rem; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); padding: 0 6px 0 8px; border-radius: 4px; transition: border-color 0.2s; height: 28px !important; min-height: 28px !important; box-sizing: border-box; position: relative;" onmouseover="this.style.borderColor='rgba(0, 242, 254, 0.2)'" onmouseout="this.style.borderColor='rgba(255, 255, 255, 0.08)'">
-                    <input type="text" style="width: 125px !important; height: 20px !important; font-size: 0.75rem !important; border: none !important; background: transparent !important; color: #ffffff !important; padding: 0 !important; outline: none !important; margin: 0 !important; font-weight: 500; font-family: inherit; box-shadow: none !important;" placeholder="İsim..." value="${p || ''}" 
+            container.innerHTML = w.teamPersonnel.map((p: string, idx: number) => {
+                const isInvalid = !p || p.trim() === '';
+                const panelBorder = isInvalid ? 'rgba(239, 68, 68, 0.6)' : 'rgba(0, 242, 254, 0.3)';
+                const panelBg = isInvalid ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255, 255, 255, 0.02)';
+                return `
+                <div class="glass-panel" style="display: flex; align-items: center; gap: 0.4rem; background: ${panelBg}; border: 1px solid ${panelBorder}; padding: 0 6px 0 8px; border-radius: 4px; transition: all 0.2s; height: 28px !important; min-height: 28px !important; box-sizing: border-box; position: relative;" onmouseover="this.style.borderColor='rgba(0, 242, 254, 0.4)'" onmouseout="this.style.borderColor='${panelBorder}'">
+                    <input type="text" style="width: 135px !important; height: 20px !important; font-size: 0.75rem !important; border: none !important; background: transparent !important; color: #ffffff !important; padding: 0 !important; outline: none !important; margin: 0 !important; font-weight: 600; font-family: inherit; box-shadow: none !important;" placeholder="İsim Yazınız *" value="${p || ''}" 
                            onfocus="window.showPersonnelSuggestions(${idx}, this.value)"
                            oninput="window.updateGlobalPersonnelName(${idx}, this.value); window.showPersonnelSuggestions(${idx}, this.value)" 
-                           onblur="setTimeout(() => { const el = document.getElementById('personnel-dropdown-${idx}'); if (el) el.style.display = 'none'; }, 200); window.checkDuplicatePersonnel(${idx}, this.value); if(typeof window.saveMaintenanceDraft === 'function') window.saveMaintenanceDraft(true); if(typeof window.renderWorkSessionsUI === 'function') window.renderWorkSessionsUI();">
+                           onblur="setTimeout(() => { const el = document.getElementById('personnel-dropdown-${idx}'); if (el) el.style.display = 'none'; }, 200); window.checkDuplicatePersonnel(${idx}, this.value); if(typeof window.saveMaintenanceDraft === 'function') window.saveMaintenanceDraft(true); if(typeof window.renderWorkSessionsUI === 'function') window.renderWorkSessionsUI(); window.renderGlobalPersonnelInputs();">
                     <button type="button" style="background: transparent; border: none; color: var(--accent-red); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" onclick="window.removeGlobalPersonnel(${idx})" title="Personeli Kaldır">
                         <i class="fa-solid fa-xmark" style="font-size: 0.75rem;"></i>
                     </button>
                     <div id="personnel-dropdown-${idx}" class="search-results-dropdown" style="display: none; position: absolute; top: 100%; left: 0; width: 100%; max-height: 180px; overflow-y: auto; z-index: 1000; margin-top: 4px; background: rgba(10, 20, 30, 0.98); border: 1px solid var(--accent-cyan); border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); padding: 2px 0;"></div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         };
 
         w.renderWorkSessionsUI = () => {
@@ -1649,6 +1674,18 @@ export class FaultFormController {
         };
 
         w.switchFormTab = (tab: string) => {
+            const validTechs = getValidPersonnelList();
+            if (validTechs.length === 0) {
+                alert("⚠️ DİKKAT: Personel ismi girmeden diğer sekmeye geçemez veya taslak kaydedemezsiniz!\n\nLütfen önce 'ÇALIŞMA ZAMANLARI' alanında en az bir Personel / Teknisyen ismi giriniz.");
+                const pInput = document.querySelector('#global-personnel-inputs-container input') as HTMLInputElement;
+                if (pInput) {
+                    pInput.focus();
+                    pInput.style.borderColor = '#ef4444';
+                    pInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return;
+            }
+
             const service = document.getElementById('tab-content-service');
             const audit = document.getElementById('tab-content-audit');
             const btnService = document.getElementById('tab-btn-service');
@@ -1800,6 +1837,20 @@ export class FaultFormController {
             const currentTask = w.currentTaskContext;
             if (!currentTask?.id) return;
             
+            const validTechs = getValidPersonnelList();
+            if (validTechs.length === 0) {
+                if (!isSilent) {
+                    alert("⚠️ DİKKAT: Rapor personelsiz kaydedilemez!\n\nLütfen önce 'ÇALIŞMA ZAMANLARI' alanına en az bir Personel / Teknisyen ismi giriniz.");
+                    const pInput = document.querySelector('#global-personnel-inputs-container input') as HTMLInputElement;
+                    if (pInput) {
+                        pInput.focus();
+                        pInput.style.borderColor = '#ef4444';
+                        pInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+                return;
+            }
+            
             const btn = document.getElementById('save-draft-btn') as HTMLButtonElement;
             if (!isSilent && btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> KAYDEDİLİYOR...'; btn.disabled = true; }
             
@@ -1827,7 +1878,8 @@ export class FaultFormController {
                     teamPersonnel: w.teamPersonnel || [],
                     materials: w.getMaterialData ? w.getMaterialData() : [],
                     notes: (document.getElementById('form-notes') as HTMLTextAreaElement)?.value || '',
-                    matFormNo: (document.getElementById('mat-form-no') as HTMLInputElement)?.value || ''
+                    matFormNo: (document.getElementById('mat-form-no') as HTMLInputElement)?.value || '',
+                    tamirFormNo: (document.getElementById('tamir-form-no') as HTMLInputElement)?.value || ''
                 };
 
                 // Local crash recovery backup
@@ -1847,8 +1899,11 @@ export class FaultFormController {
         // Auto-save draft every 5 seconds in background to prevent battery/crash data loss
         if (w._autoSaveTimer) clearInterval(w._autoSaveTimer);
         w._autoSaveTimer = setInterval(() => {
-            if (w.currentTaskContext?.id && document.getElementById('fault-form-container')) {
-                w.saveMaintenanceDraft(true);
+            if (w.currentTaskContext?.id && document.getElementById('detailed-ariza-form')) {
+                const validTechs = getValidPersonnelList();
+                if (validTechs.length > 0) {
+                    w.saveMaintenanceDraft(true);
+                }
             } else if (w._autoSaveTimer) {
                 clearInterval(w._autoSaveTimer);
                 w._autoSaveTimer = null;
@@ -1893,6 +1948,20 @@ export class FaultFormController {
             const btn = document.getElementById('submit-form-btn') as HTMLButtonElement;
             if (!btn) return;
             const orgHtml = btn.innerHTML;
+
+            // 1. FIRST VALIDATION: Strict personnel check!
+            const validTechs = getValidPersonnelList();
+            if (validTechs.length === 0) {
+                alert("⚠️ DİKKAT: Rapor personelsiz kaydedilemez veya gönderilemez!\n\nLütfen 'ÇALIŞMA ZAMANLARI' alanında 'PERSONEL EKLE' butonuna tıklayarak en az bir teknisyen/personel ismi giriniz.");
+                const pInput = document.querySelector('#global-personnel-inputs-container input') as HTMLInputElement;
+                if (pInput) {
+                    pInput.focus();
+                    pInput.style.borderColor = '#ef4444';
+                    pInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                return;
+            }
+
             btn.disabled = true;
             
             const setBtnStatus = (msg: string) => {
@@ -1964,6 +2033,8 @@ export class FaultFormController {
                     const zeroSaps = zeroQtyMaterials.map((m: any) => `• [SAP: ${m.sapNo}] ${m.description || 'Malzeme'}`).join('\n');
                     throw new Error(`🧐 DİKKAT: MALZEME ADETİ UNUTULDU!\n\nMalzeme seçimi yaptınız (SAP No yazdınız) fakat malzeme adetini girmeyip 0 (Sıfır) bıraktınız:\n\n${zeroSaps}\n\nMalzeme düşümü yapmak istediniz fakat malzeme adetini girmediniz! Lütfen kullandığınız/söktüğünüz adet miktarını yazarak raporu detaylıca iyice inceleyip kontrol eder misiniz?`);
                 }
+
+                const isWarehouse = currentTask?.taskLocationType === 'WAREHOUSE' || currentTask?.turbinSeriNo === 'DEPO' || (currentTask?.secilenSablon && currentTask.secilenSablon.startsWith('Depo İşi')) || (currentTask?.turbineId && currentTask.turbineId.toLowerCase().includes('depo'));
 
                 const matFormNoEl = document.getElementById('mat-form-no') as HTMLInputElement;
                 const matFormNo = matFormNoEl ? matFormNoEl.value.trim() : '';
@@ -2057,6 +2128,16 @@ export class FaultFormController {
                 const sessionWithoutPersonnel = workSessions.findIndex((ws: any) => !ws.personnel || ws.personnel.length === 0);
                 if (sessionWithoutPersonnel !== -1) {
                     throw new Error(`Çalışma Zamanları satır ${sessionWithoutPersonnel + 1} için personel seçilmemiş! Lütfen personele ait satırları doldurunuz.`);
+                }
+
+                // İSG Emniyet Denetimi: Eğer sahada fiziksel çalışma saati girilmişse ve bu tarihe ait İSG kaydı yoksa
+                if (currentTask && currentTask.taskLocationType !== 'WAREHOUSE' && !currentTask.isReturnedReport && currentTask.ohsData) {
+                    const ohsList = Array.isArray(currentTask.ohsData) ? currentTask.ohsData : (currentTask.ohsData?.q1 ? [currentTask.ohsData] : []);
+                    const coveredDates = new Set(ohsList.map((o: any) => o.date));
+                    const uncoveredSession = workSessions.find((ws: any) => ws.date && !coveredDates.has(ws.date) && (!ws.type || ws.type === 'ÇALIŞMA'));
+                    if (uncoveredSession) {
+                        throw new Error(`DİKKAT: Raporda ${uncoveredSession.date} tarihi için saha çalışma saati girilmiştir ancak bu tarihe ait İSG Saha Güvenlik Kontrolü bulunmamaktadır.\nLütfen iş emirleri ekranından görevi açarak ilgili gün için İSG kontrolünü onaylayınız.`);
+                    }
                 }
 
                 const auditItems = w.smartAuditItems || [];
@@ -2209,13 +2290,20 @@ export class FaultFormController {
                     }
                 }
 
+                const tamirFormNoEl = document.getElementById('tamir-form-no') as HTMLInputElement;
+                const tamirFormNo = tamirFormNoEl ? tamirFormNoEl.value.trim() : (currentTask?.tamirFormNo || currentTask?.revisionNo || '');
+
                 const reportData: any = {
-                    type: isMaintenance || isDeficiency ? 'BAKIM' : 'ARIZA',
-                    reportNo: generatedReportNo,
+                    type: isMaintenance || isDeficiency || isWarehouse ? 'BAKIM' : 'ARIZA',
+                    reportNo: isWarehouse && tamirFormNo ? tamirFormNo : generatedReportNo,
+                    tamirFormNo: tamirFormNo || undefined,
+                    revisionNo: tamirFormNo || undefined,
+                    repairNo: tamirFormNo || undefined,
                     turbineSerial: turbineSerial,
                     turbineNo: (document.getElementById('turbin-no') as HTMLInputElement).value,
                     siteId: siteId,
                     siteName: siteName,
+                    taskLocationType: isWarehouse ? 'WAREHOUSE' : 'TURBINE',
                     date: (document.getElementById('form-date') as HTMLInputElement).value,
                     team: (() => {
                         const canonWhId = getCanonicalTeamWarehouseId(siteId);
@@ -2274,15 +2362,15 @@ export class FaultFormController {
                 };
 
                 const files = w.selectedFaultFiles || [];
-                const reportId = w.currentEditReportId;
+                const reportId = w.currentEditReportId || w.currentInitialData?.id || (currentTask as any)?.reportId || (currentTask as any)?.id || null;
 
-                if (isEditMode && reportId) {
+                if (isEditMode) {
                     setBtnStatus('RAPOR GÜNCELLENİYOR...');
                     
                     const oldMaterials = w.currentInitialData?.materials || [];
                     const newMaterials = reportData.materials || [];
                     
-                    await serviceReportService.updateReport(reportId, reportData, files);
+                    await serviceReportService.updateReport(reportId || '', reportData, files);
                     
                     // Stock adjustment for Edit Mode
                     const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
@@ -2469,6 +2557,15 @@ export class FaultFormController {
                         }
                     }
                     
+                    if (currentTask && currentTask.id) {
+                        setBtnStatus('GÖREV KAPATILIYOR...');
+                        const { taskService } = await import('../../services/TaskService');
+                        await taskService.updateTaskStatus(currentTask.id, 'Tamamlandı').catch(console.warn);
+                        localStorage.removeItem('activeTaskContext');
+                        delete w.currentTaskContext;
+                    }
+
+                    (window as any).showToast?.('BAŞARILI', 'Rapor başarıyla güncellendi!', 'success');
                     alert("Rapor başarıyla güncellendi!");
                     w.navigate('reports-archive');
                 } else {
@@ -2562,6 +2659,57 @@ export class FaultFormController {
                         }
                     }
 
+                    // Perform main repaired material stock movement for warehouse tasks
+                    if (isWarehouse) {
+                        setBtnStatus('REVİZE PARÇA STOĞA ALINIYOR...');
+                        let mainMatSap = currentTask?.repairedMaterial?.sapNo || '';
+                        let mainMatDesc = currentTask?.repairedMaterial?.description || '';
+                        let mainMatQty = currentTask?.repairedMaterial?.quantity || 1;
+                        let mainMatItemId = currentTask?.repairedMaterial?.itemId || '';
+                        let mainMatSerial = currentTask?.repairedMaterial?.serialNo || '';
+
+                        if (!mainMatSap && currentTask?.yoneticiNotu) {
+                            const match = currentTask.yoneticiNotu.match(/([0-9]{4,8})\s*-\s*([^|(]+)/);
+                            if (match) {
+                                mainMatSap = match[1].trim();
+                                mainMatDesc = match[2].trim();
+                            }
+                        }
+
+                        const targetWarehouseId = currentTask?.warehouseId || currentTask?.siteId || siteWarehouseId;
+
+                        if (mainMatSap && targetWarehouseId) {
+                            if (mainMatItemId) {
+                                await warehouseService.returnDefectToInventory(
+                                    targetWarehouseId,
+                                    mainMatItemId,
+                                    'REVISED',
+                                    currentUser?.email || 'Sistem',
+                                    mainMatSerial,
+                                    `Saha İçi Revizyon (Rapor: ${reportData.reportNo}): ${reportData.notes}`,
+                                    mainMatSap,
+                                    mainMatDesc
+                                );
+                            } else {
+                                await warehouseService.updateStockBySap(
+                                    targetWarehouseId,
+                                    mainMatSap,
+                                    -mainMatQty,
+                                    { user: currentUser?.email || 'Sistem', reason: `Saha İçi Revizyon (Rapor: ${reportData.reportNo})` },
+                                    'DEFECT'
+                                ).catch(console.warn);
+
+                                await warehouseService.updateStockBySap(
+                                    targetWarehouseId,
+                                    mainMatSap,
+                                    mainMatQty,
+                                    { user: currentUser?.email || 'Sistem', reason: `Saha İçi Revizyon Tamamlandı (Rapor: ${reportData.reportNo}): ${reportData.notes}` },
+                                    'REVISED'
+                                );
+                            }
+                        }
+                    }
+
                     if (currentTask && currentTask.id) {
                         setBtnStatus('GÖREV KAPATILIYOR...');
                         const { taskService } = await import('../../services/TaskService');
@@ -2638,6 +2786,7 @@ export class FaultFormController {
         w.isEditMode = isEditMode;
         w.currentInitialData = initialData;
         w.currentEditReportNo = isEditMode ? initialData.reportNo : null;
+        w.currentEditReportId = isEditMode ? (initialData.id || initialData._id || null) : null;
 
         if (isSmartEditor) {
             const templateId = localStorage.getItem('currentEditingTemplateId');
@@ -2668,25 +2817,61 @@ export class FaultFormController {
             : (typeof rawTeam === 'string' && rawTeam.trim() ? [rawTeam.trim()] : []);
         w.renderGlobalPersonnelInputs();
 
-        // Hydrate Turbine Info
+        // Check if warehouse task
+        const isWarehouse = initialData?.taskLocationType === 'WAREHOUSE' || initialData?.turbinSeriNo === 'DEPO' || (initialData?.turbineId && initialData.turbineId.toLowerCase().includes('depo'));
+
+        // Hydrate Turbine / Warehouse Info
         const serialInput = document.getElementById('turbin-seri') as HTMLInputElement;
         if (serialInput) {
-            // In edit mode, the serial might be stored as turbineSerial or turbinSeriNo
-            const serialValue = serialInput.value || initialData?.turbinSeriNo || initialData?.turbineSerial || '';
+            const serialValue = serialInput.value || initialData?.turbinSeriNo || initialData?.turbineSerial || (isWarehouse ? 'DEPO' : '');
             if (serialValue) {
                 serialInput.value = serialValue;
-                w.handleSerialLookup(serialValue);
+                if (!isWarehouse) {
+                    w.handleSerialLookup(serialValue);
+                }
             }
         }
+        
         // Also hydrate turbine number directly if available
         const turbineNoInput = document.getElementById('turbin-no') as HTMLInputElement;
         if (turbineNoInput && !turbineNoInput.value) {
             turbineNoInput.value = initialData?.turbineId || initialData?.turbineNo || '';
         }
 
+        // Hydrate Site / Santral
+        const siteSelect = document.getElementById('santral-select') as HTMLSelectElement;
+        if (siteSelect && (initialData?.realSiteId || initialData?.siteId)) {
+            const targetSite = initialData.realSiteId || initialData.siteId;
+            siteSelect.value = targetSite;
+        }
+
+        // Hydrate Arıza Kodu / Tanımı for warehouse tasks
+        if (isWarehouse) {
+            const faultCodeInput = document.getElementById('ariza-kodu') as HTMLInputElement;
+            const faultDescInput = document.getElementById('ariza-tanimi') as HTMLInputElement;
+            if (faultCodeInput && !faultCodeInput.value) faultCodeInput.value = 'DEPO';
+            if (faultDescInput && !faultDescInput.value) faultDescInput.value = initialData?.secilenSablon || 'Saha İçi Parça Revizyonu';
+        }
+
         // Hydrate Materials
-        const materials = isEditMode ? initialData.materials : (initialData.maintenanceData?.materials || []);
-        if (materials.length > 0) {
+        let materials = isEditMode ? initialData.materials : (initialData?.maintenanceData?.materials || []);
+        
+        // If materials not set yet, but we have repairedMaterial from warehouse task, preload it as Poz 1!
+        if ((!materials || materials.length === 0) && isWarehouse) {
+            let matSap = initialData?.repairedMaterial?.sapNo || '';
+            let matDesc = initialData?.repairedMaterial?.description || '';
+            let matQty = initialData?.repairedMaterial?.quantity || 1;
+
+            if (!matSap && initialData?.yoneticiNotu) {
+                const match = initialData.yoneticiNotu.match(/([0-9]{4,8})\s*-\s*([^|(]+)/);
+                if (match) {
+                    matSap = match[1].trim();
+                    matDesc = match[2].trim();
+                }
+            }
+        }
+
+        if (materials && materials.length > 0) {
             const grouped: { [poz: string]: { S?: any; T?: any } } = {};
             materials.forEach((mat: any) => {
                 if (!mat) return;
@@ -2737,14 +2922,23 @@ export class FaultFormController {
         }
         w.renderWorkSessionsUI();
 
-        // Hydrate Notes & MCF Form No from draft or initialData
+        // Hydrate Notes & MCF / Revision Form No from draft or initialData
         const notesEl = document.getElementById('form-notes') as HTMLTextAreaElement;
         if (notesEl) {
             notesEl.value = isEditMode ? (initialData.notes || '') : (initialData?.maintenanceData?.notes || '');
         }
+        const tamirFormNoEl = document.getElementById('tamir-form-no') as HTMLInputElement;
+        if (tamirFormNoEl) {
+            const initialTamir = isEditMode 
+                ? (initialData.tamirFormNo || initialData.revisionNo || initialData.repairNo || (initialData.reportNo && initialData.reportNo.startsWith('REV-') ? initialData.reportNo : '')) 
+                : (initialData?.maintenanceData?.tamirFormNo || initialData?.tamirFormNo || initialData?.revisionNo || initialData?.repairNo || '');
+            if (initialTamir) tamirFormNoEl.value = initialTamir;
+        }
         const matFormNoEl = document.getElementById('mat-form-no') as HTMLInputElement;
         if (matFormNoEl) {
-            matFormNoEl.value = isEditMode ? (initialData.matFormNo || '') : (initialData?.maintenanceData?.matFormNo || '');
+            matFormNoEl.value = isEditMode 
+                ? (initialData.matFormNo || '') 
+                : (initialData?.maintenanceData?.matFormNo || '');
             if (typeof w.checkMcfValidation === 'function') w.checkMcfValidation();
         }
 

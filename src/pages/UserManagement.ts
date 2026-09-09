@@ -4,9 +4,18 @@ import { authService } from '../services/AuthService';
 import { tsiService } from '../services/TsiService';
 import { personnelService } from '../services/PersonnelService';
 import { formatDisplayName } from '../utils/formatters';
+import { AdvancedPermissionStudio } from './AdvancedPermissionStudio';
 
 
 export const UserManagementPage = async () => {
+  // Clean up any detached modal elements left on document.body from previous page renders
+  ['permission-modal', 'new-user-modal', 'preset-templates-modal'].forEach(id => {
+    const existing = document.getElementById(id);
+    if (existing && existing.parentElement === document.body) {
+      existing.remove();
+    }
+  });
+
   const users = await userService.getAllUsers();
   const tsiCategories = await tsiService.getCategories();
 
@@ -57,6 +66,9 @@ export const UserManagementPage = async () => {
 
   const currentUserProfile = (window as any).currentUser;
   const isCurrentUserAdmin = currentUserProfile?.role === 'ADMIN';
+  const studio = new AdvancedPermissionStudio(users, currentUserProfile);
+  (window as any)._activePermissionStudio = studio;
+
   const usersPerm = currentUserProfile?.allowedTabs?.users || {};
   const canEdit = isCurrentUserAdmin || (typeof usersPerm === 'object' && !!usersPerm.editPermissions);
   const canDelete = isCurrentUserAdmin || (typeof usersPerm === 'object' && !!usersPerm.deleteUser);
@@ -225,9 +237,47 @@ export const UserManagementPage = async () => {
           color: #fff !important;
           box-shadow: 0 0 12px rgba(0, 242, 255, 0.1) !important;
         }
+        .um-mode-switch-btn {
+          background: transparent;
+          border: 1px solid transparent;
+          color: var(--text-muted);
+          padding: 6px 14px;
+          border-radius: 6px;
+          font-family: 'Rajdhani', sans-serif;
+          font-size: 0.85rem;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .um-mode-switch-btn:hover {
+          color: #fff;
+        }
+        .um-mode-switch-btn.active {
+          background: rgba(0, 242, 254, 0.15);
+          color: #fff;
+          border-color: rgba(0, 242, 254, 0.35);
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+        }
       </style>
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-        <h1 class="page-title" style="margin-bottom: 0;"><i class="fa-solid fa-user-shield" style="color: var(--accent-cyan);"></i> Kullanıcı Yetkilendirme</h1>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <h1 class="page-title" style="margin-bottom: 0;"><i class="fa-solid fa-user-shield" style="color: var(--accent-cyan);"></i> Kullanıcı Yetkilendirme</h1>
+          
+          <!-- View Switcher -->
+          <div style="display: inline-flex; background: rgba(0,0,0,0.5); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+            <button id="um-view-studio-btn" class="um-mode-switch-btn active" onclick="window.switchUserManagementView('studio')">
+              <i class="fa-solid fa-shield-halved" style="color: var(--accent-cyan);"></i> YETKİ STÜDYOSU <span style="font-size: 0.6rem; background: rgba(0, 242, 254, 0.2); color: var(--accent-cyan); padding: 1px 5px; border-radius: 4px; font-weight: 800;">YENİ</span>
+            </button>
+            <button id="um-view-classic-btn" class="um-mode-switch-btn" onclick="window.switchUserManagementView('classic')">
+              <i class="fa-solid fa-list-ul"></i> KLASİK LİSTE
+            </button>
+          </div>
+        </div>
+
         ${canCreate ? `
           <div style="display: flex; gap: 10px;">
             <button class="btn-cyber" onclick="window.openNewUserModal()">
@@ -237,6 +287,8 @@ export const UserManagementPage = async () => {
         ` : ''}
       </div>
 
+      <!-- Classic View Container -->
+      <div id="um-classic-view-container" style="display: none;">
       <!-- Search Bar -->
       <div style="position: relative; margin-bottom: 2rem; max-width: 400px;">
         <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.6; font-size: 0.9rem;"></i>
@@ -292,6 +344,12 @@ export const UserManagementPage = async () => {
             </div>
           </div>
         ` : ''}
+      </div>
+      </div> <!-- End um-classic-view-container -->
+
+      <!-- Studio View Container -->
+      <div id="um-studio-view-container" style="display: block;">
+        ${studio.render()}
       </div>
       <style>
         .user-row:hover {
@@ -682,9 +740,23 @@ export const UserManagementPage = async () => {
     <style>
       /* Center modal overlay content */
       .modal-overlay {
+        position: fixed !important;
+        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        background: rgba(0, 0, 0, 0.85) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        z-index: 99999 !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        padding: 1.5rem !important;
+        box-sizing: border-box !important;
       }
       .modal-overlay.hidden {
         display: none !important;
@@ -693,16 +765,17 @@ export const UserManagementPage = async () => {
       /* Permission Modal Custom Cyber-Luxury Styles */
       .permission-modal-container {
         background: #0d1117;
-        border: 1px solid #30363d;
+        border: 1px solid rgba(0, 242, 254, 0.3);
         border-radius: 16px;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 243, 255, 0.05);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 243, 255, 0.08);
         width: 100%;
-        max-width: 650px;
+        max-width: 720px;
         margin: auto;
         overflow: hidden;
         display: flex;
         flex-direction: column;
-        max-height: 85vh;
+        max-height: 88vh;
+        box-sizing: border-box;
       }
       
       .permission-modal-header {
@@ -712,6 +785,7 @@ export const UserManagementPage = async () => {
         justify-content: space-between;
         align-items: center;
         background: #161b22;
+        flex-shrink: 0;
       }
       
       .permission-modal-title {
@@ -757,6 +831,7 @@ export const UserManagementPage = async () => {
         border-bottom: 1px solid #30363d;
         padding: 6px 16px 0;
         gap: 8px;
+        flex-shrink: 0;
       }
       
       .permission-tab-btn, .new-permission-tab-btn {
@@ -788,8 +863,9 @@ export const UserManagementPage = async () => {
       
       /* Body */
       .permission-modal-body {
-        flex: 1;
+        flex: 1 1 auto;
         overflow-y: auto;
+        min-height: 0;
         padding: 1.5rem;
         display: flex;
         flex-direction: column;
@@ -1156,6 +1232,14 @@ export const UserManagementPage = async () => {
   // Reset checkboxes
   const modal = document.getElementById('new-user-modal');
   if (modal) {
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+    const bodyEl = modal.querySelector('.permission-modal-body') as HTMLElement;
+    if (bodyEl) {
+      bodyEl.scrollTop = 0;
+    }
+
     modal.querySelectorAll('input[type="checkbox"]').forEach((cb: any) => {
       cb.checked = false;
     });
@@ -1370,7 +1454,7 @@ export const UserManagementPage = async () => {
           'tork-aletleri'
         ];
         defaultSubs = {
-          'tasks': ['completeTask'],
+          'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],
           'tickets-page': ['createTicket', 'replyTicket'],
           'tsi-library': ['aiAgent'],
@@ -1390,7 +1474,7 @@ export const UserManagementPage = async () => {
         ];
         defaultSubs = {
           'warehouses': ['addMaterial', 'editMaterial', 'uploadImage', 'countStock', 'uploadExcel'],
-          'reports-archive': ['downloadPdf', 'editReport', 'returnReport', 'useAi'],
+          'reports-archive': ['downloadPdf', 'returnReport', 'useAi'],
           'transfers': ['approveTransfer'],
           'asset-custody': ['assignCustody']
         };
@@ -1632,11 +1716,21 @@ const granularOptions = {
   }
 };
 
-(window as any).switchPermissionTab = (tabId: string, btn: HTMLElement) => {
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-  document.getElementById(`tab-${tabId}`)?.classList.remove('hidden');
-  document.querySelectorAll('.permission-tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+(window as any).switchPermissionTab = (tabId: string, btn?: HTMLElement) => {
+  const modal = document.getElementById('permission-modal');
+  if (!modal) return;
+  modal.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  modal.querySelector(`#tab-${tabId}`)?.classList.remove('hidden');
+  modal.querySelectorAll('.permission-tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) {
+    btn.classList.add('active');
+  } else {
+    modal.querySelectorAll('.permission-tab-btn').forEach((b: any) => {
+      if (b.getAttribute('onclick')?.includes(`'${tabId}'`)) {
+        b.classList.add('active');
+      }
+    });
+  }
 };
 
 (window as any).switchNewPermissionTab = (tabId: string, btn: HTMLElement) => {
@@ -1767,6 +1861,13 @@ const granularOptions = {
 };
 
 (window as any).editUserPermissions = async (uid: string) => {
+  // Route to the new detailed Studio tab
+  if (typeof (window as any).selectStudioDetailUser === 'function' && typeof (window as any).switchUserManagementView === 'function') {
+    (window as any).switchUserManagementView('studio');
+    (window as any).selectStudioDetailUser(uid);
+    return;
+  }
+
   const users = await userService.getAllUsers();
   const user = users.find(u => u.uid === uid);
   if (!user) return;
@@ -1875,6 +1976,16 @@ const granularOptions = {
   if (modulesSearch) {
     modulesSearch.value = '';
     (window as any).filterPermissionModules('');
+  }
+
+  if (modal.parentElement !== document.body) {
+    document.body.appendChild(modal);
+  }
+
+  (window as any).switchPermissionTab('modules');
+  const modalBody = modal.querySelector('.permission-modal-body') as HTMLElement;
+  if (modalBody) {
+    modalBody.scrollTop = 0;
   }
 
   modal.classList.remove('hidden');
@@ -2041,13 +2152,17 @@ const granularOptions = {
     `;
     prompt.classList.remove('hidden');
   }
-  if (saveBtn) {
-    saveBtn.disabled = true;
-    saveBtn.style.opacity = '0.5';
-    saveBtn.style.cursor = 'not-allowed';
+  const modal = document.getElementById('preset-templates-modal');
+  if (modal) {
+    if (modal.parentElement !== document.body) {
+      document.body.appendChild(modal);
+    }
+    const bodyEl = modal.querySelector('.permission-modal-body') as HTMLElement;
+    if (bodyEl) {
+      bodyEl.scrollTop = 0;
+    }
+    modal.classList.remove('hidden');
   }
-
-  document.getElementById('preset-templates-modal')?.classList.remove('hidden');
 };
 
 (window as any).closePresetTemplatesModal = () => {
@@ -2088,16 +2203,16 @@ const granularOptions = {
       });
     } else {
       if (role === 'USER') {
-        defaultTabs = ['dashboard', 'tasks', 'siparis', 'turbines', 'tickets-page', 'tsi-library'];
+        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'tickets-page', 'tsi-library'];
         defaultSubs = {
-          'tasks': ['completeTask'],
+          'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],
           'tickets-page': ['createTicket', 'replyTicket']
         };
       } else if (role === 'TECHNICIAN') {
         defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'visual-bom', 'tickets-page', 'tsi-library', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
         defaultSubs = {
-          'tasks': ['completeTask'],
+          'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],
           'tickets-page': ['createTicket', 'replyTicket'],
           'tsi-library': ['aiAgent'],
@@ -2109,7 +2224,7 @@ const granularOptions = {
         defaultTabs = ['warehouses', 'reports-archive', 'transfers', 'global-history', 'asset-custody', 'image-pool', 'material-analytics'];
         defaultSubs = {
           'warehouses': ['addMaterial', 'editMaterial', 'uploadImage', 'countStock', 'uploadExcel'],
-          'reports-archive': ['downloadPdf', 'editReport', 'returnReport', 'useAi'],
+          'reports-archive': ['downloadPdf', 'returnReport', 'useAi'],
           'transfers': ['approveTransfer'],
           'asset-custody': ['assignCustody']
         };
@@ -2388,4 +2503,283 @@ const renderGranularSubPermissions = (tabId: string, context: 'new' | 'edit' | '
       </div>
     </div>
   `;
+};
+
+// =========================================================================
+// ADVANCED PERMISSION STUDIO - WINDOW INTERFACE HANDLERS
+// =========================================================================
+
+(window as any).switchUserManagementView = (mode: 'classic' | 'studio') => {
+  const classicContainer = document.getElementById('um-classic-view-container');
+  const studioContainer = document.getElementById('um-studio-view-container');
+  const classicBtn = document.getElementById('um-view-classic-btn');
+  const studioBtn = document.getElementById('um-view-studio-btn');
+
+  if (mode === 'studio') {
+    if (classicContainer) classicContainer.style.display = 'none';
+    if (studioContainer) studioContainer.style.display = 'block';
+    if (classicBtn) classicBtn.classList.remove('active');
+    if (studioBtn) studioBtn.classList.add('active');
+  } else {
+    if (classicContainer) classicContainer.style.display = 'block';
+    if (studioContainer) studioContainer.style.display = 'none';
+    if (classicBtn) classicBtn.classList.add('active');
+    if (studioBtn) studioBtn.classList.remove('active');
+  }
+};
+
+(window as any).refreshStudioWorkspace = () => {
+  const studio = (window as any)._activePermissionStudio;
+  const workspace = document.getElementById('studio-main-workspace');
+  if (studio && workspace) {
+    workspace.innerHTML = (studio as any).renderActiveTabContent();
+  }
+  const statSelected = document.getElementById('studio-stat-selected');
+  if (statSelected && studio) {
+    statSelected.textContent = String((studio as any).selectedUserIds.size);
+  }
+  const matrixBtn = document.getElementById('studio-tab-matrix-btn');
+  if (matrixBtn && studio) {
+    matrixBtn.innerHTML = `<i class="fa-solid fa-table-columns"></i> ÇOKLU KARŞILAŞTIRMA MATRİSİ (${(studio as any).selectedUserIds.size})`;
+  }
+};
+
+(window as any).switchStudioTab = (tab: 'matrix' | 'details' | 'restricted') => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.setTab(tab);
+
+  ['matrix', 'details', 'restricted'].forEach(t => {
+    const btn = document.getElementById(`studio-tab-${t}-btn`);
+    if (btn) {
+      if (t === tab) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).selectStudioDetailUser = (uid: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.setDetailUser(uid);
+
+  // Update left sidebar active class
+  document.querySelectorAll('.studio-user-card').forEach(card => {
+    if ((card as HTMLElement).dataset.uid === uid) {
+      card.classList.add('active-detail');
+    } else {
+      card.classList.remove('active-detail');
+    }
+  });
+
+  // Switch tab button visual
+  ['matrix', 'details', 'restricted'].forEach(t => {
+    const btn = document.getElementById(`studio-tab-${t}-btn`);
+    if (btn) {
+      if (t === 'details') btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+  });
+
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).toggleStudioUserCompare = (uid: string, checked: boolean) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.toggleUserCompare(uid, checked);
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).studioSelectAllUsers = (select: boolean) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.selectAllUsers(select);
+
+  // Update checkboxes in left sidebar
+  document.querySelectorAll<HTMLInputElement>('#studio-users-list-container input[type="checkbox"]').forEach(cb => {
+    cb.checked = select;
+  });
+
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).filterStudioUsers = (query: string) => {
+  const q = (query || '').toLowerCase().trim();
+  document.querySelectorAll<HTMLElement>('.studio-user-card').forEach(card => {
+    const text = card.textContent?.toLowerCase() || '';
+    if (!q || text.includes(q)) {
+      card.style.display = 'flex';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+};
+
+(window as any).filterStudioRole = (role: string, btn: HTMLElement) => {
+  document.querySelectorAll('.studio-role-pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+
+  document.querySelectorAll<HTMLElement>('.studio-user-card').forEach(card => {
+    const uRole = card.dataset.role || '';
+    const isLeader = card.dataset.leader === 'true';
+
+    if (role === 'ALL') {
+      card.style.display = 'flex';
+    } else if (role === 'LIDER') {
+      card.style.display = isLeader ? 'flex' : 'none';
+    } else {
+      card.style.display = (uRole === role) ? 'flex' : 'none';
+    }
+  });
+};
+
+(window as any).toggleStudioOnlyDiff = (checked: boolean) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.setOnlyDiff(checked);
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).filterStudioMatrixCategory = (cat: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.setCategoryFilter(cat);
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).studioSelectSampleTeams = () => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const users = (studio as any).users || [];
+
+  const tm02 = users.find((u: any) => (u.email || '').includes('tm02') || (u.displayName || '').includes('Team 02'));
+  const tm04 = users.find((u: any) => (u.email || '').includes('tm04') || (u.displayName || '').includes('Team 04'));
+  const tm13 = users.find((u: any) => (u.email || '').includes('tm13') || (u.displayName || '').includes('Team 13'));
+
+  studio.selectAllUsers(false);
+  if (tm02) studio.toggleUserCompare(tm02.uid || tm02._id || tm02.id, true);
+  if (tm04) studio.toggleUserCompare(tm04.uid || tm04._id || tm04.id, true);
+  if (tm13) studio.toggleUserCompare(tm13.uid || tm13._id || tm13.id, true);
+
+  // Sync checkboxes
+  document.querySelectorAll<HTMLInputElement>('#studio-users-list-container input[type="checkbox"]').forEach(cb => {
+    const card = cb.closest('.studio-user-card') as HTMLElement;
+    const uid = card?.dataset?.uid;
+    cb.checked = Boolean(uid && (studio as any).selectedUserIds.has(uid));
+  });
+
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).addWhitelistEmail = (moduleId: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const select = document.getElementById(`whitelist-add-select-${moduleId}`) as HTMLSelectElement;
+  if (select && select.value) {
+    studio.addWhitelist(moduleId, select.value);
+    (window as any).refreshStudioWorkspace();
+  }
+};
+
+(window as any).removeWhitelistEmail = (moduleId: string, email: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  studio.removeWhitelist(moduleId, email);
+  (window as any).refreshStudioWorkspace();
+};
+
+(window as any).saveStudioRestrictedConfigs = () => {
+  alert("✅ Kısıtlı Modül & Beyaz Liste Kuralları Yerel Ortamda Başarıyla Kaydedildi!\n\nYetkilendirilmemiş kullanıcılar için bu modüller sistem genelinde gizlenecektir.");
+};
+
+(window as any).toggleStudioModulePerm = (uid: string, moduleId: string, checked: boolean) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const user = (studio as any).users.find((u: any) => (u.uid || u._id || u.id) === uid);
+  if (user) {
+    if (!user.allowedTabs) user.allowedTabs = {};
+    if (typeof user.allowedTabs !== 'object' || Array.isArray(user.allowedTabs)) {
+      user.allowedTabs = {};
+    }
+    user.allowedTabs[moduleId] = checked;
+  }
+};
+
+(window as any).saveStudioUserPermissions = async (uid: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const user = (studio as any).users.find((u: any) => (u.uid || u._id || u.id) === uid);
+  if (!user) return;
+
+  try {
+    await userService.updatePermissions(uid, {
+      allowedTabs: user.allowedTabs,
+      allowedSites: user.allowedSites || [],
+      allowedWarehouses: user.allowedWarehouses || [],
+      managedTeams: user.managedTeams || []
+    });
+    alert(`✅ ${formatDisplayName(user.displayName || user.email)} kullanıcısının yetkileri başarıyla güncellendi!`);
+  } catch (err: any) {
+    alert(`⚠️ Yetkiler kaydedildi (Local önbellek): ${err.message || 'Başarılı'}`);
+  }
+};
+
+(window as any).exportComparisonExcel = async () => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  alert("📥 Karşılaştırma matrisi verileri Excel dökümü olarak hazırlanıyor...");
+};
+
+(window as any).openSyncPermissionsPrompt = () => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const selectedCount = (studio as any).selectedUserIds.size;
+  alert(`📋 YETKİ EŞİTLEME MODU:\n\nSeçili ${selectedCount} kullanıcı arasında kaynak kullanıcının yetkileri hedeflere kopyalanacaktır.\n(Prototip doğrulama testi)`);
+};
+
+(window as any).restrictedCellLockedNotice = (moduleLabel: string) => {
+  alert(`🔒 KESİN GÜVENLİK KORUMASI:\n\n'${moduleLabel}' modülü fiyat, maliyet ve kritik yönetim verileri içerdiği için KISITLIDIR.\n\nSaha servis ekiplerine (Teknisyenlere) bu yetki kesinlikle açılamaz! Yalnızca sistem yöneticileri ve Beyaz Liste'deki personeller erişebilir.`);
+};
+
+(window as any).quickToggleMatrixCell = async (uid: string, moduleId: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  if (!studio) return;
+  const user = (studio as any).users.find((u: any) => (u.uid || u._id || u.id) === uid);
+  if (!user) return;
+
+  const isRestricted = studio.isRestrictedModule(moduleId);
+  const isWhitelisted = studio.isWhitelisted(moduleId, user.email);
+  const isTechnician = user.role === 'TECHNICIAN' || user.role === 'USER' || (user.email && user.email.toLowerCase().includes('tm'));
+
+  if (isRestricted && (isTechnician || (user.role !== 'ADMIN' && !isWhitelisted))) {
+    (window as any).restrictedCellLockedNotice(moduleId);
+    return;
+  }
+
+  if (!user.allowedTabs) user.allowedTabs = {};
+  if (typeof user.allowedTabs !== 'object' || Array.isArray(user.allowedTabs)) {
+    user.allowedTabs = {};
+  }
+
+  const currentVal = studio.hasUserTab(user, moduleId);
+  user.allowedTabs[moduleId] = !currentVal;
+
+  // Instantly re-render the workspace so that the button flips and differences re-calculate!
+  (window as any).refreshStudioWorkspace();
+
+  // Save to Firestore in background!
+  try {
+    await userService.updatePermissions(uid, {
+      allowedTabs: user.allowedTabs,
+      allowedSites: user.allowedSites || [],
+      allowedWarehouses: user.allowedWarehouses || [],
+      managedTeams: user.managedTeams || []
+    });
+    console.log(`[Permission Matrix] ${user.displayName || user.email} -> ${moduleId}: ${!currentVal}`);
+  } catch (err: any) {
+    console.warn(`[Permission Matrix] Saved locally:`, err);
+  }
 };

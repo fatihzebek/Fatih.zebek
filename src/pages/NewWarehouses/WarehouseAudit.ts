@@ -551,10 +551,25 @@ export const loadSayimGecmisi = async () => {
        const currentUser = getUserProfile();
        const isApprover = currentUser?.email === 'fatih.zebek@demirerholding.com' || currentUser?.email === 'hursit.akter@demirerholding.com' || currentUser?.email === 'emir.unver@demirerholding.com' || currentUser?.role === 'ADMIN' || (currentUser?.email?.includes('fatih.zebek') ?? false);
 
+       const APPROVAL_SYSTEM_START_DATE = new Date('2026-09-04T00:00:00+03:00').getTime();
+       const getAuditEpochTime = (a: any): number => {
+         if (a.timestamp?.seconds) return a.timestamp.seconds * 1000;
+         if (a.createdAt?.seconds) return a.createdAt.seconds * 1000;
+         if (a.date) {
+           const ddmmyyyy = a.date.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+           if (ddmmyyyy) {
+             return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`).getTime();
+           }
+           const parsed = Date.parse(a.date);
+           if (!isNaN(parsed)) return parsed;
+         }
+         return 0;
+       };
+
        const activeWhId = warehouseState.currentWarehouse.id || 'MTA';
        const audits = await warehouseService.getAuditHistory(activeWhId);
        (window as any).__cachedAudits = audits;
-       const latestPendingAudit = audits.find(a => a.status !== 'APPROVED');
+       const latestPendingAudit = audits.find(a => a.status !== 'APPROVED' && getAuditEpochTime(a) >= APPROVAL_SYSTEM_START_DATE);
 
        if (audits.length === 0) {
          container.innerHTML = '<div style="text-align:center; padding: 2rem; color: #94A3B8;">Henüz sayım geçmişi bulunmuyor.</div>';
@@ -565,7 +580,8 @@ export const loadSayimGecmisi = async () => {
            const totalDiffText = audit.totalDiff > 0 ? '+' + audit.totalDiff : audit.totalDiff;
            const isApproved = audit.status === 'APPROVED';
            const isRevisionRequested = audit.status === 'REVISION_REQUESTED';
-           const isLatestPending = !isApproved && (audit.id === latestPendingAudit?.id);
+           const isEligibleForApproval = getAuditEpochTime(audit) >= APPROVAL_SYSTEM_START_DATE;
+           const isLatestPending = !isApproved && isEligibleForApproval && (audit.id === latestPendingAudit?.id);
            
            const sortedResults = [...audit.results].map(r => {
               let shelfNo = r.shelfNo || '';
@@ -1019,7 +1035,26 @@ export const approveAndApplyAuditStock = async (auditId: string) => {
     warehouseState.auditResults = [];
     (window as any).currentDraftData = {};
 
-    alert('Sayım başarıyla onaylandı ve depo stokları güncellendi!\n\nSayım ekranı bir sonraki yeni sayım için sıfırlandı.');
+    // Send Approval Email to Managers and Counting Team
+    try {
+      const discrepancies = (audit.results || []).filter((r: any) => r.diff !== 0);
+      await emailService.sendAuditApprovalEmail({
+        warehouseName: warehouseName,
+        warehouseId: activeWhId,
+        approver: approver,
+        user: audit.user || 'Sayan Ekip',
+        userEmail: audit.userEmail || '',
+        date: new Date().toLocaleDateString('tr-TR'),
+        time: new Date().toLocaleTimeString('tr-TR'),
+        totalItems: audit.results?.length || audit.totalItems || 0,
+        totalDiff: audit.totalDiff || 0,
+        discrepancies: discrepancies
+      });
+    } catch (mailErr) {
+      console.error("Failed to send audit approval email:", mailErr);
+    }
+
+    alert(`Sayım başarıyla onaylandı ve ${warehouseName} stokları güncellendi!\n\nOnay bildirimi yöneticilere iletildi.`);
     if ((window as any).selectWarehouseAndNavigate) {
       (window as any).selectWarehouseAndNavigate(activeWhId, 'SAYIM_GECMISI');
     }

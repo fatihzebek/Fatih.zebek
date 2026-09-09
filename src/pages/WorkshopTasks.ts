@@ -37,6 +37,7 @@ export const getSiteOrWarehouseName = (sourceId?: string): string => {
 import { repairService, type RepairRecord } from '../services/RepairService';
 import { workshopComponentService, type WorkshopComponent } from '../services/WorkshopComponentService';
 import { dataService } from '../services/DataService';
+import { authService } from '../services/AuthService';
 import { doc, updateDoc, arrayUnion, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -63,6 +64,29 @@ const formatDateTime = (ts: any) => {
   try {
     const date = ts.toDate ? ts.toDate() : new Date(ts);
     return isNaN(date.getTime()) ? '-' : date.toLocaleString('tr-TR');
+  } catch (e) {
+    return '-';
+  }
+};
+
+// Helper to calculate duration between two timestamps
+export const calculateRepairDuration = (start: any, end: any): string => {
+  if (!start || !end) return '-';
+  try {
+    const sTime = (start.toDate ? start.toDate() : new Date(start)).getTime();
+    const eTime = (end.toDate ? end.toDate() : new Date(end)).getTime();
+    if (isNaN(sTime) || isNaN(eTime) || eTime < sTime) return '-';
+
+    const diffMinutes = Math.floor((eTime - sTime) / (1000 * 60));
+    const days = Math.floor(diffMinutes / (24 * 60));
+    const hours = Math.floor((diffMinutes % (24 * 60)) / 60);
+    const mins = diffMinutes % 60;
+
+    const parts = [];
+    if (days > 0) parts.push(`${days} Gün`);
+    if (hours > 0) parts.push(`${hours} Saat`);
+    if (mins > 0 || parts.length === 0) parts.push(`${mins} Dk`);
+    return parts.join(' ');
   } catch (e) {
     return '-';
   }
@@ -370,6 +394,11 @@ const getBenchDurationBadge = (assignedAt: any) => {
 };
 
 const renderStreamlinedTaskList = (tasks: RepairRecord[], warehouses: any[], tabType: string) => {
+  const user = (window as any).currentUser || authService.getCurrentUser();
+  const userEmail = (user?.email || (window as any).appState?.userProfile?.email || '').toLowerCase();
+  const userRole = ((window as any).appState?.userProfile?.role || (window as any).currentUserProfile?.role || '').toUpperCase();
+  const isAdmin = userRole === 'ADMIN' || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver');
+
   if (tasks.length === 0) {
     const emptyMessages: Record<string, { icon: string; title: string; desc: string }> = {
       'ACTIVE': {
@@ -406,6 +435,10 @@ const renderStreamlinedTaskList = (tasks: RepairRecord[], warehouses: any[], tab
     const priority = rep.priority || 'NORMAL';
     const usedComponents = rep.usedComponents || [];
     const isChecked = selectedCompletedIds.includes(rep.id!);
+
+    const startDate = rep.assignedAt || rep.receivedAt || rep.createdAt || rep.sentAt;
+    const finishDate = rep.repairedAt || rep.completedAt || rep.lastUpdated;
+    const durationStr = calculateRepairDuration(startDate, finishDate);
 
     const priorityBadge = priority === 'CRITICAL' 
       ? '<span style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 900;">🔴 KRİTİK</span>'
@@ -452,8 +485,31 @@ const renderStreamlinedTaskList = (tasks: RepairRecord[], warehouses: any[], tab
               <span style="background: ${currentStage.bg}; color: ${currentStage.color}; border: 1px solid ${currentStage.color}35; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
                 <i class="fa-solid ${currentStage.icon}"></i> ${currentStage.label}
               </span>
-              ${!isRepaired ? getBenchDurationBadge(rep.assignedAt || rep.receivedAt || rep.lastUpdated || rep.sentAt) : ''}
-              <span style="color: #64748B; font-size: 0.72rem;">• Masaya Alındı: ${formatDateTime(rep.assignedAt || rep.receivedAt)}</span>
+              ${isRepaired ? `
+                ${isAdmin ? `
+                  <div style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 6px;">
+                    <span style="color: #94A3B8; font-size: 0.72rem;" title="Masaya Alınış: ${formatDateTime(startDate)}">
+                      <i class="fa-solid fa-arrow-right-to-bracket" style="color: #38bdf8; margin-right: 3px;"></i> Giriş: <strong style="color: #e2e8f0;">${formatDateTime(startDate)}</strong>
+                    </span>
+                    <span style="color: #64748B; font-size: 0.72rem;">•</span>
+                    <span style="color: #94A3B8; font-size: 0.72rem;" title="Onarım Bitiş: ${formatDateTime(finishDate)}">
+                      <i class="fa-solid fa-circle-check" style="color: #10B981; margin-right: 3px;"></i> Bitiş: <strong style="color: #10B981;">${formatDateTime(finishDate || startDate)}</strong>
+                    </span>
+                    ${durationStr !== '-' ? `
+                      <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 1px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 800; font-family: 'Rajdhani', sans-serif;" title="Toplam Tamir Süresi">
+                        ⏱️ ${durationStr}
+                      </span>
+                    ` : ''}
+                  </div>
+                ` : `
+                  <span style="color: #10B981; font-size: 0.74rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">
+                    <i class="fa-solid fa-circle-check"></i> Onarım Bitti: ${formatDateTime(finishDate || startDate)}
+                  </span>
+                `}
+              ` : `
+                ${getBenchDurationBadge(rep.assignedAt || rep.receivedAt || rep.lastUpdated || rep.sentAt)}
+                <span style="color: #64748B; font-size: 0.72rem;">• Masaya Alındı: ${formatDateTime(rep.assignedAt || rep.receivedAt)}</span>
+              `}
             </div>
 
             <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.25rem; font-weight: 800; color: #FFF; margin: 4px 0 6px 0;">
@@ -813,6 +869,15 @@ const setupStreamlinedTaskHandlers = () => {
       z-index: 10002; display: flex; align-items: center; justify-content: center;
     `;
 
+    const user = (window as any).currentUser || authService.getCurrentUser();
+    const userEmail = (user?.email || (window as any).appState?.userProfile?.email || '').toLowerCase();
+    const userRole = ((window as any).appState?.userProfile?.role || (window as any).currentUserProfile?.role || '').toUpperCase();
+    const isAdmin = userRole === 'ADMIN' || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver');
+
+    const startDate = rep.assignedAt || rep.receivedAt || rep.createdAt || rep.sentAt;
+    const finishDate = rep.repairedAt || rep.completedAt || rep.lastUpdated;
+    const durationStr = calculateRepairDuration(startDate, finishDate);
+
     modal.innerHTML = `
       <div class="glass-panel fade-in-up" style="width: 100%; max-width: 950px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.35); box-shadow: 0 25px 50px rgba(0,0,0,0.6); max-height: 92vh; display: flex; flex-direction: column;">
         
@@ -834,11 +899,22 @@ const setupStreamlinedTaskHandlers = () => {
               ${rep.description}
             </h2>
 
-            <div style="display: flex; gap: 10px; margin-top: 6px; font-family: monospace; font-size: 0.8rem; flex-wrap: wrap;">
+            <div style="display: flex; gap: 10px; margin-top: 6px; font-family: monospace; font-size: 0.8rem; flex-wrap: wrap; align-items: center;">
               <span style="color: #60a5fa; font-weight: bold;">SAP: ${rep.sapNo}</span>
               <span style="color: #34d399; font-weight: bold;">SERİ: ${rep.serialNo || '-'}</span>
               <span style="color: #F59E0B; font-weight: bold;">Saha: ${getSiteOrWarehouseName(rep.sourceWarehouseId)}</span>
               ${rep.faultCode && rep.faultCode !== '-' ? `<span style="color: #EF4444; font-weight: bold;">Arıza: ${rep.faultCode}</span>` : ''}
+              ${isRepaired ? `
+                ${isAdmin ? `
+                  <span style="color: #94A3B8;">• Giriş: <strong style="color: #e2e8f0;">${formatDateTime(startDate)}</strong></span>
+                  <span style="color: #10B981; font-weight: bold;">• Bitiş: ${formatDateTime(finishDate || startDate)}</span>
+                  ${durationStr !== '-' ? `<span style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); padding: 1px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">⏱️ ${durationStr}</span>` : ''}
+                ` : `
+                  <span style="color: #10B981; font-weight: bold;">• Onarım Bitti: ${formatDateTime(finishDate || startDate)}</span>
+                `}
+              ` : `
+                <span style="color: #64748B;">• Masaya Alındı: ${formatDateTime(startDate)}</span>
+              `}
             </div>
           </div>
 

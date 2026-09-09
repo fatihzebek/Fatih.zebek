@@ -33,16 +33,34 @@ export const WorkshopDashboardPage = async () => {
   // Key Counts
   const pendingArrivals = repairs.filter(r => r.status === 'PENDING_ARRIVAL');
   const pendingArrivalCount = pendingArrivals.length;
-  const underRepairCount = repairs.filter(r => r.status === 'UNDER_REPAIR').length;
+
+  // Masada Aktif Onarımda Olan Kartlar (İş emri açılmış)
+  const activeWorkOrders = repairs.filter(r => 
+    r.status === 'UNDER_REPAIR' && ((!!r.assignedTo && r.assignedTo.trim() !== '' && r.assignedTo !== '-') || !!r.repairStage)
+  );
+  const underRepairCount = activeWorkOrders.length;
+
+  // Tamir Bekleyen Atölye Stoğu (Henüz masaya alınmamış kart stoğu)
+  const waitingStock = repairs.filter(r => 
+    r.status === 'UNDER_REPAIR' && (!r.assignedTo || r.assignedTo.trim() === '' || r.assignedTo === '-') && !r.repairStage
+  );
+  const waitingStockCount = waitingStock.length;
+
   const repairedCount = repairs.filter(r => r.status === 'REPAIRED').length;
   const completedCount = repairs.filter(r => r.status === 'SENT_BACK' || r.status === 'COMPLETED').length;
 
   const isNoSerial = (r: RepairRecord) => !r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız';
   const noSerialCount = repairs.filter(r => (r.status === 'UNDER_REPAIR' || r.status === 'PENDING_ARRIVAL') && isNoSerial(r)).length;
 
-  setupDashboardHandlers();
+    const userProfile = (window as any).appState?.userProfile || (window as any).userProfile;
+    const isManagerOrAdmin = userProfile?.role === 'ADMIN' || 
+                             userProfile?.role === 'MALZEME_YONETIMI' || 
+                             user?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' || 
+                             user?.email?.toLowerCase() === 'fatih.zebek@demirerholding.com';
 
-  return `
+    setupDashboardHandlers();
+
+    return `
     <div class="fade-in-up content-area" style="max-width: 1300px; margin: 0 auto; padding: 2rem 1.5rem;">
       
       <!-- Page Header -->
@@ -58,73 +76,87 @@ export const WorkshopDashboardPage = async () => {
           </div>
           <p style="color: var(--text-dim); margin: 4px 0 0 0; font-size: 0.88rem;">Merkez Tamir Atölyesi canlı operasyon, ambar ve iş emri yönetim paneli.</p>
         </div>
-        
         <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
-          <button onclick="if(window.navigate) window.navigate('workshop-tasks');" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; font-weight: 900; border: none; padding: 0 1.25rem; border-radius: 8px; height: 40px; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 0 18px rgba(20, 241, 149, 0.3); font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
-            <i class="fa-solid fa-clipboard-list" style="font-size: 1rem;"></i> 📋 KART İŞ EMİRLERİNE GİT
-          </button>
-          
-          <button onclick="if(window.navigate) window.navigate('workshop-stock');" class="btn-cyber" style="background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); padding: 0 1rem; border-radius: 8px; height: 40px; font-size: 0.82rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif;">
-            <i class="fa-solid fa-boxes-stacked"></i> Atölye Tamir Stoğu
-          </button>
-
-          <button onclick="if(window.navigate) window.navigate('workshop-components');" class="btn-cyber" style="background: rgba(0, 242, 255, 0.1); color: #00f2ff; border: 1px solid rgba(0, 242, 255, 0.35); padding: 0 1rem; border-radius: 8px; height: 40px; font-size: 0.82rem; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif;">
-            <i class="fa-solid fa-microchip"></i> Komponent Stoğu
-          </button>
-
-          <div style="background: rgba(20, 241, 149, 0.05); border: 1px solid rgba(20, 241, 149, 0.15); padding: 0 1rem; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; height: 40px; box-sizing: border-box;">
+          ${isManagerOrAdmin ? `
+            <button onclick="if(window.navigate) window.navigate('workshop-performance')" class="btn-cyber" style="background: rgba(20, 241, 149, 0.12); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.35); font-weight: 800; padding: 0 1rem; height: 40px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(20, 241, 149, 0.25)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.12)'">
+              <i class="fa-solid fa-gauge-high"></i> BAŞARI & PERFORMANS
+            </button>
+          ` : ''}
+          <div style="background: rgba(20, 241, 149, 0.05); border: 1px solid rgba(20, 241, 149, 0.2); padding: 0 1.25rem; border-radius: 8px; display: flex; align-items: center; gap: 0.6rem; height: 40px; box-sizing: border-box; backdrop-filter: blur(8px);">
             <span style="width: 8px; height: 8px; border-radius: 50%; background: #14F195; box-shadow: 0 0 10px #14F195;"></span>
-            <span style="font-weight: 700; color: #14F195; font-size: 0.82rem;">${username}</span>
+            <span style="font-weight: 800; color: #14F195; font-size: 0.85rem; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">${username}</span>
           </div>
         </div>
       </div>
 
       <!-- KPI Summary Cards -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
         
         <!-- 1. Yolda / Kabul Bekleyen -->
         <div onclick="if(window.navigate) window.navigate('workshop-stock');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #F59E0B; display: flex; align-items: center; gap: 1rem; background: rgba(245, 158, 11, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(245, 158, 11, 0.09)'" onmouseout="this.style.background='rgba(245, 158, 11, 0.04)'" title="Gelen Kargoları Görüntüle">
-          <div style="background: rgba(245, 158, 11, 0.15); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #F59E0B; font-size: 1.4rem;">
+          <div style="background: rgba(245, 158, 11, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #F59E0B; font-size: 1.3rem;">
             <i class="fa-solid fa-truck-fast"></i>
           </div>
           <div>
-            <div style="font-size: 1.9rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${pendingArrivalCount}</div>
-            <div style="font-size: 0.75rem; color: #F59E0B; font-weight: 700; text-transform: uppercase;">
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${pendingArrivalCount}</div>
+            <div style="font-size: 0.72rem; color: #F59E0B; font-weight: 700; text-transform: uppercase;">
               Yolda (Kabul Bekleyen)
             </div>
           </div>
         </div>
 
         <!-- 2. Masadaki Aktif Kartlar -->
-        <div onclick="if(window.navigate) window.navigate('workshop-tasks');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #3B82F6; display: flex; align-items: center; gap: 1rem; background: rgba(59, 130, 246, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(59, 130, 246, 0.09)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.04)'">
-          <div style="background: rgba(59, 130, 246, 0.15); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #3B82F6; font-size: 1.4rem;">
+        <div onclick="if(window.navigate) window.navigate('workshop-tasks');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #3B82F6; display: flex; align-items: center; gap: 1rem; background: rgba(59, 130, 246, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(59, 130, 246, 0.09)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.04)'" title="Masadaki Aktif İş Emirlerine Git">
+          <div style="background: rgba(59, 130, 246, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #3B82F6; font-size: 1.3rem;">
             <i class="fa-solid fa-wrench"></i>
           </div>
           <div>
-            <div style="font-size: 1.9rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${underRepairCount}</div>
-            <div style="font-size: 0.75rem; color: #60a5fa; font-weight: 700; text-transform: uppercase;">Masada Onarımda</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${underRepairCount}</div>
+            <div style="font-size: 0.72rem; color: #60a5fa; font-weight: 700; text-transform: uppercase;">Masada Onarımda</div>
           </div>
         </div>
 
-        <!-- 3. Revize Sağlam (Sevke Hazır) -->
-        <div onclick="if(window.navigate) window.navigate('workshop-tasks');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #14F195; display: flex; align-items: center; gap: 1rem; background: rgba(20, 241, 149, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(20, 241, 149, 0.09)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.04)'">
-          <div style="background: rgba(20, 241, 149, 0.15); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #14F195; font-size: 1.4rem;">
+        <!-- 3. Tamir Bekleyen Atölye Stoğu -->
+        <div onclick="if(window.navigate) window.navigate('workshop-stock');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #a855f7; display: flex; align-items: center; gap: 1rem; background: rgba(168, 85, 247, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(168, 85, 247, 0.09)'" onmouseout="this.style.background='rgba(168, 85, 247, 0.04)'" title="Atölye Tamir Stoğunu Görüntüle">
+          <div style="background: rgba(168, 85, 247, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #c084fc; font-size: 1.3rem;">
+            <i class="fa-solid fa-boxes-stacked"></i>
+          </div>
+          <div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${waitingStockCount}</div>
+            <div style="font-size: 0.72rem; color: #c084fc; font-weight: 700; text-transform: uppercase;">Tamir Bekleyen Stok</div>
+          </div>
+        </div>
+
+        <!-- 4. Revize Sağlam (Sevke Hazır) -->
+        <div onclick="if(window.navigate) window.navigate('workshop-tasks');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #14F195; display: flex; align-items: center; gap: 1rem; background: rgba(20, 241, 149, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(20, 241, 149, 0.09)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.04)'" title="Sevke Hazır Kartları Görüntüle">
+          <div style="background: rgba(20, 241, 149, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #14F195; font-size: 1.3rem;">
             <i class="fa-solid fa-circle-check"></i>
           </div>
           <div>
-            <div style="font-size: 1.9rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${repairedCount}</div>
-            <div style="font-size: 0.75rem; color: #14F195; font-weight: 700; text-transform: uppercase;">Revize Sağlam (Hazır)</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${repairedCount}</div>
+            <div style="font-size: 0.72rem; color: #14F195; font-weight: 700; text-transform: uppercase;">Revize Sağlam (Hazır)</div>
           </div>
         </div>
 
-        <!-- 4. Seri Numarasızlar Havuzu -->
+        <!-- 5. Seri Numarasızlar Havuzu -->
         <div onclick="if(window.navigate) { (window as any)._workshopStockTab = 'NO_SERIAL'; window.navigate('workshop-stock'); }" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #EC4899; display: flex; align-items: center; gap: 1rem; background: rgba(236, 72, 153, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(236, 72, 153, 0.09)'" onmouseout="this.style.background='rgba(236, 72, 153, 0.04)'" title="Seri Numarası Olmayan Kartları İncele & Ata">
-          <div style="background: rgba(236, 72, 153, 0.15); width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #EC4899; font-size: 1.4rem;">
+          <div style="background: rgba(236, 72, 153, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #EC4899; font-size: 1.3rem;">
             <i class="fa-solid fa-barcode"></i>
           </div>
           <div>
-            <div style="font-size: 1.9rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${noSerialCount}</div>
-            <div style="font-size: 0.75rem; color: #f472b6; font-weight: 700; text-transform: uppercase;">Seri Numarasız Kartlar</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${noSerialCount}</div>
+            <div style="font-size: 0.72rem; color: #f472b6; font-weight: 700; text-transform: uppercase;">Seri Numarasız Kartlar</div>
+          </div>
+        </div>
+
+        <!-- 6. Sevk Edilenler (Arşiv) -->
+        <div onclick="if(window.navigate) window.navigate('workshop-dispatches');" class="glass-panel" style="padding: 1.25rem; border-radius: 14px; border-left: 4px solid #06b6d4; display: flex; align-items: center; gap: 1rem; background: rgba(6, 182, 212, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(6, 182, 212, 0.09)'" onmouseout="this.style.background='rgba(6, 182, 212, 0.04)'" title="Sevk Edilen Kartları & Kargo Arşivini Görüntüle">
+          <div style="background: rgba(6, 182, 212, 0.15); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #06b6d4; font-size: 1.3rem;">
+            <i class="fa-solid fa-truck-arrow-right"></i>
+          </div>
+          <div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #FFF; font-family: 'Rajdhani', sans-serif; line-height: 1.2;">${completedCount}</div>
+            <div style="font-size: 0.72rem; color: #22d3ee; font-weight: 700; text-transform: uppercase;">Sevk Edilenler</div>
           </div>
         </div>
 

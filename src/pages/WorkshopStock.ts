@@ -180,7 +180,16 @@ export const WorkshopStockPage = async () => {
     return { days, badgeHtml };
   };
 
-  // Group all repairs by SAP Model & calculate stats
+  const activeTab = (window as any)._workshopStockTab || 'ALL';
+  const sapFilter = (window as any)._workshopStockSapFilter || '';
+  const warehouseFilter = (window as any)._workshopStockWarehouseFilter || '';
+  const viewMode = (window as any)._workshopStockViewMode || 'DETAILED';
+
+  // Group repairs by SAP Model & calculate stats (Scoped to selected warehouse/saha if any!)
+  const targetRepairsForSummaries = warehouseFilter
+    ? allRepairs.filter((r: any) => r.sourceWarehouseId === warehouseFilter)
+    : allRepairs;
+
   interface SapModelSummary {
     sapNo: string;
     description: string;
@@ -193,7 +202,7 @@ export const WorkshopStockPage = async () => {
   }
 
   const sapGroupsMap = new Map<string, SapModelSummary>();
-  allRepairs.forEach(rep => {
+  targetRepairsForSummaries.forEach(rep => {
     const sap = rep.sapNo || 'Bilinmeyen';
     let g = sapGroupsMap.get(sap);
     if (!g) {
@@ -227,8 +236,8 @@ export const WorkshopStockPage = async () => {
     const tab = (window as any)._workshopStockTab || 'ALL';
     const rawQuery = ((window as any)._workshopStockSearch || '').trim();
     const cleanQ = normalizeKey(rawQuery);
-    const sapFilter = (window as any)._workshopStockSapFilter || '';
-    const whFilter = (window as any)._workshopStockWarehouseFilter || '';
+    const sapF = (window as any)._workshopStockSapFilter || '';
+    const whF = (window as any)._workshopStockWarehouseFilter || '';
 
     // Check exact match in O(1) across pre-indexed items
     let hasExactMatch = false;
@@ -241,10 +250,10 @@ export const WorkshopStockPage = async () => {
 
     return allRepairs.filter((rep: any) => {
       // SAP Filter
-      if (sapFilter && rep.sapNo !== sapFilter) return false;
+      if (sapF && rep.sapNo !== sapF) return false;
 
       // Warehouse / Saha Filter
-      if (whFilter && rep.sourceWarehouseId !== whFilter) return false;
+      if (whF && rep.sourceWarehouseId !== whF) return false;
 
       // Tab filter
       if (tab === 'DEFECT' && rep.status !== 'PENDING_ARRIVAL') return false;
@@ -274,13 +283,13 @@ export const WorkshopStockPage = async () => {
     });
   };
 
-  // Counts for Stats Cards
-  const totalCount = allRepairs.length;
-  const pendingDefectCount = allRepairs.filter(r => r.status === 'PENDING_ARRIVAL').length;
-  const waitingStockCount = allRepairs.filter(r => r.status === 'UNDER_REPAIR' && (!r.assignedTo || r.assignedTo.trim() === '' || r.assignedTo === '-') && !r.repairStage).length;
-  const activeWorkOrderCount = allRepairs.filter(r => r.status === 'UNDER_REPAIR' && ((!!r.assignedTo && r.assignedTo.trim() !== '' && r.assignedTo !== '-') || !!r.repairStage)).length;
-  const repairedReadyCount = allRepairs.filter(r => r.status === 'REPAIRED').length;
-  const noSerialStockCount = allRepairs.filter(r => (r.status === 'UNDER_REPAIR' || r.status === 'PENDING_ARRIVAL') && (!r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız')).length;
+  // Counts for Stats Cards (Scoped to selected warehouse if active!)
+  const totalCount = targetRepairsForSummaries.length;
+  const pendingDefectCount = targetRepairsForSummaries.filter(r => r.status === 'PENDING_ARRIVAL').length;
+  const waitingStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && (!r.assignedTo || r.assignedTo.trim() === '' || r.assignedTo === '-') && !r.repairStage).length;
+  const activeWorkOrderCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && ((!!r.assignedTo && r.assignedTo.trim() !== '' && r.assignedTo !== '-') || !!r.repairStage)).length;
+  const repairedReadyCount = targetRepairsForSummaries.filter(r => r.status === 'REPAIRED').length;
+  const noSerialStockCount = targetRepairsForSummaries.filter(r => (r.status === 'UNDER_REPAIR' || r.status === 'PENDING_ARRIVAL') && (!r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız')).length;
 
   // Global window functions
   (window as any).setWorkshopStockTab = (tab: string) => {
@@ -404,7 +413,6 @@ export const WorkshopStockPage = async () => {
   (window as any).filterWorkshopByWarehouse = (whId: string) => {
     (window as any)._workshopStockWarehouseFilter = whId;
     (window as any)._workshopStockPage = 1;
-    (window as any)._workshopStockViewMode = 'DETAILED';
     if ((window as any).navigate) {
       (window as any).navigate('workshop-stock');
     }
@@ -898,7 +906,7 @@ export const WorkshopStockPage = async () => {
             </div>
             ${rep.repairImageUrl ? `
               <div style="text-align: center;">
-                <img src="${rep.repairImageUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(20,241,149,0.3); cursor: pointer;" onclick="window.open('${rep.repairImageUrl}', '_blank')" title="Büyütmek için tıklayın" />
+                <img src="${rep.repairImageUrl}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(20,241,149,0.3); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'" onclick="window.showImageLightbox(this.src)" title="Büyütmek için tıklayın" />
               </div>
             ` : ''}
           </div>
@@ -1794,10 +1802,6 @@ export const WorkshopStockPage = async () => {
     }).join('');
   };
 
-  const activeTab = (window as any)._workshopStockTab || 'ALL';
-  const sapFilter = (window as any)._workshopStockSapFilter || '';
-  const warehouseFilter = (window as any)._workshopStockWarehouseFilter || '';
-  const viewMode = (window as any)._workshopStockViewMode || 'DETAILED';
   const currentPage = (window as any)._workshopStockPage || 1;
   const initialFilteredItems = filterItems();
   const totalPages = Math.max(1, Math.ceil(initialFilteredItems.length / PAGE_SIZE));
@@ -1909,76 +1913,7 @@ export const WorkshopStockPage = async () => {
         </div>
       ` : ''}
 
-      <!-- Quick Stats Counters -->
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 0.85rem; margin-bottom: 1.5rem;">
-        
-        <!-- Total -->
-        <div onclick="window.setWorkshopStockTab('ALL')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: space-between; background: rgba(15, 23, 42, 0.6); cursor: pointer;" title="Tüm Kartları Listele">
-          <div>
-            <div style="font-size: 0.74rem; color: #94A3B8; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Toplam Atölye Stoğu</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #FFF; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${totalCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(0, 243, 255, 0.1); border: 1px solid rgba(0, 243, 255, 0.25); display: flex; align-items: center; justify-content: center; color: #00f3ff; font-size: 1.15rem;">
-            <i class="fa-solid fa-warehouse"></i>
-          </div>
-        </div>
 
-        <!-- Defect / Pending Arrival -->
-        <div onclick="window.setWorkshopStockTab('DEFECT')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(234, 179, 8, 0.25); display: flex; align-items: center; justify-content: space-between; background: rgba(234, 179, 8, 0.04); cursor: pointer;" title="Kabul Bekleyen Kargoları Listele">
-          <div>
-            <div style="font-size: 0.74rem; color: #eab308; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Kabul Bekleyen (Yolda)</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #eab308; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${pendingDefectCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.3); display: flex; align-items: center; justify-content: center; color: #eab308; font-size: 1.15rem;">
-            <i class="fa-solid fa-truck"></i>
-          </div>
-        </div>
-
-        <!-- Waiting in Stock (Rafta Bekleyen Arızalılar) -->
-        <div onclick="window.setWorkshopStockTab('WAITING_STOCK')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.25); display: flex; align-items: center; justify-content: space-between; background: rgba(59, 130, 246, 0.04); cursor: pointer;" title="Rafta / Ambarda Bekleyen Arızalı Kartlar">
-          <div>
-            <div style="font-size: 0.74rem; color: #60a5fa; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Arızalı Stok (Bekleyen)</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #60a5fa; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${waitingStockCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); display: flex; align-items: center; justify-content: center; color: #3b82f6; font-size: 1.15rem;">
-            <i class="fa-solid fa-boxes-stacked"></i>
-          </div>
-        </div>
-
-        <!-- Active Work Orders (Masada Onarımda) -->
-        <div onclick="window.setWorkshopStockTab('ACTIVE_TASK')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(20, 241, 149, 0.3); display: flex; align-items: center; justify-content: space-between; background: rgba(20, 241, 149, 0.04); cursor: pointer;" title="İş Emri Açılmış / Masada Onarımda Olan Kartlar">
-          <div>
-            <div style="font-size: 0.74rem; color: #14F195; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Masada Onarımda</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #14F195; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${activeWorkOrderCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(20, 241, 149, 0.15); border: 1px solid rgba(20, 241, 149, 0.3); display: flex; align-items: center; justify-content: center; color: #14F195; font-size: 1.15rem;">
-            <i class="fa-solid fa-screwdriver-wrench"></i>
-          </div>
-        </div>
-
-        <!-- Repaired Ready -->
-        <div onclick="window.setWorkshopStockTab('REPAIRED')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.25); display: flex; align-items: center; justify-content: space-between; background: rgba(16, 185, 129, 0.04); cursor: pointer;" title="Revize Sağlam Kartları Listele">
-          <div>
-            <div style="font-size: 0.74rem; color: #34d399; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Revize Sağlam (Hazır)</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #34d399; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${repairedReadyCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); display: flex; align-items: center; justify-content: center; color: #34d399; font-size: 1.15rem;">
-            <i class="fa-solid fa-circle-check"></i>
-          </div>
-        </div>
-
-        <!-- No Serial Cards Counter Card -->
-        <div onclick="window.setWorkshopStockTab('NO_SERIAL')" class="glass-panel" style="padding: 1.1rem; border-radius: 12px; border: 1px solid rgba(236, 72, 153, 0.25); display: flex; align-items: center; justify-content: space-between; background: rgba(236, 72, 153, 0.04); cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(236,72,153,0.09)'" onmouseout="this.style.background='rgba(236,72,153,0.04)'" title="Seri Numarası Olmayan Kartları Filtrele">
-          <div>
-            <div style="font-size: 0.74rem; color: #f472b6; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Seri Numarasızlar</div>
-            <div style="font-size: 1.6rem; font-weight: 900; color: #f472b6; font-family: 'Rajdhani', sans-serif; margin-top: 2px;">${noSerialStockCount}</div>
-          </div>
-          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236, 72, 153, 0.3); display: flex; align-items: center; justify-content: center; color: #f472b6; font-size: 1.15rem;">
-            <i class="fa-solid fa-wand-magic-sparkles"></i>
-          </div>
-        </div>
-
-      </div>
 
       <!-- Filters & Live Search Toolbar (Single Row) -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; gap: 0.75rem; flex-wrap: wrap;">

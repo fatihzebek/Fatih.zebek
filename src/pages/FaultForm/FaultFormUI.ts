@@ -10,11 +10,49 @@ export const FaultFormUI = {
     `,
 
     renderMainLayout: (currentTask: any) => {
-        const isMaintenanceTask = currentTask?.isMaintenance || 
+        const isWarehouse = currentTask?.taskLocationType === 'WAREHOUSE' || 
+                            currentTask?.turbinSeriNo === 'DEPO' || 
+                            (typeof currentTask?.turbineId === 'string' && currentTask.turbineId.toLowerCase().includes('depo')) ||
+                            (typeof currentTask?.secilenSablon === 'string' && currentTask.secilenSablon.startsWith('Depo İşi'));
+        
+        let matSap = currentTask?.repairedMaterial?.sapNo || '';
+        let matDesc = currentTask?.repairedMaterial?.description || '';
+        let matQty = currentTask?.repairedMaterial?.quantity || 1;
+
+        if (!matSap && currentTask?.yoneticiNotu) {
+            const match = currentTask.yoneticiNotu.match(/([0-9]{4,8})\s*-\s*([^|(]+)/);
+            if (match) {
+                matSap = match[1].trim();
+                matDesc = match[2].trim();
+            }
+        }
+
+        const taskTemplateLower = (currentTask?.secilenSablon || currentTask?.type || '').toLowerCase();
+        const isWarehouseRevision = isWarehouse && (
+            Boolean(matSap || currentTask?.repairedMaterial?.sapNo) ||
+            taskTemplateLower.includes('revizyon') ||
+            taskTemplateLower.includes('onarım') ||
+            taskTemplateLower.includes('tamir') ||
+            taskTemplateLower.includes('mekanik')
+        ) && !taskTemplateLower.includes('sayım') && !taskTemplateLower.includes('tasnif') && !taskTemplateLower.includes('temizlik') && !taskTemplateLower.includes('aletleri') && !taskTemplateLower.includes('pano') && !taskTemplateLower.includes('hurda') && !taskTemplateLower.includes('iyileştirme');
+
+        const isWarehouseNonRevision = isWarehouse && !isWarehouseRevision;
+
+        const currentYear = new Date().getFullYear();
+        let defaultTamirFormNo = '';
+        if (isWarehouseRevision) {
+            defaultTamirFormNo = currentTask?.tamirFormNo || 
+                                 currentTask?.revisionNo || 
+                                 currentTask?.repairNo || 
+                                 (currentTask?.reportNo && currentTask.reportNo.startsWith('REV-') ? currentTask.reportNo : '') ||
+                                 `REV-${currentYear}-${currentTask?.id ? (currentTask.id.replace(/\D/g, '').slice(-4) || '1001').padStart(4, '0') : Math.floor(1000 + Math.random() * 9000)}`;
+        }
+
+        const isMaintenanceTask = !isWarehouse && (currentTask?.isMaintenance || 
                                  ['bak-m', 'bakim', 'bakım', 'yag', 'yağ', 'kont', 'ana', 'bak'].some(k => (currentTask?.secilenSablon || '').toLowerCase().includes(k)) &&
-                                 !(currentTask?.secilenSablon || '').toLowerCase().includes('ariza');
+                                 !(currentTask?.secilenSablon || '').toLowerCase().includes('ariza'));
         const isDeficiencyTask = currentTask?.type === 'EKSİKLİK';
-        const hideFaultFields = isMaintenanceTask || isDeficiencyTask;
+        const hideFaultFields = isWarehouse || isMaintenanceTask || isDeficiencyTask;
         const isSmartEditor = localStorage.getItem('currentEditingTemplateId') !== null;
 
         const isPlanliDurus = currentTask?.secilenSablon === 'Planlı Duruş' || 
@@ -28,7 +66,9 @@ export const FaultFormUI = {
         const defaultFaultCode = isPlanliDurus ? 'Planlı Duruş' : (currentTask?.rawFaultCode || currentTask?.faultCode || '');
         let initialFaultDesc = currentTask?.faultDesc || '';
         
-        if (isPlanliDurus) {
+        if (isWarehouse) {
+            initialFaultDesc = currentTask?.secilenSablon || 'Saha İçi Parça Revizyonu';
+        } else if (isPlanliDurus) {
             initialFaultDesc = currentTask?.yoneticiNotu || currentTask?.description || 'Planlı Duruş';
         } else if (defaultFaultCode) {
             const exact = statusService.getCodeByKod(defaultFaultCode);
@@ -115,8 +155,8 @@ export const FaultFormUI = {
                       </span>
                     ` : ''}
                     <div>
-                      <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">REFERANS NO</div>
-                      <div style="font-size: 1rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">#${currentTask?.id?.slice(-6).toUpperCase() || 'NEW-FORM'}</div>
+                      <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">${isWarehouseRevision ? 'TAMİR / REVİZYON NO' : 'REFERANS NO'}</div>
+                      <div style="font-size: 1rem; font-weight: 900; color: ${isWarehouseRevision ? '#10B981' : 'var(--accent-cyan)'}; letter-spacing: 1px;">${isWarehouseRevision ? defaultTamirFormNo : ('#' + (currentTask?.id?.slice(-6).toUpperCase() || 'NEW-FORM'))}</div>
                     </div>
                   </div>
                 </header>
@@ -144,26 +184,44 @@ export const FaultFormUI = {
                         </h3>
                       </div>
                       <div style="display: flex; flex-direction: column; gap: 1.5rem; width: 100%;">
-                        <!-- Row 1: Tarih, Türbin Seri No, Türbin No, Bölge -->
-                        <div class="fault-form-top-row" style="display: grid; width: 100%;">
-                          <div class="form-group">
-                            <label>TARİH</label>
-                            <input type="date" id="form-date" class="cyber-input" value="${currentTask?.date ? currentTask.date.split('T')[0] : new Date().toISOString().split('T')[0]}" required>
+                        <!-- Row 1: Tarih, Türbin Seri No, Türbin No, Bölge / Depo -->
+                        ${isWarehouse ? `
+                          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; width: 100%;">
+                            <div class="form-group">
+                              <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">TARİH</label>
+                              <input type="date" id="form-date" class="cyber-input" value="${currentTask?.date ? currentTask.date.split('T')[0] : new Date().toISOString().split('T')[0]}" required>
+                            </div>
+                            <div class="form-group">
+                              <label style="color: #10B981; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">
+                                <i class="fa-solid fa-warehouse"></i> SEÇİLEN DEPO / TESİS
+                              </label>
+                              <input type="text" id="turbin-no" class="cyber-input" readonly style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.4); color: #10B981; font-weight: 800; cursor: default;" value="${currentTask?.warehouseName || currentTask?.sahaBilgisi || currentTask?.siteName || 'Depo'}">
+                              <input type="hidden" id="turbin-seri" value="DEPO">
+                              <input type="hidden" id="form-site-name" value="${currentTask?.siteName || currentTask?.sahaBilgisi || ''}">
+                              <input type="hidden" id="form-site" value="${currentTask?.realSiteId || currentTask?.siteId || ''}">
+                            </div>
                           </div>
-                          <div class="form-group">
-                            <label>TÜRBİN SERİ NO</label>
-                            <input type="text" id="turbin-seri" class="cyber-input" placeholder="Örn: 41193" oninput="window.handleSerialLookup(this.value)" autocomplete="off" required value="${currentTask?.turbinSeriNo || ''}">
+                        ` : `
+                          <div class="fault-form-top-row" style="display: grid; width: 100%;">
+                            <div class="form-group">
+                              <label>TARİH</label>
+                              <input type="date" id="form-date" class="cyber-input" value="${currentTask?.date ? currentTask.date.split('T')[0] : new Date().toISOString().split('T')[0]}" required>
+                            </div>
+                            <div class="form-group">
+                              <label>TÜRBİN SERİ NO</label>
+                              <input type="text" id="turbin-seri" class="cyber-input" placeholder="Örn: 41193" oninput="window.handleSerialLookup(this.value)" autocomplete="off" required value="${currentTask?.turbinSeriNo || ''}">
+                            </div>
+                            <div class="form-group">
+                              <label>TÜRBİN NO</label>
+                              <input type="text" id="turbin-no" class="cyber-input" placeholder="Oto dolacak..." readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed;" value="${currentTask?.turbineId || ''}">
+                            </div>
+                            <div class="form-group">
+                              <label>BÖLGE</label>
+                              <input type="text" id="form-site-name" class="cyber-input" placeholder="Oto dolacak..." readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed;" value="${currentTask?.siteName || ''}">
+                              <input type="hidden" id="form-site" value="${currentTask?.realSiteId || currentTask?.siteId || ''}">
+                            </div>
                           </div>
-                          <div class="form-group">
-                            <label>TÜRBİN NO</label>
-                            <input type="text" id="turbin-no" class="cyber-input" placeholder="Oto dolacak..." readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed;" value="${currentTask?.turbineId || ''}">
-                          </div>
-                          <div class="form-group">
-                            <label>BÖLGE</label>
-                            <input type="text" id="form-site-name" class="cyber-input" placeholder="Oto dolacak..." readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed;" value="${currentTask?.siteName || ''}">
-                            <input type="hidden" id="form-site" value="${currentTask?.realSiteId || currentTask?.siteId || ''}">
-                          </div>
-                        </div>
+                        `}
 
                         <!-- Row 2: Arıza Kodu / Planlı Kontrol & Açıklama -->
                         <div style="display: ${hideFaultFields ? 'none' : 'flex'}; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
@@ -278,23 +336,69 @@ export const FaultFormUI = {
                       </div>
                     </div>
 
-                    <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem; border-top: 3px solid var(--accent-green);">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                        <h3 style="font-size: 0.7rem; font-weight: 900; color: var(--accent-green); margin: 0; display: flex; align-items: center; gap: 0.5rem; letter-spacing: 1px;">
-                          <i class="fa-solid fa-boxes-stacked"></i> MALZEME YÖNETİMİ
+                  ${!isWarehouseNonRevision ? `
+                    <div class="glass-panel" style="padding: 1.5rem; margin-bottom: 2rem; border-top: 3px solid ${isWarehouse ? '#10B981' : 'var(--accent-green)'};">
+                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+                        <h3 style="font-size: 0.72rem; font-weight: 900; color: ${isWarehouse ? '#10B981' : 'var(--accent-green)'}; margin: 0; display: flex; align-items: center; gap: 0.5rem; letter-spacing: 1px;">
+                          <i class="fa-solid ${isWarehouse ? 'fa-screwdriver-wrench' : 'fa-boxes-stacked'}"></i> ${isWarehouse ? 'REVİZYON & MALZEME YÖNETİMİ' : 'MALZEME YÖNETİMİ'}
                         </h3>
-                        <div style="display: flex; align-items: center; gap: 2rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                          ${isWarehouse ? `
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                              <label style="font-size: 0.7rem; color: #10B981; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 4px;">
+                                <i class="fa-solid fa-wrench"></i> TAMİR FORM NO:
+                              </label>
+                              <input type="text" id="tamir-form-no" class="cyber-input" style="width: 155px; height: 30px; color: #10B981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); text-align: center; font-weight: 800; font-family: monospace;" placeholder="REV-2026-XXXX" value="${defaultTamirFormNo}">
+                            </div>
+                          ` : ''}
                           <div style="display: flex; align-items: center; gap: 0.5rem;">
                             <label style="font-size: 0.7rem; color: var(--text-muted); margin: 0;">MALZEME ÇIKIŞ FORM NO:</label>
-                            <input type="text" id="mat-form-no" class="cyber-input" style="width: 150px; height: 30px; color: var(--accent-red); text-align: center; font-weight: 800;" placeholder="MÇF NO">
+                            <input type="text" id="mat-form-no" class="cyber-input" style="width: 140px; height: 30px; color: var(--accent-red); text-align: center; font-weight: 800;" placeholder="MÇF NO">
                           </div>
                           <div style="display: flex; gap: 0.4rem;">
-                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.addMaterialRow()"><i class="fa-solid fa-plus"></i> MALZEME EKLE</button>
-                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(143, 148, 251, 0.08); border: 1px solid rgba(143, 148, 251, 0.4); color: #8f94fb; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.scanBarcodeForMaterial()"><i class="fa-solid fa-qrcode"></i> BARKOD OKUT</button>
+                            <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.4); color: #00e676; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.addMaterialRow()"><i class="fa-solid fa-plus"></i> ${isWarehouse ? 'SARF / PARÇA EKLE' : 'MALZEME EKLE'}</button>
+                            ${!isWarehouse ? `
+                              <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(143, 148, 251, 0.08); border: 1px solid rgba(143, 148, 251, 0.4); color: #8f94fb; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.scanBarcodeForMaterial()"><i class="fa-solid fa-qrcode"></i> BARKOD OKUT</button>
+                            ` : ''}
                             <button type="button" class="btn-cyber" style="padding: 0 0.75rem; height: 30px; font-size: 0.65rem; font-weight: 800; border-radius: 6px; background: rgba(255, 23, 68, 0.08); border: 1px solid rgba(255, 23, 68, 0.4); color: #ff1744; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onclick="window.removeSelectedMaterials()"><i class="fa-solid fa-trash"></i> SATIR SİL</button>
                           </div>
                         </div>
                       </div>
+
+                      ${isWarehouse && (matSap || matDesc) ? `
+                        <!-- Onarılan Ana Parça Kartı (DEFECT -> REVISED) -->
+                        <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-size: 0.72rem; font-weight: 800; color: #10B981; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                              <i class="fa-solid fa-wrench"></i> ONARILAN ANA MALZEME (REVİZYON HEDEFİ)
+                            </span>
+                            <span style="background: #EF4444; color: #000; font-weight: 900; font-size: 0.68rem; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.5px;">
+                              🔴 DEFECT ➔ 🟢 REVISED
+                            </span>
+                          </div>
+                          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            ${matSap ? `
+                              <span style="font-family: monospace; font-size: 1rem; font-weight: 800; color: #00f3ff; background: rgba(0, 243, 255, 0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(0,243,255,0.2);">
+                                ${matSap}
+                              </span>
+                            ` : ''}
+                            <span style="font-size: 0.92rem; font-weight: 700; color: #F8FAFC;">
+                              ${matDesc}
+                            </span>
+                          </div>
+                          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; color: #94A3B8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                            <span>Onarım Adedi: <strong style="color: #fff;">${matQty} Adet</strong></span>
+                          </div>
+                        </div>
+
+                        <!-- Sarf Malzemeler Başlığı -->
+                        <div style="margin-bottom: 0.75rem;">
+                          <span style="font-size: 0.68rem; font-weight: 800; color: #94A3B8; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-cubes"></i> ONARIM SIRASINDA KULLANILAN SARF VE YEDEK PARÇALAR (OPSİYONEL)
+                          </span>
+                        </div>
+                      ` : ''}
+
                       <div style="overflow-x: auto;">
                         <table class="cyber-table" style="width: 100%; border-collapse: collapse; font-size: 0.7rem;">
                           <thead>
@@ -311,6 +415,7 @@ export const FaultFormUI = {
                         </table>
                       </div>
                     </div>
+                  ` : ''}
                   </div>
 
                   <div id="tab-content-audit" style="display: none;">
@@ -350,23 +455,22 @@ export const FaultFormUI = {
         </tr>
     `,
     renderWorkSessionRow: (ws: any, isLast: boolean) => {
-        const teamList = ((window as any).teamPersonnel || []).filter((p: string) => p && p.trim() !== '');
         const isSessionLocked = ws.locked === true || !isLast;
+        const teamList = (window as any).teamPersonnel ? [...(window as any).teamPersonnel].filter(p => p && p.trim() !== '' && p !== '-- Personel Yok --') : [];
         let rowPersonnel = isSessionLocked 
-            ? (Array.isArray(ws.personnel) && ws.personnel.length > 0 ? ws.personnel : []) 
+            ? (Array.isArray(ws.personnel) && ws.personnel.length > 0 ? ws.personnel.filter((p: string) => p && p.trim() !== '' && p !== '-- Personel Yok --') : []) 
             : teamList;
         
-        if (isSessionLocked && rowPersonnel.length === 0) {
-            rowPersonnel = ws.personnel && typeof ws.personnel === 'string' ? [ws.personnel] : ['-- Personel Yok --'];
-        }
-            
-        const displayNames = rowPersonnel.length > 0 ? rowPersonnel.join(', ') : 'Lütfen önce personel ekleyin';
+        const hasValidPersonnel = rowPersonnel.length > 0;
+        const displayNames = hasValidPersonnel 
+            ? rowPersonnel.join(', ') 
+            : '<span style="color: #ef4444; font-weight: 700; display: flex; align-items: center; gap: 4px; font-size: 0.72rem;"><i class="fa-solid fa-triangle-exclamation"></i> -- Personel Yok (İsim Yazınız) --</span>';
         const disabledAttr = isSessionLocked ? 'disabled' : '';
 
         return `
-        <div class="session-card" style="display: flex; gap: 0.5rem; align-items: center; background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 6px; padding: 0.35rem 0.5rem; min-height: 38px; box-sizing: border-box; width: 100%; min-width: 850px;">
+        <div class="session-card" style="display: flex; gap: 0.5rem; align-items: center; background: rgba(255, 255, 255, 0.015); border: 1px solid ${hasValidPersonnel ? 'rgba(255, 255, 255, 0.05)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 6px; padding: 0.35rem 0.5rem; min-height: 38px; box-sizing: border-box; width: 100%; min-width: 850px;">
             <!-- Personel (Kilitli/Otomatik) -->
-            <div style="flex: 1.5; min-width: 130px; font-size: 0.75rem; color: #fff; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; min-height: 28px; height: auto; display: flex; align-items: center; padding: 4px 6px; box-sizing: border-box; word-break: break-word; line-height: 1.25;" title="${displayNames}">
+            <div style="flex: 1.5; min-width: 130px; font-size: 0.75rem; color: #fff; background: ${hasValidPersonnel ? 'rgba(0,0,0,0.2)' : 'rgba(239,68,68,0.06)'}; border: 1px solid ${hasValidPersonnel ? 'rgba(255,255,255,0.08)' : 'rgba(239,68,68,0.4)'}; border-radius: 4px; min-height: 28px; height: auto; display: flex; align-items: center; padding: 4px 6px; box-sizing: border-box; word-break: break-word; line-height: 1.25;" title="${hasValidPersonnel ? displayNames : 'Lütfen önce personel ismi ekleyiniz'}">
                 ${displayNames}
             </div>
 

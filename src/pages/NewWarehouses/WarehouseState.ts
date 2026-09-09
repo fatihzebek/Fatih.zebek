@@ -1,5 +1,76 @@
 import { formatTeamName } from '../../utils/formatters';
 import { dataService } from '../../services/DataService';
+import { db } from '../../firebase';
+import { collection, getDocs, setDoc, doc, serverTimestamp } from 'firebase/firestore';
+
+export const PREDEFINED_TURBINE_TYPES = [
+  'E44 - E48',
+  'E70 - E82',
+  'E82/E2 - E92',
+  'RTU - FCU'
+];
+
+export const sapMetadataMap = new Map<string, { cabinet?: string; turbineType?: string }>();
+let sapMetadataFetched = false;
+
+export const fetchSapMetadata = async (forceRefresh = false): Promise<Map<string, { cabinet?: string; turbineType?: string }>> => {
+  if (sapMetadataFetched && !forceRefresh && sapMetadataMap.size > 0) {
+    return sapMetadataMap;
+  }
+  try {
+    const snap = await getDocs(collection(db, 'material_sap_metadata'));
+    snap.forEach(docSnap => {
+      const data = docSnap.data();
+      const sap = docSnap.id.trim();
+      if (sap) {
+        sapMetadataMap.set(sap, {
+          cabinet: (data.cabinet || '').trim(),
+          turbineType: (data.turbineType || '').trim()
+        });
+      }
+    });
+    sapMetadataFetched = true;
+  } catch (err) {
+    console.warn('[WarehouseState] Failed to fetch material_sap_metadata:', err);
+  }
+  return sapMetadataMap;
+};
+
+export const saveSapMetadata = async (sapNo: string, data: { cabinet?: string; turbineType?: string }) => {
+  const cleanSap = String(sapNo || '').trim();
+  if (!cleanSap) return;
+  const existing = sapMetadataMap.get(cleanSap) || {};
+  const updated = {
+    ...existing,
+    ...data
+  };
+  sapMetadataMap.set(cleanSap, updated);
+
+  try {
+    const user = getUserProfile() || (window as any).currentUser;
+    const userEmail = (user?.email || '').toLowerCase().trim();
+    await setDoc(doc(db, 'material_sap_metadata', cleanSap), {
+      sapNo: cleanSap,
+      ...updated,
+      updatedAt: serverTimestamp(),
+      updatedBy: userEmail
+    }, { merge: true });
+  } catch (err) {
+    console.error('[WarehouseState] Error saving material_sap_metadata:', err);
+  }
+};
+
+export const getEffectiveCabinet = (item: any): string => {
+  const sap = String(item?.sapNo || '').trim();
+  const meta = sap ? sapMetadataMap.get(sap) : null;
+  return (item?.cabinet || meta?.cabinet || '').trim();
+};
+
+export const getEffectiveTurbineType = (item: any): string => {
+  const sap = String(item?.sapNo || '').trim();
+  const meta = sap ? sapMetadataMap.get(sap) : null;
+  return (item?.turbineType || meta?.turbineType || '').trim();
+};
 
 export const warehouseState = {
   userProfile: null as any,
@@ -9,6 +80,15 @@ export const warehouseState = {
   currentWarehouse: null as any,
   isMobileWarehouse: false,
   targetOptions: [] as { id: string; name: string }[],
+  
+  // Price view permissions and cache
+  canViewPrices: false,
+  pricesMap: new Map<string, any>(),
+  unpricedItems: [] as any[],
+  
+  // Scrap / Hurda items state
+  scrapItems: [] as any[],
+  allFieldScraps: [] as any[],
   
   // Inventory pagination and state
   inventoryItems: [] as any[],
@@ -47,6 +127,91 @@ export const warehouseState = {
 
   // Selected materials for bulk operations & QR label printing across pages
   selectedMaterialIds: new Set<string>(),
+
+  // Fatih Zebek exclusive filters
+  selectedCabinetFilter: 'ALL' as string,
+  selectedTurbineTypeFilter: 'ALL' as string,
+};
+
+export const getAvailableCabinets = (): string[] => {
+  const distinct = new Set<string>();
+  (warehouseState.inventoryItems || []).forEach(item => {
+    const raw = getEffectiveCabinet(item);
+    if (raw) {
+      distinct.add(raw);
+      if (raw.includes(' _ ') || raw.includes(' / ') || raw.includes(',')) {
+        const parts = raw.split(/\s+_\s+|\s*\/\s*|,\s*/);
+        parts.forEach((p: string) => {
+          const cleanPart = p.trim();
+          if (cleanPart && cleanPart.length > 1) {
+            distinct.add(cleanPart);
+          }
+        });
+      }
+    }
+  });
+  sapMetadataMap.forEach(meta => {
+    const raw = (meta.cabinet || '').trim();
+    if (raw) {
+      distinct.add(raw);
+      if (raw.includes(' _ ') || raw.includes(' / ') || raw.includes(',')) {
+        const parts = raw.split(/\s+_\s+|\s*\/\s*|,\s*/);
+        parts.forEach((p: string) => {
+          const cleanPart = p.trim();
+          if (cleanPart && cleanPart.length > 1) {
+            distinct.add(cleanPart);
+          }
+        });
+      }
+    }
+  });
+  return Array.from(distinct).sort((a, b) => a.localeCompare(b, 'tr', { sensitivity: 'base', numeric: true }));
+};
+
+export const getAvailableTurbineTypes = (): string[] => {
+  const distinct = new Set<string>(PREDEFINED_TURBINE_TYPES);
+  (warehouseState.inventoryItems || []).forEach(item => {
+    const raw = getEffectiveTurbineType(item);
+    if (raw) distinct.add(raw);
+  });
+  sapMetadataMap.forEach(meta => {
+    const raw = (meta.turbineType || '').trim();
+    if (raw) distinct.add(raw);
+  });
+  return Array.from(distinct);
+};
+
+export const isUserFatihZebek = (userProfile?: any): boolean => {
+  const user = userProfile || getUserProfile() || (window as any).appState?.userProfile || (window as any).currentUser;
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  return userEmail === 'fatih.zebek@demirerholding.com' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek');
+};
+
+export const isPcbMaterial = (item: any): boolean => {
+  if (!item) return false;
+  const text = `${item.name || ''} ${item.description || ''} ${item.category || ''} ${item.sapNo || ''}`.toLowerCase().trim();
+  return /^(pcb|kart)\b/i.test(text) || 
+         /pcb|kart\b|kartı\b|kartlar|board\b|plata\b|platine|leiterplatte|cpu\b|controller|ana\s*kart|sürücü\s*kart|tetikleme|haberleşme|modül\s*kart|power\s*board|io\s*board|dsp\b|motherboard|anaboard|devre\s*kart|driver\s*board|interface\s*board|sub-rack/i.test(text);
+};
+
+export const isIgbtMaterial = (item: any): boolean => {
+  if (!item) return false;
+  // If it's a PCB / electronic board, it strictly belongs to PCB (Cards) tab
+  if (isPcbMaterial(item)) return false;
+
+  const text = `${item.name || ''} ${item.description || ''} ${item.category || ''} ${item.sapNo || ''}`.toLowerCase().trim();
+  return /igbt|skm\d|ff\d{2,4}|skkd|skkt|semikron|eupec|infineon|thyristor|tristör|rectifier|bridge\s*rectifier|diode\s*module|diyot\s*modül|power\s*block|güç\s*bloğu|köprü\s*diyot|chopper\s*modul|power\s*module/i.test(text);
+};
+
+export const canViewWarehousePrices = (userProfile?: any): boolean => {
+  const user = userProfile || getUserProfile() || (window as any).appState?.userProfile || (window as any).currentUser;
+  const userRole = (user?.role || '').toUpperCase().trim();
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const isAdmin = userRole === 'ADMIN' || userRole === 'YONETICI' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek');
+  const isMaterialManager = userRole === 'MALZEME_YONETIMI' || 
+    userEmail === 'hursit.akter@demirerholding.com' ||
+    userEmail === 'emir.unver@demirerholding.com';
+  return Boolean(isAdmin || isMaterialManager);
 };
 
 export const getUserProfile = (): any => {

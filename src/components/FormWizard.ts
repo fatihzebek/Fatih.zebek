@@ -2,9 +2,21 @@ import { dataService } from '../services/DataService';
 import { taskService } from '../services/TaskService';
 import { statusService } from '../services/StatusService';
 import { maintenanceService } from '../services/MaintenanceService';
+import { warehouseService } from '../services/WarehouseService';
+
+let formLocationMode: 'TURBINE' | 'WAREHOUSE' = 'TURBINE';
+let currentWarehouseDefects: any[] = [];
+let selectedDefectItem: any = null;
 
 export const NewTaskForm = async () => {
   const templates = await maintenanceService.fetchTemplates();
+  const warehouses = dataService.getWarehouses();
+  currentWarehouseDefects = [];
+  selectedDefectItem = null;
+
+  const allowedTeams = dataService.getAllowedTeams();
+  const isSingleTeam = allowedTeams.length === 1;
+  const initialTeamValue = isSingleTeam ? allowedTeams[0] : '';
   
   // Group templates by turbine model
   const groupedTemplates: Record<string, typeof templates> = {};
@@ -17,7 +29,8 @@ export const NewTaskForm = async () => {
     // Bind custom dropdowns
     const dropdowns = [
       { id: 'nt-task-type', label: 'Görev Türü Seçiniz...' },
-      { id: 'nt-team', label: 'Atanacak Ekip Seçiniz...' }
+      { id: 'nt-team', label: 'Atanacak Ekip Seçiniz...' },
+      { id: 'nt-warehouse', label: 'Depo / Tesis Seçiniz...' }
     ];
 
     dropdowns.forEach(dd => {
@@ -36,22 +49,41 @@ export const NewTaskForm = async () => {
             if (other.id !== dd.id) {
               const otherOpt = document.getElementById(`${other.id}-options`);
               const otherTrig = document.getElementById(`${other.id}-trigger`);
+              const otherWrap = document.getElementById(`${other.id}-dropdown-wrapper`);
               otherOpt?.classList.add('hidden');
               otherTrig?.querySelector('.fa-chevron-down')?.classList.remove('rotate-180');
+              if (otherWrap) otherWrap.style.zIndex = '30';
             }
           });
 
+          const isOpening = options.classList.contains('hidden');
           options.classList.toggle('hidden');
-          const icon = trigger.querySelector('.fa-chevron-down');
-          if (icon) {
-            icon.classList.toggle('rotate-180');
+          const wrapper = document.getElementById(`${dd.id}-dropdown-wrapper`);
+          if (wrapper) {
+            wrapper.style.zIndex = isOpening ? '1000' : '30';
           }
 
-          // Focus on search input when team dropdown is opened
-          if (dd.id === 'nt-team' && !options.classList.contains('hidden')) {
-            const searchInput = document.getElementById('nt-team-search') as HTMLInputElement;
-            if (searchInput) {
-              setTimeout(() => searchInput.focus(), 50);
+          const icon = trigger.querySelector('.fa-chevron-down');
+          if (icon) {
+            if (isOpening) {
+              icon.classList.add('rotate-180');
+            } else {
+              icon.classList.remove('rotate-180');
+            }
+          }
+
+          if (isOpening) {
+            // Center trigger into view on mobile so full dropdown options list is clearly visible
+            setTimeout(() => {
+              trigger.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 80);
+
+            // Focus on search input only on desktop (prevent mobile keyboard overlay)
+            if (dd.id === 'nt-team' && window.innerWidth > 768) {
+              const searchInput = document.getElementById('nt-team-search') as HTMLInputElement;
+              if (searchInput) {
+                setTimeout(() => searchInput.focus(), 100);
+              }
             }
           }
         });
@@ -91,6 +123,8 @@ export const NewTaskForm = async () => {
             // Trigger change logic
             if (dd.id === 'nt-task-type') {
               (window as any).handleTaskTypeChange(val);
+            } else if (dd.id === 'nt-warehouse') {
+              (window as any).handleWarehouseSelect(val);
             }
           });
         });
@@ -99,83 +133,75 @@ export const NewTaskForm = async () => {
 
     // Handle team search filter input events
     const teamSearchInput = document.getElementById('nt-team-search') as HTMLInputElement;
-    if (teamSearchInput) {
-      teamSearchInput.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
+    const teamOptionsWrapper = document.getElementById('nt-team-options');
+    if (teamSearchInput && teamOptionsWrapper) {
       teamSearchInput.addEventListener('input', (e) => {
-        const val = (e.target as HTMLInputElement).value.toLowerCase().trim();
-        const optionsContainer = document.getElementById('nt-team-options');
-        if (optionsContainer) {
-          const options = optionsContainer.querySelectorAll('.custom-dropdown-option');
-          options.forEach(opt => {
-            const dataVal = opt.getAttribute('data-value') || '';
-            if (!dataVal) return; // Keep "Atanacak Ekip Seçiniz..." visible
+        const query = ((e.target as HTMLInputElement).value || '').trim().toLowerCase();
+        const allOptionElements = teamOptionsWrapper.querySelectorAll('.custom-dropdown-option');
+        
+        allOptionElements.forEach(opt => {
+          const val = opt.getAttribute('data-value') || '';
+          if (!val) {
+            (opt as HTMLElement).style.display = query ? 'none' : 'flex';
+            return;
+          }
+          
+          const teamText = opt.querySelector('span')?.textContent?.toLowerCase() || '';
+          const matchNumber = val.toLowerCase().replace('team', '').trim().includes(query) || 
+                              val.toLowerCase().replace('team 0', '').trim().includes(query) ||
+                              val.toLowerCase().replace('team ', '').trim().includes(query);
+          
+          if (teamText.includes(query) || val.toLowerCase().includes(query) || matchNumber) {
+            (opt as HTMLElement).style.display = 'flex';
+          } else {
+            (opt as HTMLElement).style.display = 'none';
+          }
+        });
+      });
 
-            const optText = opt.textContent || '';
-            const cleanOptText = optText.toLowerCase().replace(/\s+/g, '');
-            const cleanSearchVal = val.replace(/\s+/g, '');
-
-            const numSearch = val.replace(/[^0-9]/g, '');
-            const numOpt = optText.replace(/[^0-9]/g, '');
-            const isNumMatch = numSearch !== '' && parseInt(numOpt) === parseInt(numSearch);
-
-            if (optText.toLowerCase().includes(val) || cleanOptText.includes(cleanSearchVal) || isNumMatch || val === '') {
-              (opt as HTMLElement).style.display = 'flex';
-            } else {
-              (opt as HTMLElement).style.display = 'none';
-            }
-          });
+      teamSearchInput.addEventListener('click', (e) => e.stopPropagation());
+      teamSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const firstVisible = teamOptionsWrapper.querySelector('.custom-dropdown-option:not([style*="display: none"]):not([data-value=""])') as HTMLElement;
+          if (firstVisible) {
+            firstVisible.click();
+          }
         }
       });
     }
 
-    // Close on outside click
-    document.addEventListener('click', () => {
+    // Global document click to close dropdowns
+    document.addEventListener('click', (e) => {
       dropdowns.forEach(dd => {
-        const options = document.getElementById(`${dd.id}-options`);
-        const trigger = document.getElementById(`${dd.id}-trigger`);
-        options?.classList.add('hidden');
-        const icon = trigger?.querySelector('.fa-chevron-down');
-        if (icon) icon.classList.remove('rotate-180');
-      });
-      // Clear team search input when closed
-      if (teamSearchInput) {
-        teamSearchInput.value = '';
-        const optionsContainer = document.getElementById('nt-team-options');
-        if (optionsContainer) {
-          optionsContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
-            (o as HTMLElement).style.display = 'flex';
-          });
+        const wrapper = document.getElementById(`${dd.id}-dropdown-wrapper`);
+        if (wrapper && !wrapper.contains(e.target as Node)) {
+          const options = document.getElementById(`${dd.id}-options`);
+          const trigger = document.getElementById(`${dd.id}-trigger`);
+          options?.classList.add('hidden');
+          trigger?.querySelector('.fa-chevron-down')?.classList.remove('rotate-180');
         }
-      }
+      });
     });
 
-    // Check if task creation was triggered with pre-filled parameters
+    // Prefill from appState if opened from another page
     const activeTask = (window as any).appState?.activeTask;
-    if (activeTask && activeTask.prefilledSerial) {
-      const serialInput = document.getElementById('nt-serial') as HTMLInputElement;
-      if (serialInput) {
-        serialInput.value = activeTask.prefilledSerial;
-        // Set tempActiveTask so handleSerialAutoFill can access prefilledMaintType
-        (window as any).tempActiveTask = activeTask;
-        // Trigger autofill to resolve site and turbine number
-        (window as any).handleSerialAutoFill(activeTask.prefilledSerial);
+    if (activeTask) {
+      if (activeTask.prefilledSerial) {
+        const serialInput = document.getElementById('nt-serial') as HTMLInputElement;
+        if (serialInput) {
+          serialInput.value = activeTask.prefilledSerial;
+          (window as any).handleSerialAutoFill(activeTask.prefilledSerial);
+        }
       }
       if (activeTask.prefilledTaskType) {
-        const taskTypeInput = document.getElementById('nt-task-type') as HTMLInputElement;
-        if (taskTypeInput) {
-          taskTypeInput.value = activeTask.prefilledTaskType;
-          const selectedLabel = document.getElementById('nt-task-type-selected-label');
-          if (selectedLabel) {
-            if (activeTask.prefilledTaskType === 'Bakım') {
-              selectedLabel.textContent = '🔧 Periyodik Bakım Görevi';
-            } else if (activeTask.prefilledTaskType === 'Türbin Arıza Formu') {
-              selectedLabel.textContent = '🚨 Türbin Arıza Formu';
-            } else {
-              selectedLabel.textContent = activeTask.prefilledTaskType;
-            }
-            selectedLabel.style.color = '#ffffff';
+        const typeInput = document.getElementById('nt-task-type') as HTMLInputElement;
+        const typeLabel = document.getElementById('nt-task-type-selected-label');
+        if (typeInput) {
+          typeInput.value = activeTask.prefilledTaskType;
+          if (typeLabel) {
+            typeLabel.textContent = activeTask.prefilledTaskType === 'Türbin Arıza Formu' ? '🚨 Türbin Arıza Formu' : activeTask.prefilledTaskType;
+            typeLabel.style.color = '#ffffff';
           }
           const options = document.getElementById('nt-task-type-options');
           if (options) {
@@ -185,57 +211,107 @@ export const NewTaskForm = async () => {
               matchOpt.classList.add('active');
             }
           }
-          // Fire the task type changed event handler
           (window as any).handleTaskTypeChange(activeTask.prefilledTaskType);
         }
       }
-      // Clear parameter from state so it does not repeat
       (window as any).appState.activeTask = null;
+    }
+
+    if (isSingleTeam && initialTeamValue) {
+      const teamInput = document.getElementById('nt-team') as HTMLInputElement;
+      const teamLabel = document.getElementById('nt-team-selected-label');
+      if (teamInput) teamInput.value = initialTeamValue;
+      if (teamLabel) {
+        teamLabel.textContent = initialTeamValue;
+        teamLabel.style.color = '#ffffff';
+      }
     }
   }, 100);
 
   return `
     <div class="fade-in-up content-area" style="display: flex; flex-direction: column; align-items: center;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; width: 100%; max-width: 750px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; width: 100%; max-width: 750px;">
         <div>
           <h1 class="page-title" style="margin-bottom: 0.25rem;">
             <i class="fa-solid fa-circle-plus" style="color: var(--accent-cyan); text-shadow: 0 0 10px rgba(0,243,255,0.3);"></i> Yeni İş Emri Oluştur
           </h1>
-          <p style="color: var(--text-dim); margin: 0; font-size: 0.85rem;">Türbin bazlı yeni operasyonel iş emri atama formu.</p>
+          <p style="color: var(--text-dim); margin: 0; font-size: 0.85rem;">Türbin veya Depo bazlı yeni operasyonel iş emri atama formu.</p>
         </div>
       </div>
 
-      <div class="glass-panel" style="padding: 2.5rem; width: 100%; max-width: 750px; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; background: rgba(13, 18, 30, 0.4); box-shadow: 0 20px 50px rgba(0,0,0,0.6); position: relative;">
+      <div class="glass-panel" style="padding: 2rem; width: 100%; max-width: 750px; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; background: rgba(13, 18, 30, 0.4); box-shadow: 0 20px 50px rgba(0,0,0,0.6); position: relative; overflow: visible !important;">
         <div style="position: absolute; top: -5%; left: 10%; width: 150px; height: 100px; background: rgba(0, 243, 255, 0.03); filter: blur(60px); border-radius: 50%;"></div>
         
+        <!-- Compact Location Selector Buttons -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
+          <button type="button" class="location-btn selected" id="loc-btn-turbine" 
+                  onclick="window.switchFormLocationMode('TURBINE')" 
+                  style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--accent-cyan); background: rgba(0, 243, 255, 0.12); color: #fff; font-weight: 800; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 0 12px rgba(0, 243, 255, 0.15);">
+            <i class="fa-solid fa-wind" style="color: var(--accent-cyan); font-size: 1rem;"></i>
+            <span>Türbin İş Emri Oluştur</span>
+          </button>
+
+          <button type="button" class="location-btn" id="loc-btn-warehouse" 
+                  onclick="window.switchFormLocationMode('WAREHOUSE')" 
+                  style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); color: var(--text-muted); font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: all 0.2s;">
+            <i class="fa-solid fa-warehouse" style="color: #10B981; font-size: 1rem;"></i>
+            <span>Depo ve Tesis Görevleri Oluştur</span>
+          </button>
+        </div>
+
         <form id="new-task-form" onsubmit="window.handleNewTaskSubmit(event)">
           
-          <!-- Section 1: Telemetry Verification -->
-          <div class="cyber-form-section-title">
+          <!-- Section 1: Verification -->
+          <div class="cyber-form-section-title" id="section-1-title">
             <i class="fa-solid fa-satellite-dish"></i> 01. Türbin Doğrulama
           </div>
           
-          <div class="form-group" style="margin-bottom: 1.5rem;">
+          <!-- Turbine Serial Input (Turbine Mode) -->
+          <div class="form-group" id="group-turbine-serial" style="margin-bottom: 1.25rem;">
             <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">TÜRBİN SERİ NO SORGULA</label>
             <div style="position: relative;">
               <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem;"></i>
-              <input type="text" id="nt-serial" class="cyber-input" placeholder="Türbin seri numarası girin (Örn: 41193)..." oninput="window.handleSerialAutoFill(this.value)" autocomplete="off" required style="padding-left: 42px; font-size: 0.95rem; height: 48px; border-radius: 10px;">
+              <input type="text" id="nt-serial" class="cyber-input" placeholder="Türbin seri numarası girin (Örn: 41193)..." oninput="window.handleSerialAutoFill(this.value)" autocomplete="off" style="padding-left: 42px; font-size: 0.95rem; height: 46px; border-radius: 10px;">
             </div>
             <div id="nt-serial-error" style="color: var(--accent-orange); font-size: 0.8rem; margin-top: 0.75rem; display: none; font-weight: 600; padding: 10px 12px; background: rgba(255, 170, 0, 0.05); border: 1px solid rgba(255, 170, 0, 0.2); border-radius: 8px;">
               <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i> Yetkisiz saha işlemi! Farklı seri numarası girerseniz, iş emri oluşturmasını teknik destekten talep edin.
             </div>
           </div>
 
-          <!-- Telemetry readouts -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 2rem;">
+          <!-- Warehouse Select Input (Warehouse Mode) -->
+          <div class="form-group" id="group-warehouse-select" style="margin-bottom: 1.25rem; display: none;">
+            <label style="color: #10B981; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">SANTRAL & DEPO SEÇİNİZ</label>
+            <div class="custom-dropdown" id="nt-warehouse-dropdown-wrapper" style="position: relative; width: 100%;">
+              <div class="cyber-input custom-dropdown-trigger" id="nt-warehouse-trigger" style="padding-left: 42px; font-size: 0.9rem; height: 46px; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(16, 185, 129, 0.35);">
+                <i class="fa-solid fa-warehouse" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #10B981; font-size: 0.9rem; pointer-events: none; z-index: 5;"></i>
+                <span id="nt-warehouse-selected-label" style="color: var(--text-muted);">Depo / Tesis Seçiniz...</span>
+                <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.2s;"></i>
+              </div>
+              <div class="custom-dropdown-options hidden glass-panel" id="nt-warehouse-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; box-shadow: 0 12px 35px rgba(0,0,0,0.85); max-height: min(250px, 45vh); overflow-y: auto; z-index: 99999;">
+                <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                  Depo / Tesis Seçiniz...
+                </div>
+                ${warehouses.map(w => `
+                  <div class="custom-dropdown-option" data-value="${w.id}" data-name="${w.name}" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-boxes-stacked" style="color: #10B981; font-size: 0.8rem;"></i>
+                    <span>${w.name}</span>
+                  </div>
+                `).join('')}
+              </div>
+              <input type="hidden" id="nt-warehouse">
+            </div>
+          </div>
+
+          <!-- Telemetry readouts (Only in Turbine Mode) -->
+          <div id="telemetry-readouts-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
             <div id="telemetry-turbine-card" class="telemetry-card" style="position: relative; display: flex; flex-direction: column; gap: 6px; padding: 1rem 1.25rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase;">
+                <span id="label-unit-card" style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase;">
                   <i class="fa-solid fa-fan" style="margin-right: 5px;"></i> TÜRBİN NO
                 </span>
                 <div class="status-indicator" style="width: 8px; height: 8px; border-radius: 50%; background: #374151; box-shadow: 0 0 8px rgba(0,0,0,0.5); transition: all 0.3s;"></div>
               </div>
-              <input type="text" id="nt-turbine" class="cyber-telemetry-input" readonly style="background: transparent; border: none; font-size: 1.2rem; font-weight: 800; color: var(--text-muted); padding: 0; outline: none; width: 100%; pointer-events: none; text-transform: uppercase; font-family: 'Rajdhani', sans-serif;" placeholder="Sorgu Bekleniyor...">
+              <input type="text" id="nt-turbine" class="cyber-telemetry-input" readonly style="background: transparent; border: none; font-size: 1.15rem; font-weight: 800; color: var(--text-muted); padding: 0; outline: none; width: 100%; pointer-events: none; text-transform: uppercase; font-family: 'Rajdhani', sans-serif;" placeholder="Sorgu Bekleniyor...">
             </div>
             <div id="telemetry-site-card" class="telemetry-card" style="position: relative; display: flex; flex-direction: column; gap: 6px; padding: 1rem 1.25rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
               <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -250,29 +326,29 @@ export const NewTaskForm = async () => {
           </div>
 
           <!-- Section 2: Task Definition -->
-          <div class="cyber-form-section-title" style="margin-top: 2rem;">
+          <div class="cyber-form-section-title" style="margin-top: 1.75rem;">
             <i class="fa-solid fa-clipboard-list"></i> 02. Görev Tanımlama ve Şablon
           </div>
 
-          <div class="form-group" style="margin-bottom: 1.5rem;">
+          <div class="form-group" style="margin-bottom: 1.25rem;">
             <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">GÖREV KATEGORİSİ</label>
             <div class="custom-dropdown" id="nt-task-type-dropdown-wrapper" style="position: relative; width: 100%;">
-              <div class="cyber-input custom-dropdown-trigger" id="nt-task-type-trigger" style="padding-left: 42px; font-size: 0.9rem; height: 48px; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15);">
+              <div class="cyber-input custom-dropdown-trigger" id="nt-task-type-trigger" style="padding-left: 42px; font-size: 0.9rem; height: 46px; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15);">
                 <i class="fa-solid fa-list-check" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); font-size: 0.9rem; pointer-events: none; z-index: 5;"></i>
                 <span id="nt-task-type-selected-label" style="color: var(--text-muted);">Görev Türü Seçiniz...</span>
                 <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.2s;"></i>
               </div>
-              <div class="custom-dropdown-options hidden glass-panel" id="nt-task-type-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.7); max-height: 250px; overflow-y: auto; z-index: 100;">
-                <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: all 0.2s;">
+              <div class="custom-dropdown-options hidden glass-panel" id="nt-task-type-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 10px; box-shadow: 0 12px 35px rgba(0,0,0,0.85); max-height: min(250px, 45vh); overflow-y: auto; z-index: 99999;">
+                <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
                   Görev Türü Seçiniz...
                 </div>
-                <div class="custom-dropdown-option" data-value="Türbin Arıza Formu" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <div class="custom-dropdown-option" data-value="Türbin Arıza Formu" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
                   <span>🚨 Türbin Arıza Formu</span>
                 </div>
-                <div class="custom-dropdown-option" data-value="Bakım" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <div class="custom-dropdown-option" data-value="Bakım" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
                   <span>🔧 Periyodik Bakım Görevi</span>
                 </div>
-                <div class="custom-dropdown-option" data-value="Planlı Duruş" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                <div class="custom-dropdown-option" data-value="Planlı Duruş" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
                   <span>📅 Planlı Operasyonel Duruş</span>
                 </div>
               </div>
@@ -280,32 +356,64 @@ export const NewTaskForm = async () => {
             </div>
           </div>
 
-          <!-- Planned Stop Description Input (Dynamic) -->
-          <div id="nt-planned-stop-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem;">
-            <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">PLANLI DURUŞ AÇIKLAMASI</label>
+          <!-- Warehouse Defect Materials Interactive Section (Strictly 1 Material per Task) -->
+          <div id="nt-warehouse-material-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem; padding: 1.25rem; border: 1px dashed rgba(16, 185, 129, 0.4); border-radius: 12px; background: rgba(16, 185, 129, 0.03);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem;">
+              <label style="color: #10B981; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.5px; margin: 0; display: flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-wrench"></i> BU DEPODAKİ DEFECT (ARIZALI) MALZEME SEÇİMİ
+              </label>
+              <span id="nt-defect-count-badge" style="font-size: 0.68rem; background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 2px 8px; font-weight: 700;">Yükleniyor...</span>
+            </div>
+
+            <!-- Fast SAP Search Filter Box -->
+            <div style="position: relative; margin-bottom: 0.75rem;">
+              <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+              <input type="text" id="nt-defect-search" class="cyber-input" placeholder="🔍 SAP No veya Parça Adı yazarak anında filtreleyin (Örn: 96030 veya Fan)..." oninput="window.filterDefectMaterials(this.value)" autocomplete="off" style="padding-left: 36px; height: 38px; border-radius: 8px; font-size: 0.82rem; border-color: rgba(16, 185, 129, 0.3);">
+            </div>
+
+            <!-- Defect List Container -->
+            <div id="nt-defect-list-container" style="max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 1rem; padding-right: 4px;">
+              <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <i class="fa-solid fa-spinner fa-spin" style="margin-right: 6px;"></i> Depo arızalı stoğu taranıyor...
+              </div>
+            </div>
+
+            <!-- Selected Single Material (Strictly 1 Unit) -->
+            <div style="padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06);">
+              <label style="font-size: 0.68rem; color: #10B981; display: block; margin-bottom: 4px; font-weight: 700;">
+                <i class="fa-solid fa-circle-check"></i> SEÇİLEN TEKİL MALZEME (1 ADET ONARIM İÇİN)
+              </label>
+              <input type="text" id="nt-wh-sap" class="cyber-input" placeholder="Yukarıdaki listeden bir parça seçiniz..." readonly style="height: 42px; border-radius: 8px; font-size: 0.88rem; font-weight: 700; background: rgba(0,0,0,0.4); width: 100%; box-sizing: border-box;">
+              <input type="hidden" id="nt-wh-qty" value="1">
+            </div>
+          </div>
+
+          <!-- General Description / Operational Note -->
+          <div id="nt-planned-stop-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.25rem;">
+            <label id="nt-desc-label" style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">GÖREV AÇIKLAMASI & TALİMATLAR</label>
             <div style="position: relative;">
-              <i class="fa-solid fa-align-left" style="position: absolute; left: 14px; top: 15px; color: var(--accent-cyan); font-size: 0.9rem; z-index: 5;"></i>
-              <textarea id="nt-planned-stop-desc" class="cyber-input" placeholder="Lütfen duruş nedenini/açıklamasını yazın (Örn: Rulman Onarımı, Kanat Revizyonu vb.)..." style="padding-left: 42px; padding-top: 12px; height: 100px; border-radius: 10px; resize: none; font-size: 0.95rem; font-family: 'Rajdhani', sans-serif; box-sizing: border-box; width: 100%; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15); color: #fff;"></textarea>
+              <i class="fa-solid fa-align-left" style="position: absolute; left: 14px; top: 14px; color: var(--accent-cyan); font-size: 0.9rem; z-index: 5;"></i>
+              <textarea id="nt-planned-stop-desc" class="cyber-input" placeholder="Lütfen görevin hedefini, açıklamasını veya talimatlarını yazınız..." style="padding-left: 42px; padding-top: 10px; height: 75px; border-radius: 10px; resize: none; font-size: 0.9rem; font-family: 'Rajdhani', sans-serif; box-sizing: border-box; width: 100%; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15); color: #fff;"></textarea>
             </div>
           </div>
           
           <!-- Fault Code Input (Dynamic) -->
-          <div id="nt-fault-code-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem;">
+          <div id="nt-fault-code-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.25rem;">
             <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">ARIZA HATA KODU SEÇİNİZ</label>
             <div style="position: relative;">
               <i class="fa-solid fa-triangle-exclamation" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #ff4d4d; font-size: 0.9rem;"></i>
-              <input type="text" id="nt-fault-search" class="cyber-input" placeholder="Arıza kodu veya açıklaması yazarak arayın..." oninput="window.handleFaultSearch(this.value)" autocomplete="off" style="padding-left: 42px; height: 48px; border-radius: 10px;">
+              <input type="text" id="nt-fault-search" class="cyber-input" placeholder="Arıza kodu veya açıklaması yazarak arayın..." oninput="window.handleFaultSearch(this.value)" autocomplete="off" style="padding-left: 42px; height: 46px; border-radius: 10px;">
               <div id="nt-fault-results" class="glass-panel hidden search-results-dropdown" style="width: 100%; top: 100%; z-index: 100; border-color: rgba(255, 77, 77, 0.25); background: rgba(13, 18, 30, 0.98); box-shadow: 0 10px 30px rgba(0,0,0,0.6); max-height: 220px; overflow-y: auto; border-radius: 10px;"></div>
               <input type="hidden" id="nt-fault-code-value">
             </div>
           </div>
 
           <!-- Maintenance Template Input (Dynamic) -->
-          <div id="nt-maintenance-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.5rem; padding: 1.25rem; border: 1px dashed rgba(0, 243, 255, 0.25); border-radius: 12px; background: rgba(0, 243, 255, 0.015);">
+          <div id="nt-maintenance-section" class="form-group fade-in-up" style="display: none; margin-bottom: 1.25rem; padding: 1.25rem; border: 1px dashed rgba(0, 243, 255, 0.25); border-radius: 12px; background: rgba(0, 243, 255, 0.015);">
             <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">UYGULANACAK BAKIM ŞABLONU</label>
             <div style="position: relative;">
               <i class="fa-solid fa-screwdriver-wrench" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); font-size: 0.9rem; pointer-events: none; z-index: 5;"></i>
-              <select id="nt-maintenance-template" class="cyber-input" onchange="window.handleMaintenanceTemplateChange(this.value)" style="padding-left: 42px; font-size: 0.9rem; height: 46px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">
+              <select id="nt-maintenance-template" class="cyber-input" onchange="window.handleMaintenanceTemplateChange(this.value)" style="padding-left: 42px; font-size: 0.9rem; height: 44px; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%;">
                 <option value="">Bakım Şablonu Seçiniz...</option>
                 ${Object.keys(groupedTemplates).sort().map(model => `
                   <optgroup label="${model} SERİSİ" style="background: #0d1117; color: #fff;">
@@ -315,52 +423,53 @@ export const NewTaskForm = async () => {
               </select>
             </div>
             
-            <!-- Template Checklist Preview Panel -->
             <div id="nt-template-preview" class="glass-panel mt-3 hidden" style="background: rgba(0,0,0,0.3); border-color: rgba(0, 243, 255, 0.15); padding: 1rem; border-radius: 8px;">
               <h4 style="color: var(--accent-cyan); font-size: 0.65rem; font-weight: 900; margin: 0 0 0.8rem 0; letter-spacing: 1.5px; display: flex; align-items: center; gap: 0.5rem; text-transform: uppercase;">
                 <i class="fa-solid fa-list-check"></i> Şablon Kontrol Adımları
               </h4>
-              <div id="nt-preview-checklist" class="space-y-1" style="max-height: 150px; overflow-y: auto; padding-right: 5px; font-family: 'Inter', sans-serif;">
-                <!-- Checklist items populating dynamically -->
-              </div>
+              <div id="nt-preview-checklist" class="space-y-1" style="max-height: 150px; overflow-y: auto; padding-right: 5px; font-family: 'Inter', sans-serif;"></div>
             </div>
           </div>
 
           <!-- Section 3: Dispatch & Allocation -->
-          <div class="cyber-form-section-title" style="margin-top: 2rem;">
+          <div class="cyber-form-section-title" style="margin-top: 1.75rem;">
             <i class="fa-solid fa-people-carry-box"></i> 03. Ekip Atama ve Koordinasyon
           </div>
 
-          <div class="form-group" style="margin-bottom: 2.5rem;">
+          <div class="form-group" style="margin-bottom: 2rem;">
             <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">GÖREV İÇİN EKİP ATAMA</label>
             <div class="custom-dropdown" id="nt-team-dropdown-wrapper" style="position: relative; width: 100%;">
-              <div class="cyber-input custom-dropdown-trigger" id="nt-team-trigger" style="padding-left: 42px; font-size: 0.9rem; height: 48px; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15);">
+              <div class="cyber-input custom-dropdown-trigger" id="nt-team-trigger" style="padding-left: 42px; font-size: 0.9rem; height: 46px; border-radius: 10px; cursor: pointer; font-weight: 700; display: flex; align-items: center; justify-content: space-between; box-sizing: border-box; background: rgba(0,0,0,0.5); border: 1px solid rgba(0, 243, 255, 0.15);">
                 <i class="fa-solid fa-users" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); font-size: 0.9rem; pointer-events: none; z-index: 5;"></i>
-                <span id="nt-team-selected-label" style="color: var(--text-muted);">Atanacak Ekip Seçiniz...</span>
+                <span id="nt-team-selected-label" style="${initialTeamValue ? 'color: #ffffff;' : 'color: var(--text-muted);'}">${initialTeamValue || 'Atanacak Ekip Seçiniz...'}</span>
                 <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem; color: var(--text-muted); transition: transform 0.2s;"></i>
               </div>
-              <div class="custom-dropdown-options hidden glass-panel" id="nt-team-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.7); max-height: 250px; overflow-y: auto; z-index: 100;">
-                <div class="dropdown-search-wrapper" style="padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 0; background: rgba(13, 18, 30, 0.98); z-index: 10;">
-                  <input type="text" id="nt-team-search" placeholder="Ekip No Yazın (Örn: 5)..." style="width: 100%; padding: 6px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; box-sizing: border-box; font-family: 'Inter', sans-serif;" autocomplete="off">
-                </div>
-                <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); transition: all 0.2s;">
-                  Atanacak Ekip Seçiniz...
-                </div>
-                ${dataService.getAllowedTeams().map(team => `
-                  <div class="custom-dropdown-option" data-value="${team}" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+              <div class="custom-dropdown-options hidden glass-panel" id="nt-team-options" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 6px; background: rgba(13, 18, 30, 0.98); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 10px; box-shadow: 0 12px 35px rgba(0,0,0,0.85); max-height: min(250px, 45vh); overflow-y: auto; z-index: 99999;">
+                ${allowedTeams.length > 5 ? `
+                  <div class="dropdown-search-wrapper" style="padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); position: sticky; top: 0; background: rgba(13, 18, 30, 0.98); z-index: 10;">
+                    <input type="text" id="nt-team-search" placeholder="Ekip No Yazın (Örn: 5)..." style="width: 100%; padding: 6px 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 6px; color: #fff; font-size: 0.8rem; outline: none; box-sizing: border-box; font-family: 'Inter', sans-serif;" autocomplete="off">
+                  </div>
+                ` : ''}
+                ${!isSingleTeam ? `
+                  <div class="custom-dropdown-option ${!initialTeamValue ? 'active' : ''}" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                    Atanacak Ekip Seçiniz...
+                  </div>
+                ` : ''}
+                ${allowedTeams.map(team => `
+                  <div class="custom-dropdown-option ${initialTeamValue === team ? 'active' : ''}" data-value="${team}" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
                     <i class="fa-solid fa-user-group" style="font-size: 0.75rem; color: var(--accent-cyan); opacity: 0.7;"></i>
                     <span>${team}</span>
                   </div>
                 `).join('')}
               </div>
-              <input type="hidden" id="nt-team" required>
+              <input type="hidden" id="nt-team" value="${initialTeamValue}" required>
             </div>
           </div>
 
           <!-- Form Submit Button -->
-          <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1.75rem; display: flex; justify-content: flex-end;">
-            <button type="submit" id="nt-submit-btn" class="btn-cyber" style="width: 100%; max-width: 320px; padding: 12px 24px; font-size: 0.85rem; background: rgba(0, 242, 254, 0.06); border: 1px solid rgba(0, 242, 254, 0.25); color: #00f2ff; font-weight: 800; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
-              <i class="fa-solid fa-paper-plane" style="font-size: 0.95rem;"></i> GÖREVİ ATAMASINI GERÇEKLEŞTİR
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="submit" id="nt-submit-btn" class="btn-cyber" style="background: var(--accent-cyan); color: #000; font-weight: 800; font-size: 0.9rem; padding: 12px 28px; border-radius: 10px; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px; box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);">
+              <i class="fa-solid fa-paper-plane"></i> GÖREVİ ATAMASINI GERÇEKLEŞTİR
             </button>
           </div>
 
@@ -369,20 +478,13 @@ export const NewTaskForm = async () => {
     </div>
 
     <style>
-      #nt-submit-btn:hover {
-        background: rgba(0, 242, 254, 0.15) !important;
-        border-color: rgba(0, 242, 254, 0.5) !important;
-        color: #fff !important;
-        box-shadow: 0 0 15px rgba(0, 242, 254, 0.15) !important;
-      }
       .cyber-form-section-title {
-        font-family: 'Rajdhani', sans-serif;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         font-weight: 800;
         color: var(--accent-cyan);
         letter-spacing: 1.5px;
         text-transform: uppercase;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -390,12 +492,26 @@ export const NewTaskForm = async () => {
         padding-bottom: 8px;
         text-shadow: 0 0 8px rgba(0, 243, 255, 0.15);
       }
-      .cyber-telemetry-input::placeholder {
-        color: rgba(255, 255, 255, 0.15) !important;
-        font-weight: 700;
+      .defect-item-card {
+        padding: 8px 12px;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all 0.2s;
       }
-      .telemetry-card {
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
+      .defect-item-card:hover {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: rgba(239, 68, 68, 0.4);
+        transform: translateY(-1px);
+      }
+      .defect-item-card.selected {
+        background: rgba(16, 185, 129, 0.15) !important;
+        border-color: #10B981 !important;
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
       }
       .custom-dropdown-trigger {
         position: relative;
@@ -403,6 +519,8 @@ export const NewTaskForm = async () => {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(0, 243, 255, 0.15);
       }
       .custom-dropdown-trigger:hover {
         border-color: rgba(0, 243, 255, 0.45) !important;
@@ -410,11 +528,15 @@ export const NewTaskForm = async () => {
       }
       .custom-dropdown-option {
         padding: 10px 16px;
+        min-height: 42px;
+        box-sizing: border-box;
         font-size: 0.85rem;
         color: #c9d1d9;
         cursor: pointer;
         border-bottom: 1px solid rgba(255,255,255,0.03);
         transition: all 0.2s ease;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(0, 243, 255, 0.15);
       }
       .custom-dropdown-option:hover {
         background: rgba(0, 243, 255, 0.08) !important;
@@ -434,24 +556,320 @@ export const NewTaskForm = async () => {
 
 // --- DOM Etkileşim Fonksiyonları ---
 
+(window as any).switchFormLocationMode = (mode: 'TURBINE' | 'WAREHOUSE') => {
+  formLocationMode = mode;
+  const btnTurbine = document.getElementById('loc-btn-turbine');
+  const btnWarehouse = document.getElementById('loc-btn-warehouse');
+  const groupTurbine = document.getElementById('group-turbine-serial');
+  const groupWarehouse = document.getElementById('group-warehouse-select');
+  const sec1Title = document.getElementById('section-1-title');
+  const telemetryContainer = document.getElementById('telemetry-readouts-container');
+  const taskTypeOptions = document.getElementById('nt-task-type-options');
+  const taskTypeLabel = document.getElementById('nt-task-type-selected-label');
+  const taskTypeInput = document.getElementById('nt-task-type') as HTMLInputElement;
+
+  resetTelemetryCards();
+
+  if (mode === 'WAREHOUSE') {
+    if (btnTurbine) {
+      btnTurbine.style.borderColor = 'rgba(255,255,255,0.08)';
+      btnTurbine.style.background = 'rgba(255,255,255,0.02)';
+      btnTurbine.style.color = 'var(--text-muted)';
+      btnTurbine.style.boxShadow = 'none';
+    }
+    if (btnWarehouse) {
+      btnWarehouse.style.borderColor = '#10B981';
+      btnWarehouse.style.background = 'rgba(16, 185, 129, 0.15)';
+      btnWarehouse.style.color = '#fff';
+      btnWarehouse.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.25)';
+    }
+    if (groupTurbine) groupTurbine.style.display = 'none';
+    if (groupWarehouse) groupWarehouse.style.display = 'block';
+    if (telemetryContainer) telemetryContainer.style.display = 'none'; // Duplicate boxes hidden
+    if (sec1Title) sec1Title.innerHTML = '<i class="fa-solid fa-warehouse" style="color: #10B981;"></i> 01. Depo & Tesis Doğrulama';
+
+    // Populate warehouse categories in task type options
+    if (taskTypeOptions) {
+      taskTypeOptions.innerHTML = `
+        <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
+          Depo Görev Türü Seçiniz...
+        </div>
+        <div class="custom-dropdown-option" data-value="Saha İçi Defect Malzeme Onarım Çalışması (Tamir Edilebilir Malzemeler İçin)" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🛠️ Saha İçi Defect Malzeme Onarım Çalışması (Tamir Edilebilir Malzemeler İçin)</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="Depo Sayımı, Raf Düzenleme & Depo Temizliği" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>📦 Depo Sayımı, Raf Düzenleme & Depo Temizliği</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="El Aletleri & Ekipman Bakımı" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🔧 El Aletleri & Ekipman Bakımı</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="Hurda Malzeme Ayrıştırma & Atık Ayrıştırma" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🛡️ Hurda Malzeme Ayrıştırma & Atık Ayrıştırma</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="Tesis İçerisinde Yapılan Çalışmalar" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🏢 Tesis İçerisinde Yapılan Çalışmalar</span>
+        </div>
+      `;
+
+      taskTypeOptions.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.getAttribute('data-value') || '';
+          if (taskTypeInput) taskTypeInput.value = val;
+          if (taskTypeLabel) {
+            taskTypeLabel.textContent = opt.querySelector('span')?.textContent || opt.textContent || 'Depo Görev Türü Seçiniz...';
+            taskTypeLabel.style.color = val ? '#ffffff' : 'var(--text-muted)';
+          }
+          taskTypeOptions.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+          taskTypeOptions.classList.add('hidden');
+          (window as any).handleTaskTypeChange(val);
+        });
+      });
+    }
+
+    if (taskTypeLabel) {
+      taskTypeLabel.textContent = 'Depo Görev Türü Seçiniz...';
+      taskTypeLabel.style.color = 'var(--text-muted)';
+    }
+    if (taskTypeInput) taskTypeInput.value = '';
+
+  } else {
+    // Turbine Mode
+    if (btnTurbine) {
+      btnTurbine.style.borderColor = 'var(--accent-cyan)';
+      btnTurbine.style.background = 'rgba(0, 243, 255, 0.12)';
+      btnTurbine.style.color = '#fff';
+      btnTurbine.style.boxShadow = '0 0 12px rgba(0, 243, 255, 0.15)';
+    }
+    if (btnWarehouse) {
+      btnWarehouse.style.borderColor = 'rgba(255,255,255,0.08)';
+      btnWarehouse.style.background = 'rgba(255,255,255,0.02)';
+      btnWarehouse.style.color = 'var(--text-muted)';
+      btnWarehouse.style.boxShadow = 'none';
+    }
+    if (groupTurbine) groupTurbine.style.display = 'block';
+    if (groupWarehouse) groupWarehouse.style.display = 'none';
+    if (telemetryContainer) telemetryContainer.style.display = 'grid';
+    if (sec1Title) sec1Title.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> 01. Türbin Doğrulama';
+
+    // Populate turbine categories
+    if (taskTypeOptions) {
+      taskTypeOptions.innerHTML = `
+        <div class="custom-dropdown-option active" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
+          Görev Türü Seçiniz...
+        </div>
+        <div class="custom-dropdown-option" data-value="Türbin Arıza Formu" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🚨 Türbin Arıza Formu</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="Bakım" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>🔧 Periyodik Bakım Görevi</span>
+        </div>
+        <div class="custom-dropdown-option" data-value="Planlı Duruş" style="padding: 10px 16px; font-size: 0.85rem; color: #c9d1d9; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; gap: 8px;">
+          <span>📅 Planlı Operasyonel Duruş</span>
+        </div>
+      `;
+
+      taskTypeOptions.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.getAttribute('data-value') || '';
+          if (taskTypeInput) taskTypeInput.value = val;
+          if (taskTypeLabel) {
+            taskTypeLabel.textContent = opt.querySelector('span')?.textContent || opt.textContent || 'Görev Türü Seçiniz...';
+            taskTypeLabel.style.color = val ? '#ffffff' : 'var(--text-muted)';
+          }
+          taskTypeOptions.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+          taskTypeOptions.classList.add('hidden');
+          (window as any).handleTaskTypeChange(val);
+        });
+      });
+    }
+
+    if (taskTypeLabel) {
+      taskTypeLabel.textContent = 'Görev Türü Seçiniz...';
+      taskTypeLabel.style.color = 'var(--text-muted)';
+    }
+    if (taskTypeInput) taskTypeInput.value = '';
+  }
+};
+
+(window as any).handleWarehouseSelect = async (warehouseId: string) => {
+  const warehouses = dataService.getWarehouses();
+  const matched = warehouses.find(w => w.id === warehouseId);
+  const turbineInput = document.getElementById('nt-turbine') as HTMLInputElement;
+  const siteInput = document.getElementById('nt-site') as HTMLInputElement;
+  const siteIdInput = document.getElementById('nt-site-id') as HTMLInputElement;
+
+  if (!matched) {
+    resetTelemetryCards();
+    return;
+  }
+
+  if (turbineInput) turbineInput.value = matched.name;
+  if (siteInput) siteInput.value = matched.name.replace(' Deposu', ' RES').replace(' Atölye', '');
+  if (siteIdInput) siteIdInput.value = matched.id;
+
+  // Auto select team if assigned to this site and within allowedTeams
+  const allSites = dataService.getSites();
+  const siteMatch = allSites.find(s => s.id === matched.id || s.name.includes(matched.name.replace(' Deposu', '')));
+  if (siteMatch && (siteMatch as any).assignedTeam) {
+    const siteTeam = (siteMatch as any).assignedTeam;
+    const allowed = dataService.getAllowedTeams();
+    if (allowed.includes(siteTeam)) {
+      const teamHidden = document.getElementById('nt-team') as HTMLInputElement;
+      const teamLabel = document.getElementById('nt-team-selected-label');
+      if (teamHidden) teamHidden.value = siteTeam;
+      if (teamLabel) {
+        teamLabel.textContent = siteTeam;
+        teamLabel.style.color = '#ffffff';
+      }
+    }
+  }
+
+  // Fetch defect materials for this warehouse
+  await (window as any).loadWarehouseDefectMaterials(matched.id);
+};
+
+(window as any).loadWarehouseDefectMaterials = async (warehouseId: string) => {
+  const container = document.getElementById('nt-defect-list-container');
+  const badge = document.getElementById('nt-defect-count-badge');
+  if (!container || !badge) return;
+
+  container.innerHTML = `
+    <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.8rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+      <i class="fa-solid fa-spinner fa-spin" style="margin-right: 6px;"></i> Depo arızalı stoğu taranıyor...
+    </div>
+  `;
+
+  try {
+    const inventory = await warehouseService.getInventory(warehouseId);
+    const defectItems = inventory.filter(i => (i.condition === 'DEFECT' || (i as any).status === 'DEFECT') && Number(i.quantity) > 0);
+    currentWarehouseDefects = defectItems;
+    selectedDefectItem = null;
+
+    badge.textContent = `${defectItems.length} Kalem Arızalı`;
+    badge.style.background = defectItems.length > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+    badge.style.color = defectItems.length > 0 ? '#EF4444' : '#10B981';
+    badge.style.borderColor = defectItems.length > 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)';
+
+    (window as any).renderFilteredDefects(defectItems);
+
+  } catch (e) {
+    console.error("Defect malzeme getirme hatası:", e);
+    container.innerHTML = `
+      <div style="padding: 10px; color: #EF4444; font-size: 0.78rem; text-align: center;">
+        Arızalı malzemeler yüklenirken hata oluştu.
+      </div>
+    `;
+  }
+};
+
+(window as any).filterDefectMaterials = (query: string) => {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) {
+    (window as any).renderFilteredDefects(currentWarehouseDefects);
+    return;
+  }
+  const filtered = currentWarehouseDefects.filter(item => {
+    const sapMatch = String(item.sapNo || '').toLowerCase().includes(q);
+    const descMatch = String(item.description || '').toLowerCase().includes(q);
+    return sapMatch || descMatch;
+  });
+  (window as any).renderFilteredDefects(filtered);
+};
+
+(window as any).renderFilteredDefects = (items: any[]) => {
+  const container = document.getElementById('nt-defect-list-container');
+  if (!container) return;
+
+  if (items.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 12px; text-align: center; color: #94A3B8; font-size: 0.78rem; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
+        <i class="fa-solid fa-circle-check" style="color: #10B981; margin-right: 6px;"></i> Eşleşen arızalı malzeme bulunamadı.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = items.map(item => `
+    <div class="defect-item-card ${selectedDefectItem?.id === item.id ? 'selected' : ''}" 
+         onclick="window.selectDefectMaterial('${item.id}')">
+      <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+        <span style="background: #EF4444; color: #000; font-weight: 900; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; flex-shrink: 0;">DEFECT</span>
+        <span style="font-weight: 800; font-size: 0.8rem; color: #00f3ff; font-family: monospace;">${item.sapNo}</span>
+        <span style="color: var(--text-muted); font-size: 0.75rem;">-</span>
+        <span style="font-size: 0.78rem; color: #CBD5E1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.description}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+        <span style="font-size: 0.75rem; color: #F87171; font-weight: 800; background: rgba(239, 68, 68, 0.1); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.2);">
+          ${item.quantity} Adet
+        </span>
+        <i class="fa-solid ${selectedDefectItem?.id === item.id ? 'fa-circle-check' : 'fa-circle-plus'}" style="color: ${selectedDefectItem?.id === item.id ? '#10B981' : 'var(--text-muted)'}; font-size: 0.95rem;"></i>
+      </div>
+    </div>
+  `).join('');
+};
+
+(window as any).selectDefectMaterial = (itemId: string) => {
+  const item = currentWarehouseDefects.find(i => i.id === itemId);
+  if (!item) return;
+
+  selectedDefectItem = item;
+  const sapInput = document.getElementById('nt-wh-sap') as HTMLInputElement;
+  const qtyInput = document.getElementById('nt-wh-qty') as HTMLInputElement;
+
+  if (sapInput) {
+    sapInput.value = `${item.sapNo} - ${item.description}`;
+    sapInput.style.borderColor = '#10B981';
+    sapInput.style.color = '#fff';
+  }
+  if (qtyInput) {
+    qtyInput.value = '1';
+    qtyInput.max = String(item.quantity || 1);
+  }
+
+  // Update card selected state (single selection)
+  const cards = document.querySelectorAll('.defect-item-card');
+  cards.forEach(c => c.classList.remove('selected'));
+  const clickedCard = document.querySelector(`.defect-item-card[onclick*="${itemId}"]`);
+  if (clickedCard) clickedCard.classList.add('selected');
+};
+
 (window as any).handleTaskTypeChange = (type: string) => {
   const maintenanceSection = document.getElementById('nt-maintenance-section');
   const maintenanceTemplate = document.getElementById('nt-maintenance-template') as HTMLSelectElement;
+  const whMaterialSection = document.getElementById('nt-warehouse-material-section');
+  const plannedStopSection = document.getElementById('nt-planned-stop-section');
+  const plannedStopDesc = document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement;
+  const descLabel = document.getElementById('nt-desc-label');
+  const faultSection = document.getElementById('nt-fault-code-section');
+  const faultSearch = document.getElementById('nt-fault-search') as HTMLInputElement;
   
-  if (!maintenanceSection || !maintenanceTemplate) return;
+  if (maintenanceSection) {
+    if (type === 'Bakım') {
+      maintenanceSection.style.display = 'block';
+      if (maintenanceTemplate) maintenanceTemplate.required = true;
+    } else {
+      maintenanceSection.style.display = 'none';
+      if (maintenanceTemplate) {
+        maintenanceTemplate.required = false;
+        maintenanceTemplate.value = '';
+      }
+    }
+  }
 
-  if (type === 'Bakım') {
-    maintenanceSection.style.display = 'block';
-    maintenanceTemplate.required = true;
-  } else {
-    maintenanceSection.style.display = 'none';
-    maintenanceTemplate.required = false;
-    maintenanceTemplate.value = '';
+  // Warehouse Material Section (Strictly in revision mode)
+  if (whMaterialSection) {
+    if (type.includes('Defect') || type.includes('Onarım') || type.includes('Revizyon') || type.includes('Mekanik')) {
+      whMaterialSection.style.display = 'block';
+    } else {
+      whMaterialSection.style.display = 'none';
+    }
   }
 
   // Arıza Kodu Bölümü
-  const faultSection = document.getElementById('nt-fault-code-section');
-  const faultSearch = document.getElementById('nt-fault-search') as HTMLInputElement;
   if (faultSection) {
     if (type === 'Türbin Arıza Formu') {
       faultSection.style.display = 'block';
@@ -467,13 +885,13 @@ export const NewTaskForm = async () => {
     }
   }
 
-  // Planlı Duruş Açıklama Bölümü
-  const plannedStopSection = document.getElementById('nt-planned-stop-section');
-  const plannedStopDesc = document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement;
+  // Planlı Duruş / Açıklama Bölümü
   if (plannedStopSection) {
-    if (type === 'Planlı Duruş') {
+    if (type === 'Planlı Duruş' || formLocationMode === 'WAREHOUSE') {
       plannedStopSection.style.display = 'block';
-      if (plannedStopDesc) plannedStopDesc.required = true;
+      if (descLabel) {
+        descLabel.textContent = formLocationMode === 'WAREHOUSE' ? 'GÖREV AÇIKLAMASI & TALİMATLAR' : 'PLANLI DURUŞ AÇIKLAMASI';
+      }
     } else {
       plannedStopSection.style.display = 'none';
       if (plannedStopDesc) {
@@ -483,7 +901,6 @@ export const NewTaskForm = async () => {
     }
   }
 
-  // Preview'ı da temizle
   const preview = document.getElementById('nt-template-preview');
   if (preview) preview.classList.add('hidden');
 };
@@ -513,7 +930,6 @@ export const NewTaskForm = async () => {
     preview.classList.add('hidden');
   }
 };
-
 
 (window as any).handleFaultSearch = (query: string) => {
   const resultsDiv = document.getElementById('nt-fault-results');
@@ -549,6 +965,9 @@ const resetTelemetryCards = () => {
   const turbineInput = document.getElementById('nt-turbine') as HTMLInputElement;
   const siteInput = document.getElementById('nt-site') as HTMLInputElement;
   const siteIdInput = document.getElementById('nt-site-id') as HTMLInputElement;
+  const whInput = document.getElementById('nt-warehouse') as HTMLInputElement;
+  const whLabel = document.getElementById('nt-warehouse-selected-label');
+  selectedDefectItem = null;
   
   if (turbineInput) {
     turbineInput.value = '';
@@ -561,6 +980,11 @@ const resetTelemetryCards = () => {
     siteInput.style.color = 'var(--text-muted)';
   }
   if (siteIdInput) siteIdInput.value = '';
+  if (whInput) whInput.value = '';
+  if (whLabel) {
+    whLabel.textContent = 'Depo / Tesis Seçiniz...';
+    whLabel.style.color = 'var(--text-muted)';
+  }
   
   if (turbineCard && siteCard) {
     turbineCard.style.borderColor = 'rgba(255, 255, 255, 0.05)';
@@ -587,112 +1011,6 @@ const resetTelemetryCards = () => {
     taskTypeOptions.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.remove('active'));
     taskTypeOptions.querySelector('[data-value=""]')?.classList.add('active');
   }
-
-  const teamInput = document.getElementById('nt-team') as HTMLInputElement;
-  const teamLabel = document.getElementById('nt-team-selected-label');
-  const teamOptions = document.getElementById('nt-team-options');
-  if (teamInput) teamInput.value = '';
-  if (teamLabel) {
-    teamLabel.innerText = 'Atanacak Ekip Seçiniz...';
-    teamLabel.style.color = 'var(--text-muted)';
-  }
-  if (teamOptions) {
-    teamOptions.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.remove('active'));
-    teamOptions.querySelector('[data-value=""]')?.classList.add('active');
-  }
-};
-
-(window as any).autoSelectBestTemplate = (turbineType: string, maintType: string) => {
-  const selectEl = document.getElementById('nt-maintenance-template') as HTMLSelectElement;
-  if (!selectEl) return;
-  
-  const rawModel = (turbineType || '').toUpperCase().trim();
-  const rawMaint = (maintType || '').toUpperCase().trim();
-
-  // Determine category search type: '4YIL', 'YAĞ', or 'ANA'
-  let searchCategory = 'ANA';
-  if (rawMaint.includes('4') && (rawMaint.includes('YIL') || rawMaint.includes('YILLIK'))) {
-    searchCategory = '4YIL';
-  } else if (rawMaint.includes('YAĞ') || rawMaint.includes('YAG')) {
-    searchCategory = 'YAĞ';
-  } else if (rawMaint.includes('ANA')) {
-    searchCategory = 'ANA';
-  }
-  
-  // Determine canonical model key
-  let canonicalModel = '';
-  if (rawModel.includes('E82/E2') || rawModel.includes('E82-E2') || rawModel.includes('E82E2') || rawModel.includes('E82/2') || rawModel.includes('E82_E2')) {
-    canonicalModel = 'E82/E2';
-  } else if (rawModel.includes('E82')) {
-    canonicalModel = 'E82';
-  } else if (rawModel.includes('E44') || rawModel.includes('E48')) {
-    canonicalModel = 'E44-E48';
-  } else if (rawModel.includes('E70')) {
-    canonicalModel = 'E70';
-  } else if (rawModel.includes('E92')) {
-    canonicalModel = 'E92';
-  }
-
-  const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  let matchedOptionValue = '';
-
-  // Helper to check if an option matches canonicalModel and searchCategory
-  const isMatch = (optText: string, reqCategory: boolean) => {
-    const is4Yil = /4\s*YIL|4\.YIL|4-YIL/.test(optText);
-    const isYag = optText.includes('YAĞ') || optText.includes('YAG');
-    const isAna = optText.includes('ANA') && !is4Yil;
-
-    if (reqCategory) {
-      if (searchCategory === '4YIL') {
-        if (!is4Yil) return false;
-      } else if (searchCategory === 'YAĞ') {
-        if (!isYag) return false;
-      } else {
-        // ANA
-        if (!isAna) return false;
-      }
-    }
-
-    const cOpt = clean(optText);
-
-    if (canonicalModel === 'E82/E2') {
-      return cOpt.includes('E82E2') || cOpt.includes('E822');
-    } else if (canonicalModel === 'E82') {
-      return cOpt.includes('E82') && !cOpt.includes('E82E2') && !cOpt.includes('E822');
-    } else if (canonicalModel === 'E44-E48') {
-      return cOpt.includes('E44') || cOpt.includes('E48');
-    } else if (canonicalModel === 'E70') {
-      return cOpt.includes('E70');
-    } else if (canonicalModel === 'E92') {
-      return cOpt.includes('E92');
-    }
-    return false;
-  };
-
-  // 1. Match canonical model + exact searchCategory (ANA / YAĞ / 4YIL)
-  for (let i = 0; i < selectEl.options.length; i++) {
-    const opt = selectEl.options[i];
-    if (isMatch(opt.text.toUpperCase(), true)) {
-      matchedOptionValue = opt.value;
-      break;
-    }
-  }
-
-  // 2. Fallback: match canonical model regardless of category
-  if (!matchedOptionValue) {
-    for (let i = 0; i < selectEl.options.length; i++) {
-      const opt = selectEl.options[i];
-      if (isMatch(opt.text.toUpperCase(), false)) {
-        matchedOptionValue = opt.value;
-        break;
-      }
-    }
-  }
-
-  if (matchedOptionValue) {
-    selectEl.value = matchedOptionValue;
-    selectEl.dispatchEvent(new Event('change'));
-  }
 };
 
 (window as any).handleSerialAutoFill = (serial: string) => {
@@ -711,7 +1029,6 @@ const resetTelemetryCards = () => {
     return;
   }
 
-  // Seri no üzerinden türbin ve saha bulma
   const sites = dataService.getSites();
   let found = false;
 
@@ -724,7 +1041,6 @@ const resetTelemetryCards = () => {
       siteInput.value = site.name;
       siteIdInput.value = site.id;
       
-      // Cyber glow effect
       turbineInput.classList.add('auto-filled');
       siteInput.classList.add('auto-filled');
       turbineInput.style.color = '#00f3ff';
@@ -738,14 +1054,6 @@ const resetTelemetryCards = () => {
         siteCard.style.borderColor = 'rgba(0, 243, 255, 0.4)';
         siteCard.style.background = 'rgba(0, 243, 255, 0.03)';
         siteCard.querySelector('.status-indicator')?.setAttribute('style', 'width: 8px; height: 8px; border-radius: 50%; background: #00f3ff; box-shadow: 0 0 10px #00f3ff;');
-      }
-
-      // Prefilled template logic
-      const activeTask = (window as any).tempActiveTask;
-      if (activeTask && activeTask.prefilledMaintType) {
-        // Auto select best template based on type
-        (window as any).autoSelectBestTemplate(matchedTurbine.type || '', activeTask.prefilledMaintType);
-        (window as any).tempActiveTask = null; // Clear
       }
 
       found = true;
@@ -772,7 +1080,6 @@ const resetTelemetryCards = () => {
       siteCard.querySelector('.status-indicator')?.setAttribute('style', 'width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d; box-shadow: 0 0 10px #ff4d4d;');
     }
     
-    // Check if the serial actually exists globally but the user is not authorized
     const currentUser = (window as any).currentUser;
     const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
     if (!isAdmin && serial.length >= 3) {
@@ -790,10 +1097,11 @@ const resetTelemetryCards = () => {
   const btn = document.getElementById('nt-submit-btn') as HTMLButtonElement;
   if (!btn) return;
 
-  // Validation
+  const isWarehouse = formLocationMode === 'WAREHOUSE';
   const siteId = (document.getElementById('nt-site-id') as HTMLInputElement).value;
+  
   if (!siteId) {
-    alert("Geçerli bir Türbin Seri No giriniz.");
+    alert(isWarehouse ? "Lütfen bir Depo / Tesis seçiniz." : "Geçerli bir Türbin Seri No giriniz.");
     return;
   }
 
@@ -802,43 +1110,57 @@ const resetTelemetryCards = () => {
   btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> ATANIYOR...';
 
   try {
-    const serial = (document.getElementById('nt-serial') as HTMLInputElement).value;
+    const serial = isWarehouse ? 'DEPO' : (document.getElementById('nt-serial') as HTMLInputElement).value;
     const turbine = (document.getElementById('nt-turbine') as HTMLInputElement).value;
     const site = (document.getElementById('nt-site') as HTMLInputElement).value;
     const taskType = (document.getElementById('nt-task-type') as HTMLSelectElement).value;
     const team = (document.getElementById('nt-team') as HTMLSelectElement).value;
-    const faultCode = (document.getElementById('nt-fault-code-value') as HTMLInputElement).value;
+    const faultCode = (document.getElementById('nt-fault-code-value') as HTMLInputElement)?.value || '';
+    const whQty = parseInt((document.getElementById('nt-wh-qty') as HTMLInputElement)?.value || '1', 10);
+    const plannedStopDesc = (document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement)?.value.trim() || '';
     
-    if (!team) {
-      alert("Lütfen görev için atanacak bir ekip seçiniz.");
+    if (!taskType) {
+      alert("Lütfen bir Görev Kategorisi seçiniz.");
       btn.disabled = false;
       btn.innerHTML = originalText;
       return;
     }
 
-    if (taskType === 'Türbin Arıza Formu') {
+    if (isWarehouse && (taskType.includes('Defect') || taskType.includes('Onarım') || taskType.includes('Revizyon')) && !selectedDefectItem) {
+      alert("Lütfen onarılacak arızalı (DEFECT) malzemeyi listeden seçiniz.");
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      return;
+    }
+
+    const allowed = dataService.getAllowedTeams();
+    if (!team || !allowed.includes(team)) {
+      alert("Lütfen görev için yetkili olduğunuz bir ekip seçiniz.");
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      return;
+    }
+
+    if (!isWarehouse && taskType === 'Türbin Arıza Formu') {
       if (!faultCode || faultCode === '---' || !statusService.getCodeByKod(faultCode)) {
-        alert('Lütfen arama sonuçlarından geçerli bir Arıza Kodu seçiniz. (Arama kutusuna yazdıktan sonra çıkan listeden tıklamalısınız)');
+        alert('Lütfen arama sonuçlarından geçerli bir Arıza Kodu seçiniz.');
         btn.disabled = false;
         btn.innerHTML = originalText;
         return;
       }
     }
 
-    if (taskType === 'Planlı Duruş') {
-      const plannedStopDesc = (document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement)?.value.trim() || '';
-      if (!plannedStopDesc) {
-        alert("Lütfen planlı duruş için bir açıklama giriniz.");
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        return;
-      }
+    if (!isWarehouse && taskType === 'Planlı Duruş' && !plannedStopDesc) {
+      alert("Lütfen planlı duruş için bir açıklama giriniz.");
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+      return;
     }
     
     let templateName = taskType;
     let maintenanceData = undefined;
 
-    if (taskType === 'Bakım') {
+    if (!isWarehouse && taskType === 'Bakım') {
       const templateId = (document.getElementById('nt-maintenance-template') as HTMLSelectElement).value;
       const templateObj = await maintenanceService.getTemplate(templateId);
       if (templateObj) {
@@ -849,7 +1171,7 @@ const resetTelemetryCards = () => {
           materials: templateObj.materials
         };
       }
-    } else if (taskType === 'Türbin Arıza Formu') {
+    } else if (!isWarehouse && taskType === 'Türbin Arıza Formu') {
       const templateObj = await maintenanceService.getTemplate('form-ariza');
       if (templateObj) {
         maintenanceData = {
@@ -860,22 +1182,38 @@ const resetTelemetryCards = () => {
       }
     }
 
+    let note = '';
+    if (isWarehouse) {
+      if (selectedDefectItem) {
+        note = `Depo Onarım Görevi: ${selectedDefectItem.sapNo} - ${selectedDefectItem.description} (${whQty} Adet)${plannedStopDesc ? ` | Not: ${plannedStopDesc}` : ''}`;
+      } else {
+        note = `Depo Görevi: ${taskType}${plannedStopDesc ? ` | Not: ${plannedStopDesc}` : ''}`;
+      }
+    } else {
+      note = taskType === 'Planlı Duruş' ? plannedStopDesc : `Sistemden atanan ${templateName} görevi.`;
+    }
 
-    const plannedStopDesc = (document.getElementById('nt-planned-stop-desc') as HTMLTextAreaElement)?.value || '';
-
-    // Logic Engineer'ın motoruna gönder
+    // Logic Engine'e kaydet
     await taskService.createNewTask({
-      secilenSablon: templateName,
+      secilenSablon: isWarehouse ? `Depo İşi: ${taskType}` : templateName,
       sahaBilgisi: site,
       siteId: siteId,
       turbinSeriNo: serial,
       turbinNo: turbine,
       statuKodu: faultCode,
-      yoneticiNotu: taskType === 'Planlı Duruş' ? plannedStopDesc : `Sistemden atanan ${templateName} görevi.`,
+      yoneticiNotu: note,
       assignedTeam: team,
+      taskLocationType: isWarehouse ? 'WAREHOUSE' : 'TURBINE',
+      warehouseId: isWarehouse ? siteId : undefined,
+      warehouseName: isWarehouse ? turbine : undefined,
+      repairedMaterial: isWarehouse && selectedDefectItem ? {
+        itemId: selectedDefectItem.id || '',
+        sapNo: String(selectedDefectItem.sapNo || ''),
+        description: selectedDefectItem.description || '',
+        quantity: whQty || 1
+      } : undefined,
       maintenanceData
     });
-
 
     // Başarılı
     btn.style.background = 'var(--accent-green)';
@@ -883,9 +1221,20 @@ const resetTelemetryCards = () => {
     btn.innerHTML = '<i class="fa-solid fa-check-double"></i> BAŞARIYLA ATANDI';
     
     (document.getElementById('new-task-form') as HTMLFormElement).reset();
-    (window as any).handleTaskTypeChange(''); // Form sıfırlanınca bakım menüsünü gizle
-    
+    (window as any).handleTaskTypeChange('');
     resetTelemetryCards();
+
+    const allowedOnReset = dataService.getAllowedTeams();
+    if (allowedOnReset.length === 1) {
+      const defaultTeam = allowedOnReset[0];
+      const teamHidden = document.getElementById('nt-team') as HTMLInputElement;
+      const teamLabel = document.getElementById('nt-team-selected-label');
+      if (teamHidden) teamHidden.value = defaultTeam;
+      if (teamLabel) {
+        teamLabel.textContent = defaultTeam;
+        teamLabel.style.color = '#ffffff';
+      }
+    }
 
   } catch (error) {
     console.error("Görev atama hatası:", error);

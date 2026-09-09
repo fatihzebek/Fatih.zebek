@@ -578,8 +578,11 @@ let ohsHtml = '';
       <!-- MALZEME YÖNETİMİ -->
       <div class="report-section">
         <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none; display: flex; justify-content: space-between; align-items: center;">
-          <span>MALZEME YÖNETİMİ</span>
-          <span style="font-weight: 600; font-size: 0.95rem;">MÇF No: <strong style="color: #cc0000;">${report.matFormNo || '-'}</strong></span>
+          <span>${report.taskLocationType === 'WAREHOUSE' ? 'REVİZYON & MALZEME YÖNETİMİ' : 'MALZEME YÖNETİMİ'}</span>
+          <div style="display: flex; gap: 15px; align-items: center;">
+            ${(report.tamirFormNo || report.revisionNo) ? `<span style="font-weight: 600; font-size: 0.95rem;">Tamir Form No: <strong style="color: #059669;">${report.tamirFormNo || report.revisionNo}</strong></span>` : ''}
+            <span style="font-weight: 600; font-size: 0.95rem;">MÇF No: <strong style="color: #cc0000;">${report.matFormNo || '-'}</strong></span>
+          </div>
         </div>
         <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.9rem; text-align: center; table-layout: fixed;">
           <colgroup>

@@ -516,17 +516,20 @@ export const DashboardPage = async () => {
       // Query all warehouses in parallel
       const searchPromises = allWarehouses.map(async (wh) => {
         try {
-          const inventory = await warehouseService.getInventory(wh.id);
-          const item = inventory.find(i => {
+          const inventory = await warehouseService.getInventory(wh.id, true);
+          const matchingItems = inventory.filter(i => {
             const itemSap = String(i.sapNo || '').trim().replace(/^0+/, '');
-            return itemSap === cleanSapInput;
+            const isMatch = itemSap === cleanSapInput || String(i.sapNo || '').trim().toLowerCase() === sapNo.toLowerCase();
+            if (!isMatch) return false;
+            return i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI';
           });
-          if (item && item.quantity > 0) {
+          const totalQty = matchingItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+          if (totalQty > 0) {
             const cleanName = wh.name.replace(/\s+Deposu?$/i, '');
             return {
               siteName: cleanName,
-              quantity: item.quantity,
-              description: item.description || ''
+              quantity: totalQty,
+              description: matchingItems[0]?.description || ''
             };
           }
         } catch (e) {

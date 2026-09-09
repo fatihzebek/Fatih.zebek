@@ -591,7 +591,7 @@ html {
     border-collapse: collapse !important;
   }
 
-  .tasks-table-panel, .table-responsive, .glass-panel {
+  .tasks-table-panel, .table-responsive, .glass-panel:has(table) {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     max-width: 100% !important;
@@ -633,8 +633,13 @@ html {
   }
 
   /* Fix text overflow in cards */
-  .glass-card, .glass-panel, .stat-card {
+  .glass-card, .stat-card {
     overflow: hidden;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  .glass-panel {
+    overflow: visible;
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
@@ -3214,3 +3219,441 @@ body.light-mode .btn-cyber-mini.active {
     transform: scale(1);
   }
 }
+
+/* ================================================================
+   📱 TELEFON & TABLET MOBİL OPTİMİZASYONU
+   ================================================================
+   Masaüstü (>1024px) görünümü ETKİLENMEZ.
+   Tablet (≤1024px) ve Telefon (≤768px) için ayrı katmanlar.
+   ================================================================ */
+
+/* ------------------------------------------------------------------
+   KATMAN 1: TABLET + TELEFON ORTAK (≤1024px)
+   ------------------------------------------------------------------ */
+@media (max-width: 1024px) {
+
+  /* === 1. GLOBAL YATAY TAŞMA KİLİDİ === */
+  html {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+
+  body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    position: relative !important;
+  }
+
+  .main-content {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
+  }
+
+  .content-area,
+  #page-content,
+  #page-inner-content {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding-bottom: 220px !important;
+    /* overflow-x kaldırıldı: dropdown/select listelerinin kesilmesini önler */
+  }
+
+  /* Dropdown container'lar */
+  .custom-dropdown {
+    position: relative !important;
+    overflow: visible !important;
+    z-index: 30;
+  }
+
+  .custom-dropdown:has(.custom-dropdown-options:not(.hidden)) {
+    z-index: 1000 !important;
+  }
+
+  .custom-dropdown-options {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    max-height: min(250px, 45vh) !important;
+    -webkit-overflow-scrolling: touch !important;
+    z-index: 99999 !important;
+  }
+
+  .search-results-dropdown {
+    overflow-y: auto !important;
+    max-height: 250px !important;
+    z-index: 99999 !important;
+  }
+
+  /* Dropdown içindeki glass-panel'ler normal padding'de kalsın ve tam kaydırılsın */
+  .custom-dropdown-options.glass-panel,
+  .custom-dropdown .glass-panel {
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+
+  /* === 2. TABLO KAPSÜLLEME — BAĞIMSIZ KAYDIRMA === */
+  /* Tablolar kendi kartları içinde parmakla sağa-sola kayar, sayfa sabit kalır */
+  .glass-panel:has(table),
+  .tasks-table-panel,
+  .table-responsive,
+  div[style*="overflow-x"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Tablo wrapper'ı olmayan yalın tablolar için güvenlik ağı */
+  .content-area > table,
+  #page-inner-content > table,
+  .glass-panel > table {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    max-width: 100% !important;
+  }
+
+  /* === 3. SAYFA BAŞLIĞI & BUTON SARMALAMA === */
+  .page-title {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Sayfa başlığı içindeki buton grupları */
+  .page-title > div,
+  .page-title > span {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    max-width: 100% !important;
+  }
+
+  /* Genel inline flex container'lar taşmasın */
+  div[style*="display: flex"][style*="gap"] {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* === 4. MENÜ KARARTMA ÖRTÜSÜ (SIDEBAR BACKDROP) === */
+  .sidebar.mobile-active::before {
+    content: '' !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.55) !important;
+    z-index: -1 !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+  }
+
+  /* Sidebar açıkken body scroll'u engelle */
+  body:has(.sidebar.mobile-active) {
+    overflow: hidden !important;
+  }
+
+  /* === 5. DOKUNMA DOSTU SEKMELER (TAB) === */
+  .tab-btn {
+    min-height: 44px !important;
+    padding: 0.6rem 0.75rem !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  .turbine-tab-btn {
+    min-height: 42px !important;
+    padding: 0.5rem 0.6rem !important;
+    font-size: 0.8rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Sekme satırlarını yatay kaydırılabilir yap */
+  .modal-tabs,
+  div:has(> .tab-btn) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none !important;
+  }
+
+  .modal-tabs::-webkit-scrollbar,
+  div:has(> .tab-btn)::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* === 6. MODAL İYİLEŞTİRMESİ === */
+  .modal-body-scrollable {
+    padding: 1rem !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .modal-close-btn {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    font-size: 1.1rem !important;
+  }
+
+  /* Modal içindeki formlar */
+  .modal-content .fault-form-grid,
+  .modal-content .fault-form-grid-2col {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* === 7. GENEL DOKUNMA HEDEFLERİ === */
+  /* Tıklanabilir elemanlar minimum 44px yükseklik */
+  .search-item {
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .sub-item {
+    min-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  /* === 8. GRID TAŞMA KORUMASI === */
+  /* Inline style grid'ler ekranı patlatmasın */
+  [style*="grid-template-columns"]:not(.turbine-grid):not(.stats-grid) {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   KATMAN 2: SADECE TELEFON (≤768px)
+   ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+
+  /* === 9. TOPBAR KOMPAKTLAŞTIRMA === */
+  .topbar {
+    padding: 0 0.75rem !important;
+    gap: 0.25rem !important;
+  }
+
+  /* "YENİLİKLER" yazısını gizle, sadece ikon kalsın */
+  .topbar .btn-cyber-outline span {
+    display: none !important;
+  }
+
+  .topbar .btn-cyber-outline {
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    min-width: 36px !important;
+    border-radius: 50% !important;
+  }
+
+  /* === 10. FORMLAR TEK SÜTUN === */
+  .fault-form-grid,
+  .fault-form-grid-2col,
+  .user-management-grid,
+  .modal-grid-2col {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Inline style ile tanımlanmış grid'leri de tek sütuna zorla */
+  [style*="grid-template-columns: repeat(2"],
+  [style*="grid-template-columns: repeat(3"],
+  [style*="grid-template-columns: 1fr 1fr"],
+  [style*="grid-template-columns: 1.2fr 1fr"],
+  [style*="grid-template-columns: 1fr 350px"],
+  [style*="grid-template-columns: 1fr 1.5fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* === 11. İSTATİSTİK KARTLARI === */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem !important;
+  }
+
+  .stat-card {
+    padding: 0.75rem !important;
+  }
+
+  .stat-value {
+    font-size: 1.4rem !important;
+  }
+
+  .stat-label {
+    font-size: 0.6rem !important;
+  }
+
+  /* === 12. PANEL & KART ARALIKLARI === */
+  .glass-panel {
+    padding: 0.75rem !important;
+    border-radius: 8px !important;
+    margin-bottom: 0.75rem !important;
+    overflow: visible !important;
+  }
+
+  .content-area {
+    padding: 0.75rem 0.75rem 260px 0.75rem !important;
+  }
+
+  /* === 13. BUTONLAR TAM GENİŞLİK === */
+  .page-title .btn-cyber,
+  .page-title .btn-cyber-outline {
+    width: auto !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+    font-size: 0.7rem !important;
+    padding: 0.4rem 0.6rem !important;
+    letter-spacing: 0 !important;
+  }
+
+  /* === 14. TÜRBİN GRID TELEFON === */
+  .turbine-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
+    gap: 0.4rem !important;
+  }
+
+  .turbine-card {
+    padding: 0.5rem !important;
+  }
+
+  .turbine-no {
+    font-size: 0.65rem !important;
+  }
+
+  .turbine-id {
+    font-size: 0.75rem !important;
+  }
+
+  /* === 15. ARAMA KUTULARI TAM GENİŞLİK === */
+  .search-box-mini {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .search-box-mini input {
+    width: 100% !important;
+  }
+
+  /* === 16. BADGE & ETİKET TAŞMA KORUMASI === */
+  .badge, .mini-badge {
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: 0.6rem !important;
+  }
+
+  /* === 17. GÖREV OLUŞTURMA (WIZARD) TELEFON === */
+  .step-dot {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 0.65rem !important;
+  }
+
+  /* === 18. SİDEBAR TELEFON GENİŞLİĞİ === */
+  .sidebar {
+    width: 280px !important;
+    left: -280px !important;
+  }
+
+  .sidebar.mobile-active {
+    left: 0 !important;
+  }
+
+  /* === 19. PAGE TITLE TELEFON === */
+  .page-title {
+    font-size: 1rem !important;
+    margin-bottom: 0.75rem !important;
+    gap: 0.4rem !important;
+  }
+
+  .page-title i {
+    font-size: 0.9rem !important;
+  }
+
+  /* === 20. TOAST BİLDİRİMLERİ TELEFON === */
+  .toast-container {
+    left: 0.5rem !important;
+    right: 0.5rem !important;
+    bottom: 0.5rem !important;
+    max-width: 100% !important;
+  }
+
+  /* === 21. LOGIN SAYFASI TELEFON === */
+  .login-glass-panel {
+    margin: 1rem !important;
+    padding: 2rem 1.25rem !important;
+    max-width: calc(100vw - 2rem) !important;
+    border-radius: 16px !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   KATMAN 3: ÇOK KÜÇÜK TELEFON (≤420px)
+   ------------------------------------------------------------------ */
+@media (max-width: 420px) {
+
+  /* İstatistik kartları tek sütun */
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Türbin grid 2 sütun */
+  .turbine-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Page title daha küçük */
+  .page-title {
+    font-size: 0.9rem !important;
+  }
+
+  /* Sayfa butonları tam genişlik */
+  .page-title .btn-cyber,
+  .page-title .btn-cyber-outline {
+    width: 100% !important;
+    flex: unset !important;
+  }
+
+  /* Panel padding minimal */
+  .glass-panel {
+    padding: 0.6rem !important;
+    overflow: visible !important;
+  }
+
+  .content-area {
+    padding: 0.5rem 0.5rem 260px 0.5rem !important;
+  }
+}
+
+/* ==================================================================
+   LEAFLET MAP SEAMLESS TILES
+   ================================================================== */
+.leaflet-container img.leaflet-tile,
+.leaflet-tile-container img,
+.leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-backface-visibility: hidden !important;
+  backface-visibility: hidden !important;
+}
+

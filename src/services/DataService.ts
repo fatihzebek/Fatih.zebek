@@ -1,4 +1,5 @@
 import type { Site, Turbine } from '../types';
+import { formatTeamName } from '../utils/formatters';
 
 export interface Warehouse {
   id: string;
@@ -433,7 +434,9 @@ export class DataService {
     const user = (window as any).currentUser;
     let result = this.sites;
     if (user && user.role === 'TECHNICIAN') {
-      const teamStr = (user.displayName || '').replace(/\s+/g, '').toLowerCase();
+      const formatted = formatTeamName(user.team || user.displayName || user.email || '');
+      const teamStr = formatted.replace(/\s+/g, '').toLowerCase();
+      const rawTeam = (user.team || user.displayName || user.email || '').replace(/\s+/g, '').toLowerCase();
       const teamMapping: Record<string, string[]> = {
         'team01': ['2678', '0752'],
         'team1': ['2678', '0752'],
@@ -461,10 +464,10 @@ export class DataService {
         'team11': ['3245', '3892']
       };
 
-      if (user.allowedSites && Array.isArray(user.allowedSites) && user.allowedSites.length > 0) {
+      if (user.allowedSites && Array.isArray(user.allowedSites) && user.allowedSites.length > 0 && !user.allowedSites.includes('all')) {
         result = this.sites.filter(s => user.allowedSites.includes(s.id));
       } else {
-        const allowedIds = teamMapping[teamStr];
+        const allowedIds = teamMapping[teamStr] || teamMapping[rawTeam];
         if (allowedIds) {
           result = this.sites.filter(s => allowedIds.includes(s.id));
         }
@@ -499,34 +502,46 @@ export class DataService {
     
     if (isAdmin) return allTeams;
 
-    const allowedSites = this.getSites().map(s => s.id);
-    
-    const teamMapping: Record<string, string[]> = {
-      'Team 01': ['2678', '0752'],
-      'Team 02': ['2678', '0752'],
-      'Team 12': ['2678', '0752'],
-      
-      'Team 03': ['2688', '3439', '3243'],
-      'Team 04': ['2688', '3439', '3243'],
-      'Team 13': ['2688', '3439', '3243'],
-      'Team 15': ['2688', '3439', '3243'],
-
-      'Team 06': ['2990', '3793'],
-      'Team 08': ['2990', '3793'],
-      'Team 09': ['2990', '3793'],
-      'Team 14': ['2990', '3793'],
-
-      'Team 05': ['3213'],
-      'Team 10': ['3213'],
-
-      'Team 07': ['3245', '3892'],
-      'Team 11': ['3245', '3892']
+    const normalizeToTeamSpace = (name: string) => {
+      const match = (name || '').match(/Team\s*(\d+)/i);
+      if (match) return `Team ${match[1].padStart(2, '0')}`;
+      return name;
     };
 
-    return allTeams.filter(team => {
-      const teamSites = teamMapping[team] || [];
-      return teamSites.some(siteId => allowedSites.includes(siteId));
+    // 1. Check if user is a team leader with managedTeams
+    const managedTeams: string[] = (user?.managedTeams || []).map((mt: string) => formatTeamName(mt)).filter(Boolean);
+    const userTeamRaw = user?.team || (window as any).currentUserTeam || '';
+    const userTeamFormatted = userTeamRaw ? formatTeamName(userTeamRaw) : '';
+
+    const allowedSet = new Set<string>();
+    if (userTeamFormatted && userTeamFormatted.toLowerCase().startsWith('team')) {
+      allowedSet.add(normalizeToTeamSpace(userTeamFormatted));
+    }
+
+    managedTeams.forEach((mt: string) => {
+      if (mt && mt.toLowerCase().startsWith('team')) {
+        allowedSet.add(normalizeToTeamSpace(mt));
+      }
     });
+
+    if (allowedSet.size > 0) {
+      return Array.from(allowedSet).sort();
+    }
+
+    // 2. Fallback for users with allowedWarehouses containing team_
+    const teamWhs = (user?.allowedWarehouses || []).filter((w: string) => w.startsWith('team_'));
+    teamWhs.forEach((tw: string) => {
+      const formatted = formatTeamName(tw);
+      if (formatted && formatted.toLowerCase().startsWith('team')) {
+        allowedSet.add(normalizeToTeamSpace(formatted));
+      }
+    });
+
+    if (allowedSet.size > 0) {
+      return Array.from(allowedSet).sort();
+    }
+
+    return allTeams;
   }
 
   getWarehouses(): Warehouse[] {

@@ -104,7 +104,7 @@ class PersonnelService {
     return companyName.trim();
   }
 
-  getPersonnelDetailsList() {
+  getPersonnelDetailsList(): { id: string, name: string, company: string, baseSites: string[], team: string }[] {
     const norm = (s: string) => {
       return (s || '')
         .toLocaleLowerCase('tr-TR')
@@ -130,13 +130,13 @@ class PersonnelService {
         };
       }
       // Fallback to static JSON file details
-      const match = personnelDetails.find(d => norm(d.name) === norm(name));
+      const match = personnelDetails.find(d => norm(d.name) === norm(name)) as any;
       return {
         id: this.ids[name] || '',
         name,
         company: this.normalizeCompanyName(match?.company),
-        baseSites: match?.baseSiteId && match.baseSiteId !== 'GENEL' ? [match.baseSiteId] : [],
-        team: ''
+        baseSites: (match?.baseSites || (match?.baseSiteId && match.baseSiteId !== 'GENEL' ? [match.baseSiteId] : [])) as string[],
+        team: match?.team || ''
       };
     });
   }

@@ -23,13 +23,35 @@ export const getGreetingPrefixHTML = (): string => {
 
 export const getUserBadgeHTML = (currentUser: any): string => {
   if (!currentUser) return '';
-  const rawTeam = currentUser.team || '';
-  const canonicalTeam = rawTeam ? formatTeamName(rawTeam) : '';
-  const roleOrTeam = currentUser.role === 'ADMIN' 
-    ? 'YÖNETİCİ' 
-    : (currentUser.role === 'MALZEME_YONETIMI' ? 'MALZEME YÖNETİMİ' : (rawTeam ? rawTeam.toUpperCase() : 'EKİP ÜYESİ'));
+  
+  // 1. Team determination (only if explicit team is set or account is a team like dh-tm13 / Team 13)
+  const explicitTeam = currentUser.team || '';
+  const teamFromEmailOrName = formatTeamName(currentUser.displayName || currentUser.email || '');
+  const isTeamAccount = explicitTeam.toLowerCase().includes('team') || teamFromEmailOrName.startsWith('Team');
+  const canonicalTeam = isTeamAccount ? formatTeamName(explicitTeam || teamFromEmailOrName) : '';
+
+  // 2. Role or Header Tag (Cyan upper text)
+  let roleOrTeam = 'KULLANICI';
+  const role = (currentUser.role || '').toUpperCase();
+  if (role === 'ADMIN') {
+    roleOrTeam = 'YÖNETİCİ';
+  } else if (role === 'MALZEME_YONETIMI') {
+    roleOrTeam = 'MALZEME YÖNETİMİ';
+  } else if (role === 'TAMİR' || role === 'TAMIR') {
+    roleOrTeam = 'MERKEZ TAMİR ATÖLYESİ';
+  } else if (canonicalTeam) {
+    roleOrTeam = canonicalTeam.toUpperCase();
+  } else if (role === 'USER') {
+    roleOrTeam = 'KULLANICI';
+  } else if (role === 'TECHNICIAN') {
+    roleOrTeam = 'TEKNİSYEN';
+  } else if (role) {
+    roleOrTeam = role;
+  }
+
+  // 3. User Name or Team Personnel (White lower text)
   let userName = formatDisplayName(currentUser.displayName || currentUser.email || 'Kullanıcı');
-  if (currentUser.role !== 'ADMIN' && canonicalTeam) {
+  if (role !== 'ADMIN' && canonicalTeam) {
     const teamPersonnel = personnelService.getPersonnelDetailsList().filter(p => {
       return p.team && formatTeamName(p.team) === canonicalTeam;
     });
@@ -42,6 +64,7 @@ export const getUserBadgeHTML = (currentUser: any): string => {
       userName = teamPersonnel.map(p => p.name).join(' - ');
     }
   }
+
   return `
     <span style="font-size: 0.7rem; font-weight: 800; color: var(--accent-cyan); font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; text-transform: uppercase; text-align: center; width: 100%;">${roleOrTeam}</span>
     <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-main); margin-top: 2px; text-align: center; width: 100%;">${userName}</span>

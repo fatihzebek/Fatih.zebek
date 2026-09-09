@@ -38,9 +38,54 @@ const loadSahaSapCatalog = async () => {
   return cachedSahaSapList;
 };
 
+// 5 Sites assigned to Furkan YILDIRIM for Demands & Pre-approval
+export const FURKAN_DEMAND_SITES = ['3245', '3213', '3892', '2678', '0752'];
+// 3245: Alize Keltepe, 3213: Dares Datça, 3892: Alize Çataltepe, 2678: Mare Manastır, 0752: Alize Germiyan
+
+export const FATIH_DIRECT_DEMAND_SITES = ['2688', '3439', '3243', '2990', '3793'];
+// 2688: Anemon İntepe, 3439: Alize Sarıkaya, 3243: Alize Çamseki, 2990: Doğal Sayalar, 3793: Alize Kuyucak
+
+export const isFurkanUser = (user: any): boolean => {
+  const email = (user?.email || '').toLowerCase().trim();
+  const name = (user?.displayName || '').toLowerCase().trim();
+  return email === 'furkan.yildirim@demirerholding.com' || name.includes('furkan yıldırım') || name.includes('furkan yildirim');
+};
+
+export const isSuperAdminUser = (user: any): boolean => {
+  return user?.role === 'ADMIN' || user?.email?.toLowerCase()?.includes('fatih.zebek');
+};
+
+export const getVisibleSitesForUser = (user: any, allSites: any[]) => {
+  if (isSuperAdminUser(user) || user?.role === 'MALZEME_YONETIMI' || user?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') {
+    return allSites;
+  }
+  if (isFurkanUser(user)) {
+    return allSites.filter(s => FURKAN_DEMAND_SITES.includes(s.id));
+  }
+  if (Array.isArray(user?.allowedSites) && user.allowedSites.length > 0 && !user.allowedSites.includes('all')) {
+    return allSites.filter(s => user.allowedSites.includes(s.id));
+  }
+  return allSites;
+};
+
+export const canUserApproveDemand = (user: any, demand: MaterialDemand): boolean => {
+  if (isSuperAdminUser(user)) return true; // Admin can approve any demand across all sites
+  if (isFurkanUser(user) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true; // Furkan can approve his 5 sites
+  return false;
+};
+
+export const canUserEditDemand = (user: any, demand: MaterialDemand): boolean => {
+  if (isSuperAdminUser(user)) return true;
+  if (isFurkanUser(user) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true;
+  if (user?.role === 'MALZEME_YONETIMI' || user?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') return true;
+  if (demand.requesterId === user?.uid) return true;
+  return false;
+};
+
 export const SahaSiparisleriPage = async (userProfile: any) => {
   const currentUser = userProfile || (window as any).currentUser || authService.getCurrentUser();
-  const sites = dataService.getSortedSites();
+  const allSites = dataService.getSortedSites();
+  const sites = getVisibleSitesForUser(currentUser, allSites);
 
   // Preload catalog
   loadSahaSapCatalog().catch(() => {});
@@ -835,16 +880,33 @@ let demandsUnsubscribe: (() => void) | null = null;
 };
 
 (window as any).applyDemandFilters = () => {
+  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const allSites = dataService.getSites();
+  const visibleSites = getVisibleSitesForUser(currentUser, allSites);
+  const visibleSiteIds = new Set(visibleSites.map((s: any) => s.id));
+
+  // Filter demands that this user is permitted to see
+  const userPermittedDemands = allDemandsList.filter(d => {
+    if (isSuperAdminUser(currentUser) || currentUser?.role === 'MALZEME_YONETIMI') return true;
+    if (isFurkanUser(currentUser)) {
+      return FURKAN_DEMAND_SITES.includes(d.siteId);
+    }
+    if (Array.isArray(currentUser?.allowedSites) && !currentUser.allowedSites.includes('all')) {
+      return currentUser.allowedSites.includes(d.siteId) || d.requesterId === currentUser?.uid;
+    }
+    return visibleSiteIds.has(d.siteId);
+  });
+
   // Update Top Stats
   const statPending = document.getElementById('stat-demands-pending');
   const statApproved = document.getElementById('stat-demands-approved');
   const statOrdered = document.getElementById('stat-demands-ordered');
   const statRejected = document.getElementById('stat-demands-rejected');
 
-  const countPending = allDemandsList.filter(d => d.status === 'PENDING_REVIEW').length;
-  const countApproved = allDemandsList.filter(d => d.status === 'APPROVED_FOR_ORDER').length;
-  const countOrdered = allDemandsList.filter(d => d.status === 'ORDERED').length;
-  const countRejected = allDemandsList.filter(d => d.status === 'REJECTED').length;
+  const countPending = userPermittedDemands.filter(d => d.status === 'PENDING_REVIEW').length;
+  const countApproved = userPermittedDemands.filter(d => d.status === 'APPROVED_FOR_ORDER').length;
+  const countOrdered = userPermittedDemands.filter(d => d.status === 'ORDERED').length;
+  const countRejected = userPermittedDemands.filter(d => d.status === 'REJECTED').length;
 
   if (statPending) statPending.innerText = String(countPending);
   if (statApproved) statApproved.innerText = String(countApproved);
@@ -853,19 +915,18 @@ let demandsUnsubscribe: (() => void) | null = null;
 
   // Update site chip counts
   const badgeAll = document.getElementById('badge-site-all');
-  if (badgeAll) badgeAll.innerText = String(allDemandsList.length);
+  if (badgeAll) badgeAll.innerText = String(userPermittedDemands.length);
 
-  const sites = dataService.getSites();
-  sites.forEach(s => {
+  visibleSites.forEach((s: any) => {
     const badge = document.getElementById(`badge-site-${s.id}`);
     if (badge) {
-      const siteCount = allDemandsList.filter(d => d.siteId === s.id).length;
+      const siteCount = userPermittedDemands.filter(d => d.siteId === s.id).length;
       badge.innerText = String(siteCount);
     }
   });
 
-  // Filter demands list
-  filteredDemandsList = allDemandsList.filter(d => {
+  // Filter demands list for display
+  filteredDemandsList = userPermittedDemands.filter(d => {
     if (selectedDemandSiteFilter !== 'ALL' && d.siteId !== selectedDemandSiteFilter) return false;
     if (selectedDemandStatusFilter !== 'ALL' && d.status !== selectedDemandStatusFilter) return false;
     if (selectedDemandCategoryFilter !== 'ALL' && d.demandCategory !== selectedDemandCategoryFilter) return false;
@@ -898,11 +959,6 @@ let demandsUnsubscribe: (() => void) | null = null;
   }
 
   const currentUser = (window as any).currentUser || authService.getCurrentUser();
-  const isManagerOrAdmin = currentUser?.role === 'ADMIN' || 
-    currentUser?.role === 'MALZEME_YONETIMI' || 
-    currentUser?.email?.toLowerCase() === 'hursit.akter@demirerholding.com' ||
-    currentUser?.email?.toLowerCase() === 'emir.unver@demirerholding.com' ||
-    currentUser?.email?.toLowerCase().includes('fatih.zebek');
 
   const statusMap: Record<MaterialDemandStatus, { label: string; class: string; icon: string }> = {
     'PENDING_REVIEW': { label: 'Ön Kontrol Bekliyor', class: 'pending', icon: 'fa-clock' },
@@ -927,68 +983,98 @@ let demandsUnsubscribe: (() => void) | null = null;
     }
 
     const urgencyLabels: Record<string, string> = {
-      'ACIL_ARIZA': '<span style="color: #f87171; font-weight: 800; background: rgba(239,68,68,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.74rem;"><i class="fa-solid fa-triangle-exclamation"></i> ACİL ARIZA</span>',
-      'PERIYODIK_BAKIM': '<span style="color: #fbbf24; font-weight: 800; background: rgba(245,158,11,0.12); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245,158,11,0.3); font-size: 0.74rem;"><i class="fa-solid fa-wrench"></i> PERİYODİK BAKIM</span>',
-      'NORMAL': '<span style="color: #94a3b8; font-weight: 700; font-size: 0.74rem;">NORMAL İHTİYAÇ</span>'
+      'ACIL_ARIZA': '<span style="color: #f87171; font-weight: 800; background: rgba(239,68,68,0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.72rem;"><i class="fa-solid fa-triangle-exclamation"></i> ACİL ARIZA</span>',
+      'PERIYODIK_BAKIM': '<span style="color: #fbbf24; font-weight: 800; background: rgba(245,158,11,0.12); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(245,158,11,0.3); font-size: 0.72rem;"><i class="fa-solid fa-wrench"></i> PERİYODİK BAKIM</span>',
+      'NORMAL': '<span style="color: #94a3b8; font-weight: 700; font-size: 0.72rem; background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1);">NORMAL İHTİYAÇ</span>'
     };
 
+    const displayDemandNo = demand.demandNo || (demand.title.includes('_') ? demand.title.split('_')[0] : demand.title);
+
     return `
-      <div class="demand-card status-${st.class}" style="padding: 10px 14px; margin-bottom: 0.65rem; border-radius: 10px;">
+      <div class="demand-card status-${st.class}" style="padding: 14px 16px; margin-bottom: 0.85rem; border-radius: 12px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
         
-        <!-- COMPACT HEADER ROW (ZARİF & TEK SATIRDA ÖZET) -->
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <!-- 1. ÜST BİLGİ & DURUM ÇUBUĞU (FERAH & DÜZENLİ) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: 8px; flex-wrap: wrap;">
           
-          <!-- Sol Bilgi Grubu: Başlık, Durum, Tür, Saha, Kalem Sayısı -->
+          <!-- Sol Bilgi Grubu: Kod, Saha, Türbin, Talep Eden, Tarih -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span class="demand-title-text" style="font-size: 0.92rem; font-weight: 800; font-family: monospace;">[ ${demand.title} ]</span>
-            <span class="status-pill ${st.class}" style="font-size: 0.72rem; padding: 2px 8px;">
-              <i class="fa-solid ${st.icon}"></i> ${st.label}
+            <span style="font-family: monospace; font-size: 0.92rem; font-weight: 800; color: #00f3ff; background: rgba(0, 243, 255, 0.08); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.25);">
+              ${displayDemandNo}
             </span>
-            <span class="category-pill ${isConsumable ? 'consumable' : 'turbine'}" style="font-size: 0.72rem; padding: 2px 8px;">
-              <i class="fa-solid ${isConsumable ? 'fa-boxes-packing' : 'fa-bolt'}"></i> ${isConsumable ? 'SARF / PİYASA' : 'TÜRBİN PARÇASI'}
+            <span style="color: #fff; font-size: 0.88rem; font-weight: 800;">
+              <i class="fa-solid fa-location-dot" style="color: #38bdf8;"></i> ${demand.siteName} ${demand.turbineId ? `<span style="color: #38bdf8; font-weight: 700;">(${demand.turbineId})</span>` : ''}
             </span>
-            ${elapsedDaysText ? `<span class="days-waiting-pill" style="font-size: 0.72rem; padding: 2px 8px;">${elapsedDaysText}</span>` : ''}
-            ${demand.urgency ? urgencyLabels[demand.urgency] : ''}
-            <span style="color: #64748b; font-size: 0.76rem;">•</span>
-            <span style="color: #cbd5e1; font-size: 0.8rem; font-weight: 700;">
-              <i class="fa-solid fa-location-dot" style="color: #00f3ff;"></i> ${demand.siteName} ${demand.turbineId ? `(${demand.turbineId})` : ''}
+            <span style="color: #64748b;">•</span>
+            <span style="color: #94a3b8; font-size: 0.8rem; font-weight: 600;">
+              <i class="fa-solid fa-user" style="color: #64748b;"></i> ${demand.requesterName}
             </span>
-            <span style="color: #64748b; font-size: 0.76rem;">•</span>
-            <span style="background: rgba(0, 243, 255, 0.1); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 4px; padding: 1px 8px; font-size: 0.74rem; font-weight: 800;">
-              <i class="fa-solid fa-boxes-stacked"></i> ${(demand.items || []).length} Kalem
+            <span style="color: #64748b;">•</span>
+            <span style="color: #64748b; font-size: 0.78rem;">
+              <i class="fa-regular fa-calendar"></i> ${createdAtDate}
             </span>
           </div>
 
-          <!-- Sağ İşlem Grubu: Talep Eden, Sipariş No, Ön Kontrol & Detay Butonları -->
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="color: #94a3b8; font-size: 0.76rem; margin-right: 4px;">
-              <i class="fa-solid fa-user-circle" style="color: #38bdf8;"></i> <strong style="color: #fff;">${demand.requesterName}</strong> 
-              <span style="color: #64748b;">(${createdAtDate})</span>
+          <!-- Sağ Rozet Grubu: Aciliyet, Tür, Durum -->
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            ${demand.urgency ? urgencyLabels[demand.urgency] : ''}
+            <span class="category-pill ${isConsumable ? 'consumable' : 'turbine'}" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 6px;">
+              <i class="fa-solid ${isConsumable ? 'fa-boxes-packing' : 'fa-bolt'}"></i> ${isConsumable ? 'SARF / PİYASA' : 'TÜRBİN PARÇASI'}
             </span>
+            <span class="status-pill ${st.class}" style="font-size: 0.74rem; padding: 3px 9px; border-radius: 6px; font-weight: 800;">
+              <i class="fa-solid ${st.icon}"></i> ${st.label}
+            </span>
+          </div>
 
+        </div>
+
+        <!-- 2. ORTA HIZLI ÖZET (Tek bakışta malzeme içeriği) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; background: rgba(0, 0, 0, 0.2); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.04);">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span style="background: rgba(0, 243, 255, 0.1); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 5px; padding: 1px 7px; font-size: 0.74rem; font-weight: 800; flex-shrink: 0;">
+              <i class="fa-solid fa-boxes-stacked"></i> ${(demand.items || []).length} Kalem
+            </span>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e2e8f0; font-size: 0.84rem;">
+              ${(demand.items || []).map(i => `<strong style="color: #fff;">${i.description}</strong> (${i.quantity} ${i.unit || 'Adet'})${i.sapNo ? ` <span style="color: #38bdf8; font-family: monospace; font-size: 0.78rem;">[SAP: ${i.sapNo}]</span>` : ''}`).join(' <span style="color: #64748b;">•</span> ')}
+            </span>
+          </div>
+        </div>
+
+        <!-- 3. ALT AKSİYON & İŞLEM ÇUBUĞU (Düzenli & Hizalı) -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+          
+          <!-- Sol Bilgi: Varsa Sipariş Numarası ve Sevkiyat Süresi -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             ${demand.orderNo ? `
-              <span style="background: rgba(52, 211, 153, 0.15); padding: 4px 9px; border-radius: 4px; border: 1px solid rgba(52, 211, 153, 0.35); color: #34d399; font-size: 0.74rem; font-weight: 800;">
+              <span style="background: rgba(52, 211, 153, 0.12); padding: 3px 8px; border-radius: 5px; border: 1px solid rgba(52, 211, 153, 0.3); color: #34d399; font-size: 0.76rem; font-weight: 800;">
                 <i class="fa-solid fa-file-invoice"></i> Sipariş No: <strong style="color: #fff; font-family: monospace; letter-spacing: 0.5px;">${demand.orderNo}</strong>
               </span>
             ` : ''}
+            ${elapsedDaysText ? `
+              <span class="days-waiting-pill" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 5px;">
+                ${elapsedDaysText}
+              </span>
+            ` : ''}
+          </div>
 
-            ${((isManagerOrAdmin || demand.requesterId === currentUser?.uid) && (demand.status === 'PENDING_REVIEW' || demand.status === 'APPROVED_FOR_ORDER')) ? `
-              <button type="button" onclick="window.openEditDemandModal('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 10px; height: 28px; font-weight: 700; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; background: rgba(56, 189, 248, 0.08);" title="Talebe Yeni Kalem Ekle veya Düzenle">
-                <i class="fa-solid fa-pen-to-square"></i> Kalem Ekle / Düzenle
+          <!-- Sağ İşlem Butonları -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            ${(canUserEditDemand(currentUser, demand) && (demand.status === 'PENDING_REVIEW' || demand.status === 'APPROVED_FOR_ORDER')) ? `
+              <button type="button" onclick="window.openEditDemandModal('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 11px; height: 28px; font-weight: 700; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; background: rgba(56, 189, 248, 0.08);" title="Talebe Yeni Kalem Ekle veya Düzenle">
+                <i class="fa-solid fa-pen-to-square"></i> Düzenle
               </button>
             ` : ''}
 
-            ${(isManagerOrAdmin && demand.status === 'PENDING_REVIEW') ? `
-              <button type="button" onclick="window.openApproveDemandModal('${demand.id}')" class="cyber-btn cyber-btn-emerald" style="font-size: 0.74rem; padding: 4px 12px; height: 28px; font-weight: 800;">
+            ${(canUserApproveDemand(currentUser, demand) && demand.status === 'PENDING_REVIEW') ? `
+              <button type="button" onclick="window.openApproveDemandModal('${demand.id}')" class="cyber-btn cyber-btn-emerald" style="font-size: 0.76rem; padding: 4px 14px; height: 28px; font-weight: 800;">
                 <i class="fa-solid fa-clipboard-check"></i> ÖN KONTROL & ONAYLA
               </button>
             ` : ''}
 
-            <button type="button" id="btn-toggle-detail-${demand.id}" onclick="window.toggleDemandDetails('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 10px; height: 28px; font-weight: 700; border-color: rgba(0, 243, 255, 0.3); color: #00f3ff;">
+            <button type="button" id="btn-toggle-detail-${demand.id}" onclick="window.toggleDemandDetails('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 11px; height: 28px; font-weight: 700; border-color: rgba(0, 243, 255, 0.3); color: #00f3ff;">
               <i class="fa-solid fa-chevron-down"></i> Detay Göster
             </button>
 
-            ${(isManagerOrAdmin || demand.requesterId === currentUser?.uid) ? `
+            ${(canUserEditDemand(currentUser, demand)) ? `
               <button type="button" onclick="window.handleDeleteDemand('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.72rem; padding: 3px 8px; height: 28px; border-color: rgba(239, 68, 68, 0.3); color: #f87171;" title="Talebi Sil">
                 <i class="fa-solid fa-trash"></i>
               </button>
@@ -997,8 +1083,8 @@ let demandsUnsubscribe: (() => void) | null = null;
 
         </div>
 
-        <!-- ACCORDION COLLAPSIBLE DETAIL BODY (VARSAYILAN OLARAK KAPALI) -->
-        <div id="demand-detail-${demand.id}" style="display: none; padding-top: 10px; margin-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+        <!-- 4. ACCORDION COLLAPSIBLE DETAIL BODY (VARSAYILAN OLARAK KAPALI) -->
+        <div id="demand-detail-${demand.id}" style="display: none; padding-top: 12px; margin-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
           
           <!-- Personel Notu (Varsa) -->
           ${demand.generalNote ? `
@@ -1153,7 +1239,7 @@ let demandsUnsubscribe: (() => void) | null = null;
           </div>
 
           <!-- Pending Review Extra Actions (Tümünü Reddet vb.) -->
-          ${(isManagerOrAdmin && demand.status === 'PENDING_REVIEW') ? `
+          ${(canUserApproveDemand(currentUser, demand) && demand.status === 'PENDING_REVIEW') ? `
             <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px;">
               <button type="button" onclick="window.openRejectDemandModal('${demand.id}')" class="cyber-btn cyber-btn-danger" style="font-size: 0.74rem; padding: 3px 12px; height: 26px; font-weight: 800;">
                 <i class="fa-solid fa-xmark"></i> TÜMÜNÜ REDDET

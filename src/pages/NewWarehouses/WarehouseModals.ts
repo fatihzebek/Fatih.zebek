@@ -1,10 +1,11 @@
-import { warehouseState, getUserProfile } from './WarehouseState';
+import { warehouseState, getUserProfile, isUserFatihZebek, getAvailableCabinets, getAvailableTurbineTypes, PREDEFINED_TURBINE_TYPES, saveSapMetadata, getEffectiveCabinet, getEffectiveTurbineType } from './WarehouseState';
 import { db } from '../../firebase';
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { warehouseService } from '../../services/WarehouseService';
 import { dataService } from '../../services/DataService';
 import { warehouseAgent } from '../../agents/WarehouseAgent';
 import { fileService } from '../../services/FileService';
+import { priceService } from '../../services/PriceService';
 import { ImageCompressor } from '../../utils/imageCompressor';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -256,6 +257,26 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
             <input id="edit-min-stock-input" type="number" min="0" placeholder="Örn: 5" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 8px; color: #E2E8F0; padding: 0 1rem; font-size: 0.9rem; outline: none;">
           </div>
 
+          <div id="edit-cabinet-container" style="display: none;">
+            <label style="display: block; font-size: 0.8rem; color: #C4B5FD; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 700;">
+              <i class="fa-solid fa-server" style="color: #A855F7; margin-right: 4px;"></i> Kabin / Pano (Özel)
+            </label>
+            <input id="edit-cabinet-input" type="text" list="cabinets-datalist" placeholder="Örn: =012 Pitch control box" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #8B5CF6; border-radius: 8px; color: #C4B5FD; padding: 0 1rem; font-size: 0.9rem; outline: none;">
+            <datalist id="cabinets-datalist">
+              ${getAvailableCabinets().map(c => `<option value="${c}"></option>`).join('')}
+            </datalist>
+          </div>
+
+          <div id="edit-turbinetype-container" style="display: none;">
+            <label style="display: block; font-size: 0.8rem; color: #38BDF8; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 700;">
+              <i class="fa-solid fa-fan" style="color: #00F3FF; margin-right: 4px;"></i> Türbin Tipi (Özel)
+            </label>
+            <input id="edit-turbinetype-input" type="text" list="turbinetypes-datalist" placeholder="Örn: E70 - E82" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid #00F3FF; border-radius: 8px; color: #38BDF8; padding: 0 1rem; font-size: 0.9rem; outline: none;">
+            <datalist id="turbinetypes-datalist">
+              ${getAvailableTurbineTypes().map(t => `<option value="${t}"></option>`).join('')}
+            </datalist>
+          </div>
+
           <input type="hidden" id="edit-old-qty-input">
           
           <div id="edit-stock-entry-details" style="display: none; flex-direction: column; gap: 0.75rem; border-top: 1px dashed #1E293B; padding-top: 0.75rem; margin-top: 0.5rem; text-align: left;">
@@ -354,7 +375,7 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
     <!-- Big Image Display Modal -->
     <div id="big-image-modal" style="display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.9); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center;">
       <div style="background-color: #0A0E17; border: 1px solid #1E293B; border-radius: 16px; width: 90%; max-width: 600px; padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align: center; position: relative;">
-        <button onclick="document.getElementById('big-image-modal').style.display='none'" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.5rem; transition: color 0.2s;" onmouseover="this.style.color='#FFF'" onmouseout="this.style.color='#64748B'"><i class="fa-solid fa-xmark"></i></button>
+        <button onclick="window.closeBigImage ? window.closeBigImage() : (document.getElementById('big-image-modal').style.display='none')" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: #64748B; cursor: pointer; font-size: 1.5rem; transition: color 0.2s;" onmouseover="this.style.color='#FFF'" onmouseout="this.style.color='#64748B'"><i class="fa-solid fa-xmark"></i></button>
         <h3 id="big-image-title" style="font-size: 1.1rem; font-weight: 600; color: #E2E8F0; margin: 0 0 1.5rem 0; padding-right: 2rem; text-align: left;">Ürün Görseli</h3>
         <img id="big-image-img" src="" style="width: 100%; max-height: 60vh; object-fit: contain; border-radius: 8px; margin-bottom: 0;" />
       </div>
@@ -391,29 +412,165 @@ export const renderModalsHTML = (targetOptions: any[], isMobileWarehouse: boolea
         </div>
       </div>
     </div>
+
+    <!-- Quick Price Modal -->
+    <div id="quick-price-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(10, 14, 23, 0.85); z-index: 10005; justify-content: center; align-items: center; padding: 20px 1rem; backdrop-filter: blur(6px);">
+      <div style="background-color: #111827; border: 1px solid rgba(0, 243, 255, 0.3); border-radius: 14px; width: 500px; max-width: 95vw; padding: 1.75rem; box-shadow: 0 20px 35px rgba(0, 0, 0, 0.6); box-sizing: border-box;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(0, 243, 255, 0.1); border: 1px solid rgba(0, 243, 255, 0.3); display: flex; align-items: center; justify-content: center; color: #00f3ff;">
+              <i class="fa-solid fa-tags"></i>
+            </div>
+            <h2 style="margin: 0; font-size: 1.15rem; color: #FFF; font-weight: 700; font-family: 'Rajdhani', sans-serif;">Malzeme Birim Fiyatı Tanımla</h2>
+          </div>
+          <i class="fa-solid fa-times" onclick="window.closeQuickPriceModal()" style="cursor: pointer; color: #64748B; font-size: 1.25rem;"></i>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 1rem; text-align: left;">
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">SAP Numarası & Tanımı</label>
+            <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.6rem 0.85rem;">
+              <span id="quick-price-sap" style="font-family: monospace; font-weight: 800; color: #00f3ff; margin-right: 8px;"></span>
+              <span id="quick-price-name" style="color: #e2e8f0; font-size: 0.85rem;"></span>
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 110px; gap: 0.75rem;">
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">Birim Fiyat *</label>
+              <input id="quick-price-value-input" type="number" step="0.01" min="0" placeholder="0.00" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid rgba(0, 243, 255, 0.3); border-radius: 8px; color: #10B981; padding: 0 1rem; font-size: 1.1rem; outline: none; font-weight: 800; font-family: monospace; box-sizing: border-box;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">Para Birimi</label>
+              <select id="quick-price-currency-select" style="width: 100%; height: 42px; background-color: #0A0E17; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #FFF; padding: 0 0.5rem; font-size: 0.9rem; outline: none; font-weight: 700; font-family: monospace; box-sizing: border-box;">
+                <option value="EUR" selected>EUR (€)</option>
+                <option value="TRY">TRY (₺)</option>
+                <option value="USD">USD ($)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">Geçerlilik Yılı</label>
+              <input id="quick-price-year-input" type="number" min="2020" max="2035" value="2026" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #FFF; padding: 0 0.85rem; font-size: 0.88rem; outline: none; font-family: monospace; box-sizing: border-box;">
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">Depo / Kapsam</label>
+              <select id="quick-price-warehouse-select" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #FFF; padding: 0 0.5rem; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+                <!-- Filled dynamically -->
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.35rem; font-weight: 700; text-transform: uppercase;">Tedarikçi / Not (Opsiyonel)</label>
+            <input id="quick-price-note-input" type="text" placeholder="Örn: Vestas, Fatura No..." style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #FFF; padding: 0 0.85rem; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
+          <button onclick="window.closeQuickPriceModal()" style="padding: 0.5rem 1.25rem; background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #94A3B8; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">İptal</button>
+          <button id="btn-save-quick-price" onclick="window.saveQuickPriceModal(this)" style="padding: 0.5rem 1.5rem; background: linear-gradient(135deg, #10B981, #059669); border: none; color: #FFF; font-weight: 700; border-radius: 8px; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 0 15px rgba(16,185,129,0.3);">
+            <i class="fa-solid fa-check"></i> Fiyatı Kaydet
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Cabinet Assignment Modal (Fatih Zebek Özel) -->
+    <div id="new-warehouse-quick-cabinet-modal" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 1100; justify-content: center; align-items: center; padding: 20px 1rem;">
+      <div style="background-color: #0F172A; border: 1px solid #8B5CF6; border-radius: 16px; width: 100%; max-width: 480px; padding: 1.5rem; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.9); position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(139, 92, 246, 0.2); padding-bottom: 0.75rem;">
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: #C4B5FD; margin: 0; font-family: 'Rajdhani', sans-serif; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-server" style="color: #A855F7;"></i> Malzemeye Kabin / Pano Ata
+          </h3>
+          <button onclick="window.closeQuickCabinetModal()" style="background: none; border: none; color: #94A3B8; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="quick-cabinet-item-id">
+        <input type="hidden" id="quick-cabinet-sap-no">
+        <div style="margin-bottom: 1rem; background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+          <div id="quick-cabinet-item-name" style="color: #FFF; font-weight: 600; font-size: 0.88rem;"></div>
+          <div id="quick-cabinet-item-sap" style="color: #14F195; font-family: monospace; font-size: 0.8rem; margin-top: 2px;"></div>
+        </div>
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 700;">Hızlı Seçim (Kayıtlı Kabinler):</label>
+          <div id="quick-cabinet-buttons-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 180px; overflow-y: auto;">
+          </div>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase; font-weight: 700;">Veya Özel Kabin / Pano Adı Girin:</label>
+          <input id="quick-cabinet-custom-input" type="text" placeholder="Örn: =012 Pitch control box" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #8B5CF6; border-radius: 8px; color: #C4B5FD; padding: 0 0.75rem; font-size: 0.85rem; outline: none; margin-bottom: 0.75rem;">
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button onclick="window.saveQuickCabinet()" style="flex: 1; height: 38px; border-radius: 8px; border: none; background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%); color: #FFF; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+            Kaydet
+          </button>
+          <button onclick="document.getElementById('quick-cabinet-custom-input').value=''; window.saveQuickCabinet();" style="height: 38px; padding: 0 1rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #FCA5A5; font-size: 0.8rem; font-weight: 700; cursor: pointer;" title="Kabini Temizle">
+            Kaldır
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Turbine Type Assignment Modal (Fatih Zebek Özel) -->
+    <div id="new-warehouse-quick-turbinetype-modal" style="display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 1100; justify-content: center; align-items: center; padding: 20px 1rem;">
+      <div style="background-color: #0F172A; border: 1px solid #00F3FF; border-radius: 16px; width: 100%; max-width: 480px; padding: 1.5rem; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.9); position: relative;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(0, 243, 255, 0.2); padding-bottom: 0.75rem;">
+          <h3 style="font-size: 1.15rem; font-weight: 700; color: #38BDF8; margin: 0; font-family: 'Rajdhani', sans-serif; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-fan" style="color: #00F3FF;"></i> Malzemeye Türbin Tipi Ata
+          </h3>
+          <button onclick="window.closeQuickTurbineTypeModal()" style="background: none; border: none; color: #94A3B8; cursor: pointer; font-size: 1.25rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="quick-turbinetype-item-id">
+        <input type="hidden" id="quick-turbinetype-sap-no">
+        <div style="margin-bottom: 1rem; background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+          <div id="quick-turbinetype-item-name" style="color: #FFF; font-weight: 600; font-size: 0.88rem;"></div>
+          <div id="quick-turbinetype-item-sap" style="color: #14F195; font-family: monospace; font-size: 0.8rem; margin-top: 2px;"></div>
+        </div>
+        <div style="margin-bottom: 1rem;">
+          <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: 700;">Hızlı Seçim (Türbin Tipleri):</label>
+          <div id="quick-turbinetype-buttons-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 180px; overflow-y: auto;">
+          </div>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.75rem; color: #94A3B8; margin-bottom: 0.4rem; text-transform: uppercase; font-weight: 700;">Veya Özel Türbin Tipi Girin:</label>
+          <input id="quick-turbinetype-custom-input" type="text" placeholder="Örn: E70 - E82" style="width: 100%; height: 38px; background-color: #0A0E17; border: 1px solid #00F3FF; border-radius: 8px; color: #38BDF8; padding: 0 0.75rem; font-size: 0.85rem; outline: none; margin-bottom: 0.75rem;">
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button onclick="window.saveQuickTurbineType()" style="flex: 1; height: 38px; border-radius: 8px; border: none; background: linear-gradient(135deg, #00F3FF 0%, #0284C7 100%); color: #0A0E17; font-size: 0.85rem; font-weight: 800; cursor: pointer; transition: all 0.2s;">
+            Kaydet
+          </button>
+          <button onclick="document.getElementById('quick-turbinetype-custom-input').value=''; window.saveQuickTurbineType();" style="height: 38px; padding: 0 1rem; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #FCA5A5; font-size: 0.8rem; font-weight: 700; cursor: pointer;" title="Tipi Temizle">
+            Kaldır
+          </button>
+        </div>
+      </div>
+    </div>
   `;
 };
 
 // --- Modal Handlers ---
 
 export const openAddNewModal = () => {
-  const modal = document.getElementById('add-new-modal');
-  if (modal) modal.style.display = 'flex';
+  const modal = ensureSingleModalInBody('add-new-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
   
-  const sourceInput = document.getElementById('new-source-input') as HTMLInputElement;
+  const sourceInput = modal.querySelector('#new-source-input') as HTMLInputElement;
   if (sourceInput) sourceInput.value = '';
-  const deliveryInput = document.getElementById('new-delivery-input') as HTMLInputElement;
+  const deliveryInput = modal.querySelector('#new-delivery-input') as HTMLInputElement;
   if (deliveryInput) deliveryInput.value = '';
-  const invoiceInput = document.getElementById('new-invoice-input') as HTMLInputElement;
+  const invoiceInput = modal.querySelector('#new-invoice-input') as HTMLInputElement;
   if (invoiceInput) invoiceInput.value = '';
-  const noteInput = document.getElementById('new-entry-note-input') as HTMLInputElement;
+  const noteInput = modal.querySelector('#new-entry-note-input') as HTMLInputElement;
   if (noteInput) noteInput.value = '';
   
-  const updatedByInput = document.getElementById('new-updatedby-input') as HTMLInputElement;
+  const updatedByInput = modal.querySelector('#new-updatedby-input') as HTMLInputElement;
   if (updatedByInput) updatedByInput.value = '';
 
-  const sapInput = document.getElementById('new-sap-input') as HTMLInputElement;
-  const nameInput = document.getElementById('new-name-input') as HTMLInputElement;
+  const sapInput = modal.querySelector('#new-sap-input') as HTMLInputElement;
+  const nameInput = modal.querySelector('#new-name-input') as HTMLInputElement;
   
   // Set default state for nameInput (editable by default until SAP is typed)
   if (nameInput) {
@@ -472,31 +629,34 @@ export const openAddNewModal = () => {
 };
 
 export const closeAddNewModal = () => {
-  const modal = document.getElementById('add-new-modal');
-  if (modal) modal.style.display = 'none';
-  const sapInput = document.getElementById('new-sap-input') as HTMLInputElement;
-  if (sapInput) sapInput.value = '';
-  const nameInput = document.getElementById('new-name-input') as HTMLInputElement;
-  if (nameInput) nameInput.value = '';
-  const quantityInput = document.getElementById('new-qty-input') as HTMLInputElement;
-  if (quantityInput) quantityInput.value = '';
-  const locationInput = document.getElementById('new-loc-input') as HTMLInputElement;
-  if (locationInput) locationInput.value = '';
-  const imgInput = document.getElementById('new-img-input') as HTMLInputElement;
-  if (imgInput) imgInput.value = '';
-  const imgLabel = document.getElementById('new-img-label');
-  if (imgLabel) { imgLabel.innerText = 'Görsel Yükle'; imgLabel.style.color = '#94A3B8'; }
+  const modal = ensureSingleModalInBody('add-new-modal') || document.getElementById('add-new-modal');
+  if (modal) {
+    modal.style.display = 'none';
+    const sapInput = modal.querySelector('#new-sap-input') as HTMLInputElement;
+    if (sapInput) sapInput.value = '';
+    const nameInput = modal.querySelector('#new-name-input') as HTMLInputElement;
+    if (nameInput) nameInput.value = '';
+    const quantityInput = modal.querySelector('#new-qty-input') as HTMLInputElement;
+    if (quantityInput) quantityInput.value = '';
+    const locationInput = modal.querySelector('#new-loc-input') as HTMLInputElement;
+    if (locationInput) locationInput.value = '';
+    const imgInput = modal.querySelector('#new-img-input') as HTMLInputElement;
+    if (imgInput) imgInput.value = '';
+    const imgLabel = modal.querySelector('#new-img-label') as HTMLElement;
+    if (imgLabel) { imgLabel.innerText = 'Görsel Yükle'; imgLabel.style.color = '#94A3B8'; }
+  }
   if ((window as any).selectWarehouseAndNavigate) {
     (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
   }
 };
 
 export const saveNewItem = async (btn: HTMLButtonElement) => {
-  const sapInput = document.getElementById('new-sap-input') as HTMLInputElement;
-  const nameInput = document.getElementById('new-name-input') as HTMLInputElement;
-  const quantityInput = document.getElementById('new-qty-input') as HTMLInputElement;
-  const unitInput = document.getElementById('new-unit-input') as HTMLInputElement;
-  const locationInput = document.getElementById('new-loc-input') as HTMLInputElement;
+  const modal = (btn ? btn.closest('#add-new-modal') : null) || ensureSingleModalInBody('add-new-modal');
+  const sapInput = (modal?.querySelector('#new-sap-input') || document.getElementById('new-sap-input')) as HTMLInputElement;
+  const nameInput = (modal?.querySelector('#new-name-input') || document.getElementById('new-name-input')) as HTMLInputElement;
+  const quantityInput = (modal?.querySelector('#new-qty-input') || document.getElementById('new-qty-input')) as HTMLInputElement;
+  const unitInput = (modal?.querySelector('#new-unit-input') || document.getElementById('new-unit-input')) as HTMLInputElement;
+  const locationInput = (modal?.querySelector('#new-loc-input') || document.getElementById('new-loc-input')) as HTMLInputElement;
 
   if (!sapInput || !nameInput || !quantityInput || !sapInput.value || !nameInput.value || !quantityInput.value) {
     alert('Lütfen zorunlu alanları doldurun!');
@@ -514,14 +674,14 @@ export const saveNewItem = async (btn: HTMLButtonElement) => {
   btn.disabled = true;
 
   try {
-    const imgInput = document.getElementById('new-img-input') as HTMLInputElement;
+    const imgInput = (modal?.querySelector('#new-img-input') || document.getElementById('new-img-input')) as HTMLInputElement;
     const inputNameValue = nameInput.value;
 
-    const sourceVal = (document.getElementById('new-source-input') as HTMLInputElement)?.value.trim() || '';
-    const deliveryVal = (document.getElementById('new-delivery-input') as HTMLInputElement)?.value.trim() || '';
-    const invoiceVal = (document.getElementById('new-invoice-input') as HTMLInputElement)?.value.trim() || '';
-    const updatedByVal = (document.getElementById('new-updatedby-input') as HTMLInputElement)?.value.trim() || '';
-    const entryNoteVal = (document.getElementById('new-entry-note-input') as HTMLInputElement)?.value.trim() || '';
+    const sourceVal = ((modal?.querySelector('#new-source-input') || document.getElementById('new-source-input')) as HTMLInputElement)?.value.trim() || '';
+    const deliveryVal = ((modal?.querySelector('#new-delivery-input') || document.getElementById('new-delivery-input')) as HTMLInputElement)?.value.trim() || '';
+    const invoiceVal = ((modal?.querySelector('#new-invoice-input') || document.getElementById('new-invoice-input')) as HTMLInputElement)?.value.trim() || '';
+    const updatedByVal = ((modal?.querySelector('#new-updatedby-input') || document.getElementById('new-updatedby-input')) as HTMLInputElement)?.value.trim() || '';
+    const entryNoteVal = ((modal?.querySelector('#new-entry-note-input') || document.getElementById('new-entry-note-input')) as HTMLInputElement)?.value.trim() || '';
     
     const logDetails = {
       sourceWh: sourceVal || '-',
@@ -568,8 +728,8 @@ export const saveNewItem = async (btn: HTMLButtonElement) => {
     quantityInput.value = '';
     locationInput.value = '';
     if (imgInput) imgInput.value = '';
-    const imgLabel = document.getElementById('new-img-label');
-    if (imgLabel) { imgLabel.innerText = 'Görsel Yükle'; imgLabel.style.color = '#94A3B8'; }
+    const imgLabel = modal?.querySelector('#new-img-label') || document.getElementById('new-img-label');
+    if (imgLabel) { (imgLabel as HTMLElement).innerText = 'Görsel Yükle'; (imgLabel as HTMLElement).style.color = '#94A3B8'; }
     sapInput.focus();
     
     btn.innerText = 'Başarıyla Eklendi!';
@@ -589,7 +749,7 @@ export const saveNewItem = async (btn: HTMLButtonElement) => {
   }
 };
 
-export const openEditModal = (id: string, sap: string, name: string, qty: number, loc: string, imageUrl?: string, minStock?: number, unit?: string) => {
+export const openEditModal = (id: string, sap: string, name: string, qty: number, loc: string, imageUrl?: string, minStock?: number, unit?: string, cabinet?: string, turbineType?: string) => {
   let modal = ensureSingleModalInBody('new-warehouse-edit-modal');
   if (modal) {
     const editItemId = modal.querySelector('#edit-item-id') as HTMLInputElement;
@@ -600,6 +760,10 @@ export const openEditModal = (id: string, sap: string, name: string, qty: number
     const editUnitInput = modal.querySelector('#edit-unit-input') as HTMLSelectElement;
     const oldQtyInput = modal.querySelector('#edit-old-qty-input') as HTMLInputElement;
     const minStockInput = modal.querySelector('#edit-min-stock-input') as HTMLInputElement;
+    const cabinetContainer = modal.querySelector('#edit-cabinet-container') as HTMLElement;
+    const cabinetInput = modal.querySelector('#edit-cabinet-input') as HTMLInputElement;
+    const turbineTypeContainer = modal.querySelector('#edit-turbinetype-container') as HTMLElement;
+    const turbineTypeInput = modal.querySelector('#edit-turbinetype-input') as HTMLInputElement;
     const sourceInput = modal.querySelector('#edit-source-input') as HTMLInputElement;
     const deliveryInput = modal.querySelector('#edit-delivery-input') as HTMLInputElement;
     const invoiceInput = modal.querySelector('#edit-invoice-input') as HTMLInputElement;
@@ -621,6 +785,31 @@ export const openEditModal = (id: string, sap: string, name: string, qty: number
     if (invoiceInput) invoiceInput.value = '';
     if (noteInput) noteInput.value = '';
     if (minStockInput) minStockInput.value = minStock !== undefined ? minStock.toString() : '0';
+
+    const isFatihZebek = isUserFatihZebek();
+    const effCab = cabinet || getEffectiveCabinet({ sapNo: sap, cabinet });
+    const effTurb = turbineType || getEffectiveTurbineType({ sapNo: sap, turbineType });
+
+    if (cabinetContainer) {
+      cabinetContainer.style.display = isFatihZebek ? 'block' : 'none';
+    }
+    if (cabinetInput) {
+      cabinetInput.value = effCab || '';
+    }
+    if (turbineTypeContainer) {
+      turbineTypeContainer.style.display = isFatihZebek ? 'block' : 'none';
+    }
+    if (turbineTypeInput) {
+      turbineTypeInput.value = effTurb || '';
+    }
+    const datalist = modal.querySelector('#cabinets-datalist') as HTMLElement;
+    if (datalist) {
+      datalist.innerHTML = getAvailableCabinets().map(c => `<option value="${c.replace(/"/g, '&quot;')}"></option>`).join('');
+    }
+    const turbineDatalist = modal.querySelector('#turbinetypes-datalist') as HTMLElement;
+    if (turbineDatalist) {
+      turbineDatalist.innerHTML = getAvailableTurbineTypes().map(t => `<option value="${t.replace(/"/g, '&quot;')}"></option>`).join('');
+    }
 
     const userProfile = getUserProfile() || (window as any).currentUser;
     const user = userProfile ? userProfile.displayName || userProfile.email : '';
@@ -772,6 +961,11 @@ export const saveEditItem = async (btn: HTMLButtonElement) => {
       };
   }
   
+  const cabinetInput = (modal.querySelector('#edit-cabinet-input') || document.getElementById('edit-cabinet-input')) as HTMLInputElement;
+  const cabinetVal = cabinetInput ? cabinetInput.value.trim() : '';
+  const turbineTypeInput = (modal.querySelector('#edit-turbinetype-input') || document.getElementById('edit-turbinetype-input')) as HTMLInputElement;
+  const turbineTypeVal = turbineTypeInput ? turbineTypeInput.value.trim() : '';
+  
   const originalText = btn.innerText;
   btn.innerText = 'Kaydediliyor...';
   btn.disabled = true;
@@ -784,17 +978,35 @@ export const saveEditItem = async (btn: HTMLButtonElement) => {
     userProfile?.email?.toLowerCase() === 'emir.unver@demirerholding.com' ||
     userProfile?.email?.toLowerCase()?.includes('fatih.zebek');
   
+  const isFatihZebek = isUserFatihZebek(userProfile);
+
   try {
-    if (!isMaterialManager) {
-      // Saha Personeli: Sadece Raf Konumu ve Kritik Stok Limiti güncellenebilir!
-      await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
-        shelfNo: loc,
-        criticalLimit: isNaN(minStock) ? 0 : minStock
-      } as any);
-    } else {
-      await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
-        sapNo: sap, description: name, quantity: isNaN(qty) ? oldQty : qty, shelfNo: loc, criticalLimit: isNaN(minStock) ? 0 : minStock, unit
-      } as any, logDetails);
+    const updatesObj: any = isMaterialManager ? {
+      sapNo: sap, description: name, quantity: isNaN(qty) ? oldQty : qty, shelfNo: loc, criticalLimit: isNaN(minStock) ? 0 : minStock, unit
+    } : {
+      shelfNo: loc,
+      criticalLimit: isNaN(minStock) ? 0 : minStock
+    };
+
+    if (isFatihZebek) {
+      updatesObj.cabinet = cabinetVal;
+      updatesObj.turbineType = turbineTypeVal;
+      if (sap) {
+        await saveSapMetadata(sap, { cabinet: cabinetVal, turbineType: turbineTypeVal });
+      }
+    }
+
+    await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, updatesObj, isMaterialManager ? logDetails : undefined);
+
+    const memItem = (warehouseState.inventoryItems || []).find((i: any) => i.id === id);
+    if (memItem && isFatihZebek) {
+      memItem.cabinet = cabinetVal;
+      memItem.turbineType = turbineTypeVal;
+    }
+    const memItemQR = (warehouseState.inventoryWithQRs || []).find((i: any) => i.id === id);
+    if (memItemQR && isFatihZebek) {
+      memItemQR.cabinet = cabinetVal;
+      memItemQR.turbineType = turbineTypeVal;
     }
 
     const imgInput = (modal.querySelector('#edit-img-input') || document.getElementById('edit-img-input')) as HTMLInputElement;
@@ -895,32 +1107,38 @@ export const deleteEditImage = async () => {
 };
 
 export const openMtaEditModal = (id: string, sap: string, name: string, serial: string, note: string, loc: string, qty: number) => {
-  const modal = document.getElementById('new-warehouse-mta-edit-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-mta-edit-modal');
   if (modal) {
-    (document.getElementById('mta-edit-item-id') as HTMLInputElement).value = id;
-    const nameText = document.getElementById('mta-edit-name-text');
+    const idInput = modal.querySelector('#mta-edit-item-id') as HTMLInputElement;
+    if (idInput) idInput.value = id;
+    const nameText = modal.querySelector('#mta-edit-name-text') as HTMLElement;
     if (nameText) nameText.innerText = name;
-    const sapText = document.getElementById('mta-edit-sap-text');
+    const sapText = modal.querySelector('#mta-edit-sap-text') as HTMLElement;
     if (sapText) sapText.innerText = sap;
-    (document.getElementById('mta-edit-qty-input') as HTMLInputElement).value = qty !== undefined ? qty.toString() : '0';
-    (document.getElementById('mta-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null') ? '' : serial;
-    (document.getElementById('mta-edit-note-input') as HTMLTextAreaElement).value = (note === 'undefined' || note === 'null') ? '' : note;
-    (document.getElementById('mta-edit-loc-input') as HTMLInputElement).value = (loc === 'undefined' || loc === 'null') ? '' : loc;
+    const qtyInput = modal.querySelector('#mta-edit-qty-input') as HTMLInputElement;
+    if (qtyInput) qtyInput.value = qty !== undefined ? qty.toString() : '0';
+    const serialInput = modal.querySelector('#mta-edit-serial-input') as HTMLInputElement;
+    if (serialInput) serialInput.value = (serial === 'undefined' || serial === 'null') ? '' : serial;
+    const noteInput = modal.querySelector('#mta-edit-note-input') as HTMLTextAreaElement;
+    if (noteInput) noteInput.value = (note === 'undefined' || note === 'null') ? '' : note;
+    const locInput = modal.querySelector('#mta-edit-loc-input') as HTMLInputElement;
+    if (locInput) locInput.value = (loc === 'undefined' || loc === 'null') ? '' : loc;
     modal.style.display = 'flex';
   }
 };
 
 export const closeMtaEditModal = () => {
-  const modal = document.getElementById('new-warehouse-mta-edit-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-mta-edit-modal') || document.getElementById('new-warehouse-mta-edit-modal');
   if (modal) modal.style.display = 'none';
 };
 
 export const saveMtaEditItem = async (btn: HTMLButtonElement) => {
-  const id = (document.getElementById('mta-edit-item-id') as HTMLInputElement).value;
-  const qty = parseInt((document.getElementById('mta-edit-qty-input') as HTMLInputElement).value) || 0;
-  const serial = (document.getElementById('mta-edit-serial-input') as HTMLInputElement).value.trim();
-  const note = (document.getElementById('mta-edit-note-input') as HTMLTextAreaElement).value.trim();
-  const loc = (document.getElementById('mta-edit-loc-input') as HTMLInputElement).value.trim();
+  const modal = (btn ? btn.closest('#new-warehouse-mta-edit-modal') : null) || ensureSingleModalInBody('new-warehouse-mta-edit-modal');
+  const id = ((modal?.querySelector('#mta-edit-item-id') || document.getElementById('mta-edit-item-id')) as HTMLInputElement)?.value;
+  const qty = parseInt(((modal?.querySelector('#mta-edit-qty-input') || document.getElementById('mta-edit-qty-input')) as HTMLInputElement)?.value || '0') || 0;
+  const serial = (((modal?.querySelector('#mta-edit-serial-input') || document.getElementById('mta-edit-serial-input')) as HTMLInputElement)?.value || '').trim();
+  const note = (((modal?.querySelector('#mta-edit-note-input') || document.getElementById('mta-edit-note-input')) as HTMLTextAreaElement)?.value || '').trim();
+  const loc = (((modal?.querySelector('#mta-edit-loc-input') || document.getElementById('mta-edit-loc-input')) as HTMLInputElement)?.value || '').trim();
   
   const originalText = btn.innerText;
   btn.innerText = 'Kaydediliyor...';
@@ -951,29 +1169,32 @@ export const saveMtaEditItem = async (btn: HTMLButtonElement) => {
 export const openDefectEditModal = (id: string, sap: string, name: string, serial: string, reportDocId: string = '') => {
   let modal = ensureSingleModalInBody('new-warehouse-defect-edit-modal');
   if (modal) {
-    (document.getElementById('defect-edit-item-id') as HTMLInputElement).value = id;
-    const reportDocIdInput = document.getElementById('defect-edit-report-doc-id') as HTMLInputElement;
+    const idInput = modal.querySelector('#defect-edit-item-id') as HTMLInputElement;
+    if (idInput) idInput.value = id;
+    const reportDocIdInput = modal.querySelector('#defect-edit-report-doc-id') as HTMLInputElement;
     if (reportDocIdInput) reportDocIdInput.value = reportDocId;
-    const nameText = document.getElementById('defect-edit-name-text');
+    const nameText = modal.querySelector('#defect-edit-name-text') as HTMLElement;
     if (nameText) nameText.innerText = name;
-    const sapText = document.getElementById('defect-edit-sap-text');
+    const sapText = modal.querySelector('#defect-edit-sap-text') as HTMLElement;
     if (sapText) sapText.innerText = sap;
-    (document.getElementById('defect-edit-serial-input') as HTMLInputElement).value = (serial === 'undefined' || serial === 'null' || serial === '-') ? '' : serial;
+    const serialInput = modal.querySelector('#defect-edit-serial-input') as HTMLInputElement;
+    if (serialInput) serialInput.value = (serial === 'undefined' || serial === 'null' || serial === '-') ? '' : serial;
     modal.style.display = 'flex';
   }
 };
 
 export const closeDefectEditModal = () => {
-  const modal = document.getElementById('new-warehouse-defect-edit-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-defect-edit-modal') || document.getElementById('new-warehouse-defect-edit-modal');
   if (modal) modal.style.display = 'none';
 };
 
 export const saveDefectEditItem = async (btn: HTMLButtonElement) => {
-  const id = (document.getElementById('defect-edit-item-id') as HTMLInputElement).value;
-  const serial = (document.getElementById('defect-edit-serial-input') as HTMLInputElement).value.trim();
-  const reportDocId = (document.getElementById('defect-edit-report-doc-id') as HTMLInputElement)?.value || '';
-  const sapTextEl = document.getElementById('defect-edit-sap-text');
-  const sapNo = sapTextEl ? sapTextEl.innerText.trim() : '';
+  const modal = (btn ? btn.closest('#new-warehouse-defect-edit-modal') : null) || ensureSingleModalInBody('new-warehouse-defect-edit-modal');
+  const id = ((modal?.querySelector('#defect-edit-item-id') || document.getElementById('defect-edit-item-id')) as HTMLInputElement)?.value;
+  const serial = (((modal?.querySelector('#defect-edit-serial-input') || document.getElementById('defect-edit-serial-input')) as HTMLInputElement)?.value || '').trim();
+  const reportDocId = ((modal?.querySelector('#defect-edit-report-doc-id') || document.getElementById('defect-edit-report-doc-id')) as HTMLInputElement)?.value || '';
+  const sapTextEl = (modal?.querySelector('#defect-edit-sap-text') || document.getElementById('defect-edit-sap-text')) as HTMLElement | null;
+  const sapNo = sapTextEl ? (sapTextEl.innerText || sapTextEl.textContent || '').trim() : '';
 
   const originalText = btn.innerText;
   btn.innerText = 'Kaydediliyor...';
@@ -1023,18 +1244,21 @@ export const saveDefectEditItem = async (btn: HTMLButtonElement) => {
 };
 
 export const openTransferModal = async (id: string, sap: string, name: string, maxQty: number, preselectedTargetWarehouseId?: string) => {
-  let modal = document.getElementById('new-warehouse-transfer-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-transfer-modal');
   if(modal) {
-    if (modal.parentElement !== document.body) {
-      document.body.appendChild(modal);
-    }
-    (document.getElementById('transfer-item-id') as HTMLInputElement).value = id;
-    const transferInfo = document.getElementById('transfer-info');
-    if (transferInfo) transferInfo.innerText = `${sap} - ${name} (Mevcut: ${maxQty})`;
-    (document.getElementById('transfer-qty-input') as HTMLInputElement).max = maxQty.toString();
-    (document.getElementById('transfer-qty-input') as HTMLInputElement).value = '1';
+    const itemIdInput = modal.querySelector('#transfer-item-id') as HTMLInputElement;
+    if (itemIdInput) itemIdInput.value = id;
 
-    const targetSelect = document.getElementById('transfer-target-input') as HTMLSelectElement;
+    const transferInfo = modal.querySelector('#transfer-info') as HTMLElement;
+    if (transferInfo) transferInfo.innerText = `${sap} - ${name} (Mevcut: ${maxQty})`;
+
+    const qtyInput = modal.querySelector('#transfer-qty-input') as HTMLInputElement;
+    if (qtyInput) {
+      qtyInput.max = maxQty.toString();
+      qtyInput.value = '1';
+    }
+
+    const targetSelect = modal.querySelector('#transfer-target-input') as HTMLSelectElement;
     if (targetSelect) {
        targetSelect.innerHTML = '<option value="">Yükleniyor...</option>';
        
@@ -1080,8 +1304,9 @@ export const openTransferModal = async (id: string, sap: string, name: string, m
          optionsHtml = `<option value="${matchedWh.id}">${matchedWh.name}</option>`;
        } else if (warehouseState.currentWarehouse.id.startsWith('team_')) {
          const allowedMain = (warehouseState.targetOptions || []).filter(w => !w.id.startsWith('team_'));
-         optionsHtml = allowedMain.length > 0 
-           ? allowedMain.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
+         const fallbackMain = allowedMain.length > 0 ? allowedMain : dataService.getWarehouses().filter(w => !w.id.startsWith('team_'));
+         optionsHtml = fallbackMain.length > 0 
+           ? fallbackMain.map(w => `<option value="${w.id}">${w.name}</option>`).join('')
            : `<option value="">İade edilecek yetkili depo bulunamadı</option>`;
        } else {
          const allowedTeams = (warehouseState.targetOptions || []).filter(w => w.id.startsWith('team_'));
@@ -1101,16 +1326,17 @@ export const openTransferModal = async (id: string, sap: string, name: string, m
 };
 
 export const closeTransferModal = () => {
-  const modal = document.getElementById('new-warehouse-transfer-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-transfer-modal') || document.getElementById('new-warehouse-transfer-modal');
   if(modal) modal.style.display = 'none';
 };
 
 export const saveTransferItem = async (btn: HTMLButtonElement) => {
-  const id = (document.getElementById('transfer-item-id') as HTMLInputElement).value;
-  const targetId = (document.getElementById('transfer-target-input') as HTMLSelectElement).value;
-  const qty = parseInt((document.getElementById('transfer-qty-input') as HTMLInputElement).value);
+  const modal = ensureSingleModalInBody('new-warehouse-transfer-modal');
+  const id = (modal?.querySelector('#transfer-item-id') as HTMLInputElement || document.getElementById('transfer-item-id') as HTMLInputElement)?.value;
+  const targetId = (modal?.querySelector('#transfer-target-input') as HTMLSelectElement || document.getElementById('transfer-target-input') as HTMLSelectElement)?.value;
+  const qty = parseInt((modal?.querySelector('#transfer-qty-input') as HTMLInputElement || document.getElementById('transfer-qty-input') as HTMLInputElement)?.value || '0');
   
-  if(!targetId || isNaN(qty) || qty <= 0) {
+  if(!id || !targetId || isNaN(qty) || qty <= 0) {
     alert('Lütfen geçerli bir hedef depo ve miktar girin.');
     return;
   }
@@ -1132,24 +1358,29 @@ export const saveTransferItem = async (btn: HTMLButtonElement) => {
 };
 
 export const openP2PTransferModal = (id: string, sap: string, name: string, maxQty: number) => {
-  const modal = document.getElementById('p2p-transfer-modal');
+  const modal = ensureSingleModalInBody('p2p-transfer-modal');
   if (modal) {
-    (document.getElementById('p2p-item-id') as HTMLInputElement).value = id;
-    (document.getElementById('p2p-item-sap') as HTMLInputElement).value = sap;
-    (document.getElementById('p2p-item-name') as HTMLInputElement).value = name;
+    const idInput = modal.querySelector('#p2p-item-id') as HTMLInputElement;
+    if (idInput) idInput.value = id;
+    const sapInput = modal.querySelector('#p2p-item-sap') as HTMLInputElement;
+    if (sapInput) sapInput.value = sap;
+    const nameInput = modal.querySelector('#p2p-item-name') as HTMLInputElement;
+    if (nameInput) nameInput.value = name;
     
-    const infoDiv = document.getElementById('p2p-info');
+    const infoDiv = modal.querySelector('#p2p-info') as HTMLElement;
     if (infoDiv) {
       infoDiv.innerText = `${sap} - ${name} (Zimmetinizdeki Mevcut: ${maxQty})`;
     }
     
-    const qtyInput = document.getElementById('p2p-qty-input') as HTMLInputElement;
-    qtyInput.max = maxQty.toString();
-    qtyInput.value = '1';
+    const qtyInput = modal.querySelector('#p2p-qty-input') as HTMLInputElement;
+    if (qtyInput) {
+      qtyInput.max = maxQty.toString();
+      qtyInput.value = '1';
+    }
     
-    const inputContainer = document.getElementById('p2p-input-container');
+    const inputContainer = modal.querySelector('#p2p-input-container') as HTMLElement;
     if (inputContainer) inputContainer.style.display = 'block';
-    const qrDisplay = document.getElementById('p2p-qr-display');
+    const qrDisplay = modal.querySelector('#p2p-qr-display') as HTMLElement;
     if (qrDisplay) qrDisplay.style.display = 'none';
     
     modal.style.display = 'flex';
@@ -1157,16 +1388,17 @@ export const openP2PTransferModal = (id: string, sap: string, name: string, maxQ
 };
 
 export const closeP2PTransferModal = () => {
-  const modal = document.getElementById('p2p-transfer-modal');
+  const modal = ensureSingleModalInBody('p2p-transfer-modal') || document.getElementById('p2p-transfer-modal');
   if (modal) modal.style.display = 'none';
 };
 
 export const generateP2PQR = async () => {
-  const id = (document.getElementById('p2p-item-id') as HTMLInputElement).value;
-  const sap = (document.getElementById('p2p-item-sap') as HTMLInputElement).value;
-  const name = (document.getElementById('p2p-item-name') as HTMLInputElement).value;
-  const qtyInput = document.getElementById('p2p-qty-input') as HTMLInputElement;
-  const qty = parseInt(qtyInput.value);
+  const modal = ensureSingleModalInBody('p2p-transfer-modal');
+  const id = (modal?.querySelector('#p2p-item-id') as HTMLInputElement || document.getElementById('p2p-item-id') as HTMLInputElement)?.value;
+  const sap = (modal?.querySelector('#p2p-item-sap') as HTMLInputElement || document.getElementById('p2p-item-sap') as HTMLInputElement)?.value;
+  const name = (modal?.querySelector('#p2p-item-name') as HTMLInputElement || document.getElementById('p2p-item-name') as HTMLInputElement)?.value;
+  const qtyInput = (modal?.querySelector('#p2p-qty-input') as HTMLInputElement || document.getElementById('p2p-qty-input') as HTMLInputElement);
+  const qty = parseInt(qtyInput?.value || '0');
   const maxQty = parseInt(qtyInput.max || '0');
   
   if (isNaN(qty) || qty <= 0 || qty > maxQty) {
@@ -1201,16 +1433,16 @@ export const generateP2PQR = async () => {
 };
 
 export const closeHistoryModal = () => {
-  const modal = document.getElementById('new-warehouse-history-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-history-modal') || document.getElementById('new-warehouse-history-modal');
   if(modal) modal.style.display = 'none';
 };
 
 export const openHistoryModal = async (id: string, name: string) => {
-  const modal = document.getElementById('new-warehouse-history-modal');
+  const modal = ensureSingleModalInBody('new-warehouse-history-modal');
   if(modal) {
-    const historyTitle = document.getElementById('history-title') as HTMLElement;
+    const historyTitle = modal.querySelector('#history-title') as HTMLElement;
     if (historyTitle) historyTitle.innerText = `Geçmiş: ${name}`;
-    const list = document.getElementById('history-list');
+    const list = modal.querySelector('#history-list') as HTMLElement;
     if(list) list.innerHTML = '<div style="text-align:center; padding:1rem;">Yükleniyor...</div>';
     modal.style.display = 'flex';
     
@@ -1280,22 +1512,24 @@ export const openHistoryModal = async (id: string, name: string) => {
 };
 
 export const showBigQR = (id: string, sapNo: string, name: string, qrUrl: string) => {
-  const img = document.getElementById('big-qr-img');
-  if (img) img.setAttribute('src', qrUrl);
-  const titleDiv = document.getElementById('big-qr-title');
-  if (titleDiv) {
-     titleDiv.innerHTML = `
-        <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; line-height: 1.3;">${name}</div>
-        <div style="font-size: 0.95rem; color: #14F195; margin-top: 6px; font-weight: 700;">SAP NO: ${sapNo}</div>
-     `;
+  const modal = ensureSingleModalInBody('big-qr-modal');
+  if (modal) {
+    const img = modal.querySelector('#big-qr-img') as HTMLImageElement;
+    if (img) img.setAttribute('src', qrUrl);
+    const titleDiv = modal.querySelector('#big-qr-title') as HTMLElement;
+    if (titleDiv) {
+       titleDiv.innerHTML = `
+          <div style="font-size: 1.15rem; font-weight: 700; color: #FFFFFF; line-height: 1.3;">${name}</div>
+          <div style="font-size: 0.95rem; color: #14F195; margin-top: 6px; font-weight: 700;">SAP NO: ${sapNo}</div>
+       `;
+    }
+    (window as any)._currentBigQRItem = { id, sapNo, description: name, warehouseId: warehouseState.currentWarehouse.id };
+    modal.style.display = 'flex';
   }
-  (window as any)._currentBigQRItem = { id, sapNo, description: name, warehouseId: warehouseState.currentWarehouse.id };
-  const modal = document.getElementById('big-qr-modal');
-  if (modal) modal.style.display = 'flex';
 };
 
 export const closeBigQR = () => {
-  const modal = document.getElementById('big-qr-modal');
+  const modal = ensureSingleModalInBody('big-qr-modal') || document.getElementById('big-qr-modal');
   if (modal) modal.style.display = 'none';
   (window as any)._currentBigQRItem = null;
 };
@@ -1412,12 +1646,19 @@ export const printSingleQRFromModal = async () => {
 };
 
 export const showBigImage = (url: string, title: string) => {
-  const img = document.getElementById('big-image-img');
-  if (img) img.setAttribute('src', url);
-  const titleDiv = document.getElementById('big-image-title');
-  if (titleDiv) titleDiv.innerText = title;
-  const modal = document.getElementById('big-image-modal');
-  if (modal) modal.style.display = 'flex';
+  const modal = ensureSingleModalInBody('big-image-modal');
+  if (modal) {
+    const img = modal.querySelector('#big-image-img') as HTMLImageElement;
+    if (img) img.setAttribute('src', url);
+    const titleDiv = modal.querySelector('#big-image-title') as HTMLElement;
+    if (titleDiv) titleDiv.innerText = title;
+    modal.style.display = 'flex';
+  }
+};
+
+export const closeBigImage = () => {
+  const modal = ensureSingleModalInBody('big-image-modal') || document.getElementById('big-image-modal');
+  if (modal) modal.style.display = 'none';
 };
 
 export const showRecoveryInfoList = (itemId: string) => {
@@ -2551,6 +2792,265 @@ export const printWarehouseMsfVoucher = (transferId: string) => {
   });
 };
 
+export const openQuickPriceModal = (sapNo: string, name?: string) => {
+  const modal = ensureSingleModalInBody('quick-price-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    modal.style.zIndex = '10005';
+
+    const item = (warehouseState.inventoryItems || []).find((i: any) => String(i.sapNo).trim() === String(sapNo).trim());
+    const resolvedName = name || item?.name || '';
+
+    const sapEl = modal.querySelector('#quick-price-sap');
+    if (sapEl) sapEl.textContent = sapNo || '';
+
+    const nameEl = modal.querySelector('#quick-price-name');
+    if (nameEl) nameEl.textContent = resolvedName || '';
+
+    const valInput = modal.querySelector('#quick-price-value-input') as HTMLInputElement;
+    if (valInput) {
+      valInput.value = '';
+      setTimeout(() => valInput.focus(), 100);
+    }
+
+    const currSelect = modal.querySelector('#quick-price-currency-select') as HTMLSelectElement;
+    if (currSelect) currSelect.value = 'EUR';
+
+    const yearInput = modal.querySelector('#quick-price-year-input') as HTMLInputElement;
+    if (yearInput) yearInput.value = String(new Date().getFullYear());
+
+    const whSelect = modal.querySelector('#quick-price-warehouse-select') as HTMLSelectElement;
+    if (whSelect) {
+      const currentWh = warehouseState.currentWarehouse;
+      whSelect.innerHTML = `
+        <option value="${currentWh?.id || '2688'}">${currentWh?.name || 'Anemon İntepe Depo'}</option>
+        <option value="GENEL">Genel Fiyat Listesi (Tüm Depolar)</option>
+      `;
+    }
+
+    const noteInput = modal.querySelector('#quick-price-note-input') as HTMLInputElement;
+    if (noteInput) noteInput.value = '';
+  }
+};
+
+export const closeQuickPriceModal = () => {
+  const modal = ensureSingleModalInBody('quick-price-modal') || document.getElementById('quick-price-modal');
+  if (modal) modal.style.display = 'none';
+};
+
+export const saveQuickPriceModal = async (btn?: HTMLButtonElement) => {
+  const modal = (btn ? btn.closest('#quick-price-modal') : null) || ensureSingleModalInBody('quick-price-modal');
+  const sapNo = modal?.querySelector('#quick-price-sap')?.textContent?.trim() || '';
+  const description = modal?.querySelector('#quick-price-name')?.textContent?.trim() || '';
+  const valInput = modal?.querySelector('#quick-price-value-input') as HTMLInputElement;
+  const currSelect = modal?.querySelector('#quick-price-currency-select') as HTMLSelectElement;
+  const yearInput = modal?.querySelector('#quick-price-year-input') as HTMLInputElement;
+  const whSelect = modal?.querySelector('#quick-price-warehouse-select') as HTMLSelectElement;
+  const noteInput = modal?.querySelector('#quick-price-note-input') as HTMLInputElement;
+
+  const price = parseFloat(valInput?.value || '0');
+  if (isNaN(price) || price <= 0) {
+    alert('Lütfen geçerli bir birim fiyat giriniz.');
+    valInput?.focus();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';
+  }
+
+  try {
+    const user = getUserProfile();
+    const warehouseId = whSelect?.value || warehouseState.currentWarehouse?.id || 'GENEL';
+    const warehouseName = whSelect?.options[whSelect.selectedIndex]?.text || warehouseState.currentWarehouse?.name || 'Genel Liste';
+
+    await priceService.savePriceEntry({
+      sapNo,
+      description,
+      price,
+      currency: (currSelect?.value as any) || 'EUR',
+      year: parseInt(yearInput?.value || '2026', 10),
+      warehouseId,
+      warehouseName,
+      entryDate: new Date().toISOString().split('T')[0],
+      note: noteInput?.value?.trim() || '',
+      createdByName: user?.displayName || user?.email || 'Malzeme Yönetimi',
+      createdByEmail: user?.email || ''
+    });
+
+    closeQuickPriceModal();
+
+    // Re-render inventory table & unpriced table
+    if (typeof (window as any).renderInventoryTable === 'function') {
+      await (window as any).renderInventoryTable();
+    }
+    if (typeof (window as any).renderUnpricedTable === 'function') {
+      await (window as any).renderUnpricedTable();
+    }
+  } catch (err: any) {
+    console.error('Failed to save quick price:', err);
+    alert('Fiyat kaydedilirken hata oluştu: ' + (err?.message || err));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Fiyatı Kaydet';
+    }
+  }
+};
+
+export const openQuickCabinetModal = (id: string, sap: string, name: string, cabinet: string) => {
+  let modal = ensureSingleModalInBody('new-warehouse-quick-cabinet-modal');
+  if (modal) {
+    const idInput = modal.querySelector('#quick-cabinet-item-id') as HTMLInputElement;
+    const sapInput = modal.querySelector('#quick-cabinet-sap-no') as HTMLInputElement;
+    const nameEl = modal.querySelector('#quick-cabinet-item-name') as HTMLElement;
+    const sapEl = modal.querySelector('#quick-cabinet-item-sap') as HTMLElement;
+    const customInput = modal.querySelector('#quick-cabinet-custom-input') as HTMLInputElement;
+    const buttonsContainer = modal.querySelector('#quick-cabinet-buttons-container') as HTMLElement;
+
+    if (idInput) idInput.value = id;
+    if (sapInput) sapInput.value = sap;
+    if (nameEl) nameEl.textContent = name;
+    if (sapEl) sapEl.textContent = `SAP No: ${sap}`;
+    if (customInput) customInput.value = cabinet || '';
+
+    if (buttonsContainer) {
+      const avail = getAvailableCabinets();
+      if (avail.length === 0) {
+        buttonsContainer.innerHTML = '<span style="color: #64748B; font-size: 0.76rem; grid-column: span 2;">Henüz kayıtlı kabin yok. Aşağıdan ilk kabin adını yazabilirsiniz.</span>';
+      } else {
+        buttonsContainer.innerHTML = avail.map(c => `
+          <button type="button" onclick="document.getElementById('quick-cabinet-custom-input').value='${c.replace(/'/g, "\\'")}'; window.saveQuickCabinet();" style="background: rgba(139, 92, 246, 0.12); border: 1px solid rgba(139, 92, 246, 0.35); color: #E2E8F0; padding: 6px 8px; border-radius: 6px; font-size: 0.78rem; text-align: left; cursor: pointer; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.background='rgba(139, 92, 246, 0.28)'; this.style.borderColor='#8B5CF6'" onmouseout="this.style.background='rgba(139, 92, 246, 0.12)'; this.style.borderColor='rgba(139, 92, 246, 0.35)'" title="${c.replace(/"/g, '&quot;')}">
+            <i class="fa-solid fa-server" style="color: #A855F7; font-size: 0.7rem; flex-shrink: 0;"></i>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${c}</span>
+          </button>
+        `).join('');
+      }
+    }
+
+    modal.style.display = 'flex';
+  }
+};
+
+export const closeQuickCabinetModal = () => {
+  const modals = document.querySelectorAll('#new-warehouse-quick-cabinet-modal');
+  modals.forEach((m: any) => {
+    m.style.display = 'none';
+  });
+};
+
+export const saveQuickCabinet = async () => {
+  const modal = ensureSingleModalInBody('new-warehouse-quick-cabinet-modal');
+  if (!modal) return;
+  const id = (modal.querySelector('#quick-cabinet-item-id') as HTMLInputElement)?.value;
+  const sap = (modal.querySelector('#quick-cabinet-sap-no') as HTMLInputElement)?.value?.trim();
+  const customInput = modal.querySelector('#quick-cabinet-custom-input') as HTMLInputElement;
+  const cabinet = customInput ? customInput.value.trim() : '';
+
+  if (!id || !warehouseState.currentWarehouse?.id) return;
+
+  try {
+    await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
+      cabinet: cabinet
+    } as any);
+
+    if (sap) {
+      await saveSapMetadata(sap, { cabinet: cabinet });
+    }
+
+    // Update in memory
+    const item = (warehouseState.inventoryItems || []).find((i: any) => i.id === id);
+    if (item) item.cabinet = cabinet;
+    const itemQR = (warehouseState.inventoryWithQRs || []).find((i: any) => i.id === id);
+    if (itemQR) itemQR.cabinet = cabinet;
+
+    closeQuickCabinetModal();
+
+    if (typeof (window as any).renderInventoryTable === 'function') {
+      (window as any).renderInventoryTable();
+    }
+  } catch (e) {
+    console.error("Failed to update cabinet:", e);
+    alert("Kabin kaydedilirken hata oluştu.");
+  }
+};
+
+export const openQuickTurbineTypeModal = (id: string, sap: string, name: string, turbineType: string) => {
+  let modal = ensureSingleModalInBody('new-warehouse-quick-turbinetype-modal');
+  if (modal) {
+    const idInput = modal.querySelector('#quick-turbinetype-item-id') as HTMLInputElement;
+    const sapInput = modal.querySelector('#quick-turbinetype-sap-no') as HTMLInputElement;
+    const nameEl = modal.querySelector('#quick-turbinetype-item-name') as HTMLElement;
+    const sapEl = modal.querySelector('#quick-turbinetype-item-sap') as HTMLElement;
+    const customInput = modal.querySelector('#quick-turbinetype-custom-input') as HTMLInputElement;
+    const buttonsContainer = modal.querySelector('#quick-turbinetype-buttons-container') as HTMLElement;
+
+    const effTurb = turbineType || getEffectiveTurbineType({ sapNo: sap, turbineType });
+
+    if (idInput) idInput.value = id;
+    if (sapInput) sapInput.value = sap;
+    if (nameEl) nameEl.textContent = name;
+    if (sapEl) sapEl.textContent = `SAP No: ${sap}`;
+    if (customInput) customInput.value = effTurb || '';
+
+    if (buttonsContainer) {
+      const avail = getAvailableTurbineTypes();
+      buttonsContainer.innerHTML = avail.map(t => `
+        <button type="button" onclick="document.getElementById('quick-turbinetype-custom-input').value='${t.replace(/'/g, "\\'")}'; window.saveQuickTurbineType();" style="background: rgba(0, 243, 255, 0.1); border: 1px solid rgba(0, 243, 255, 0.35); color: #E2E8F0; padding: 6px 8px; border-radius: 6px; font-size: 0.78rem; text-align: left; cursor: pointer; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.background='rgba(0, 243, 255, 0.25)'; this.style.borderColor='#00F3FF'" onmouseout="this.style.background='rgba(0, 243, 255, 0.1)'; this.style.borderColor='rgba(0, 243, 255, 0.35)'" title="${t.replace(/"/g, '&quot;')}">
+          <i class="fa-solid fa-fan" style="color: #00F3FF; font-size: 0.7rem; flex-shrink: 0;"></i>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t}</span>
+        </button>
+      `).join('');
+    }
+
+    modal.style.display = 'flex';
+  }
+};
+
+export const closeQuickTurbineTypeModal = () => {
+  const modals = document.querySelectorAll('#new-warehouse-quick-turbinetype-modal');
+  modals.forEach((m: any) => {
+    m.style.display = 'none';
+  });
+};
+
+export const saveQuickTurbineType = async () => {
+  const modal = ensureSingleModalInBody('new-warehouse-quick-turbinetype-modal');
+  if (!modal) return;
+  const id = (modal.querySelector('#quick-turbinetype-item-id') as HTMLInputElement)?.value;
+  const sap = (modal.querySelector('#quick-turbinetype-sap-no') as HTMLInputElement)?.value?.trim();
+  const customInput = modal.querySelector('#quick-turbinetype-custom-input') as HTMLInputElement;
+  const turbineType = customInput ? customInput.value.trim() : '';
+
+  if (!id || !warehouseState.currentWarehouse?.id) return;
+
+  try {
+    await warehouseService.updateMaterial(warehouseState.currentWarehouse.id, id, {
+      turbineType: turbineType
+    } as any);
+
+    if (sap) {
+      await saveSapMetadata(sap, { turbineType: turbineType });
+    }
+
+    // Update in memory
+    const item = (warehouseState.inventoryItems || []).find((i: any) => i.id === id);
+    if (item) item.turbineType = turbineType;
+    const itemQR = (warehouseState.inventoryWithQRs || []).find((i: any) => i.id === id);
+    if (itemQR) itemQR.turbineType = turbineType;
+
+    closeQuickTurbineTypeModal();
+
+    if (typeof (window as any).renderInventoryTable === 'function') {
+      (window as any).renderInventoryTable();
+    }
+  } catch (e) {
+    console.error("Failed to update turbine type:", e);
+    alert("Türbin tipi kaydedilirken hata oluştu.");
+  }
+};
+
 // Register methods to window
 (window as any).openAddNewModal = openAddNewModal;
 (window as any).closeAddNewModal = closeAddNewModal;
@@ -2577,6 +3077,7 @@ export const printWarehouseMsfVoucher = (transferId: string) => {
 (window as any).closeBigQR = closeBigQR;
 (window as any).printSingleQRFromModal = printSingleQRFromModal;
 (window as any).showBigImage = showBigImage;
+(window as any).closeBigImage = closeBigImage;
 (window as any).showRecoveryInfoList = showRecoveryInfoList;
 (window as any).returnDefectToInventory = returnDefectToInventory;
 (window as any).openSendToRepairModal = openSendToRepairModal;
@@ -2586,3 +3087,12 @@ export const printWarehouseMsfVoucher = (transferId: string) => {
 (window as any).approveWarehouseMsfTransfer = approveWarehouseMsfTransfer;
 (window as any).rejectWarehouseMsfTransfer = rejectWarehouseMsfTransfer;
 (window as any).printWarehouseMsfVoucher = printWarehouseMsfVoucher;
+(window as any).openQuickPriceModal = openQuickPriceModal;
+(window as any).closeQuickPriceModal = closeQuickPriceModal;
+(window as any).saveQuickPriceModal = saveQuickPriceModal;
+(window as any).openQuickCabinetModal = openQuickCabinetModal;
+(window as any).closeQuickCabinetModal = closeQuickCabinetModal;
+(window as any).saveQuickCabinet = saveQuickCabinet;
+(window as any).openQuickTurbineTypeModal = openQuickTurbineTypeModal;
+(window as any).closeQuickTurbineTypeModal = closeQuickTurbineTypeModal;
+(window as any).saveQuickTurbineType = saveQuickTurbineType;

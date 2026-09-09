@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc, collectionGroup, limit, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, getDocs, doc, deleteDoc, updateDoc, where, setDoc, getDoc, collectionGroup, limit, runTransaction, writeBatch } from 'firebase/firestore';
 import { dataService } from './DataService';
 
 export interface InventoryItem {
@@ -25,6 +25,7 @@ export interface InventoryItem {
   dispatchedQty?: number;
   dispatchNo?: string;
   reservations?: Record<string, number>;
+  cabinet?: string;
 }
 
 export interface InventoryLog {
@@ -1019,32 +1020,60 @@ class WarehouseService {
   async applyAuditResultsToInventory(warehouseId: string, results: AuditResult[], user: string) {
     const resolvedWhId = this.resolveWarehouseId(warehouseId);
     const auditTimestamp = serverTimestamp();
-    const promises = results.map(async res => {
-      const itemDocRef = doc(db, 'warehouses', resolvedWhId, 'inventory_v2', res.itemId);
-      const itemSnap = await getDoc(itemDocRef);
-      const targetSerial = itemSnap.exists() ? itemSnap.data().serialNo || '' : '';
-      await updateDoc(itemDocRef, {
-        lastAuditDate: auditTimestamp,
-        quantity: res.physicalQty, // Update system quantity to match physical reality
-        lastUpdated: auditTimestamp
-      });
-      if (res.diff !== 0) {
-        await this.addLog(resolvedWhId, {
-           itemId: res.itemId,
-           sapNo: res.sapNo || '',
-           materialName: res.description || 'Bilinmeyen',
-           type: 'UPDATE',
-           quantity: res.diff,
-           oldQty: res.systemQty,
-           newQty: res.physicalQty,
-           user: user,
-           note: res.note ? `Sayım Güncellemesi (Onaylandı): ${res.note}` : 'Sayım Güncellemesi (Onaylandı)',
-           serialNo: targetSerial
-        });
-      }
-    });
 
-    await Promise.all(promises);
+    if (!results || results.length === 0) return;
+
+    // Split results into safe chunks of 300 to stay well within Firestore's 500-op batch limits
+    const CHUNK_SIZE = 300;
+    for (let i = 0; i < results.length; i += CHUNK_SIZE) {
+      const chunk = results.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+
+      for (const res of chunk) {
+        let itemId = res.itemId;
+        if (!itemId || itemId.trim() === '') {
+          itemId = (res.sapNo || 'item').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + Date.now();
+        }
+
+        const itemDocRef = doc(db, 'warehouses', resolvedWhId, 'inventory_v2', itemId);
+        const updatePayload: any = {
+          quantity: res.physicalQty,
+          lastAuditDate: auditTimestamp,
+          lastUpdated: auditTimestamp
+        };
+
+        if (res.sapNo) updatePayload.sapNo = res.sapNo;
+        if (res.description) {
+          updatePayload.description = res.description;
+          updatePayload.name = res.description;
+        }
+        if (res.shelfNo) updatePayload.shelfNo = res.shelfNo;
+
+        batch.set(itemDocRef, updatePayload, { merge: true });
+
+        // Add log if there is a discrepancy
+        if (res.diff !== 0) {
+          const logDocRef = doc(collection(db, 'warehouses', resolvedWhId, 'logs'));
+          batch.set(logDocRef, {
+            itemId: itemId,
+            sapNo: res.sapNo || '',
+            materialName: res.description || 'Bilinmeyen',
+            type: 'UPDATE',
+            quantity: res.diff,
+            oldQty: res.systemQty,
+            newQty: res.physicalQty,
+            user: user,
+            timestamp: auditTimestamp,
+            createdAt: auditTimestamp,
+            note: res.note ? `Sayım Güncellemesi (Onaylandı): ${res.note}` : 'Sayım Güncellemesi (Onaylandı)',
+            serialNo: ''
+          });
+        }
+      }
+
+      await batch.commit();
+    }
+
     this.inventoryCache.delete(resolvedWhId);
   }
 

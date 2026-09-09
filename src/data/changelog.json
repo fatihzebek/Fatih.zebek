@@ -1,9 +1,59 @@
 [
   {
+    "version": "v1.7.0",
+    "date": "7 Eylül 2026",
+    "title": "Komponent Hızlı Sayfalama & Stok Sayım Modalı, SCADA Reset Kararlılığı & Arayüz Sadeleştirmesi",
+    "badge": "En Son Sürüm",
+    "changes": [
+      "🗄️ Komponent Yönetimi Hızlı Sayfalama (30 Kalem / Sayfa): 327 kalemlik elektronik komponent listesi 30'ar satırlık sayfalara bölünerek açılış gecikmesi tamamen giderildi, sayfa geçişleri ve filtrelemeler anlık hale getirildi.",
+      "📋 Çekmece Hızlı Filtresi & İnteraktif Komponent Stok Sayım Modalı: Doğal sayısal sıralamalı (1, 2, 3.. 10) çekmece filtreleme ve doğrudan çekmece bazında sayım yapıp stokları güncelleyen interaktif sayım modalı eklendi.",
+      "⚡ SCADA Reset Köprü Kararlılığı: Bilgisayar başlangıcındaki UTF-8 BOM hatası ve yaşam döngüsü giderilerek, VPN bağlıyken telefon ve web üzerinden türbin resetleme tam kararlı hale getirildi (0 KB/s boşta bekleme trafiği korundu).",
+      "🌐 Global Malzeme Sorgulama Canlı Filtreleme: Malzeme sorgulamada hurda, defect ve hurdaya ayrılmış malzemeler filtrelenerek sadece aktif envanterlerin canlı ve paralel gösterilmesi sağlandı.",
+      "🧠 Arıza Çözüm Kütüphanesi İyileştirmeleri: Ortalama çözüm süreleri saat ve dakika formatına (örn: ~1 sa 29 dk) dönüştürüldü, rapor başlatma butonları kaldırılarak modül erişimi geliştirme sürecinde sadece yöneticilere sınırlandırıldı.",
+      "🚀 Arayüz & Sürüm Notları Düzenlemesi: Üst çubuktaki Yenilikler butonu kaldırılarak arayüz sadeleştirildi; Sürüm Notları menünün en altına taşındı."
+    ]
+  },
+  {
+    "version": "v1.6.0",
+    "date": "4 Eylül 2026",
+    "title": "Depo Sayım Onay Hızlandırması, Otomatik E-Posta, 5 Kategori Depo Görevleri & Akıllı Form",
+    "changes": [
+      "⚡ Ultra Hızlı Toplu Stok Güncellemesi (writeBatch): 500+ kalemlik sayım listesi tek tek yerine toplu paketler halinde 1-2 saniye içinde depoya aktarılır; yeni eklenen malzemeler otomatik oluşturulur.",
+      "📧 Otomatik Sayım Onay E-Postası: Hurşit Akter ve yöneticiler sayımı onayladığında yöneticilere ve sayımı yapan ekibe detaylı fark tablosuyla birlikte anında resmi onay maili iletilir.",
+      "📤 Sayımı Tamamla & Onaya Gönder Akışı: Ekip sayımı bitirdiğinde buton 'Sayımı Tamamla & Onaya Gönder' olarak güncellendi; stoklar onaylanana kadar güvenle korunur.",
+      "📅 Tarih Bazlı Onay Kalkanı: Bugünden (04.09.2026) önceki eski sayımların onay butonları temizlenip arşive alındı; yeni onay mekanizması bugünden itibaren çalışan sahalara bağlandı.",
+      "📋 5 Temel Depo / Tesis Görev Kategorisi: Depo ve tesis çalışmaları 'Saha İçi Defect Malzeme Onarım Çalışması', 'Depo Sayımı, Raf Düzenleme & Depo Temizliği', 'El Aletleri & Ekipman Bakımı', 'Hurda Malzeme Ayrıştırma & Atık Ayrıştırma' ve 'Tesis İçerisinde Yapılan Çalışmalar' olarak standartlaştırıldı.",
+      "🗂️ Akıllı Form & Sadeleştirilmiş Arayüz: Depo görevlerinde üst kısımdaki gereksiz türbin alanları gizlenerek sadece Tarih ve Seçilen Depo bırakıldı; onarım dışındaki genel depo işlerinde sarf tablosu gizlenerek doğrudan çalışma süresi girişine uyarlandı.",
+      "⚡ Hızlı & Kesintisiz Görev Başlatma: Simülasyon kaynaklı yanıltıcı yıldırım uyarıları ve HOLD_WEATHER blokajı kaldırılarak görevlerin beklemesiz, anında açılması sağlandı."
+    ]
+  },
+  {
+    "version": "v1.5.0",
+    "date": "3 Eylül 2026",
+    "title": "Malzeme Tüketim Analizi, Depo Veri Optimizasyonu & Sistem Güvenliği",
+    "changes": [
+      "📊 Malzeme Tüketim Analizi Portalı: Başlıklar ve filtreleme yapıları optimize edildi; '3. SAP Malzeme Listesi' sekmesine genel sarfiyat toplamları ve tablo dökümü eklendi.",
+      "🔒 Depo Veri Bütünlüğü & İzolasyon: Depo bazlı malzeme ve parametre eşleştirmeleri her saha için bağımsız çalışacak şekilde izole edildi.",
+      "⚡ Hızlı Malzeme Parametre Modalı: Depo arayüzündeki hızlı işlem butonlarının katmanlama (z-index) ve karakter eşleşmesi güçlendirildi.",
+      "♻️ Depo Hurda Ayrıştırması: Hurdaya ayrılan malzemelerin depo envanterinden ve operasyonel sayaçlardan tam izolasyonu sağlandı."
+    ]
+  },
+  {
+    "version": "v1.4.0",
+    "date": "2 Eylül 2026",
+    "title": "Santral Malzeme Analitiği, E-Posta Zenginleştirmesi & Personel Doğrulama",
+    "changes": [
+      "📊 Santral & Türbin Malzeme Analitiği: Santral türbin sayılarına göre normalize edilmiş adil tüketim yoğunluğu sıralaması (⚡ Adet / Türbin) ve detaylı Excel dökümü eklendi.",
+      "🔒 Modül Yetkilendirme & Güvenlik Kalkanı: Modül bazlı rol doğrulamaları ve erişim güvenliği en üst seviyeye çıkarıldı.",
+      "📧 Servis Raporu E-Posta Zenginleştirmesi: Otomatik e-posta bildirimlerine Arıza Kodu, Arıza Tanımı ve sahadan girilen Yapılan İşlemler / Notlar detaylı olarak entegre edildi; otomatik sistem alt yazısı kaldırıldı.",
+      "🛡️ Personel Doğrulama & İsim Zorunluluk Kilidi: Çalışma Zamanları alanına teknisyen ismi girilmeden sekmeler arası geçiş, taslak kaydı ve rapor gönderimi tamamen engellendi; arayüzde kırmızı uyarı kalkanı devreye alındı.",
+      "📄 Standart Türkçe Karakterli Dosya Adı: E-posta eki ve arşiv indirmelerinde '2026.09.02-Alize_Sarıkaya-Planlı_Duruş-T01-AL_SR02092026001.pdf' standardı uygulanarak Türkçe karakterler güvenceye alındı."
+    ]
+  },
+  {
     "version": "v1.3.0",
     "date": "1 Eylül 2026",
     "title": "Merkez Tamir Atölyesi Süreçleri, Canlı Sayaçlar, Görsel Hurda & Akıllı Not Yönetimi",
-    "badge": "En Son Sürüm",
     "changes": [
       "🛠️ Sol Menüde 'Merkez Tamir Atölyesi' Bölümü: Tüm kart iş emirleri, tamir hareketleri, atölye stoğu, malzeme stoğu ve sevkiyat sekmeleri müstakil bir başlık altında toplandı.",
       "⏱️ Canlı Onarım Süresi Takip Sayaçları: Masadaki kartlarda 0-6 Saat (Yeşil), 6-24 Saat (Mavi), 1-4 Gün (Turuncu) ve 5+ Gün (Kırmızı - Kritik Gecikme) renk kodlu dinamik süre sayaçları devreye alındı.",

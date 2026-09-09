@@ -7,6 +7,7 @@ import {
   addDoc, 
   updateDoc, 
   deleteDoc, 
+  writeBatch,
   query, 
   orderBy, 
   limit, 
@@ -168,6 +169,33 @@ class WorkshopComponentService {
     const docRef = doc(db, 'workshopComponents', id);
     await deleteDoc(docRef);
     this.cachedComponents = null;
+  }
+
+  async clearAllComponents(user: string): Promise<number> {
+    try {
+      const colRef = collection(db, 'workshopComponents');
+      const snap = await getDocs(colRef);
+      const docs = snap.docs;
+      if (docs.length === 0) return 0;
+
+      // Firestore batches support up to 500 operations
+      const chunkSize = 400;
+      for (let i = 0; i < docs.length; i += chunkSize) {
+        const chunk = docs.slice(i, i + chunkSize);
+        const batch = writeBatch(db);
+        chunk.forEach(d => {
+          batch.delete(d.ref);
+        });
+        await batch.commit();
+      }
+
+      this.cachedComponents = null;
+      console.log(`Successfully deleted all ${docs.length} workshop components by ${user}`);
+      return docs.length;
+    } catch (err) {
+      console.error("Error clearing all workshop components:", err);
+      throw err;
+    }
   }
 
   async addStock(componentId: string, qtyToAdd: number, user: string, note?: string): Promise<void> {
@@ -334,6 +362,51 @@ class WorkshopComponentService {
       message: "Başarıyla " + consumedRecords.length + " kalem komponent stoktan düşüldü ve karta işlendi.",
       usedSummary
     };
+  }
+
+  /**
+   * Batch update stock quantities for inventory audit / count.
+   * Records an 'ADJUST' log for each modified item.
+   */
+  async auditStockQuantities(
+    updates: Array<{ componentId: string; newQuantity: number; reason?: string }>,
+    user: string
+  ): Promise<{ updatedCount: number }> {
+    if (!updates || updates.length === 0) return { updatedCount: 0 };
+
+    let updatedCount = 0;
+    for (const update of updates) {
+      const comp = await this.getComponentById(update.componentId);
+      if (!comp) continue;
+
+      const prevQty = Number(comp.quantity || 0);
+      const newQty = Math.max(0, Number(update.newQuantity) || 0);
+
+      if (prevQty === newQty) continue; // No change
+
+      const diff = newQty - prevQty;
+      const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
+
+      await this.updateComponent(update.componentId, { quantity: newQty }, user);
+
+      await addDoc(collection(db, 'workshopComponentLogs'), {
+        componentId: update.componentId,
+        componentCode: comp.code || '-',
+        componentName: comp.name,
+        type: 'ADJUST',
+        quantity: Math.abs(diff),
+        previousQuantity: prevQty,
+        newQuantity: newQty,
+        user,
+        date: serverTimestamp(),
+        note: update.reason || `Stok Sayım Düzeltmesi (Eski: ${prevQty}, Yeni: ${newQty}, Fark: ${diffStr})`
+      });
+
+      updatedCount++;
+    }
+
+    this.cachedComponents = null;
+    return { updatedCount };
   }
 }
 

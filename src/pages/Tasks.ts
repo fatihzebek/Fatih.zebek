@@ -7,6 +7,10 @@ import { formatTeamName } from '../utils/formatters';
 import { dataService, DataService } from '../services/DataService';
 import type { ServiceReport } from '../services/ServiceReportService';
 import { personnelService } from '../services/PersonnelService';
+import { warehouseService } from '../services/WarehouseService';
+import { ImageCompressor } from '../utils/imageCompressor';
+import { db } from '../firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '')
@@ -28,15 +32,81 @@ const formatSiteNameTitle = (name: string) => {
     .join(' ');
 };
 
+const checkCompleteTaskPermission = (currentUser: any): boolean => {
+  if (!currentUser) return false;
+  const role = currentUser.role?.toUpperCase();
+  if (role === 'ADMIN') return true;
+  
+  const taskPerms = currentUser.allowedTabs?.tasks;
+  // If tasks tab is explicitly enabled as boolean true or in array
+  if (taskPerms === true) return true;
+  if (Array.isArray(currentUser.allowedTabs) && currentUser.allowedTabs.includes('tasks')) return true;
+  
+  // If tasks tab is an object with granular sub-permissions
+  if (typeof taskPerms === 'object' && taskPerms !== null && !Array.isArray(taskPerms)) {
+    if ((taskPerms as any).completeTask === true) return true;
+    if ((taskPerms as any).access === true && (taskPerms as any).completeTask !== false) return true;
+    if ((taskPerms as any).completeTask === false) return false;
+  }
+  
+  // By default, TECHNICIAN role has task completion permission unless explicitly set to false
+  if (role === 'TECHNICIAN' && (taskPerms as any)?.completeTask !== false) return true;
+  
+  return false;
+};
+
+const checkDeleteTaskPermission = (currentUser: any): boolean => {
+  if (!currentUser) return false;
+  const role = currentUser.role?.toUpperCase();
+  if (role === 'ADMIN') return true;
+  
+  const taskPerms = currentUser.allowedTabs?.tasks;
+  if (typeof taskPerms === 'object' && taskPerms !== null && !Array.isArray(taskPerms)) {
+    return !!(taskPerms as any).deleteTask;
+  }
+  return false;
+};
+
+const checkTransferTaskPermission = (currentUser: any): boolean => {
+  if (!currentUser) return false;
+  const role = currentUser.role?.toUpperCase();
+  if (role === 'ADMIN') return true;
+  
+  const taskPerms = currentUser.allowedTabs?.tasks;
+  if (typeof taskPerms === 'object' && taskPerms !== null && !Array.isArray(taskPerms)) {
+    return !!((taskPerms as any).transferTask || (taskPerms as any).delegateTask);
+  }
+  return false;
+};
+
+const checkCreateTaskPermission = (currentUser: any): boolean => {
+  if (!currentUser) return false;
+  const role = currentUser.role?.toUpperCase();
+  if (role === 'ADMIN') return true;
+  if ((role as any) === 'TAMİR' || (role as any) === 'TAMIR') return false;
+  if (currentUser.email === 'hursit.akter@demirerholding.com' || role === 'MALZEME_YONETIMI') return false;
+  
+  const taskPerms = currentUser.allowedTabs?.tasks;
+  if (typeof taskPerms === 'object' && taskPerms !== null) {
+    if ((taskPerms as any).createTask === false) return false;
+    if ((taskPerms as any).createTask === true) return true;
+    if ((taskPerms as any).access === true) return true;
+  }
+  if (taskPerms === true) return true;
+  if (Array.isArray(currentUser.allowedTabs) && (currentUser.allowedTabs.includes('tasks') || currentUser.allowedTabs.includes('new-task'))) return true;
+  
+  if (role === 'TECHNICIAN' || role === 'USER' || !!currentUser.team) return true;
+  return false;
+};
+
 let activeSiteFilter = 'TÜMÜ';
 
 const renderTasksTable = (tasks: Task[], userRole: string) => {
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-  const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasDeleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).deleteTask);
-  const hasCompleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).completeTask);
-  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && (!!(taskPerms as any).transferTask || !!(taskPerms as any).delegateTask));
+  const hasDeleteTaskPerm = checkDeleteTaskPermission(currentUser);
+  const hasCompleteTaskPerm = checkCompleteTaskPermission(currentUser);
+  const hasTransferTaskPerm = checkTransferTaskPermission(currentUser);
+  const hasCreateTaskPerm = checkCreateTaskPermission(currentUser);
   if (tasks.length === 0) {
     return `
       <div style="padding: 4rem; text-align: center; color: var(--text-muted);">
@@ -84,27 +154,35 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
       <!-- Top Filter Navigation -->
       <div class="tasks-filter-sidebar">
         <div class="glass-panel" style="padding: 0.6rem 0.8rem; background: rgba(10, 14, 23, 0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 0.2rem;">
-          <div class="sidebar-nav">
-             <div class="task-filter-item ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" 
-                  onclick="window.handleSiteFilter('TÜMÜ')"
-                  style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
-               <i class="fa-solid fa-layer-group" style="font-size: 0.75rem;"></i>
-               <span>TÜMÜ</span>
-               <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${tasks.length}</span>
+          <div class="sidebar-nav" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+             <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+               <div class="task-filter-item ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" 
+                    onclick="window.handleSiteFilter('TÜMÜ')"
+                    style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
+                 <i class="fa-solid fa-layer-group" style="font-size: 0.75rem;"></i>
+                 <span>TÜMÜ</span>
+                 <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${tasks.length}</span>
+               </div>
+
+               ${siteNames.map(id => {
+                  const site = dataService.getAllSites().find(s => s.id === id);
+                  const displayName = site ? site.name : id;
+                  return `
+                  <div class="task-filter-item ${activeSiteFilter === id ? 'active' : ''}" 
+                       onclick="window.handleSiteFilter('${id}')"
+                       style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
+                    <i class="fa-solid fa-wind" style="font-size: 0.75rem;"></i>
+                    <span>${displayName}</span>
+                    <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${grouped[id].length}</span>
+                  </div>
+               `}).join('')}
              </div>
 
-             ${siteNames.map(id => {
-                const site = dataService.getAllSites().find(s => s.id === id);
-                const displayName = site ? site.name : id;
-                return `
-                <div class="task-filter-item ${activeSiteFilter === id ? 'active' : ''}" 
-                     onclick="window.handleSiteFilter('${id}')"
-                     style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
-                  <i class="fa-solid fa-wind" style="font-size: 0.75rem;"></i>
-                  <span>${displayName}</span>
-                  <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${grouped[id].length}</span>
-                </div>
-             `}).join('')}
+             ${hasCreateTaskPerm ? `
+               <button onclick="window.navigate('new-task')" class="cyber-btn" style="background: linear-gradient(135deg, rgba(20, 241, 149, 0.2), rgba(0, 243, 255, 0.15)); border: 1px solid rgba(20, 241, 149, 0.5); color: #14f195; font-weight: 700; font-size: 0.8rem; padding: 7px 14px; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: all 0.2s; white-space: nowrap; margin-left: auto;">
+                 <i class="fa-solid fa-plus-circle" style="font-size: 0.9rem;"></i> Yeni İş Emri Aç
+               </button>
+             ` : ''}
           </div>
         </div>
       </div>
@@ -630,8 +708,14 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                             ${siteNameTitle}
                           </span>
                           <div style="display: flex; align-items: center; gap: 6px;">
-                            <span class="turbine-id-badge" style="margin: 0; font-size: 0.68rem; padding: 1px 6px; flex-shrink: 0; line-height: 1;">${task.turbineId}</span>
-                            ${serial ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; font-weight: 600;">${serial}</span>` : ''}
+                            ${task.taskLocationType === 'WAREHOUSE' || task.turbineId?.toLowerCase().includes('depo') ? `
+                              <span class="turbine-id-badge" style="margin: 0; font-size: 0.65rem; padding: 2px 6px; flex-shrink: 0; line-height: 1; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 4px; font-weight: 800;">
+                                <i class="fa-solid fa-warehouse"></i> ${task.turbineId}
+                              </span>
+                            ` : `
+                              <span class="turbine-id-badge" style="margin: 0; font-size: 0.68rem; padding: 1px 6px; flex-shrink: 0; line-height: 1;">${task.turbineId}</span>
+                              ${serial ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; font-weight: 600;">${serial}</span>` : ''}
+                            `}
                           </div>
                         </div>
                     </td>
@@ -642,7 +726,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </span>
                     </td>
                     <td>
-                        <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : 'maintenance')}">
+                        <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : (task.taskLocationType === 'WAREHOUSE' ? 'maintenance' : 'maintenance'))}">
                           ${isFault ? `
                             <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                               <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
@@ -654,6 +738,18 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                             <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
                               <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.82rem; text-shadow: 0 0 8px rgba(179,127,235,0.4); flex-shrink: 0;"></i>
                               <span style="font-weight: 800; font-size: 0.76rem; color: #b37feb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
+                            </div>
+                          ` : task.taskLocationType === 'WAREHOUSE' || task.secilenSablon?.toLowerCase().includes('depo') ? `
+                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+                              <i class="fa-solid fa-screwdriver-wrench" style="color: #10B981; font-size: 0.82rem; text-shadow: 0 0 8px rgba(16,185,129,0.3); flex-shrink: 0;"></i>
+                              <span style="font-weight: 800; font-size: 0.76rem; color: #10B981; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Depo / Tesis İşi'}</span>
+                              ${task.repairedMaterial?.description ? `
+                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                <span style="font-weight: 700; font-size: 0.74rem; color: #FFF; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><i class="fa-solid fa-cube"></i> ${task.repairedMaterial.description} (${task.repairedMaterial.quantity || 1} Ad.)</span>
+                              ` : (task.yoneticiNotu ? `
+                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
+                              ` : '')}
                             </div>
                           ` : `
                             <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
@@ -869,10 +965,10 @@ export const TasksPage = async () => {
 
     try {
       if (task.isReturnedReport) {
-        // Returned reports are in the 'reports' collection
+        // Returned reports are in the 'serviceReports' collection
         const { doc, updateDoc } = await import('firebase/firestore');
         const { db } = await import('../firebase');
-        const reportRef = doc(db, 'reports', task.id);
+        const reportRef = doc(db, 'serviceReports', task.id);
         
         let reportTeam = targetTeam;
         if (targetTeam.toLowerCase().startsWith('team')) {
@@ -954,21 +1050,18 @@ export const TasksPage = async () => {
                            searchTeam.includes(taskPersonnel) || 
                            managedTeams.some((mt: string) => taskPersonnel.includes(mt));
 
-      // Ekibe doğrudan atanmış görevleri, allowedSites kısıtlamasından bağımsız olarak göster
+      // 1. Ekibe veya yönetilen alt ekiplere atanmış görevleri her zaman göster
       if (isMyTeamTask) return true;
       
-      // Diğer durumlar (örneğin SİSTEM veya boş olanlar) için allowedSites kontrolü uygula
+      // 2. Kendi yetkili olduğu sahadaki (allowedSites) TÜM iş emirlerini göster (diğer ekiplerin açtığı görevler görünsün ki mükerrer görev açılmasın)
       const allowedSites = dataService.getSites().map(s => s.id);
       let tSiteId = t.siteId || '';
       if (tSiteId && isNaN(Number(tSiteId))) {
         const siteObj = dataService.getAllSites().find(s => s.name.toLowerCase() === tSiteId.toLowerCase() || s.name.toLowerCase().includes(tSiteId.toLowerCase()));
         if (siteObj) tSiteId = siteObj.id;
       }
-      if (!allowedSites.includes(tSiteId)) return false;
+      if (allowedSites.includes(tSiteId)) return true;
 
-      // "SİSTEM" veya boş olanları (kendi bölgesinde olduğu sürece) göster
-      if (taskPersonnel === 'SİSTEM' || !taskPersonnel || taskPersonnel === 'ATANMADI') return true;
-      
       if (!userTeam && managedTeams.length === 0) return true;
 
       return false;
@@ -1274,11 +1367,380 @@ export const TasksPage = async () => {
     }
 };
 
+(window as any).showTaskIntentModal = (task: any, onCloseOnly: () => void, onFieldWork: () => void) => {
+  const ohsList = Array.isArray(task.ohsData) ? task.ohsData : (task.ohsData?.q1 ? [task.ohsData] : []);
+  const lastOhs = ohsList.length > 0 ? ohsList[ohsList.length - 1] : null;
+  const lastDateStr = lastOhs?.date ? new Date(lastOhs.date).toLocaleDateString('tr-TR') : 'Önceki gün';
+
+  const modal = document.createElement('div');
+  modal.className = 'cyber-modal-overlay fade-in';
+  modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:99999; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px); padding: 1rem; box-sizing: border-box;';
+
+  const siteTurbine = `${task.siteName || ''} • ${task.turbinSeriNo || task.turbineId || ''}`.trim();
+  const taskTitle = task.taskNo ? `İş Emri: ${task.taskNo}` : (task.secilenSablon || 'Görev Formu');
+
+  modal.innerHTML = `
+    <div class="glass-panel" style="width: 100%; max-width: 520px; padding: 1.5rem; position: relative; border-top: 4px solid #3b82f6; display: flex; flex-direction: column; background: #0b0f19; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.85);">
+      <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 0.75rem; right: 1rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.3rem;">&times;</button>
+      
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.85rem; color: #3b82f6;">
+        <div style="width: 40px; height: 40px; border-radius: 8px; background: rgba(59, 130, 246, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; border: 1px solid rgba(59, 130, 246, 0.3);">
+          🛡️
+        </div>
+        <div>
+          <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.25rem; margin: 0; font-weight: 800; letter-spacing: 0.5px; color: #fff;">
+            GÖREV FORMU GİRİŞİ
+          </h3>
+          <div style="font-size: 0.78rem; color: var(--text-muted);">
+            ${siteTurbine ? `${siteTurbine} • ` : ''}${taskTitle}
+          </div>
+        </div>
+      </div>
+
+      <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.8rem; color: #93c5fd; line-height: 1.45;">
+        ℹ️ Bu görev için <strong>${lastDateStr}</strong> tarihinde İSG Saha Güvenlik Kontrolü onaylanmıştır.<br>
+        Lütfen bugünkü işlem amacınızı seçiniz:
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <!-- SEÇENEK 1: SADECE RAPORU KAPAT / DÜZENLE -->
+        <button id="intent-close-report-btn" style="text-align: left; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: flex-start; gap: 0.85rem;"
+                onmouseover="this.style.background='rgba(16, 185, 129, 0.18)'; this.style.borderColor='#10b981';"
+                onmouseout="this.style.background='rgba(16, 185, 129, 0.08)'; this.style.borderColor='rgba(16, 185, 129, 0.3)';">
+          <div style="font-size: 1.4rem; line-height: 1; margin-top: 2px;">🟢</div>
+          <div>
+            <div style="color: #10b981; font-weight: 800; font-size: 0.95rem; margin-bottom: 4px;">
+              SADECE RAPORU KAPATACAĞIM / DÜZENLEYECEĞİM
+            </div>
+            <div style="color: #94a3b8; font-size: 0.75rem; line-height: 1.35;">
+              Bugün türbine çıkılmadı. Dün yapılan çalışmanın raporunu masada kontrol edip göndereceğim/kapatacağım. <em style="color: #10b981;">(İSG kontrol listesi atlanır)</em>
+            </div>
+          </div>
+        </button>
+
+        <!-- SEÇENEK 2: BUGÜN DE TÜRBİNDE ÇALIŞMA YAPILACAK -->
+        <button id="intent-field-work-btn" style="text-align: left; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: flex-start; gap: 0.85rem;"
+                onmouseover="this.style.background='rgba(245, 158, 11, 0.18)'; this.style.borderColor='#f59e0b';"
+                onmouseout="this.style.background='rgba(245, 158, 11, 0.08)'; this.style.borderColor='rgba(245, 158, 11, 0.3)';">
+          <div style="font-size: 1.4rem; line-height: 1; margin-top: 2px;">🟠</div>
+          <div>
+            <div style="color: #f59e0b; font-weight: 800; font-size: 0.95rem; margin-bottom: 4px;">
+              BUGÜN DE TÜRBİNDE ÇALIŞMA YAPILACAK
+            </div>
+            <div style="color: #94a3b8; font-size: 0.75rem; line-height: 1.35;">
+              Bugün sahada / türbinde fiziksel çalışma devam edecek. Bugüne ait yeni İSG Saha Güvenlik Kontrolünü onaylayarak başlamak istiyorum.
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <div style="margin-top: 1.25rem; display: flex; justify-content: flex-end;">
+        <button onclick="this.closest('.cyber-modal-overlay').remove()" class="btn-cyber-mini" style="background: transparent; color: var(--text-muted); border: 1px solid rgba(255,255,255,0.1); font-size: 0.75rem; padding: 5px 12px; cursor: pointer;">
+          İPTAL
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const closeBtn = document.getElementById('intent-close-report-btn');
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      modal.remove();
+      onCloseOnly();
+    };
+  }
+
+  const fieldBtn = document.getElementById('intent-field-work-btn');
+  if (fieldBtn) {
+    fieldBtn.onclick = () => {
+      modal.remove();
+      onFieldWork();
+    };
+  }
+};
+
+(window as any).showWarehouseTaskCompletionModal = (task: any) => {
+  const existing = document.getElementById('wh-task-modal');
+  if (existing) existing.remove();
+
+  const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+  const userDisplayName = currentUser?.displayName || currentUser?.name || currentUser?.email?.split('@')[0] || '';
+  
+  const siteName = task.turbineId || task.siteId || 'Depo';
+  
+  let matSap = task.repairedMaterial?.sapNo || '';
+  let matDesc = task.repairedMaterial?.description || '';
+  let matQty = task.repairedMaterial?.quantity || 1;
+
+  // Fallback parser: Extract from yoneticiNotu if repairedMaterial was not populated
+  if (!matSap && task.yoneticiNotu) {
+    const match = task.yoneticiNotu.match(/([0-9]{4,8})\s*-\s*([^|(]+)/);
+    if (match) {
+      matSap = match[1].trim();
+      matDesc = match[2].trim();
+    }
+  }
+
+  if (!matDesc) {
+    matDesc = task.secilenSablon ? task.secilenSablon.replace('Depo İşi: ', '').trim() : 'Onarılacak Parça';
+  }
+
+  const hasMaterial = !!matSap || (!!matDesc && !matDesc.includes('Saha İçi Malzeme') && !matDesc.includes('Defect Malzeme'));
+
+  let selectedPhotoBase64: string = '';
+
+  const modal = document.createElement('div');
+  modal.id = 'wh-task-modal';
+  modal.style.cssText = `
+    position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.75); 
+    backdrop-filter: blur(6px); z-index: 999999; display: flex; 
+    align-items: center; justify-content: center; opacity: 0; transition: opacity 0.25s ease;
+    padding: 1rem;
+  `;
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="background: #0A0E17; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 16px; width: 100%; max-width: 520px; padding: 1.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.85); transform: scale(0.95); transition: transform 0.25s ease; color: #fff; font-family: 'Inter', sans-serif; position: relative;">
+      
+      <!-- Close Button -->
+      <button onclick="document.getElementById('wh-task-modal')?.remove()" style="position: absolute; right: 18px; top: 18px; background: transparent; border: none; color: var(--text-muted); font-size: 1.1rem; cursor: pointer;">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <!-- Header -->
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem;">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <i class="fa-solid fa-warehouse" style="color: #10B981; font-size: 1.1rem;"></i>
+        </div>
+        <div>
+          <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; color: #fff; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+            SAHA İÇİ PARÇA REVİZYON & ONARIM FORMU
+          </h3>
+          <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: #94A3B8;">
+            ${siteName} • Ekip: <strong style="color: #00f3ff;">${formatTeamName(task.personnel)}</strong>
+          </p>
+        </div>
+      </div>
+
+      <!-- Preloaded Material Card (DEFECT -> REVISED) -->
+      ${hasMaterial ? `
+        <div style="background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <span style="font-size: 0.68rem; font-weight: 800; color: #10B981; letter-spacing: 1px; text-transform: uppercase;">
+              <i class="fa-solid fa-box-open" style="margin-right: 4px;"></i> ONARILACAK DEFECT PARÇA
+            </span>
+            <span style="background: #EF4444; color: #000; font-weight: 900; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px;">
+              🔴 DEFECT
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            ${matSap ? `
+              <span style="font-family: monospace; font-size: 0.95rem; font-weight: 800; color: #00f3ff; background: rgba(0, 243, 255, 0.1); padding: 2px 6px; border-radius: 4px;">
+                ${matSap}
+              </span>
+            ` : ''}
+            <span style="font-size: 0.85rem; font-weight: 700; color: #F1F5F9; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${matDesc}
+            </span>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; color: #94A3B8; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+            <span>Onarım Adedi: <strong style="color: #fff;">${matQty} Adet</strong></span>
+            <span style="color: #10B981; font-weight: 700;">➔ Hedef: REVISED (0 TL Stoğa Giriş)</span>
+          </div>
+        </div>
+      ` : `
+        <div style="background: rgba(0, 243, 255, 0.04); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 1.25rem;">
+          <span style="font-size: 0.72rem; font-weight: 800; color: #00f3ff; text-transform: uppercase;">GÖREV KAPSAMI</span>
+          <div style="font-size: 0.88rem; font-weight: 700; color: #fff; margin-top: 2px;">${cleanSablonName(task.secilenSablon)}</div>
+        </div>
+      `}
+
+      <!-- Form Inputs -->
+      <div style="display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 1.25rem;">
+        
+        <!-- Duration & Technicians in 2 columns -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <div>
+            <label style="display: block; font-size: 0.7rem; color: #F59E0B; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">
+              <i class="fa-regular fa-clock"></i> Harcanan Süre
+            </label>
+            <input type="text" id="wh-task-duration" placeholder="Örn: 2 Saat veya 09:30-11:30" 
+                   value="${task.repairedMaterial?.repairDuration || ''}" 
+                   style="width: 100%; height: 38px; background: rgba(0,0,0,0.5); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; color: #fff; padding: 0 10px; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+          </div>
+          <div>
+            <label style="display: block; font-size: 0.7rem; color: #F59E0B; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">
+              <i class="fa-solid fa-user-gear"></i> Onaran Personel
+            </label>
+            <input type="text" id="wh-task-technician" placeholder="Örn: Fatih ZEBEK & Ekip" 
+                   value="${task.repairedMaterial?.repairedBy || userDisplayName}" 
+                   style="width: 100%; height: 38px; background: rgba(0,0,0,0.5); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 8px; color: #fff; padding: 0 10px; font-size: 0.85rem; outline: none; box-sizing: border-box;">
+          </div>
+        </div>
+
+        <!-- Notes / Repair Actions -->
+        <div>
+          <label style="display: block; font-size: 0.7rem; color: #94A3B8; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">
+            <i class="fa-solid fa-pen-to-square"></i> Yapılan Onarım & Revizyon İşlemleri (Açıklama)
+          </label>
+          <textarea id="wh-task-notes" placeholder="Parça sökülüp temizlendi, contalar yenilendi, test edildi ve tamir edildi..." 
+                    style="width: 100%; height: 70px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; color: #fff; padding: 8px 10px; font-size: 0.85rem; outline: none; resize: none; font-family: 'Inter', sans-serif; box-sizing: border-box;"></textarea>
+        </div>
+
+        <!-- Photo Upload -->
+        <div>
+          <label style="display: block; font-size: 0.7rem; color: #94A3B8; font-weight: 800; margin-bottom: 4px; text-transform: uppercase;">
+            <i class="fa-solid fa-camera"></i> Onarım Fotoğrafı (Opsiyonel)
+          </label>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #CBD5E1; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+              <i class="fa-solid fa-cloud-arrow-up" style="color: #00f3ff;"></i> Fotoğraf Seç / Çek
+              <input type="file" id="wh-task-photo-input" accept="image/*" style="display: none;">
+            </label>
+            <span id="wh-photo-filename" style="font-size: 0.75rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px;">Dosya seçilmedi</span>
+          </div>
+          <div id="wh-photo-preview-container" style="display: none; margin-top: 8px;">
+            <img id="wh-photo-preview-img" src="" alt="Önizleme" style="max-height: 90px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.4);">
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
+        <button onclick="document.getElementById('wh-task-modal')?.remove()" 
+                style="background: rgba(255,255,255,0.05); color: #94A3B8; border: 1px solid rgba(255,255,255,0.1); padding: 9px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 700;">
+          İptal
+        </button>
+        <button id="wh-task-submit-btn" 
+                style="background: #10B981; color: #000; border: none; padding: 9px 20px; border-radius: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 900; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);">
+          <i class="fa-solid fa-boxes-packing"></i> ONARIMI TAMAMLA VE STOĞA AL
+        </button>
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  setTimeout(() => {
+    modal.style.opacity = '1';
+    (modal.firstElementChild as HTMLElement).style.transform = 'scale(1)';
+  }, 10);
+
+  // Bind Photo input change
+  const photoInput = document.getElementById('wh-task-photo-input') as HTMLInputElement;
+  const photoName = document.getElementById('wh-photo-filename');
+  const previewContainer = document.getElementById('wh-photo-preview-container');
+  const previewImg = document.getElementById('wh-photo-preview-img') as HTMLImageElement;
+
+  photoInput?.addEventListener('change', async (e: any) => {
+    const file = e.target?.files?.[0];
+    if (file) {
+      if (photoName) photoName.textContent = file.name;
+      try {
+        const compressed = await ImageCompressor.compressImage(file, 1200, 1200, 0.8);
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          selectedPhotoBase64 = evt.target?.result as string || '';
+          if (previewImg && previewContainer) {
+            previewImg.src = selectedPhotoBase64;
+            previewContainer.style.display = 'block';
+          }
+        };
+        reader.readAsDataURL(compressed);
+      } catch (err) {
+        console.error("Fotoğraf sıkıştırma hatası:", err);
+      }
+    }
+  });
+
+  // Bind Submit Button
+  const submitBtn = document.getElementById('wh-task-submit-btn') as HTMLButtonElement;
+  submitBtn?.addEventListener('click', async () => {
+    const duration = (document.getElementById('wh-task-duration') as HTMLInputElement)?.value.trim() || '';
+    const technician = (document.getElementById('wh-task-technician') as HTMLInputElement)?.value.trim() || userDisplayName;
+    const notes = (document.getElementById('wh-task-notes') as HTMLTextAreaElement)?.value.trim() || 'Saha içi parça revizyonu tamamlandı.';
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> STOĞA ALINIYOR...';
+
+    try {
+      const email = currentUser?.email || 'Sistem';
+      const targetWarehouseId = task.warehouseId || task.siteId;
+
+      if (hasMaterial && targetWarehouseId) {
+        // Return Defect to Revised stock
+        if (task.repairedMaterial?.itemId) {
+          await warehouseService.returnDefectToInventory(
+            targetWarehouseId,
+            task.repairedMaterial.itemId,
+            'REVISED',
+            email,
+            task.repairedMaterial.serialNo || '',
+            `Saha İçi Onarım: ${notes} | Süre: ${duration} | Onaran: ${technician}`,
+            task.repairedMaterial.sapNo,
+            task.repairedMaterial.description
+          );
+        } else if (task.repairedMaterial?.sapNo) {
+          // Fallback if no specific itemId: update stock via SAP
+          await warehouseService.updateStockBySap(
+            targetWarehouseId,
+            task.repairedMaterial.sapNo,
+            -matQty,
+            { user: email, reason: 'Saha İçi Revizyona Alındı' },
+            'DEFECT'
+          ).catch(console.warn);
+
+          await warehouseService.updateStockBySap(
+            targetWarehouseId,
+            task.repairedMaterial.sapNo,
+            matQty,
+            { user: email, reason: `Saha İçi Revizyon Tamamlandı (${technician}): ${notes}` },
+            'REVISED'
+          );
+        }
+      }
+
+      // Update Task in Firestore
+      await taskService.updateTaskStatus(task.id, 'Tamamlandı');
+      
+      // Update completion details in task document
+      const taskDocRef = doc(db, 'tasks', task.id);
+      await updateDoc(taskDocRef, {
+        status: 'Tamamlandı',
+        completedAt: serverTimestamp(),
+        completionData: {
+          duration: duration,
+          technician: technician,
+          notes: notes,
+          photoUrl: selectedPhotoBase64 ? selectedPhotoBase64.substring(0, 500000) : null,
+          completedAt: new Date().toISOString()
+        }
+      }).catch(console.warn);
+
+      modal.style.opacity = '0';
+      setTimeout(() => modal.remove(), 250);
+
+      alert(`✅ Başarılı!\n\n${hasMaterial ? `"${matDesc}" parçası başarıyla onarıldı ve ${siteName} Tamirli (REVISED) stoğuna 0 TL maliyetle eklendi.` : 'Depo görevi başarıyla tamamlandı.'}`);
+
+      // Refresh task list
+      if ((window as any).refreshTasks) {
+        (window as any).refreshTasks();
+      }
+
+    } catch (err: any) {
+      console.error("Revizyon tamamlama hatası:", err);
+      alert(`İşlem sırasında hata oluştu:\n${err.message}`);
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fa-solid fa-boxes-packing"></i> ONARIMI TAMAMLA VE STOĞA AL';
+    }
+  });
+};
+
 (window as any).handleStartTask = async (taskId: string) => {
   const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-  const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasCompleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).completeTask);
+  const hasCompleteTaskPerm = checkCompleteTaskPermission(currentUser);
 
   if (!hasCompleteTaskPerm) {
     alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Formu Doldurma yetkisi)");
@@ -1297,8 +1759,17 @@ export const TasksPage = async () => {
       }
     }
 
-    // 1. Show OHS Checklist First
+    // 1. Show OHS Checklist First (Skip for Warehouse / Facility tasks)
     if (task) {
+      const isWarehouseTask = task.taskLocationType === 'WAREHOUSE' || task.turbinSeriNo === 'DEPO' || (task.secilenSablon && task.secilenSablon.startsWith('Depo İşi'));
+
+      if (isWarehouseTask) {
+        // Depo ve Tesis görevlerinde kule içi İSG kontrolünü atla, doğrudan tam ekran ana forma (form-ariza) git
+        taskService.updateTaskStatus(taskId, 'Görev Teslim Edildi').catch(console.error);
+        (window as any).navigate('form-ariza', { ...task, status: 'Görev Teslim Edildi' });
+        return;
+      }
+
       if (task.isReturnedReport) {
         // İade edilen raporlar için İSG formunu atla, direkt düzenlemeye geç
         (window as any).navigate('form-ariza', { ...task, status: 'Geri Gönderildi', isEditMode: true });
@@ -1310,9 +1781,24 @@ export const TasksPage = async () => {
       const hasToday = ohsList.some((o: any) => o.date === todayStr && o.team === task.personnel);
 
       if (hasToday) {
+        // Bugün ve bu ekip için zaten İSG kontrolü tamamlanmış, doğrudan forma geç
         taskService.updateTaskStatus(taskId, 'Görev Teslim Edildi').catch(console.error);
         (window as any).navigate('form-ariza', { ...task, status: 'Görev Teslim Edildi' });
+      } else if (ohsList.length > 0) {
+        // Daha önce bu görev için İSG doldurulmuş (Ertesi gün rapor kapatma veya devam etme senaryosu)
+        (window as any).showTaskIntentModal(task, () => {
+          // 1. Sadece dünkü raporu kapatacak / düzenleyecek -> İSG'siz doğrudan forma geç
+          taskService.updateTaskStatus(taskId, 'Görev Teslim Edildi').catch(console.error);
+          (window as any).navigate('form-ariza', { ...task, status: 'Görev Teslim Edildi', isCloseOnlyMode: true });
+        }, () => {
+          // 2. Bugün de sahada/türbinde aktif çalışma var -> Bugüne ait İSG kontrolünü doldurt
+          (window as any).showOHSChecklistModal(task, () => {
+            taskService.updateTaskStatus(taskId, 'Görev Teslim Edildi').catch(console.error);
+            (window as any).navigate('form-ariza', { ...task, status: 'Görev Teslim Edildi' });
+          });
+        });
       } else {
+        // Göreve ilk defa başlanıyor (hiç İSG kaydı yok) -> Zorunlu İSG kontrolü
         (window as any).showOHSChecklistModal(task, () => {
           // Proceed after OHS is confirmed
           taskService.updateTaskStatus(taskId, 'Görev Teslim Edildi').catch(console.error);
@@ -1328,9 +1814,7 @@ export const TasksPage = async () => {
 
 (window as any).handleTransferTask = async (taskId: string) => {
   const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-  const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasTransferTaskPerm = isAdmin || (typeof taskPerms === 'object' && (!!(taskPerms as any).transferTask || !!(taskPerms as any).delegateTask));
+  const hasTransferTaskPerm = checkTransferTaskPermission(currentUser);
 
   if (!hasTransferTaskPerm) {
     alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Transfer Etme yetkisi)");
@@ -1435,9 +1919,7 @@ export const TasksPage = async () => {
 
 (window as any).handleTaskDelete = async (taskId: string) => {
   const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-  const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasDeleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).deleteTask);
+  const hasDeleteTaskPerm = checkDeleteTaskPermission(currentUser);
 
   if (!hasDeleteTaskPerm) {
     alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Silme yetkisi)");
@@ -1456,9 +1938,7 @@ export const TasksPage = async () => {
 
 (window as any).handleReturnedReportDelete = async (reportId: string) => {
   const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-  const taskPerms = currentUser?.allowedTabs?.tasks || {};
-  const hasDeleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).deleteTask);
+  const hasDeleteTaskPerm = checkDeleteTaskPermission(currentUser);
 
   if (!hasDeleteTaskPerm) {
     alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Silme yetkisi)");
@@ -1483,9 +1963,7 @@ export const TasksPage = async () => {
 
 (window as any).editReturnedReport = async (reportNo: string) => {
     const currentUser = (window as any).currentUser;
-    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-    const taskPerms = currentUser?.allowedTabs?.tasks || {};
-    const hasCompleteTaskPerm = isAdmin || (typeof taskPerms === 'object' && !!(taskPerms as any).completeTask);
+    const hasCompleteTaskPerm = checkCompleteTaskPermission(currentUser);
 
     if (!hasCompleteTaskPerm) {
         alert("Bu işlem için yetkiniz bulunmamaktadır. (Görev Formu Doldurma yetkisi)");

@@ -468,13 +468,12 @@ const archiveItemsPerPage = 50;
                 const day = String(d.getDate()).padStart(2, '0');
                 const dateStr = `${y}.${m}.${day}`;
                 
-                const mcfStr = report.matFormNo ? ` (MÇF ${report.matFormNo})` : '';
-                const actionStr = type === 'Bakim' ? report.templateName : report.faultCode;
-                
-                const replaceTr = (s: string) => (s||'').replace(/Ğ/g,'G').replace(/ğ/g,'g').replace(/Ü/g,'U').replace(/ü/g,'u').replace(/Ş/g,'S').replace(/ş/g,'s').replace(/İ/g,'I').replace(/ı/g,'i').replace(/Ö/g,'O').replace(/ö/g,'o').replace(/Ç/g,'C').replace(/ç/g,'c');
-                
-                let fileName = `${dateStr}-${report.siteName}-${actionStr}-${turbineNo}${mcfStr}.pdf`;
-                fileName = replaceTr(fileName).replace(/[\\/:*?"<>|]/g, '-');
+                const mcfStr = report.matFormNo ? `_(MÇF_${report.matFormNo})` : '';
+                const actionStr = ((type === 'Bakim' ? report.templateName : report.faultCode) || 'Rapor').replace(/\s+/g, '_');
+                const siteStr = (report.siteName || 'Saha').replace(/\s+/g, '_');
+                const turbStr = (turbineNo || 'T').replace(/\s+/g, '_');
+                let fileName = `${dateStr}-${siteStr}-${actionStr}-${turbStr}${mcfStr}.pdf`;
+                fileName = fileName.replace(/[\\/:*?"<>|]/g, '-').trim();
                 
                 if (type === 'Bakim') {
                     bakimFolder.file(fileName, pdfBlob);
@@ -593,7 +592,7 @@ export const ReportArchivePage = async (siteId?: string) => {
     }
 
     const perms = currentUser?.allowedTabs?.['reports-archive'] || {};
-    const canEdit = isAdmin || perms.editReport;
+    const canEdit = isAdmin;
     const canDelete = isAdmin || perms.deleteReport;
     const canDownloadPdf = isAdmin || perms.downloadPdf;
     const canReturn = isAdmin || perms.returnReport;
@@ -1147,10 +1146,9 @@ export const ReportArchivePage = async (siteId?: string) => {
 
 (window as any).editArchiveReport = async (reportNo: string) => {
     const currentUser = (window as any).currentUser;
-    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
-    const perms = currentUser?.allowedTabs?.['reports-archive'] || {};
-    if (!isAdmin && !perms.editReport) {
-        alert("Bu işlemi yapmak için yetkiniz bulunmamaktadır.");
+    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || currentUser?.email?.toLowerCase()?.includes('fatih.zebek');
+    if (!isAdmin) {
+        alert("Rapor düzenleme yetkisi sadece sistem yöneticilerine (Admin) aittir.");
         return;
     }
     const report = await serviceReportService.getReportByNo(reportNo);
@@ -1665,10 +1663,12 @@ export const ReportArchivePage = async (siteId?: string) => {
             // Dosya adı oluştur
             const d = new Date(report.date);
             const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-            const actionStr = report.templateName || report.faultCode || 'Rapor';
-            let fileName = `${dateStr}-${report.siteName}-${actionStr}-${report.turbineNo}.pdf`;
-            fileName = fileName.replace(/Ğ/g,'G').replace(/ğ/g,'g').replace(/Ü/g,'U').replace(/ü/g,'u').replace(/Ş/g,'S').replace(/ş/g,'s').replace(/İ/g,'I').replace(/ı/g,'i').replace(/Ö/g,'O').replace(/ö/g,'o').replace(/Ç/g,'C').replace(/ç/g,'c');
-            fileName = fileName.replace(/[\\/:*?"<>|]/g, '-');
+            const actionStr = (report.templateName || report.faultCode || 'Rapor').replace(/\s+/g, '_');
+            const siteStr = (report.siteName || 'Saha').replace(/\s+/g, '_');
+            const turbStr = (report.turbineNo || 'T').replace(/\s+/g, '_');
+            const repNo = report.reportNo ? `-${report.reportNo}` : '';
+            let fileName = `${dateStr}-${siteStr}-${actionStr}-${turbStr}${repNo}.pdf`;
+            fileName = fileName.replace(/[\\/:*?"<>|]/g, '-').trim();
 
             // Create temporary container offscreen
             const wrapper = document.createElement('div');

@@ -393,6 +393,16 @@ export const MaterialPricingPage = async (userProfile?: any) => {
         </div>
 
         <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <!-- Warehouse Filter -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Depo:</span>
+            <div class="pricing-filter-pills" id="warehouse-filter-pills">
+              <div class="pricing-pill active" onclick="window.selectPricingWarehouseFilter('ALL', this)">Tümü</div>
+              <div class="pricing-pill" onclick="window.selectPricingWarehouseFilter('2688', this)">🏛️ Anemon Depo</div>
+              <div class="pricing-pill" onclick="window.selectPricingWarehouseFilter('GENEL', this)">📦 Genel Liste</div>
+            </div>
+          </div>
+
           <!-- Year Filter -->
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="font-size: 0.75rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Yıl:</span>
@@ -512,20 +522,41 @@ export const MaterialPricingPage = async (userProfile?: any) => {
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="pricing-form-group">
               <label class="pricing-form-label">Giriş Miktarı (Adet/Birim)</label>
               <input type="number" step="1" min="1" id="form-price-qty" class="pricing-form-input" placeholder="Örn: 10">
             </div>
 
             <div class="pricing-form-group">
-              <label class="pricing-form-label">Fatura / İrsaliye / Satın Alma No</label>
-              <input type="text" id="form-price-invoice" class="pricing-form-input" placeholder="Örn: FT-2026-004">
+              <label class="pricing-form-label">Geçerli Olduğu Depo / Santral <span style="color: #ef4444;">*</span></label>
+              <select id="form-price-warehouse" class="pricing-form-select">
+                <option value="2688" selected>🏛️ Anemon İntepe Depo</option>
+                <option value="3439">🏛️ Alize Sarıkaya Depo</option>
+                <option value="3243">🏛️ Alize Çamseki Depo</option>
+                <option value="2678">🏛️ Mare Manastır Depo</option>
+                <option value="0752">🏛️ Alize Germiyan Depo</option>
+                <option value="2990">🏛️ Doğal Sayalar Depo</option>
+                <option value="3213">🏛️ Dares Datça Depo</option>
+                <option value="3245">🏛️ Alize Keltepe Depo</option>
+                <option value="3793">🏛️ Alize Kuyucak Depo</option>
+                <option value="3892">🏛️ Alize Çataltape Depo</option>
+                <option value="MTA">🏛️ Merkez Tamir Atölyesi Deposu</option>
+                <option value="GENEL">📦 Genel Liste (Tüm Santraller)</option>
+              </select>
             </div>
           </div>
 
-          <div class="pricing-form-group">
-            <label class="pricing-form-label">Tedarikçi / Not</label>
-            <input type="text" id="form-price-note" class="pricing-form-input" placeholder="Tedarikçi adı veya ek açıklama">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="pricing-form-group">
+              <label class="pricing-form-label">Fatura / İrsaliye / Satın Alma No</label>
+              <input type="text" id="form-price-invoice" class="pricing-form-input" placeholder="Örn: FT-2026-004">
+            </div>
+
+            <div class="pricing-form-group">
+              <label class="pricing-form-label">Tedarikçi / Not</label>
+              <input type="text" id="form-price-note" class="pricing-form-input" placeholder="Tedarikçi adı veya ek açıklama">
+            </div>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.25rem;">
@@ -561,6 +592,7 @@ export const MaterialPricingPage = async (userProfile?: any) => {
             <thead>
               <tr>
                 <th>YIL / TARİH</th>
+                <th>DEPO / SANTRAL</th>
                 <th>BİRİM FİYAT</th>
                 <th>MİKTAR</th>
                 <th>FATURA NO</th>
@@ -596,12 +628,30 @@ export const MaterialPricingPage = async (userProfile?: any) => {
           </button>
         </div>
 
+        <div class="pricing-form-group" style="margin-bottom: 1.25rem;">
+          <label class="pricing-form-label">Fiyatların Bağlanacağı Depo / Santral <span style="color: #ef4444;">*</span></label>
+          <select id="excel-import-warehouse" class="pricing-form-select">
+            <option value="2688" selected>🏛️ Anemon İntepe Depo</option>
+            <option value="3439">🏛️ Alize Sarıkaya Depo</option>
+            <option value="3243">🏛️ Alize Çamseki Depo</option>
+            <option value="2678">🏛️ Mare Manastır Depo</option>
+            <option value="0752">🏛️ Alize Germiyan Depo</option>
+            <option value="2990">🏛️ Doğal Sayalar Depo</option>
+            <option value="3213">🏛️ Dares Datça Depo</option>
+            <option value="3245">🏛️ Alize Keltepe Depo</option>
+            <option value="3793">🏛️ Alize Kuyucak Depo</option>
+            <option value="3892">🏛️ Alize Çataltape Depo</option>
+            <option value="MTA">🏛️ Merkez Tamir Atölyesi Deposu</option>
+            <option value="GENEL">📦 Genel Liste (Tüm Santraller)</option>
+          </select>
+        </div>
+
         <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 1rem; margin-bottom: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
               <strong style="color: #10b981; font-size: 0.9rem;">📌 Nasıl Yüklenir?</strong>
               <p style="margin: 4px 0 0; font-size: 0.8rem; color: #94a3b8;">
-                Excel dosyanızda şu sütun başlıkları yer almalıdır: <code>SAP_NO</code>, <code>TANIM</code>, <code>YIL</code>, <code>FIYAT</code>, <code>PARA_BIRIMI</code> (EUR/USD/TRY), <code>FATURA_NO</code>
+                Excel dosyanızda şu sütun başlıkları yer alabilir: <code>SAP_NO</code>, <code>TANIM</code>, <code>YIL</code>, <code>FIYAT</code> (veya Ortalama Maliyetli Birim Fiyat), <code>PARA_BIRIMI</code> (EUR/USD/TRY), <code>FATURA_NO</code>
               </p>
             </div>
             <button onclick="window.downloadPriceExcelTemplate()" class="btn-pricing btn-pricing-secondary" style="font-size: 0.75rem; padding: 6px 12px;">
@@ -655,6 +705,7 @@ export const MaterialPricingPage = async (userProfile?: any) => {
 let allGroupedPrices: GroupedMaterialPrice[] = [];
 let allRawPrices: MaterialPriceEntry[] = [];
 let filteredGroupedPrices: GroupedMaterialPrice[] = [];
+let currentWarehouseFilter = 'ALL';
 let currentYearFilter = 'ALL';
 let currentCurrencyFilter = 'ALL';
 let currentSearchTerm = '';
@@ -716,6 +767,14 @@ let activeHistorySap = '';
   (window as any).applyPricingFilters();
 };
 
+(window as any).selectPricingWarehouseFilter = (wh: string, el: HTMLElement) => {
+  currentWarehouseFilter = wh;
+  document.querySelectorAll('#warehouse-filter-pills .pricing-pill').forEach(p => p.classList.remove('active'));
+  if (el) el.classList.add('active');
+  currentPricingPage = 1;
+  (window as any).applyPricingFilters();
+};
+
 (window as any).selectPricingYearFilter = (year: string, el: HTMLElement) => {
   currentYearFilter = year;
   document.querySelectorAll('#year-filter-pills .pricing-pill').forEach(p => p.classList.remove('active'));
@@ -742,6 +801,18 @@ let activeHistorySap = '';
       if (!sap.includes(currentSearchTerm) && !desc.includes(currentSearchTerm) && !hasInvoiceMatch) {
         return false;
       }
+    }
+
+    // Warehouse match
+    if (currentWarehouseFilter !== 'ALL') {
+      const hasWh = item.allEntries.some(e => {
+        const wId = (e.warehouseId || 'GENEL').toUpperCase();
+        if (currentWarehouseFilter === '2688') {
+          return wId === '2688' || wId === 'ANEMON' || (e.warehouseName || '').toLowerCase().includes('anemon');
+        }
+        return wId === currentWarehouseFilter;
+      });
+      if (!hasWh) return false;
     }
 
     // Year match
@@ -819,8 +890,12 @@ let activeHistorySap = '';
         </td>
         <td>
           <div style="font-weight: 700; color: #fff;">${item.description || '-'}</div>
-          <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">
-            ${item.allEntries.length} adet fiyat kaydı ${latest?.invoiceNo ? '• Son Fat: ' + latest.invoiceNo : ''}
+          <div style="font-size: 0.72rem; color: #64748b; margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span style="background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); font-size: 0.65rem; padding: 1px 6px; border-radius: 4px; font-weight: 700;">
+              🏛️ ${latest?.warehouseName || 'Anemon İntepe Depo'}
+            </span>
+            <span>• ${item.allEntries.length} fiyat kaydı</span>
+            ${latest?.invoiceNo ? '<span>• Fat: ' + latest.invoiceNo + '</span>' : ''}
           </div>
         </td>
         <td style="text-align: right;">${formatPrice(p2024)}</td>
@@ -892,6 +967,7 @@ let activeHistorySap = '';
   const dateInput = document.getElementById('form-price-date') as HTMLInputElement;
   const amountInput = document.getElementById('form-price-amount') as HTMLInputElement;
   const currSelect = document.getElementById('form-price-currency') as HTMLSelectElement;
+  const whSelect = document.getElementById('form-price-warehouse') as HTMLSelectElement;
   const qtyInput = document.getElementById('form-price-qty') as HTMLInputElement;
   const invoiceInput = document.getElementById('form-price-invoice') as HTMLInputElement;
   const noteInput = document.getElementById('form-price-note') as HTMLInputElement;
@@ -903,6 +979,7 @@ let activeHistorySap = '';
   if (dateInput) dateInput.value = entry?.entryDate || new Date().toISOString().split('T')[0];
   if (amountInput) amountInput.value = entry?.price !== undefined ? String(entry.price) : '';
   if (currSelect) currSelect.value = entry?.currency || 'EUR';
+  if (whSelect) whSelect.value = entry?.warehouseId || '2688';
   if (qtyInput) qtyInput.value = entry?.quantity !== undefined ? String(entry.quantity) : '1';
   if (invoiceInput) invoiceInput.value = entry?.invoiceNo || '';
   if (noteInput) noteInput.value = entry?.note || '';
@@ -926,7 +1003,8 @@ let activeHistorySap = '';
     sapNo,
     description,
     year: new Date().getFullYear(),
-    currency: 'EUR'
+    currency: 'EUR',
+    warehouseId: '2688'
   });
 };
 
@@ -1002,6 +1080,9 @@ let activeHistorySap = '';
     const entryDate = (document.getElementById('form-price-date') as HTMLInputElement)?.value;
     const price = Number((document.getElementById('form-price-amount') as HTMLInputElement)?.value) || 0;
     const currency = ((document.getElementById('form-price-currency') as HTMLSelectElement)?.value || 'EUR') as any;
+    const whSelect = document.getElementById('form-price-warehouse') as HTMLSelectElement;
+    const warehouseId = whSelect?.value || '2688';
+    const warehouseName = whSelect?.options[whSelect.selectedIndex]?.text?.replace(/^[^\w\s]*\s*/, '') || 'Anemon İntepe Depo';
     const quantity = Number((document.getElementById('form-price-qty') as HTMLInputElement)?.value) || 1;
     const invoiceNo = (document.getElementById('form-price-invoice') as HTMLInputElement)?.value;
     const note = (document.getElementById('form-price-note') as HTMLInputElement)?.value;
@@ -1015,6 +1096,8 @@ let activeHistorySap = '';
       entryDate,
       price,
       currency,
+      warehouseId,
+      warehouseName,
       quantity,
       invoiceNo,
       note,
@@ -1054,7 +1137,7 @@ let activeHistorySap = '';
 
   if (tbody) {
     if (item.allEntries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: #64748b;">Kayıtlı fiyat geçmişi bulunamadı.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="padding: 2rem; text-align: center; color: #64748b;">Kayıtlı fiyat geçmişi bulunamadı.</td></tr>`;
     } else {
       tbody.innerHTML = item.allEntries.map(entry => {
         const symbol = entry.currency === 'EUR' ? '€' : (entry.currency === 'USD' ? '$' : '₺');
@@ -1065,6 +1148,9 @@ let activeHistorySap = '';
                 ${entry.year}
               </span>
               <div style="font-size: 0.75rem; color: #64748b; margin-top: 2px;">${entry.entryDate || '-'}</div>
+            </td>
+            <td>
+              <span style="color: #fbbf24; font-size: 0.8rem; font-weight: 700;">🏛️ ${entry.warehouseName || 'Anemon İntepe Depo'}</span>
             </td>
             <td>
               <strong style="color: #38bdf8; font-size: 0.95rem;">
@@ -1194,12 +1280,26 @@ let activeHistorySap = '';
       }
 
       parsedExcelEntries = rawRows.map(row => {
-        const sap = String(row.SAP_NO || row.SAP || row.sap_no || row.sap || '').trim();
-        const desc = String(row.TANIM || row.MALZEME_TANIMI || row.description || row.Aciklama || '').trim();
-        const year = Number(row.YIL || row.year) || new Date().getFullYear();
-        const price = Number(row.FIYAT || row.Birim_Fiyat || row.price) || 0;
-        let curr = String(row.PARA_BIRIMI || row.Birim || row.currency || 'EUR').toUpperCase().trim();
-        if (curr === 'TL' || curr === 'TL (₺)') curr = 'TRY';
+        const keys = Object.keys(row);
+        const sapKey = keys.find(k => /sap|malzeme/i.test(k) && !/metni|tanım|tanim/i.test(k)) || 'SAP_NO';
+        const descKey = keys.find(k => /tanım|tanim|metni|açıklama|aciklama|desc/i.test(k)) || 'TANIM';
+        const priceKey = keys.find(k => /fiyat|maliyet|price|tutar/i.test(k)) || 'FIYAT';
+        const yearKey = keys.find(k => /yıl|yil|year/i.test(k)) || 'YIL';
+        const currKey = keys.find(k => /para|birim|currency/i.test(k) && !/fiyat/i.test(k)) || 'PARA_BIRIMI';
+
+        const sap = String(row[sapKey] || row.SAP_NO || row.SAP || '').trim();
+        const desc = String(row[descKey] || row.TANIM || row.MALZEME_TANIMI || '').trim();
+        const year = Number(row[yearKey] || row.YIL || row.year) || new Date().getFullYear();
+        let price = Number(row[priceKey] || row.FIYAT || row.price) || 0;
+        if (isNaN(price) || price === 0) {
+          const strPrice = String(row[priceKey] || '').replace(/\./g, '').replace(',', '.');
+          price = parseFloat(strPrice) || 0;
+        }
+
+        let curr = String(row[currKey] || row.PARA_BIRIMI || 'EUR').toUpperCase().trim();
+        if (curr.includes('TL') || curr.includes('₺') || curr.includes('TRY')) curr = 'TRY';
+        else if (curr.includes('$') || curr.includes('USD')) curr = 'USD';
+        else curr = 'EUR';
 
         return {
           sapNo: sap,
@@ -1259,8 +1359,14 @@ let activeHistorySap = '';
 
   try {
     const currentUser = (window as any).currentUser || authService.getCurrentUser();
+    const whSelectEl = document.getElementById('excel-import-warehouse') as HTMLSelectElement;
+    const whId = whSelectEl?.value || '2688';
+    const whName = whSelectEl?.options[whSelectEl.selectedIndex]?.text?.replace(/^[^\w\s]*\s*/, '') || 'Anemon İntepe Depo';
+
     const formatted = parsedExcelEntries.map(e => ({
       ...e,
+      warehouseId: whId,
+      warehouseName: whName,
       createdByName: currentUser?.displayName || currentUser?.email || 'Excel İçe Aktarım',
       createdByEmail: currentUser?.email || ''
     }));
@@ -1268,7 +1374,7 @@ let activeHistorySap = '';
     const saved = await priceService.batchSavePrices(formatted);
     (window as any).closeExcelImportModal();
     await (window as any).refreshPricingTable(true);
-    alert(`Başarılı! Toplam ${saved} adet SAP fiyat kaydı sisteme aktarıldı.`);
+    alert(`Başarılı! Toplam ${saved} adet SAP fiyat kaydı ${whName} deposuna aktarıldı.`);
   } catch (err) {
     console.error("Batch save error", err);
     alert("Toplu kayıt sırasında hata oluştu: " + err);

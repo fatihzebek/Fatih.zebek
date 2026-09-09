@@ -55,8 +55,8 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       turbines: true,
       "visual-bom": true
     },
-    allowedSites: ["all"],
-    allowedWarehouses: ["all"],
+    allowedSites: ["2688", "3243", "3439"],
+    allowedWarehouses: ["2688", "3439", "3243", "team_Team_13"],
     isActive: true
   },
   "UNclj0NKXdTVkET9Tp566rouMvh2": {
@@ -71,8 +71,8 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       turbines: true,
       "visual-bom": true
     },
-    allowedSites: ["all"],
-    allowedWarehouses: ["all"],
+    allowedSites: ["2688", "3243", "3439"],
+    allowedWarehouses: ["2688", "3243", "3439", "team_Team_15"],
     isActive: true
   },
   "VELpZxAedmh0WLuL8JpZBSUxgCp2": {
@@ -87,8 +87,8 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       turbines: true,
       "visual-bom": true
     },
-    allowedSites: ["all"],
-    allowedWarehouses: ["all"],
+    allowedSites: ["2688", "3243", "3439"],
+    allowedWarehouses: ["2688", "3243", "3439", "team_Team_04"],
     isActive: true
   }
 };

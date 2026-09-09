@@ -283,8 +283,8 @@ export const WorkshopScrapPage = async () => {
                     </div>
                     ${(rep.scrapImageUrl || rep.repairImageUrl) ? `
                       <div style="margin-top: 6px; display: flex; align-items: center; gap: 6px;">
-                        <img src="${rep.scrapImageUrl || rep.repairImageUrl}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); cursor: pointer;" onclick="window.open('${rep.scrapImageUrl || rep.repairImageUrl}', '_blank')" title="Büyütmek için tıklayın" />
-                        <span style="font-size: 0.72rem; color: #f87171; font-weight: 700;"><i class="fa-solid fa-camera"></i> Hasar Görseli</span>
+                        <img src="${rep.scrapImageUrl || rep.repairImageUrl}" style="width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(239, 68, 68, 0.4); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.08)'" onmouseout="this.style.transform='scale(1)'" onclick="window.showImageLightbox(this.src)" title="Büyütmek için tıklayın" />
+                        <span style="font-size: 0.72rem; color: #f87171; font-weight: 700; cursor: pointer;" onclick="window.showImageLightbox('${rep.scrapImageUrl || rep.repairImageUrl}')"><i class="fa-solid fa-camera"></i> Hasar Görseli</span>
                       </div>
                     ` : ''}
                   </td>

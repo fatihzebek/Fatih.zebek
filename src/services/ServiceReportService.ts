@@ -1,5 +1,5 @@
 import { db, storage } from '../firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, where, onSnapshot, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { offlineSyncService } from './OfflineSyncService';
 import { emailService } from './EmailService';
@@ -44,6 +44,9 @@ export interface ServiceReport {
   overtimeApprovals?: any;
   notes: string;
   matFormNo?: string;
+  taskLocationType?: 'TURBINE' | 'WAREHOUSE';
+  tamirFormNo?: string;
+  revisionNo?: string;
   imageUrls: string[];
   materials: {
     poz: string;
@@ -186,18 +189,51 @@ class ServiceReportService {
     // 2. Güncelle
     onProgress?.("Rapor güncelleniyor...");
     try {
-      const docRef = doc(db, this.collectionName, id);
+      let targetDocId = id;
+      if (!targetDocId && report.reportNo) {
+        const found = await this.getReportByNo(report.reportNo);
+        if (found?.id) targetDocId = found.id;
+      }
+
+      if (!targetDocId) {
+        throw new Error("Bu rapor arşivden silindiği için güncellenemez.");
+      }
+
+      const docRef = doc(db, this.collectionName, targetDocId);
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) {
+        throw new Error("Bu rapor arşivden silindiği için güncellenemez.");
+      }
+
+      // Strip all undefined properties to prevent Firestore invalid data error
+      const cleanReport: any = JSON.parse(JSON.stringify(report));
+      delete cleanReport.id;
+      delete cleanReport._id;
+
       await updateDoc(docRef, {
-        ...report,
+        ...cleanReport,
         imageUrls,
         status: 'completed',
         updatedAt: serverTimestamp()
       });
       this.reportsCache = null; // Invalidate cache
-      return id;
-    } catch (err) {
+
+      // Automatic email/pdf notification refresh (safe try-catch)
+      try {
+        const fullReportForEmail: ServiceReport = {
+          id: targetDocId,
+          ...cleanReport,
+          imageUrls
+        };
+        await emailService.sendReportEmail(fullReportForEmail);
+      } catch (emailErr) {
+        console.warn("[Email] E-posta güncelleme uyarısı:", emailErr);
+      }
+
+      return targetDocId;
+    } catch (err: any) {
       console.error("Firestore update error:", err);
-      throw new Error("Rapor güncellenirken hata oluştu.");
+      throw new Error(err.message || "Rapor güncellenirken hata oluştu.");
     }
   }
 
@@ -310,12 +346,109 @@ class ServiceReportService {
     }
   }
 
-  async deleteReport(id: string) {
-    const { deleteDoc, doc } = await import('firebase/firestore');
+  async deleteReport(id: string, operatorEmail?: string) {
+    const { deleteDoc, doc, getDoc } = await import('firebase/firestore');
+    const { warehouseService } = await import('./WarehouseService');
+    const { dataService } = await import('./DataService');
     try {
       const docRef = doc(db, this.collectionName, id);
+      const snap = await getDoc(docRef);
+      let reportData: ServiceReport | null = null;
+
+      if (snap.exists()) {
+        reportData = snap.data() as ServiceReport;
+
+        // Automated Stock Rollback for Materials
+        if (reportData.materials && reportData.materials.length > 0) {
+          // Resolve canonical team warehouse ID (e.g. "team_Team_09")
+          let teamWhId = '';
+          if (reportData.team) {
+            const cleanTeam = reportData.team.trim();
+            const numMatch = cleanTeam.match(/(\d+)/);
+            if (numMatch) {
+              teamWhId = `team_Team_${numMatch[1].padStart(2, '0')}`;
+            } else {
+              teamWhId = `team_${cleanTeam.replace(/\s+/g, '_')}`;
+            }
+          }
+
+          const siteWarehouseId = dataService.getWarehouseIdBySiteId(reportData.siteId || '') || reportData.siteId;
+          const userEmail = operatorEmail || (window as any).currentUser?.email || reportData.createdBy || 'Sistem';
+
+          for (const mat of reportData.materials) {
+            const sapNo = String(mat.sapNo || '').trim();
+            if (!sapNo) continue;
+
+            const typeUpper = mat.type?.toUpperCase();
+            const isTakilan = !mat.type || typeUpper === 'T';
+
+            // 1. Rollback installed parts (Takılan Parça) back to team warehouse
+            if (mat.used > 0 && isTakilan && teamWhId) {
+              try {
+                await warehouseService.updateStockBySap(teamWhId, sapNo, mat.used, {
+                  user: userEmail,
+                  reason: `Silinen Rapor (${reportData.reportNo}) İptali / Otomatik Stok İadesi`,
+                  reportNo: reportData.reportNo,
+                  materialName: mat.description,
+                  turbineNo: reportData.turbineNo,
+                  turbineSerial: reportData.turbineSerial,
+                  formNo: reportData.matFormNo
+                }, 'NEW', undefined, mat.serialNo);
+              } catch (e) {
+                console.error(`[ServiceReportService] Error rolling back installed material ${sapNo}:`, e);
+              }
+            }
+
+            // 2. Rollback removed defect parts (Sökülen Parça) from site and team warehouse
+            if (mat.defectCount > 0) {
+              if (siteWarehouseId) {
+                try {
+                  await warehouseService.updateStockBySap(siteWarehouseId, sapNo, -mat.defectCount, {
+                    user: userEmail,
+                    reason: `Silinen Rapor (${reportData.reportNo}) İptali / Arızalı Parça Kaydı İptali`,
+                    reportNo: reportData.reportNo,
+                    materialName: mat.description
+                  }, 'DEFECT', undefined, mat.serialNo);
+                } catch (e) {
+                  console.error(`[ServiceReportService] Error rolling back defect material from site ${sapNo}:`, e);
+                }
+              }
+
+              if (teamWhId) {
+                try {
+                  await warehouseService.updateStockBySap(teamWhId, sapNo, -mat.defectCount, {
+                    user: userEmail,
+                    reason: `Silinen Rapor (${reportData.reportNo}) İptali / Arızalı Parça Kaydı İptali`,
+                    reportNo: reportData.reportNo,
+                    materialName: mat.description
+                  }, 'DEFECT', undefined, mat.serialNo);
+                } catch (e) {
+                  console.error(`[ServiceReportService] Error rolling back defect material from team ${sapNo}:`, e);
+                }
+              }
+            }
+          }
+        }
+      }
+
       await deleteDoc(docRef);
       this.reportsCache = null; // Invalidate cache
+
+      // Also clean up any lingering task or notification in tasks collection if related
+      try {
+        if (reportData && (reportData as any).reportNo) {
+          const repNo = (reportData as any).reportNo;
+          const { taskService } = await import('./TaskService');
+          const allTasks = await taskService.getTasks();
+          const relatedTask = allTasks.find((t: any) => (t as any).originalReportNo === repNo || (t as any).reportNo === repNo || t.id === id);
+          if (relatedTask?.id) {
+            await taskService.deleteTask(relatedTask.id);
+          }
+        }
+      } catch (taskCleanErr) {
+        console.warn("Task cleanup warning on report delete:", taskCleanErr);
+      }
+
       return true;
     } catch (err) {
       console.error("Error deleting report:", err);

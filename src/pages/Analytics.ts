@@ -268,6 +268,10 @@ export const AnalyticsPage = async () => {
       res = (a.bakimCount + a.arizaCount) - (b.bakimCount + b.arizaCount);
     } else if (personnelSortBy === 'hours') {
       res = a.totalHours - b.totalHours;
+    } else if (personnelSortBy === 'speed') {
+      const durA = (a.avgJobDuration || 0) <= 0 ? 999 : a.avgJobDuration;
+      const durB = (b.avgJobDuration || 0) <= 0 ? 999 : b.avgJobDuration;
+      res = durA - durB;
     } else if (personnelSortBy === 'overtime') {
       res = a.overtimeHours - b.overtimeHours;
     } else {
@@ -315,7 +319,7 @@ export const AnalyticsPage = async () => {
       localStorage.setItem('analytics_personnel_sort_order', curOrder === 'desc' ? 'asc' : 'desc');
     } else {
       localStorage.setItem('analytics_personnel_sort_by', newSortBy);
-      localStorage.setItem('analytics_personnel_sort_order', newSortBy === 'name' ? 'asc' : 'desc');
+      localStorage.setItem('analytics_personnel_sort_order', (newSortBy === 'name' || newSortBy === 'speed') ? 'asc' : 'desc');
     }
     (window as any).navigate('analytics');
   };
@@ -454,7 +458,7 @@ export const AnalyticsPage = async () => {
               </tr>
               <tr style="border-bottom: 1px solid #e2e8f0;">
                 <td style="padding: 8px 12px; font-weight: 700; color: #0284c7;">🚀 Çözüm Hızı & Verimlilik</td>
-                <td style="padding: 8px 12px; color: #475569;">Müdahale sürelerine ve standart bakım sürelerine uyum</td>
+                <td style="padding: 8px 12px; color: #475569;">Ortalama iş bitirme süresi (${pMetric.avgJobDuration || 0} Saat/Görev) ve standart sürelere uyum</td>
                 <td style="padding: 8px 12px; text-align: center; font-weight: 800; color: #0f172a;">${pMetric.speedScore} / 25</td>
               </tr>
               <tr>
@@ -659,9 +663,9 @@ export const AnalyticsPage = async () => {
             <div style="font-size: 0.65rem; color: var(--text-muted);">${pMetric?.totalHours || 0}h (<span style="color:var(--accent-orange); font-weight:bold;">${pMetric?.overtimeHours || 0}h Onaylı</span>)</div>
           </div>
           <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
-            <div style="font-size: 0.65rem; color: #38bdf8; font-weight: 700;">🚀 HIZ SKORU</div>
-            <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 4px 0;">${pMetric?.speedScore || 0}/25</div>
-            <div style="font-size: 0.65rem; color: var(--text-muted);">Ortalama süreye uyum</div>
+            <div style="font-size: 0.65rem; color: #38bdf8; font-weight: 700;">⚡ ORTALAMA İŞ SÜRESİ</div>
+            <div style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 4px 0;">${pMetric?.avgJobDuration || 0} h/iş</div>
+            <div style="font-size: 0.65rem; color: var(--text-muted);">${pMetric?.speedScore || 0}/25 Puan (Hız Skoru)</div>
           </div>
           <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.75rem; border-radius: 8px; text-align: center;">
             <div style="font-size: 0.65rem; color: #4ade80; font-weight: 700;">🛡️ İŞÇİLİK KALİTESİ</div>
@@ -849,8 +853,8 @@ export const AnalyticsPage = async () => {
   // Excel Export
   (window as any).exportAnalyticsToExcel = () => {
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Personel', 'Şirket', 'Ekip', 'Sorumlu Santral', 'Bakım (Adet)', 'Arıza (Adet)', 'Toplam Saat', 'Onaylı Mesai (Saat)', 'Uzmanlık Skoru'],
-      ...data.personnelMetrics.map(p => [p.name, p.company || '', p.team || '', (p.sites || []).join(' | '), p.bakimCount, p.arizaCount, p.totalHours, p.overtimeHours, p.masteryScore])
+      ['Personel', 'Şirket', 'Ekip', 'Sorumlu Santral', 'Bakım (Adet)', 'Arıza (Adet)', 'Toplam Görev', 'Toplam Efor (Saat)', 'Ortalama Süre (Saat/İş)', 'Onaylı Mesai (Saat)', 'Uzmanlık Skoru'],
+      ...data.personnelMetrics.map(p => [p.name, p.company || '', p.team || '', (p.sites || []).join(' | '), p.bakimCount, p.arizaCount, (p.bakimCount + p.arizaCount), p.totalHours, p.avgJobDuration, p.overtimeHours, p.masteryScore])
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Personel Analizi");
@@ -1005,6 +1009,9 @@ export const AnalyticsPage = async () => {
               <button class="btn-filter ${personnelSortBy === 'hours' ? 'active' : ''}" onclick="window.setPersonnelSort('hours')" style="font-size: 0.75rem; padding: 4px 8px;">
                 ⏱️ Toplam Efor ${personnelSortBy === 'hours' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
               </button>
+              <button class="btn-filter ${personnelSortBy === 'speed' ? 'active' : ''}" onclick="window.setPersonnelSort('speed')" style="font-size: 0.75rem; padding: 4px 8px;">
+                ⚡ İş Hızı ${personnelSortBy === 'speed' ? (personnelSortOrder === 'asc' ? '↓ (Hızlı)' : '↑ (Yavaş)') : ''}
+              </button>
               <button class="btn-filter ${personnelSortBy === 'overtime' ? 'active' : ''}" onclick="window.setPersonnelSort('overtime')" style="font-size: 0.75rem; padding: 4px 8px;">
                 🔥 Onaylı Mesai ${personnelSortBy === 'overtime' ? (personnelSortOrder === 'desc' ? '↓' : '↑') : ''}
               </button>
@@ -1014,7 +1021,7 @@ export const AnalyticsPage = async () => {
             </div>
           </div>
 
-          <!-- Sadeleştirilmiş 5 Sütunlu Tablo (Sıralanabilir Başlıklar) -->
+          <!-- Sadeleştirilmiş 6 Sütunlu Tablo (Sıralanabilir Başlıklar) -->
           <div style="overflow-x: auto;">
             <table class="cyber-table">
               <thead>
@@ -1027,6 +1034,9 @@ export const AnalyticsPage = async () => {
                   </th>
                   <th onclick="window.setPersonnelSort('hours')" style="text-align: center; cursor: pointer;" title="Toplam çalışma saatine göre sırala">
                     TOPLAM EFOR ${getSortArrow('hours')}
+                  </th>
+                  <th onclick="window.setPersonnelSort('speed')" style="text-align: center; cursor: pointer;" title="Görev başına ortalama süreye göre sırala (Düşük = Hızlı)">
+                    ORTALAMA SÜRE (HIZ) ${getSortArrow('speed')}
                   </th>
                   <th onclick="window.setPersonnelSort('overtime')" style="text-align: center; cursor: pointer;" title="Onaylanan mesai saatine göre sırala">
                     ONAYLANAN MESAİ ${getSortArrow('overtime')}
@@ -1052,6 +1062,16 @@ export const AnalyticsPage = async () => {
                     </td>
                     <td style="text-align: center; font-family: monospace; font-weight: 800; color: var(--accent-cyan); font-size: 1rem;">
                       ${p.totalHours} <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">Saat</span>
+                    </td>
+                    <td style="text-align: center;">
+                      ${p.totalJobs > 0 ? `
+                        <div style="font-family: monospace; font-weight: 800; font-size: 0.95rem; color: ${p.avgJobDuration <= 3.5 ? '#4ade80' : (p.avgJobDuration <= 5.5 ? '#38bdf8' : '#fb923c')};">
+                          ${p.avgJobDuration} <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted);">Saat/İş</span>
+                        </div>
+                        <div style="font-size: 0.65rem; color: ${p.avgJobDuration <= 3.5 ? '#4ade80' : (p.avgJobDuration <= 5.5 ? 'var(--text-muted)' : '#fb923c')};">
+                          ${p.avgJobDuration <= 3.5 ? '⚡ Seri & Hızlı' : (p.avgJobDuration <= 5.5 ? 'Standart' : '⏳ Uzun')}
+                        </div>
+                      ` : '<span style="color: var(--text-muted); opacity: 0.4;">-</span>'}
                     </td>
                     <td style="text-align: center; font-family: monospace; font-weight: 700;">
                       ${p.overtimeHours > 0 ? `<span style="color: var(--accent-orange); background: rgba(255,157,0,0.1); padding: 3px 8px; border-radius: 4px; font-size: 0.8rem;" title="Yönetici tarafından onaylanan net mesai saati">${p.overtimeHours}h</span>` : '<span style="color: var(--text-muted); opacity: 0.4;">-</span>'}

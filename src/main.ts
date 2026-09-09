@@ -221,6 +221,55 @@ window.onerror = (msg, url, line, col, err) => {
 };
 console.log("%c DH SERVIS STABILITY PATCH V3 - GLOBAL MODAL ACTIVE ", "background: #00f3ff; color: #000; font-weight: bold; padding: 4px;");
 
+// --- AUTO-CORRECT: 55533 -> 56633 Düzeltmesi (Team 09 ve Loglar) ---
+async function fixSap55533To56633() {
+  try {
+    const fixKey = 'fixed_sap_55533_to_56633_v2';
+    if (localStorage.getItem(fixKey)) return;
+    const { db } = await import('./firebase');
+    const { collection, getDocs, doc, updateDoc } = await import('firebase/firestore');
+
+    const teamWhId = 'team_Team_09';
+
+    // 1. Fix inventory_v2 in Team 09
+    const invCol = collection(db, 'warehouses', teamWhId, 'inventory_v2');
+    const invSnap = await getDocs(invCol);
+    for (const d of invSnap.docs) {
+      const data = d.data();
+      if (data.sapNo === '55533') {
+        await updateDoc(doc(db, 'warehouses', teamWhId, 'inventory_v2', d.id), {
+          sapNo: '56633'
+        });
+        console.log(`✅ [FIX] inventory_v2 güncellendi: ${d.id} -> 56633`);
+      }
+    }
+
+    // 2. Fix logs in Team 09
+    const logsCol = collection(db, 'warehouses', teamWhId, 'logs');
+    const logsSnap = await getDocs(logsCol);
+    for (const d of logsSnap.docs) {
+      const data = d.data();
+      if (data.sapNo === '55533') {
+        await updateDoc(doc(db, 'warehouses', teamWhId, 'logs', d.id), {
+          sapNo: '56633'
+        });
+        console.log(`✅ [FIX] log güncellendi: ${d.id} -> 56633`);
+      }
+    }
+
+    // Clear warehouse cache
+    const { warehouseService } = await import('./services/WarehouseService');
+    (warehouseService as any).inventoryCache?.clear();
+
+    localStorage.setItem(fixKey, 'true');
+    console.log('✅ SAP 55533 -> 56633 düzeltmesi başarıyla tamamlandı!');
+  } catch (err) {
+    console.error('Error fixing SAP 55533 to 56633:', err);
+  }
+}
+fixSap55533To56633();
+(window as any).fixSap55533To56633 = fixSap55533To56633;
+
 (window as any).syncOfflineReports = async () => {
   try {
     const queued = await offlineSyncService.getQueuedReports();
@@ -273,7 +322,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-dispatches' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management';
 
 interface AppState {
   currentPage: Page
@@ -370,6 +419,14 @@ const Sidebar = () => {
       return email === 'fatih.zebek@demirerholding.com' || (email?.includes('fatih.zebek') ?? false);
     }
 
+    // STRICT SECURITY: Restricted & Price-Sensitive Modules are NEVER accessible to field service teams/technicians!
+    const RESTRICTED_FOR_SERVICE = ['material-pricing', 'material-analytics', 'parameter-audit', 'scada-reset-logs'];
+    if (RESTRICTED_FOR_SERVICE.includes(tab)) {
+      if (userRole === 'TECHNICIAN' || userRole === 'USER' || (email && email.includes('tm'))) {
+        return false;
+      }
+    }
+
     // Strict role locks for Workshop & Repair tabs: ONLY ADMIN, MALZEME_YONETIMI, TAMIR, and Furkan YILDIRIM
     const workshopAndRepairTabs = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'field-scraps', 'card-passport'];
     if (workshopAndRepairTabs.includes(tab)) {
@@ -383,11 +440,19 @@ const Sidebar = () => {
     // ADMIN has full access for all other tabs
     if (userRole === 'ADMIN') return true;
     
+    // Strict security lock: 'workshop-performance' is ONLY accessible by ADMIN or MALZEME_YONETIMI
+    if (tab === 'workshop-performance') {
+      return userRole === 'ADMIN' || 
+             userRole === 'MALZEME_YONETIMI' || 
+             email === 'hursit.akter@demirerholding.com' || 
+             email === 'fatih.zebek@demirerholding.com';
+    }
+
     // Special coordinator override for hursit.akter@demirerholding.com or role MALZEME_YONETIMI
     if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') {
       const allowedForMalzemeYonetimi = [
         'siparis', 'turbines', 'material-pricing', 'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
-        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'
+        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-performance', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'
       ];
       if (allowedForMalzemeYonetimi.includes(tab)) return true;
       return false; // Absolutely restrict from tasks, etc.
@@ -395,20 +460,40 @@ const Sidebar = () => {
 
     // TAMİR role access for other tabs
     if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') {
-      const allowedForTamir = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'warehouses'];
+      const allowedForTamir = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'];
       if (allowedForTamir.includes(tab)) return true;
       return false;
     }
 
     const tabs = profile.allowedTabs;
-    if (tabs) {
-      if (tab === 'new-task') {
-        if (Array.isArray(tabs)) return false; // Array indicates old structure
-        const tasksPerm = (tabs as any)['tasks'];
-        if (typeof tasksPerm === 'object') return !!tasksPerm.createTask;
-        return false;
-      }
+    if (tab === 'new-task') {
+      if (tabs) {
+        if (Array.isArray(tabs)) {
+          if (tabs.includes('new-task') || tabs.includes('tasks')) return true;
+        } else if (typeof tabs === 'object') {
+          const newTaskVal = (tabs as any)['new-task'];
+          if (newTaskVal === true || (typeof newTaskVal === 'object' && newTaskVal?.access === true)) return true;
+          if (newTaskVal === false) return false;
 
+          const tasksPerm = (tabs as any)['tasks'];
+          if (typeof tasksPerm === 'object' && tasksPerm !== null) {
+            if (tasksPerm.createTask === true) return true;
+            if (tasksPerm.createTask === false) return false;
+            if (tasksPerm.access === true) return true;
+          } else if (tasksPerm === true) {
+            return true;
+          }
+        }
+      }
+      
+      // Default allowed for technicians, users, or any team member unless explicitly disabled
+      if (userRole === 'TECHNICIAN' || userRole === 'USER' || !!profile?.team) {
+        return true;
+      }
+      return false;
+    }
+
+    if (tabs) {
       if (Array.isArray(tabs)) {
         return tabs.includes(tab);
       }
@@ -712,6 +797,11 @@ const Sidebar = () => {
             <i class="fa-solid fa-microchip" style="color: #00f2ff;"></i> Malzeme Stoğu
           </li>
         ` : ''}
+        ${isAllowed('workshop-performance') ? `
+          <li class="nav-item ${state.currentPage === 'workshop-performance' ? 'active' : ''}" ${navDragAttr('workshop-performance')} onclick="window.navigate('workshop-performance')">
+            <i class="fa-solid fa-gauge-high" style="color: #14F195;"></i> Performans & Başarı
+          </li>
+        ` : ''}
         ${isAllowed('workshop-dispatches') ? `
           <li class="nav-item ${state.currentPage === 'workshop-dispatches' ? 'active' : ''}" ${navDragAttr('workshop-dispatches')} onclick="window.navigate('workshop-dispatches')">
             <i class="fa-solid fa-truck-fast" style="color: #10B981;"></i> Atölye Sevk Edilenler
@@ -728,7 +818,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${(isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) ? `
+        ${((isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
           <div class="nav-section-label" ${navDragAttr('sec-depo')}>Depo Yönetimi</div>
         ` : ''}
 
@@ -754,7 +844,12 @@ const Sidebar = () => {
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('material-analytics')) ? `
           <li class="nav-item ${state.currentPage === 'material-analytics' ? 'active' : ''}" ${navDragAttr('material-analytics')} onclick="window.navigate('material-analytics')">
-            <i class="fa-solid fa-cart-shopping" style="color: #f472b6;"></i> Malzeme Analizi
+            <i class="fa-solid fa-chart-pie" style="color: #f472b6;"></i> Malzeme Tüketim Analizi
+          </li>
+        ` : ''}
+        ${(profile?.role === 'ADMIN' || isAllowed('material-pricing') || isMaterialManager) ? `
+          <li class="nav-item ${state.currentPage === 'material-pricing' ? 'active' : ''}" ${navDragAttr('material-pricing')} onclick="window.navigate('material-pricing')">
+            <i class="fa-solid fa-tags" style="color: #00f3ff;"></i> Malzeme Fiyat Yönetimi
           </li>
         ` : ''}
         ${((isAllowed('field-scraps') && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') || profile?.role === 'ADMIN' || isMaterialManager) ? `
@@ -900,7 +995,7 @@ const Sidebar = () => {
           const userEmail = (state.userProfile?.email || profile?.email || '').toLowerCase();
           const isAdmin = (state.userProfile?.role === 'ADMIN' || profile?.role === 'ADMIN') || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver');
           return isAdmin ? `
-            <li class="nav-item" onclick="window.showChangelogModal()" style="border-left-color: #a855f7; margin-top: 0.5rem;">
+            <li class="nav-item" ${navDragAttr('changelog')} onclick="window.showChangelogModal()" style="border-left-color: #a855f7; margin-top: 0.5rem;">
               <i class="fa-solid fa-rocket" style="color: #c084fc;"></i> Sürüm Notları
             </li>
           ` : '';
@@ -959,12 +1054,6 @@ const Topbar = () => {
       </div>
       
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        ${((state.userProfile?.role === 'ADMIN') || userEmail.includes('fatih.zebek') || userEmail.includes('hursit.akter') || userEmail.includes('emir.unver')) ? `
-          <button onclick="window.showChangelogModal()" class="btn-cyber-outline" style="height: 38px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border-radius: 19px; font-size: 0.75rem; border-color: rgba(168, 85, 247, 0.4); color: #c084fc; background: rgba(168, 85, 247, 0.1); cursor: pointer;" title="Sürüm Notları & Yenilikler">
-            <i class="fa-solid fa-rocket" style="color: #c084fc;"></i>
-            <span style="font-family: 'Rajdhani', sans-serif; font-weight: 700; letter-spacing: 0.5px;">YENİLİKLER</span>
-          </button>
-        ` : ''}
         <button id="topbar-ticket-bell" onclick="window.navigate('tickets-page')" class="btn-cyber-outline" style="width: 38px; height: 38px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 1rem; border-color: rgba(255,255,255,0.1); position: relative;">
           <i class="fa-solid fa-bell"></i>
         </button>
@@ -1125,7 +1214,8 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           team: autoTeam.startsWith('Team') ? autoTeam : '',
           allowedTabs: {
             dashboard: true,
-            tasks: { access: true, createTask: false, deleteTask: false, completeTask: true, transferTask: false, delegateTask: false },
+            tasks: { access: true, createTask: true, deleteTask: false, completeTask: true, transferTask: false, delegateTask: false },
+            'new-task': true,
             'bearing-analysis': true
           },
           allowedSites: [],
@@ -1140,10 +1230,31 @@ const render = async (options: { skipShell?: boolean } = {}) => {
   }
 
   if (state.userProfile) {
-    // Expand "all" permissions so that all subpages and checks work seamlessly
+    const teamMapping: Record<string, string[]> = {
+      'team01': ['2678', '0752'], 'team1': ['2678', '0752'], 'team02': ['2678', '0752'], 'team2': ['2678', '0752'], 'team12': ['2678', '0752'],
+      'team03': ['2688', '3439', '3243'], 'team3': ['2688', '3439', '3243'], 'team04': ['2688', '3439', '3243'], 'team4': ['2688', '3439', '3243'], 'team13': ['2688', '3439', '3243'], 'team15': ['2688', '3439', '3243'],
+      'team06': ['2990', '3793'], 'team6': ['2990', '3793'], 'team08': ['2990', '3793'], 'team8': ['2990', '3793'], 'team09': ['2990', '3793'], 'team9': ['2990', '3793'], 'team14': ['2990', '3793'],
+      'team05': ['3213'], 'team5': ['3213'], 'team10': ['3213'],
+      'team07': ['3245', '3892'], 'team7': ['3245', '3892'], 'team11': ['3245', '3892']
+    };
+
+    // Expand "all" permissions only for ADMIN or management roles; for technicians, enforce regional sites
     if (state.userProfile.allowedSites?.includes('all')) {
-      state.userProfile.allowedSites = dataService.getAllSites().map(s => s.id);
+      if (state.userProfile.role === 'ADMIN' || state.userProfile.role === 'MALZEME_YONETIMI') {
+        state.userProfile.allowedSites = dataService.getAllSites().map(s => s.id);
+      } else {
+        const formatted = formatTeamName(state.userProfile.team || state.userProfile.displayName || user.email || '');
+        const teamKey = formatted.replace(/\s+/g, '').toLowerCase();
+        const rawKey = (state.userProfile.team || state.userProfile.displayName || user.email || '').replace(/\s+/g, '').toLowerCase();
+        state.userProfile.allowedSites = teamMapping[teamKey] || teamMapping[rawKey] || [];
+      }
+    } else if (state.userProfile.role === 'TECHNICIAN' && (!state.userProfile.allowedSites || state.userProfile.allowedSites.length === 0)) {
+      const formatted = formatTeamName(state.userProfile.team || state.userProfile.displayName || user.email || '');
+      const teamKey = formatted.replace(/\s+/g, '').toLowerCase();
+      const rawKey = (state.userProfile.team || state.userProfile.displayName || user.email || '').replace(/\s+/g, '').toLowerCase();
+      state.userProfile.allowedSites = teamMapping[teamKey] || teamMapping[rawKey] || [];
     }
+
     if (state.userProfile.allowedWarehouses?.includes('all')) {
       state.userProfile.allowedWarehouses = dataService.getWarehouses().map(w => w.id);
     }
@@ -1686,6 +1797,10 @@ const getContent = async () => {
       const { WorkshopComponentsPage } = await import('./pages/WorkshopComponents');
       return await WorkshopComponentsPage();
     }
+    case 'workshop-performance': {
+      const { WorkshopPerformancePage } = await import('./pages/WorkshopPerformance');
+      return await WorkshopPerformancePage();
+    }
     case 'workshop-dispatches': {
       (window as any)._workshopDispatchTab = 'DISPATCHED';
       const { WorkshopDispatchesPage } = await import('./pages/WorkshopDispatches');
@@ -1708,11 +1823,26 @@ const getContent = async () => {
       return await MaterialManagementPage(state.userProfile);
     }
     case 'material-analytics': {
-      // const { MaterialAnalyticsPage } = await import('./pages/MaterialAnalytics');
-      // return await MaterialAnalyticsPage();
-      return getUnderConstructionPage('Malzeme Analizi');
+      const email = (state.userProfile?.email || '').toLowerCase();
+      const role = state.userProfile?.role;
+      if (role === 'TECHNICIAN' || role === 'USER' || email.includes('tm')) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Maliyet ve malzeme analitiği sayfaları saha servis ekiplerine kapalıdır.</p>
+        </div>`;
+      }
+      const { MaterialAnalyticsPage } = await import('./pages/MaterialAnalytics');
+      return await MaterialAnalyticsPage(state.userProfile);
     }
     case 'material-pricing': {
+      const email = (state.userProfile?.email || '').toLowerCase();
+      const role = state.userProfile?.role;
+      if (role === 'TECHNICIAN' || role === 'USER' || email.includes('tm')) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Birim fiyat yönetimi sayfası saha servis ekiplerine kapalıdır.</p>
+        </div>`;
+      }
       const { MaterialPricingPage } = await import('./pages/MaterialPricing');
       setTimeout(() => {
         if ((window as any).initMaterialPricing) {

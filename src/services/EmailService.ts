@@ -55,17 +55,13 @@ class EmailService {
 
       const d = new Date(report.date || Date.now());
       const dateStr = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-      const actionStr = report.templateName || (report as any).faultCode || 'Rapor';
-      let safeFileName = `${dateStr}-${report.siteName || 'Saha'}-${actionStr}-${turbineStr || 'T'}-${reportNo}.pdf`;
+      const actionStr = (report.templateName || (report as any).faultCode || 'Rapor').replace(/\s+/g, '_');
+      const siteStr = (report.siteName || 'Saha').replace(/\s+/g, '_');
+      const turbStr = (turbineStr || 'T').replace(/\s+/g, '_');
+      let safeFileName = `${dateStr}-${siteStr}-${actionStr}-${turbStr}-${reportNo}.pdf`;
       safeFileName = safeFileName
-        .replace(/Ğ/g,'G').replace(/ğ/g,'g')
-        .replace(/Ü/g,'U').replace(/ü/g,'u')
-        .replace(/Ş/g,'S').replace(/ş/g,'s')
-        .replace(/İ/g,'I').replace(/ı/g,'i')
-        .replace(/Ö/g,'O').replace(/ö/g,'o')
-        .replace(/Ç/g,'C').replace(/ç/g,'c')
         .replace(/[\\/:*?"<>|]/g, '-')
-        .replace(/\s+/g, '_');
+        .trim();
 
       // 3. Dispatch via Cloud Function / Gmail SMTP Service (dhservisrapor@gmail.com)
       const res = await fetch(getEmailEndpoint(), {
@@ -206,39 +202,92 @@ class EmailService {
   private buildReportEmailHTML(report: ServiceReport): string {
     const isMaintenance = report.type === 'BAKIM';
     const reportTitle = isMaintenance ? ((report as any).templateName || 'BAKIM RAPORU') : 'ARIZA RAPORU';
-    const reportNo = report.reportNo || '-';
-    const date = report.date || new Date().toLocaleDateString('tr-TR');
+    const reportNo = report.reportNo || (report as any).id || (report as any).reportId || '-';
+    const date = report.date ? new Date(report.date).toLocaleDateString('tr-TR') : new Date().toLocaleDateString('tr-TR');
     const site = report.siteName || '-';
     const turbine = (report as any).turbineNo || (report as any).turbineName || '-';
+    const turbineSerial = report.turbineSerial ? `(Seri: ${report.turbineSerial})` : '';
     const techs = (report as any).technicians || (report as any).personnel || [];
     const technicians = Array.isArray(techs) ? techs.join(', ') : (techs || '-');
-    const reportDesc = (report as any).description || (report as any).faultDescription || (report as any).summary || 'Açıklama girilmedi.';
+    const team = (report as any).team ? `[${(report as any).team}] ` : '';
 
-    // Materials list
+    // Arıza Kodu / Tanımı / Bakım Talimatı
+    const faultCode = (report as any).faultCode || (report as any).code || '';
+    const faultDesc = (report as any).faultDesc || (report as any).faultDescription || (report as any).templateName || '';
+
+    // Yapılan İşlemler / Notlar (PDF ile birebir aynı öncelik)
+    const reportDesc = (report as any).notes || 
+      (report as any).description || 
+      (report as any).faultDescription || 
+      (report as any).details || 
+      (report as any).operations || 
+      (report as any).summary || 
+      'Açıklama girilmedi.';
+
+    // MÇF No
+    const matFormNo = (report as any).matFormNo || '';
+
+    // Çalışma Süresi Özeti
+    const sessions = (report as any).workSessions || [];
+    let totalWorkDuration = '';
+    if (sessions.length > 0) {
+      const durMinutes = sessions.reduce((sum: number, s: any) => {
+        if (!s.startTime || !s.endTime) return sum;
+        const [sh, sm] = s.startTime.split(':').map(Number);
+        const [eh, em] = s.endTime.split(':').map(Number);
+        let m = (eh * 60 + em) - (sh * 60 + sm);
+        if (m < 0) m += 24 * 60;
+        return sum + m;
+      }, 0);
+      if (durMinutes > 0) {
+        const h = Math.floor(durMinutes / 60);
+        const m = durMinutes % 60;
+        totalWorkDuration = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+    }
+
+    // Materials list (PDF ile %100 Birebir Uyumlu: POZ, S/T, SAP NO, SERİ NO, MALZEME AÇIKLAMASI, ADET)
     const materials = (report as any).materials || [];
     let materialsHtml = '';
     if (materials.length > 0) {
       materialsHtml = `
-        <div style="margin-top: 20px;">
-          <h3 style="color: #0F172A; font-size: 15px; margin-bottom: 8px; border-bottom: 2px solid #2563EB; padding-bottom: 4px;">📦 Kullanılan / Değişen Malzemeler</h3>
-          <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px;">
+        <div style="margin-top: 24px;">
+          <div style="background: #E8ECF1; padding: 6px 12px; font-weight: 800; font-size: 14px; border: 1px solid #CBD5E1; border-bottom: none; display: flex; justify-content: space-between; align-items: center; color: #0F172A;">
+            <span>📦 MALZEME YÖNETİMİ</span>
+            <span style="font-weight: 700; font-size: 13px;">MÇF No: <strong style="color: #DC2626;">${matFormNo || '-'}</strong></span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; border: 1px solid #CBD5E1;">
             <thead>
-              <tr style="background-color: #F1F5F9; text-align: left; color: #475569;">
-                <th style="padding: 8px; border: 1px solid #CBD5E1;">SAP No</th>
-                <th style="padding: 8px; border: 1px solid #CBD5E1;">Malzeme Tanımı</th>
-                <th style="padding: 8px; border: 1px solid #CBD5E1; text-align: center;">Miktar</th>
-                <th style="padding: 8px; border: 1px solid #CBD5E1; text-align: center;">Durum</th>
+              <tr style="background-color: #F1F5F9; color: #334155; font-size: 12px;">
+                <th style="padding: 7px 4px; border: 1px solid #CBD5E1; width: 45px; text-align: center; font-weight: 700;">POZ</th>
+                <th style="padding: 7px 4px; border: 1px solid #CBD5E1; width: 45px; text-align: center; font-weight: 700;">S/T</th>
+                <th style="padding: 7px 6px; border: 1px solid #CBD5E1; width: 90px; text-align: center; font-weight: 700;">SAP NO</th>
+                <th style="padding: 7px 6px; border: 1px solid #CBD5E1; width: 105px; text-align: center; font-weight: 700;">SERİ NO</th>
+                <th style="padding: 7px 8px; border: 1px solid #CBD5E1; text-align: left; font-weight: 700;">MALZEME AÇIKLAMASI</th>
+                <th style="padding: 7px 4px; border: 1px solid #CBD5E1; width: 55px; text-align: center; font-weight: 700;">ADET</th>
               </tr>
             </thead>
             <tbody>
-              ${materials.map((m: any, idx: number) => `
-                <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-                  <td style="padding: 8px; border: 1px solid #E2E8F0; font-family: monospace; font-weight: bold; color: #2563EB;">${m.sapNo || '-'}</td>
-                  <td style="padding: 8px; border: 1px solid #E2E8F0;">${m.name || m.description || '-'}</td>
-                  <td style="padding: 8px; border: 1px solid #E2E8F0; text-align: center; font-weight: bold;">${m.quantity || m.used || 1} ${m.unit || 'Adet'}</td>
-                  <td style="padding: 8px; border: 1px solid #E2E8F0; text-align: center;">${m.condition === 'REVISED' ? 'Revize' : 'Yeni'}</td>
-                </tr>
-              `).join('')}
+              ${materials.map((mat: any, idx: number) => {
+                const isSokulen = (mat.type || '').toUpperCase() === 'S';
+                const stBadge = isSokulen 
+                  ? '<strong style="color: #DC2626; font-size: 14px; font-weight: 900;">S</strong>'
+                  : '<strong style="color: #16A34A; font-size: 14px; font-weight: 900;">T</strong>';
+                const qty = isSokulen 
+                  ? (mat.defectCount !== undefined && mat.defectCount !== null ? mat.defectCount : (mat.quantity || mat.used || 1))
+                  : (mat.used !== undefined && mat.used !== null ? mat.used : (mat.quantity || 1));
+                
+                return `
+                  <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+                    <td style="padding: 6px 4px; border: 1px solid #E2E8F0; font-weight: bold; color: #475569;">${mat.poz || (idx + 1)}</td>
+                    <td style="padding: 6px 4px; border: 1px solid #E2E8F0; text-align: center;">${stBadge}</td>
+                    <td style="padding: 6px 6px; border: 1px solid #E2E8F0; font-family: monospace; font-weight: 600; color: #0F172A;">${mat.sapNo || '-'}</td>
+                    <td style="padding: 6px 6px; border: 1px solid #E2E8F0; font-family: monospace; color: #334155; word-break: break-word;">${mat.serialNo || '-'}</td>
+                    <td style="padding: 6px 8px; border: 1px solid #E2E8F0; text-align: left; color: #1E293B; word-break: break-word;">${mat.description || mat.name || '-'}</td>
+                    <td style="padding: 6px 4px; border: 1px solid #E2E8F0; text-align: center; font-weight: bold; color: #0F172A;">${qty}</td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -276,24 +325,27 @@ class EmailService {
           .content { padding: 24px; }
           .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
           .info-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
-          .info-label { font-weight: bold; color: #64748B; width: 35%; }
+          .info-label { font-weight: bold; color: #64748B; width: 32%; }
           .info-val { color: #0F172A; font-weight: 600; }
           .desc-box { background-color: #F8FAFC; border-left: 4px solid #3B82F6; padding: 14px; border-radius: 4px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: #1E293B; margin-top: 10px; }
-          .footer { background-color: #F1F5F9; text-align: center; padding: 16px; font-size: 12px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
         </style>
       </head>
       <body>
         <div class="card">
           <div class="header">
             <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #14F195;">DEMİRER HOLDİNG SERVİS RAPORU</h1>
-            <p style="margin: 6px 0 0 0; font-size: 14px; color: #94A3B8;">${reportTitle} - No: <strong style="color: #FFFFFF;">${reportNo}</strong></p>
+            <p style="margin: 6px 0 0 0; font-size: 14px; color: #94A3B8;">${reportTitle} • Rapor No: <strong style="color: #FFFFFF;">${reportNo}</strong></p>
           </div>
           
           <div class="content">
             <table class="info-table">
               <tr>
                 <td class="info-label">📍 Santral / Türbin:</td>
-                <td class="info-val" style="color: #2563EB;">${site} - ${turbine}</td>
+                <td class="info-val" style="color: #2563EB;">${site} - ${turbine} <span style="font-size: 12px; color: #64748B; font-weight: normal;">${turbineSerial}</span></td>
+              </tr>
+              <tr>
+                <td class="info-label">🔖 Rapor No:</td>
+                <td class="info-val" style="color: #DC2626; font-family: monospace; font-weight: 800;">${reportNo}</td>
               </tr>
               <tr>
                 <td class="info-label">📅 Rapor Tarihi:</td>
@@ -301,26 +353,45 @@ class EmailService {
               </tr>
               <tr>
                 <td class="info-label">👤 Teknisyen(ler):</td>
-                <td class="info-val">${technicians}</td>
+                <td class="info-val">${team}${technicians}</td>
               </tr>
               <tr>
                 <td class="info-label">⚙️ Rapor Tipi:</td>
-                <td class="info-val"><span style="background: ${isMaintenance ? '#DCFCE7' : '#FEF2F2'}; color: ${isMaintenance ? '#166534' : '#991B1B'}; padding: 3px 8px; border-radius: 4px; font-size: 12px;">${reportTitle}</span></td>
+                <td class="info-val"><span style="background: ${isMaintenance ? '#DCFCE7' : '#FEF2F2'}; color: ${isMaintenance ? '#166534' : '#991B1B'}; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 700;">${reportTitle}</span></td>
               </tr>
+              ${!isMaintenance && faultCode ? `
+                <tr>
+                  <td class="info-label">⚠️ Arıza Kodu:</td>
+                  <td class="info-val" style="color: #DC2626; font-family: monospace; font-weight: 800;">${faultCode}</td>
+                </tr>
+              ` : ''}
+              ${faultDesc ? `
+                <tr>
+                  <td class="info-label">${isMaintenance ? '📋 Bakım Talimatı:' : '📋 Arıza Tanımı:'}</td>
+                  <td class="info-val">${faultDesc}</td>
+                </tr>
+              ` : ''}
+              ${totalWorkDuration ? `
+                <tr>
+                  <td class="info-label">⏱️ Çalışma Süresi:</td>
+                  <td class="info-val" style="color: #0284C7; font-family: monospace; font-weight: 700;">${totalWorkDuration} Saat</td>
+                </tr>
+              ` : ''}
+              ${matFormNo ? `
+                <tr>
+                  <td class="info-label">📦 MÇF No:</td>
+                  <td class="info-val" style="color: #D97706; font-family: monospace; font-weight: 700;">${matFormNo}</td>
+                </tr>
+              ` : ''}
             </table>
 
-            <h3 style="color: #0F172A; font-size: 15px; margin-bottom: 8px; border-bottom: 2px solid #2563EB; padding-bottom: 4px;">📝 Yapılan İşlemler & Arıza Detayları</h3>
+            <h3 style="color: #0F172A; font-size: 15px; margin-bottom: 8px; border-bottom: 2px solid #2563EB; padding-bottom: 4px;">📝 Yapılan İşlemler / Notlar</h3>
             <div class="desc-box">
               ${reportDesc}
             </div>
 
             ${materialsHtml}
             ${imagesHtml}
-          </div>
-
-          <div class="footer">
-            Bu e-posta <strong>DH-Servis Otomasyon Sistemi</strong> tarafından otomatik olarak üretilmiştir.<br>
-            Raporun resmi A4 çıktı dokümanı <strong>Servis_Raporu_${reportNo}.pdf</strong> olarak e-posta ekinde yer almaktadır.
           </div>
         </div>
       </body>
@@ -765,6 +836,219 @@ class EmailService {
   }
 
   /**
+   * Sends Warehouse Inventory Audit Approval notification to managers and the counting team.
+   */
+  async sendAuditApprovalEmail(data: {
+    warehouseName: string;
+    warehouseId: string;
+    approver: string;
+    user: string;
+    userEmail?: string;
+    date: string;
+    time?: string;
+    totalItems: number;
+    totalDiff: number;
+    discrepancies?: Array<{
+      sapNo: string;
+      description: string;
+      shelfNo?: string;
+      systemQty: number;
+      physicalQty: number;
+      diff: number;
+      note?: string;
+    }>;
+  }): Promise<{ success: boolean; message: string }> {
+    const managers = ['fatih.zebek@demirerholding.com', 'hursit.akter@demirerholding.com', 'emir.unver@demirerholding.com'];
+    const recipientList = new Set<string>();
+    
+    if (data.userEmail && data.userEmail.includes('@')) {
+      recipientList.add(data.userEmail.trim());
+    }
+    managers.forEach(m => recipientList.add(m));
+
+    const to = Array.from(recipientList).join(', ');
+    const subject = `[DH-SERVİS SAYIM ONAYI] ${data.warehouseName} - Sayım Onaylandı (${data.approver})`;
+    const htmlBody = this.buildAuditApprovalEmailHTML(data);
+
+    try {
+      const res = await fetch(getEmailEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: to,
+          subject: subject,
+          html: htmlBody
+        })
+      });
+
+      const resData = await res.json().catch(() => null);
+      if (resData?.success) {
+        console.log(`[EmailService] Sayım onay bildirimi iletildi: ${data.warehouseName} -> ${to}`);
+        if ((window as any).showToast) {
+          (window as any).showToast('SAYIM ONAYLANDI', `Sayım onaylandı ve onay bildirimi e-posta ile iletildi.`, 'success');
+        }
+        return { success: true, message: 'Sayım onay bildirimi e-postası başarıyla iletildi.' };
+      } else {
+        const errStr = resData?.error || 'E-posta servisi yanıt vermedi';
+        console.warn('[EmailService] Sayım onay bildirimi mail uyarısı:', errStr);
+        return { success: false, message: errStr };
+      }
+    } catch (err: any) {
+      console.error('[EmailService] Sayım onay bildirimi mail hatası:', err);
+      return { success: false, message: err?.message || 'E-posta gönderilemedi' };
+    }
+  }
+
+  /**
+   * Builds executive HTML email for warehouse count approval.
+   */
+  private buildAuditApprovalEmailHTML(data: {
+    warehouseName: string;
+    warehouseId: string;
+    approver: string;
+    user: string;
+    date: string;
+    time?: string;
+    totalItems: number;
+    totalDiff: number;
+    discrepancies?: Array<{
+      sapNo: string;
+      description: string;
+      shelfNo?: string;
+      systemQty: number;
+      physicalQty: number;
+      diff: number;
+      note?: string;
+    }>;
+  }): string {
+    const timeStr = data.time || new Date().toLocaleTimeString('tr-TR');
+    const totalDiffText = data.totalDiff > 0 ? `+${data.totalDiff}` : `${data.totalDiff}`;
+    const discrepancies = data.discrepancies || [];
+    const hasDiscrepancy = discrepancies.length > 0;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 12px; }
+          .card { max-width: 680px; width: 100%; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; padding: 20px; text-align: center; border-bottom: 4px solid #10B981; }
+          .content { padding: 18px; }
+          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          .info-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
+          .info-label { font-weight: bold; color: #64748B; width: 35%; }
+          .info-val { color: #0F172A; font-weight: 600; }
+          .badge-approved { background-color: #D1FAE5; color: #065F46; border: 1px solid #A7F3D0; padding: 6px 14px; border-radius: 6px; font-weight: 800; font-size: 13px; display: inline-block; }
+          .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+          .diff-table { width: 100%; min-width: 320px; border-collapse: collapse; font-size: 12px; }
+          .diff-table th { background: #0F172A; color: #FFFFFF; padding: 8px 6px; text-align: left; font-size: 11px; border: 1px solid #334155; text-transform: uppercase; }
+          .diff-table td { padding: 8px 6px; border: 1px solid #E2E8F0; vertical-align: top; }
+          .footer { background-color: #F1F5F9; text-align: center; padding: 14px; font-size: 11px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="header">
+            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #10B981;">DEMİRER HOLDİNG SAYIM ONAY BİLDİRİMİ</h1>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #E2E8F0;">${data.warehouseName} - Depo Stokları Güncellendi</p>
+          </div>
+          
+          <div class="content">
+            <div style="margin-bottom: 16px; text-align: center;">
+              <span class="badge-approved">✅ SAYIM YÖNETİCİ TARAFINDAN ONAYLANDI & STOKLAR GÜNCELLENDİ</span>
+            </div>
+
+            <table class="info-table">
+              <tr>
+                <td class="info-label">🏢 Depo:</td>
+                <td class="info-val">${data.warehouseName}</td>
+              </tr>
+              <tr>
+                <td class="info-label">👤 Onaylayan Yönetici:</td>
+                <td class="info-val" style="color: #10B981; font-weight: 800;">${data.approver}</td>
+              </tr>
+              <tr>
+                <td class="info-label">👷 Sayımı Gerçekleştiren Ekip:</td>
+                <td class="info-val">${data.user}</td>
+              </tr>
+              <tr>
+                <td class="info-label">📅 Onay Tarihi / Saati:</td>
+                <td class="info-val">${data.date} - ${timeStr}</td>
+              </tr>
+              <tr>
+                <td class="info-label">📦 Toplam Sayılan Kalem:</td>
+                <td class="info-val" style="font-weight: 800;">${data.totalItems} Kalem</td>
+              </tr>
+              <tr>
+                <td class="info-label">📊 Toplam Net Stok Farkı:</td>
+                <td class="info-val" style="font-weight: 800; color: ${data.totalDiff < 0 ? '#EF4444' : (data.totalDiff > 0 ? '#F59E0B' : '#10B981')}; font-family: monospace;">${totalDiffText} Adet</td>
+              </tr>
+            </table>
+
+            ${hasDiscrepancy ? `
+              <h3 style="font-size: 14px; color: #0F172A; margin: 18px 0 8px 0; border-bottom: 2px solid #E2E8F0; padding-bottom: 6px;">
+                📋 Onaylanan Stok Farkları & Düzenlemeler (${discrepancies.length} Kalem)
+              </h3>
+              <div class="table-responsive">
+                <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 24px; text-align: center;">#</th>
+                      <th>Malzeme & Açıklama</th>
+                      <th style="text-align: center; width: 44px;">Sistem</th>
+                      <th style="text-align: center; width: 44px;">Fizik</th>
+                      <th style="text-align: center; width: 58px;">Fark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${discrepancies.map((d, idx) => `
+                      <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+                        <td style="text-align: center; color: #64748B; font-weight: bold; font-size: 11px;">${idx + 1}</td>
+                        <td>
+                          <div style="margin-bottom: 2px;">
+                            <span style="font-family: monospace; font-weight: 700; color: #0F172A; font-size: 12px;">${d.sapNo}</span>
+                            ${d.shelfNo ? `<span style="color: #64748B; font-size: 11px; margin-left: 6px; background: #F1F5F9; padding: 1px 5px; border-radius: 3px;">📍 ${d.shelfNo}</span>` : ''}
+                          </div>
+                          <div style="font-weight: 600; color: #334155; font-size: 12px; line-height: 1.3;">${d.description}</div>
+                          ${d.note ? `
+                            <div style="margin-top: 5px; padding: 4px 8px; background: #F0FDF4; border-left: 3px solid #10B981; border-radius: 3px; font-size: 11px; color: #065F46; font-weight: 600; line-height: 1.3;">
+                              💬 <em>"${d.note}"</em>
+                            </div>
+                          ` : ''}
+                        </td>
+                        <td style="text-align: center; font-weight: 600; font-size: 12px;">${d.systemQty}</td>
+                        <td style="text-align: center; font-weight: 700; color: #0F172A; font-size: 12px;">${d.physicalQty}</td>
+                        <td style="text-align: center; font-weight: 800; font-size: 12px; color: ${d.diff < 0 ? '#EF4444' : '#F59E0B'};">
+                          <span style="background: ${d.diff < 0 ? '#FEE2E2' : '#FEF3C7'}; color: ${d.diff < 0 ? '#991B1B' : '#92400E'}; padding: 2px 6px; border-radius: 4px; display: inline-block;">
+                            ${d.diff > 0 ? '+' + d.diff : d.diff}
+                          </span>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : `
+              <div style="background-color: #F0FDF4; border: 1px solid #BBF7D0; padding: 12px; border-radius: 6px; font-size: 13px; color: #166534; text-align: center;">
+                ✨ Sayım sonucunda sistem stoğu ile fiziksel stok arasında 0 fark tespit edilmiştir. Tüm kalemler birebir uyumludur.
+              </div>
+            `}
+          </div>
+
+          <div class="footer">
+            Bu bildirim <strong>DH-Servis Saha & Depo Yönetim Sistemi</strong> tarafından otomatik olarak üretilmiştir.<br>
+            Demirer Holding Rüzgar Enerji Santralleri Teknik Operasyonlar
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
    * Builds clean, executive HTML email for warehouse count report.
    */
   private buildAuditReportEmailHTML(data: {
@@ -797,38 +1081,36 @@ class EmailService {
       <html>
       <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 20px; }
-          .card { max-width: 780px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
-          .header { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; padding: 24px; text-align: center; border-bottom: 4px solid #F59E0B; }
-          .content { padding: 24px; }
-          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          .info-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 12px; }
+          .card { max-width: 680px; width: 100%; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; padding: 20px; text-align: center; border-bottom: 4px solid #F59E0B; }
+          .content { padding: 18px; }
+          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          .info-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
           .info-label { font-weight: bold; color: #64748B; width: 35%; }
           .info-val { color: #0F172A; font-weight: 600; }
-          .stats-grid { display: table; width: 100%; margin-bottom: 20px; }
-          .stat-cell { display: table-cell; width: 20%; padding: 10px; text-align: center; border: 1px solid #E2E8F0; background: #F8FAFC; }
-          .stat-num { font-size: 18px; font-weight: 800; }
-          .stat-lbl { font-size: 11px; color: #64748B; text-transform: uppercase; margin-top: 4px; font-weight: bold; }
-          .diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+          .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+          .diff-table { width: 100%; min-width: 320px; border-collapse: collapse; font-size: 12px; }
           .diff-table th { background: #0F172A; color: #FFFFFF; padding: 8px 6px; text-align: left; font-size: 11px; border: 1px solid #334155; text-transform: uppercase; }
-          .diff-table td { padding: 7px 6px; border: 1px solid #E2E8F0; }
-          .notice-box { background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 14px; border-radius: 4px; font-size: 13px; color: #92400E; margin-top: 20px; }
-          .footer { background-color: #F1F5F9; text-align: center; padding: 16px; font-size: 12px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
+          .diff-table td { padding: 8px 6px; border: 1px solid #E2E8F0; vertical-align: top; }
+          .notice-box { background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 12px; border-radius: 4px; font-size: 12px; color: #92400E; margin-top: 20px; line-height: 1.5; }
+          .footer { background-color: #F1F5F9; text-align: center; padding: 14px; font-size: 11px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
         </style>
       </head>
       <body>
         <div class="card">
           <div class="header">
-            <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #F59E0B;">DEMİRER HOLDİNG DEPO SAYIM RAPORU</h1>
-            <p style="margin: 6px 0 0 0; font-size: 14px; color: #E2E8F0;">${data.warehouseName} - Saha Depo Sayımı</p>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #F59E0B;">DEMİRER HOLDİNG DEPO SAYIM RAPORU</h1>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #E2E8F0;">${data.warehouseName} - Saha Depo Sayımı</p>
           </div>
           
           <div class="content">
             <table class="info-table">
               <tr>
                 <td class="info-label">🏢 Sayım Yapılan Depo:</td>
-                <td class="info-val" style="color: #2563EB; font-size: 15px;">${data.warehouseName}</td>
+                <td class="info-val" style="color: #2563EB; font-size: 14px;">${data.warehouseName}</td>
               </tr>
               <tr>
                 <td class="info-label">👤 Sayımı Yapan Personel:</td>
@@ -849,78 +1131,81 @@ class EmailService {
             </table>
 
             <!-- KPI STATS -->
-            <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px; margin-bottom: 20px;">
-              <table style="width: 100%; border-collapse: collapse; text-align: center;">
+            <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 10px; margin-bottom: 18px;">
+              <table style="width: 100%; border-collapse: collapse; text-align: center; table-layout: fixed;">
                 <tr>
-                  <td style="padding: 6px; border-right: 1px solid #E2E8F0;">
-                    <div style="font-size: 18px; font-weight: 800; color: #0F172A;">${data.totalItems}</div>
-                    <div style="font-size: 10px; color: #64748B; font-weight: bold;">TOPLAM KALEM</div>
+                  <td style="padding: 4px; border-right: 1px solid #E2E8F0;">
+                    <div style="font-size: 16px; font-weight: 800; color: #0F172A;">${data.totalItems}</div>
+                    <div style="font-size: 9px; color: #64748B; font-weight: bold; line-height: 1.1;">TOPLAM</div>
                   </td>
-                  <td style="padding: 6px; border-right: 1px solid #E2E8F0;">
-                    <div style="font-size: 18px; font-weight: 800; color: #10B981;">${data.compliantItems}</div>
-                    <div style="font-size: 10px; color: #10B981; font-weight: bold;">UYUMLU (0 FARK)</div>
+                  <td style="padding: 4px; border-right: 1px solid #E2E8F0;">
+                    <div style="font-size: 16px; font-weight: 800; color: #10B981;">${data.compliantItems}</div>
+                    <div style="font-size: 9px; color: #10B981; font-weight: bold; line-height: 1.1;">UYUMLU</div>
                   </td>
-                  <td style="padding: 6px; border-right: 1px solid #E2E8F0;">
-                    <div style="font-size: 18px; font-weight: 800; color: #F59E0B;">${data.surplusItems}</div>
-                    <div style="font-size: 10px; color: #F59E0B; font-weight: bold;">FAZLA KALEM</div>
+                  <td style="padding: 4px; border-right: 1px solid #E2E8F0;">
+                    <div style="font-size: 16px; font-weight: 800; color: #F59E0B;">${data.surplusItems}</div>
+                    <div style="font-size: 9px; color: #F59E0B; font-weight: bold; line-height: 1.1;">FAZLA</div>
                   </td>
-                  <td style="padding: 6px; border-right: 1px solid #E2E8F0;">
-                    <div style="font-size: 18px; font-weight: 800; color: #EF4444;">${data.deficitItems}</div>
-                    <div style="font-size: 10px; color: #EF4444; font-weight: bold;">EKSİK KALEM</div>
+                  <td style="padding: 4px; border-right: 1px solid #E2E8F0;">
+                    <div style="font-size: 16px; font-weight: 800; color: #EF4444;">${data.deficitItems}</div>
+                    <div style="font-size: 9px; color: #EF4444; font-weight: bold; line-height: 1.1;">EKSİK</div>
                   </td>
-                  <td style="padding: 6px;">
-                    <div style="font-size: 18px; font-weight: 800; color: ${data.totalDiff < 0 ? '#EF4444' : (data.totalDiff > 0 ? '#F59E0B' : '#10B981')};">${totalDiffText}</div>
-                    <div style="font-size: 10px; color: #64748B; font-weight: bold;">NET FARK ADEDİ</div>
+                  <td style="padding: 4px;">
+                    <div style="font-size: 16px; font-weight: 800; color: ${data.totalDiff < 0 ? '#EF4444' : (data.totalDiff > 0 ? '#F59E0B' : '#10B981')};">${totalDiffText}</div>
+                    <div style="font-size: 9px; color: #64748B; font-weight: bold; line-height: 1.1;">NET FARK</div>
                   </td>
                 </tr>
               </table>
             </div>
 
             <!-- DISCREPANCY TABLE -->
-            <h3 style="color: #0F172A; font-size: 15px; margin-bottom: 8px; border-bottom: 2px solid ${hasDiscrepancy ? '#EF4444' : '#10B981'}; padding-bottom: 4px;">
-              ${hasDiscrepancy ? `⚠️ FARK ÇIKAN MALZEMELER & AÇIKLAMALARI (${data.discrepancies.length} Kalem)` : `✅ TÜM MALZEMELER STOKLA BİREBİR UYUMLU`}
+            <h3 style="color: #0F172A; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid ${hasDiscrepancy ? '#EF4444' : '#10B981'}; padding-bottom: 4px;">
+              ${hasDiscrepancy ? `⚠️ FARK ÇIKAN MALZEMELER (${data.discrepancies.length} Kalem)` : `✅ TÜM MALZEMELER STOKLA BİREBİR UYUMLU`}
             </h3>
 
             ${hasDiscrepancy ? `
-              <table class="diff-table">
-                <thead>
-                  <tr>
-                    <th style="width: 25px; text-align: center;">#</th>
-                    <th style="width: 70px;">SAP No</th>
-                    <th>Malzeme Tanımı</th>
-                    <th style="width: 65px;">Konum</th>
-                    <th style="width: 50px; text-align: right;">Sistem</th>
-                    <th style="width: 50px; text-align: right;">Fiziksel</th>
-                    <th style="width: 55px; text-align: right;">Fark</th>
-                    <th>Personel Açıklaması</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${data.discrepancies.map((d, idx) => {
-                    const isDeficit = d.diff < 0;
-                    const diffBadge = isDeficit 
-                      ? `<span style="background: #FEE2E2; color: #991B1B; padding: 2px 5px; border-radius: 4px; font-weight: 800;">${d.diff} Adet</span>`
-                      : `<span style="background: #FEF3C7; color: #92400E; padding: 2px 5px; border-radius: 4px; font-weight: 800;">+${d.diff} Adet</span>`;
+              <div class="table-responsive">
+                <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 24px; text-align: center;">#</th>
+                      <th>Malzeme & Açıklama</th>
+                      <th style="width: 44px; text-align: center;">Sistem</th>
+                      <th style="width: 44px; text-align: center;">Fizik</th>
+                      <th style="width: 58px; text-align: center;">Fark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.discrepancies.map((d, idx) => {
+                      const isDeficit = d.diff < 0;
+                      const diffBadge = isDeficit 
+                        ? `<span style="background: #FEE2E2; color: #991B1B; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 11px; display: inline-block;">${d.diff}</span>`
+                        : `<span style="background: #FEF3C7; color: #92400E; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 11px; display: inline-block;">+${d.diff}</span>`;
 
-                    return `
-                      <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-                        <td style="text-align: center; color: #64748B; font-weight: bold;">${idx + 1}</td>
-                        <td style="font-family: monospace; font-weight: bold; color: #2563EB;">${d.sapNo}</td>
-                        <td>
-                          <div style="font-weight: 700; color: #0F172A;">${d.description}</div>
-                        </td>
-                        <td style="color: #64748B; font-size: 11px;">${d.shelfNo || '-'}</td>
-                        <td style="text-align: right; font-weight: 600; color: #475569;">${d.systemQty}</td>
-                        <td style="text-align: right; font-weight: 700; color: #0F172A;">${d.physicalQty}</td>
-                        <td style="text-align: right;">${diffBadge}</td>
-                        <td style="color: #92400E; font-size: 11px; font-weight: 600; background: ${isDeficit ? 'rgba(239, 68, 68, 0.04)' : 'rgba(245, 158, 11, 0.04)'};">
-                          ${d.note ? `"${d.note}"` : '<span style="color: #94A3B8;">Açıklama girilmedi</span>'}
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
+                      return `
+                        <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+                          <td style="text-align: center; color: #64748B; font-weight: bold; font-size: 11px;">${idx + 1}</td>
+                          <td>
+                            <div style="margin-bottom: 2px;">
+                              <span style="font-family: monospace; font-weight: 700; color: #2563EB; font-size: 12px;">${d.sapNo}</span>
+                              ${d.shelfNo ? `<span style="color: #64748B; font-size: 11px; margin-left: 6px; background: #F1F5F9; padding: 1px 5px; border-radius: 3px;">📍 ${d.shelfNo}</span>` : ''}
+                            </div>
+                            <div style="font-weight: 700; color: #0F172A; font-size: 12px; line-height: 1.3;">${d.description}</div>
+                            ${d.note ? `
+                              <div style="margin-top: 5px; padding: 4px 8px; background: #FFFBEB; border-left: 3px solid #F59E0B; border-radius: 3px; font-size: 11px; color: #92400E; font-weight: 600; line-height: 1.3;">
+                                💬 <em>"${d.note}"</em>
+                              </div>
+                            ` : ''}
+                          </td>
+                          <td style="text-align: center; font-weight: 600; color: #475569; font-size: 12px;">${d.systemQty}</td>
+                          <td style="text-align: center; font-weight: 700; color: #0F172A; font-size: 12px;">${d.physicalQty}</td>
+                          <td style="text-align: center;">${diffBadge}</td>
+                        </tr>
+                      `;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
             ` : `
               <div style="background: #DCFCE7; border: 1px solid #86EFAC; color: #166534; padding: 12px; border-radius: 6px; font-size: 13px; text-align: center; font-weight: 600;">
                 Bu sayımda tüm kalemler sistem kayıtlarıyla birebir (%100) uyumlu çıkmıştır.
@@ -1036,35 +1321,37 @@ class EmailService {
       <html>
       <head>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 20px; }
-          .card { max-width: 780px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
-          .header { background: linear-gradient(135deg, #78350F 0%, #D97706 100%); color: #FFFFFF; padding: 24px; text-align: center; border-bottom: 4px solid #B45309; }
-          .content { padding: 24px; }
-          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          .info-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 12px; }
+          .card { max-width: 680px; width: 100%; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #78350F 0%, #D97706 100%); color: #FFFFFF; padding: 20px; text-align: center; border-bottom: 4px solid #B45309; }
+          .content { padding: 18px; }
+          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          .info-table td { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; font-size: 13px; }
           .info-label { font-weight: bold; color: #64748B; width: 35%; }
           .info-val { color: #0F172A; font-weight: 600; }
-          .alert-box { background-color: #FEF3C7; border: 2px solid #F59E0B; border-radius: 8px; padding: 16px; margin: 20px 0; }
-          .action-box { background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 14px; border-radius: 4px; font-size: 13px; color: #1E40AF; margin-top: 20px; }
-          .diff-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+          .alert-box { background-color: #FEF3C7; border: 2px solid #F59E0B; border-radius: 8px; padding: 14px; margin: 16px 0; }
+          .action-box { background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 12px; border-radius: 4px; font-size: 12px; color: #1E40AF; margin-top: 18px; line-height: 1.5; }
+          .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 10px; }
+          .diff-table { width: 100%; min-width: 320px; border-collapse: collapse; font-size: 12px; }
           .diff-table th { background: #0F172A; color: #FFFFFF; padding: 8px 6px; text-align: left; font-size: 11px; border: 1px solid #334155; }
-          .diff-table td { padding: 7px 6px; border: 1px solid #E2E8F0; }
-          .footer { background-color: #F1F5F9; text-align: center; padding: 16px; font-size: 12px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
+          .diff-table td { padding: 8px 6px; border: 1px solid #E2E8F0; vertical-align: top; }
+          .footer { background-color: #F1F5F9; text-align: center; padding: 14px; font-size: 11px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
         </style>
       </head>
       <body>
         <div class="card">
           <div class="header">
-            <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #FFFFFF;">⚠️ SAYIM DÜZELTME & YENİDEN KONTROL TALEBİ</h1>
-            <p style="margin: 6px 0 0 0; font-size: 14px; color: #FEF3C7;">${data.warehouseName} - Depo Sayım İncelemesi</p>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #FFFFFF;">⚠️ SAYIM DÜZELTME & YENİDEN KONTROL TALEBİ</h1>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #FEF3C7;">${data.warehouseName} - Depo Sayım İncelemesi</p>
           </div>
           
           <div class="content">
             <table class="info-table">
               <tr>
                 <td class="info-label">🏢 Depo:</td>
-                <td class="info-val" style="color: #2563EB; font-size: 15px;">${data.warehouseName}</td>
+                <td class="info-val" style="color: #2563EB; font-size: 14px;">${data.warehouseName}</td>
               </tr>
               <tr>
                 <td class="info-label">👤 Sayımı Yapan Ekip / Personel:</td>
@@ -1082,10 +1369,10 @@ class EmailService {
 
             <!-- MANAGER DIRECTIVE -->
             <div class="alert-box">
-              <div style="color: #92400E; font-size: 13px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px;">
+              <div style="color: #92400E; font-size: 12px; font-weight: 800; text-transform: uppercase; margin-bottom: 6px;">
                 📢 YÖNETİCİ TALİMATI / DÜZELTME NOTU:
               </div>
-              <div style="color: #78350F; font-size: 15px; font-weight: 700; white-space: pre-wrap; line-height: 1.5;">
+              <div style="color: #78350F; font-size: 14px; font-weight: 700; white-space: pre-wrap; line-height: 1.5;">
                 "${data.note}"
               </div>
             </div>
@@ -1094,34 +1381,45 @@ class EmailService {
               <h3 style="color: #0F172A; font-size: 14px; margin-bottom: 8px; border-bottom: 2px solid #F59E0B; padding-bottom: 4px;">
                 🔍 Kontrol Edilmesi Gereken Farklı Kalemler (${data.discrepancies!.length} Kalem)
               </h3>
-              <table class="diff-table">
-                <thead>
-                  <tr>
-                    <th style="width: 25px; text-align: center;">#</th>
-                    <th style="width: 70px;">SAP No</th>
-                    <th>Malzeme Tanımı</th>
-                    <th style="width: 60px;">Konum</th>
-                    <th style="width: 50px; text-align: right;">Sistem</th>
-                    <th style="width: 50px; text-align: right;">Fiziksel</th>
-                    <th style="width: 55px; text-align: right;">Fark</th>
-                    <th>Personel Notu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${data.discrepancies!.map((d, idx) => `
-                    <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-                      <td style="text-align: center; color: #64748B; font-weight: bold;">${idx + 1}</td>
-                      <td style="font-family: monospace; font-weight: bold; color: #2563EB;">${d.sapNo}</td>
-                      <td><div style="font-weight: 600; color: #0F172A;">${d.description}</div></td>
-                      <td style="color: #64748B; font-size: 11px;">${d.shelfNo || '-'}</td>
-                      <td style="text-align: right; color: #475569;">${d.systemQty}</td>
-                      <td style="text-align: right; font-weight: 700; color: #0F172A;">${d.physicalQty}</td>
-                      <td style="text-align: right; font-weight: 800; color: ${d.diff < 0 ? '#EF4444' : '#F59E0B'};">${d.diff > 0 ? '+' + d.diff : d.diff}</td>
-                      <td style="color: #64748B; font-size: 11px;">${d.note || '-'}</td>
+              <div class="table-responsive">
+                <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 24px; text-align: center;">#</th>
+                      <th>Malzeme & Personel Notu</th>
+                      <th style="width: 44px; text-align: center;">Sistem</th>
+                      <th style="width: 44px; text-align: center;">Fizik</th>
+                      <th style="width: 58px; text-align: center;">Fark</th>
                     </tr>
-                  `).join('')}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    ${data.discrepancies!.map((d, idx) => `
+                      <tr style="background-color: ${idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+                        <td style="text-align: center; color: #64748B; font-weight: bold; font-size: 11px;">${idx + 1}</td>
+                        <td>
+                          <div style="margin-bottom: 2px;">
+                            <span style="font-family: monospace; font-weight: bold; color: #2563EB; font-size: 12px;">${d.sapNo}</span>
+                            ${d.shelfNo ? `<span style="color: #64748B; font-size: 11px; margin-left: 6px; background: #F1F5F9; padding: 1px 5px; border-radius: 3px;">📍 ${d.shelfNo}</span>` : ''}
+                          </div>
+                          <div style="font-weight: 600; color: #0F172A; font-size: 12px; line-height: 1.3;">${d.description}</div>
+                          ${d.note ? `
+                            <div style="margin-top: 5px; padding: 4px 8px; background: #FEF3C7; border-left: 3px solid #F59E0B; border-radius: 3px; font-size: 11px; color: #92400E; font-weight: 600; line-height: 1.3;">
+                              💬 <em>"${d.note}"</em>
+                            </div>
+                          ` : ''}
+                        </td>
+                        <td style="text-align: center; color: #475569; font-size: 12px;">${d.systemQty}</td>
+                        <td style="text-align: center; font-weight: 700; color: #0F172A; font-size: 12px;">${d.physicalQty}</td>
+                        <td style="text-align: center; font-weight: 800; font-size: 12px; color: ${d.diff < 0 ? '#EF4444' : '#F59E0B'};">
+                          <span style="background: ${d.diff < 0 ? '#FEE2E2' : '#FEF3C7'}; color: ${d.diff < 0 ? '#991B1B' : '#92400E'}; padding: 2px 6px; border-radius: 4px; display: inline-block;">
+                            ${d.diff > 0 ? '+' + d.diff : d.diff}
+                          </span>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
             ` : ''}
 
             <!-- ACTION INSTRUCTIONS -->

@@ -13,6 +13,21 @@ export interface TaskCreateData {
   yoneticiNotu: string;
   assignedTeam: string;
   resolvedDeficiencyId?: string;
+  taskLocationType?: 'TURBINE' | 'WAREHOUSE';
+  warehouseId?: string;
+  warehouseName?: string;
+  tamirFormNo?: string;
+  revisionNo?: string;
+  matFormNo?: string;
+  repairedMaterial?: {
+    itemId?: string;
+    sapNo: string;
+    description: string;
+    quantity: number;
+    serialNo?: string;
+    repairDuration?: string;
+    repairedBy?: string;
+  };
   maintenanceData?: {
     templateId: string;
     checklist: any[];
@@ -35,6 +50,21 @@ export interface Task {
   yoneticiNotu?: string;
   ohsData?: any;
   resolvedDeficiencyId?: string;
+  taskLocationType?: 'TURBINE' | 'WAREHOUSE';
+  warehouseId?: string;
+  warehouseName?: string;
+  tamirFormNo?: string;
+  revisionNo?: string;
+  matFormNo?: string;
+  repairedMaterial?: {
+    itemId?: string;
+    sapNo: string;
+    description: string;
+    quantity: number;
+    serialNo?: string;
+    repairDuration?: string;
+    repairedBy?: string;
+  };
   maintenanceData?: {
     checklist: any[];
     materials: any[];
@@ -58,14 +88,22 @@ class TaskService {
       }
 
       // 2. Data Architect'in şemasına göre objeyi oluştur
+      const taskLocationType = data.taskLocationType || (data.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
       const taskDoc = {
         taskInfo: {
           secilenSablon: data.secilenSablon,
           sahaBilgisi: data.sahaBilgisi,
           siteId: data.siteId,
           turbinSeriNo: data.turbinSeriNo,
-          turbinNo: data.turbinNo
+          turbinNo: data.turbinNo,
+          taskLocationType: taskLocationType,
+          warehouseId: data.warehouseId || '',
+          warehouseName: data.warehouseName || '',
+          tamirFormNo: data.tamirFormNo || data.revisionNo || '',
+          revisionNo: data.revisionNo || data.tamirFormNo || '',
+          matFormNo: data.matFormNo || ''
         },
+        repairedMaterial: data.repairedMaterial || null,
         faultData: {
           statuKodu: data.statuKodu || '',
           statuAciklamasi: statuAciklamasi
@@ -130,12 +168,21 @@ class TaskService {
         }
         if (!desc) desc = 'Genel Görev';
 
+        const taskLocType = data.taskInfo?.taskLocationType || (data.taskInfo?.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
+
         return {
           id: doc.id,
           siteId: data.taskInfo?.sahaBilgisi || 'Bilinmiyor',
           realSiteId: data.taskInfo?.siteId || '',
           turbineId: data.taskInfo?.turbinNo || 'Bilinmiyor',
           turbinSeriNo: data.taskInfo?.turbinSeriNo || '',
+          taskLocationType: taskLocType,
+          warehouseId: data.taskInfo?.warehouseId || '',
+          warehouseName: data.taskInfo?.warehouseName || '',
+          tamirFormNo: data.taskInfo?.tamirFormNo || data.taskInfo?.revisionNo || data.tamirFormNo || data.revisionNo || '',
+          revisionNo: data.taskInfo?.revisionNo || data.taskInfo?.tamirFormNo || data.revisionNo || data.tamirFormNo || '',
+          matFormNo: data.taskInfo?.matFormNo || data.matFormNo || data.maintenanceData?.matFormNo || '',
+          repairedMaterial: data.repairedMaterial || null,
           personnel: data.assignment?.assignedTeam || 'Atanmadı',
           faultCode: `${rawCode || '---'} - ${desc}`,
           rawFaultCode: rawCode,
@@ -203,12 +250,21 @@ class TaskService {
         }
         if (!desc) desc = 'Genel Görev';
 
+        const taskLocType = data.taskInfo?.taskLocationType || (data.taskInfo?.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
+
         return {
           id: doc.id,
           siteId: data.taskInfo?.sahaBilgisi || 'Bilinmiyor',
           realSiteId: data.taskInfo?.siteId || '',
           turbineId: data.taskInfo?.turbinNo || 'Bilinmiyor',
           turbinSeriNo: data.taskInfo?.turbinSeriNo || '',
+          taskLocationType: taskLocType,
+          warehouseId: data.taskInfo?.warehouseId || '',
+          warehouseName: data.taskInfo?.warehouseName || '',
+          tamirFormNo: data.taskInfo?.tamirFormNo || data.taskInfo?.revisionNo || data.tamirFormNo || data.revisionNo || '',
+          revisionNo: data.taskInfo?.revisionNo || data.taskInfo?.tamirFormNo || data.revisionNo || data.tamirFormNo || '',
+          matFormNo: data.taskInfo?.matFormNo || data.matFormNo || data.maintenanceData?.matFormNo || '',
+          repairedMaterial: data.repairedMaterial || null,
           personnel: data.assignment?.assignedTeam || 'Atanmadı',
           faultCode: `${rawCode || '---'} - ${desc}`,
           rawFaultCode: rawCode,
@@ -218,7 +274,8 @@ class TaskService {
           yoneticiNotu: data.assignment?.yoneticiNotu || '',
           resolvedDeficiencyId: data.assignment?.resolvedDeficiencyId || '',
           ohsData: data.ohsData || null,
-          maintenanceData: data.maintenanceData || null
+          maintenanceData: data.maintenanceData || null,
+          createdBy: data.assignment?.createdBy || 'Admin'
         };
       }).sort((a, b) => {
         const dateA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;

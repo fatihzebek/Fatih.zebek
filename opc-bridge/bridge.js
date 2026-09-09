@@ -30,11 +30,16 @@ const SITE_OPC_URLS = {
   '3892': 'http://172.17.14.186:6010', // Alize Çataltepe
 };
 const SITE_USER_IDS = {
+  '0752': 3226875369, // Alize Germiyan User ID
+  '2678': 3226875369, // Mare Manastır User ID
   '2688': 3532546021, // Anemon İntepe User ID
-  '3439': 3226875369, // Alize Sarıkaya User ID
   '2990': 3226875369, // Doğal Sayalar User ID
-  '3793': 3226875369, // Alize Kuyucak User ID
   '3213': 3226875369, // Dares Datça User ID
+  '3243': 3226875369, // Alize Çamseki User ID
+  '3245': 3226875369, // Alize Keltepe User ID
+  '3439': 3226875369, // Alize Sarıkaya User ID
+  '3793': 3226875369, // Alize Kuyucak User ID
+  '3892': 3226875369, // Alize Çataltepe User ID
 };
 const TURBINE_COUNT = 36; // Sadece bizi ilgilendiren 36 türbin
 
@@ -806,17 +811,16 @@ async function start() {
 
     console.log("✅ Canlı senkronizasyon başlıyor (Dares Datça)...");
     
-    // Dinleyicileri başlat
-    startPushNotificationListener();
-    startTaskClaimListener();
+    // Sadece butona basıldığında çalışan dinleyicileri başlat (VPN koruma kalkanı)
     startTurbineResetListener();
     startParameterAuditListener();
+    console.log("🚀 OPC Köprüsü hazır! (VPN trafiği koruma modunda: 0 KB/s boşta bekleme)");
     
-    // 30 saniyede bir tum sahayı tara
-    setInterval(syncTurbines, 30000);
-    await syncTurbines();
+    // Process keep-alive (Node.js event loop'unun arka planda kapanmasını engeller)
+    setInterval(() => {}, 1000 * 60 * 60);
 }
 
 start().catch(err => {
     console.error("❌ Başlatma hatası:", err);
 });
+

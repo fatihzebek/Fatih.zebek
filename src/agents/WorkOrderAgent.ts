@@ -19,30 +19,60 @@ export class WorkOrderAgent extends BaseAgent {
    * Her adımda doğrulama yapar ve hata durumunda JSON çıktısı döner.
    */
   async createWorkOrderWizard(stepData: {
-    serialNumber: string;
-    type: 'Arıza' | 'Bakım';
+    taskLocationType?: 'TURBINE' | 'WAREHOUSE';
+    serialNumber?: string;
+    warehouseId?: string;
+    warehouseName?: string;
+    siteId?: string;
+    siteName?: string;
+    type: string;
     teamId: string; // 'Team 01' - 'Team 15'
     description: string;
     weatherStatus?: 'HOLD_WEATHER' | 'APPROVED';
     forceAssign?: boolean;
+    repairedMaterial?: {
+      sapNo: string;
+      description: string;
+      quantity: number;
+      serialNo?: string;
+    };
   }) {
     try {
       await this.setStatus('busy');
       console.log(`[WorkOrderAgent] İş emri süreci başlatıldı...`);
 
-      // ADIM 1: Türbin Seri Numarası Doğrulama
-      const turbine = dataService.findTurbineBySerial(stepData.serialNumber);
-      if (!turbine) {
-        throw { code: 404, message: 'Geçersiz türbin seri numarası!', detail: stepData.serialNumber };
-      }
-      console.log(`[Adım 1] Türbin doğrulandı: ${turbine.siteName} - ${turbine.turbineNo}`);
+      const isWarehouseTask = stepData.taskLocationType === 'WAREHOUSE';
+      let turbine: any = null;
+      let baslik = '';
+      let targetTurbineNo = '';
+      let targetSiteName = '';
+      let targetSiteId = '';
+      let targetSerial = '';
 
-      // ADIM 2: Tür Seçimi ve Başlık Oluşturma
-      const baslik = `${stepData.type}: ${turbine.siteName} ${turbine.turbineNo}`;
+      if (isWarehouseTask) {
+        targetSiteName = stepData.siteName || stepData.warehouseName || 'Santral Deposu';
+        targetSiteId = stepData.siteId || stepData.warehouseId || '';
+        targetTurbineNo = stepData.warehouseName || 'Depo / Tesis';
+        targetSerial = 'DEPO';
+        baslik = `📦 Depo & Tesis İşi: ${targetTurbineNo} - ${stepData.type}`;
+        console.log(`[Adım 1] Depo görevi doğrulandı: ${targetTurbineNo}`);
+      } else {
+        // ADIM 1: Türbin Seri Numarası Doğrulama
+        turbine = dataService.findTurbineBySerial(stepData.serialNumber || '');
+        if (!turbine) {
+          throw { code: 404, message: 'Geçersiz türbin seri numarası!', detail: stepData.serialNumber };
+        }
+        targetSiteName = turbine.siteName;
+        targetSiteId = turbine.siteId;
+        targetTurbineNo = turbine.turbineNo;
+        targetSerial = stepData.serialNumber || '';
+        baslik = `${stepData.type}: ${turbine.siteName} ${turbine.turbineNo}`;
+        console.log(`[Adım 1] Türbin doğrulandı: ${turbine.siteName} - ${turbine.turbineNo}`);
+      }
+
       console.log(`[Adım 2] İş türü seçildi: ${stepData.type}`);
 
       // ADIM 3: Ekip Atama ve Müsaitlik Kontrolü
-      // İş kuralı: Team 01 - Team 15 arası kontrol.
       const teamNumber = parseInt(stepData.teamId.replace('Team ', ''));
       if (isNaN(teamNumber) || teamNumber < 1 || teamNumber > 15) {
         throw { code: 400, message: 'Geçersiz ekip formatı! (Team 01 - Team 15 olmalı)', detail: stepData.teamId };
@@ -56,27 +86,36 @@ export class WorkOrderAgent extends BaseAgent {
       }
       console.log(`[Adım 3] Ekip ataması uygun veya bypass edildi: ${stepData.teamId}`);
 
-      // ADIM 4: Onay ve Firestore Kaydı (Priority Alanı Yok!)
+      // ADIM 4: Onay ve Firestore Kaydı
       const isBakim = stepData.type === 'Bakım' || (stepData.type || '').toLowerCase().includes('bakim') || (stepData.type || '').toLowerCase().includes('bakım');
       
       const newGorev: Omit<Gorev, 'id' | 'createdAt' | 'updatedAt'> = {
         baslik: baslik,
         aciklama: stepData.description,
-        turbinNo: turbine.turbineNo,
+        turbinNo: targetTurbineNo,
         atananEkip: stepData.teamId,
         durum: stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Açık',
-        secilenSablon: isBakim ? 'Bakım Formu' : 'form-ariza'
+        secilenSablon: isWarehouseTask ? `Depo İşi: ${stepData.type}` : (isBakim ? 'Bakım Formu' : 'form-ariza')
       };
 
       const taskId = await gorevService.saveGorev(newGorev);
 
       // Ayrıca ana 'tasks' koleksiyonuna da kaydedelim ki 'İş Emirleri' sayfasında görünsün!
+      const currentYear = new Date().getFullYear();
+      const generatedRevisionNo = isWarehouseTask ? `REV-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}` : undefined;
+
       await taskService.createNewTask({
-        secilenSablon: isBakim ? 'Bakım Formu' : 'Türbin Arıza Formu',
-        sahaBilgisi: turbine.siteName,
-        siteId: turbine.siteId,
-        turbinSeriNo: stepData.serialNumber,
-        turbinNo: turbine.turbineNo,
+        secilenSablon: isWarehouseTask ? `Depo İşi: ${stepData.type}` : (isBakim ? 'Bakım Formu' : 'Türbin Arıza Formu'),
+        sahaBilgisi: targetSiteName,
+        siteId: targetSiteId,
+        turbinSeriNo: targetSerial,
+        turbinNo: targetTurbineNo,
+        taskLocationType: isWarehouseTask ? 'WAREHOUSE' : 'TURBINE',
+        warehouseId: stepData.warehouseId,
+        warehouseName: stepData.warehouseName,
+        tamirFormNo: generatedRevisionNo,
+        revisionNo: generatedRevisionNo,
+        repairedMaterial: stepData.repairedMaterial,
         yoneticiNotu: stepData.description || `Sistemden atanan ${stepData.type} görevi.`,
         assignedTeam: stepData.teamId,
         customStatus: stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Görev Oluşturuldu'

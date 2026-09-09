@@ -1,4 +1,4 @@
-import { dataService } from '../services/DataService';
+import { dataService, DataService } from '../services/DataService';
 import { taskService } from '../services/TaskService';
 import { agentHealthService } from '../services/AgentHealthService';
 import { warehouseService } from '../services/WarehouseService';
@@ -159,40 +159,41 @@ export const DashboardPage = async () => {
     const allowedTabs = currentUser.allowedTabs || {};
     const dashPerms = allowedTabs['dashboard'];
     if (typeof dashPerms === 'object') {
-      return !!dashPerms[subId];
+      if (dashPerms[subId] !== undefined) return !!dashPerms[subId];
+      return true;
     }
     return !!dashPerms;
   };
 
   if (currentUser && currentUser.role === 'TECHNICIAN') {
     const allowedSites = dataService.getSites().map(s => s.id);
+    const userTeamStr = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
+    const managedTeams = (currentUser?.managedTeams || []).map((mt: string) => mt.toUpperCase().trim());
+    const userNum = userTeamStr.replace(/[^0-9]/g, '');
+
     tasks = tasks.filter(t => {
       let tSiteId = t.siteId || '';
       if (tSiteId && isNaN(Number(tSiteId))) {
         const siteObj = dataService.getAllSites().find(s => s.name.toLowerCase() === tSiteId.toLowerCase() || s.name.toLowerCase().includes(tSiteId.toLowerCase()));
         if (siteObj) tSiteId = siteObj.id;
       }
-      return allowedSites.includes(tSiteId);
-    });
+      
+      // 1. Kendi yetkili olduğu sahalardaki (allowedSites) tüm görevleri görsün
+      if (allowedSites.includes(tSiteId)) return true;
 
-    const userTeamStr = ((window as any).currentUserTeam || currentUser.displayName || '').toUpperCase().trim();
-    if (userTeamStr) {
-      const managedTeams = (currentUser?.managedTeams || []).map((mt: string) => mt.toUpperCase().trim());
-      tasks = tasks.filter(t => {
-        const taskPersonnel = String(t.personnel || '').toUpperCase().trim();
-        if (!taskPersonnel || taskPersonnel === 'SİSTEM' || taskPersonnel === 'ATANMADI') return true;
-        if (managedTeams.some((mt: string) => taskPersonnel.includes(mt))) return true;
-        const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
-        const userNum = userTeamStr.replace(/[^0-9]/g, '');
-        if (taskNum && userNum) {
-          const tN = parseInt(taskNum);
-          const uN = parseInt(userNum);
-          if (tN === uN) return true;
-          if ((tN === 5 && uN === 10) || (tN === 10 && uN === 5)) return true;
-        }
-        return taskPersonnel.includes(userTeamStr) || userTeamStr.includes(taskPersonnel);
-      });
-    }
+      // 2. Doğrudan ekibine veya yönettiği alt ekiplere atanmış görevleri görsün
+      const taskPersonnel = String(t.personnel || '').toUpperCase().trim();
+      if (!taskPersonnel || taskPersonnel === 'SİSTEM' || taskPersonnel === 'ATANMADI') return true;
+      if (managedTeams.some((mt: string) => taskPersonnel.includes(mt))) return true;
+      const taskNum = taskPersonnel.replace(/[^0-9]/g, '');
+      if (taskNum && userNum) {
+        const tN = parseInt(taskNum);
+        const uN = parseInt(userNum);
+        if (tN === uN) return true;
+        if ((tN === 5 && uN === 10) || (tN === 10 && uN === 5)) return true;
+      }
+      return userTeamStr && (taskPersonnel.includes(userTeamStr) || userTeamStr.includes(taskPersonnel));
+    });
   }
 
   const sites = dataService.getSites();
@@ -304,27 +305,51 @@ export const DashboardPage = async () => {
   (window as any).searchGlobalStock = async () => {
     const sapInput = document.getElementById('global-sap-search') as HTMLInputElement;
     const resultArea = document.getElementById('global-stock-results');
-    const sapNo = sapInput?.value.trim();
+    const sapNo = (sapInput?.value || '').trim();
 
     if (!sapNo) return;
 
     resultArea!.innerHTML = '<div class="loader-mini">Taranıyor...</div>';
     
     try {
-      const results: { siteName: string, quantity: number, description: string }[] = [];
+      const results: { siteName: string, quantity: number, description: string, orderIndex: number }[] = [];
+      const cleanInput = sapNo.toLowerCase().replace(/^0+/, '');
       const sites = dataService.getAllSites();
       
-      for (const site of sites) {
-        const inventory = await warehouseService.getInventory(site.id);
-        const item = inventory.find(i => i.sapNo === sapNo);
-        if (item && item.quantity > 0) {
-          results.push({ 
-            siteName: site.name, 
-            quantity: item.quantity, 
-            description: item.description || (item as any).name || 'Bilinmeyen Malzeme' 
+      // Parallel scan across all sites with forceRefresh = true to ensure real-time accuracy
+      await Promise.all(sites.map(async (site) => {
+        try {
+          const inventory = await warehouseService.getInventory(site.id, true);
+          
+          // Match only usable Envanter items (strictly excluding DEFECT, SCRAP, and HURDAYA_AYRILDI)
+          const matchingItems = inventory.filter(i => {
+            const rawSap = String(i.sapNo || '').trim().toLowerCase();
+            const cleanSap = rawSap.replace(/^0+/, '');
+            const isMatch = rawSap === sapNo.toLowerCase() || (cleanInput && cleanSap === cleanInput);
+            if (!isMatch) return false;
+            return i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI';
           });
+
+          // Sum total usable quantity for this warehouse
+          const totalQty = matchingItems.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+          
+          if (totalQty > 0) {
+            const description = matchingItems[0]?.description || (matchingItems[0] as any)?.name || 'Bilinmeyen Malzeme';
+            const orderIndex = DataService.customOrder.findIndex(o => o.toLowerCase() === site.name.toLowerCase());
+            results.push({ 
+              siteName: site.name, 
+              quantity: totalQty, 
+              description,
+              orderIndex: orderIndex === -1 ? 999 : orderIndex
+            });
+          }
+        } catch (e) {
+          console.warn(`[GlobalStockSearch] Error fetching warehouse for ${site.name}:`, e);
         }
-      }
+      }));
+
+      // Sort results by standard plant order
+      results.sort((a, b) => a.orderIndex - b.orderIndex);
 
       if (results.length === 0) {
         resultArea!.innerHTML = '<div class="no-results">Bu SAP numarası ile hiçbir depoda stok bulunamadı.</div>';

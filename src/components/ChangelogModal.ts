@@ -1,4 +1,5 @@
 import changelogData from '../data/changelog.json';
+import { authService } from '../services/AuthService';
 
 interface ChangelogEntry {
   version: string;
@@ -8,7 +9,25 @@ interface ChangelogEntry {
   changes: string[];
 }
 
+export function isChangelogAuthorized(): boolean {
+  try {
+    const user = authService.getCurrentUser();
+    const email = (user?.email || (window as any).currentUser?.email || (window as any).appState?.userProfile?.email || '').toLowerCase().trim();
+    const role = ((window as any).appState?.userProfile?.role || (window as any).currentUserProfile?.role || '').toUpperCase();
+    
+    if (role === 'ADMIN') return true;
+    if (email.includes('fatih.zebek') || email.includes('hursit.akter') || email.includes('emir.unver')) return true;
+    
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 export function showChangelogModal(autoOpen = false) {
+  // STRICT ADMIN & MANAGER CHECK - Default Deny for all other users
+  if (!isChangelogAuthorized()) return;
+
   // If already open, do not duplicate
   if (document.getElementById('changelog-modal-backdrop')) return;
 
@@ -90,11 +109,8 @@ export function closeChangelogModal() {
 }
 
 export function checkAndShowChangelogNotice() {
-  const user = (window as any).currentUser || (window as any).appState?.userProfile;
-  const email = (user?.email || '').toLowerCase();
-  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const isAdmin = user?.role === 'ADMIN' || email.includes('fatih.zebek') || email.includes('hursit.akter') || email.includes('emir.unver') || isLocal;
-  if (!isAdmin) return;
+  // STRICT ADMIN & MANAGER CHECK - Default Deny for all other users
+  if (!isChangelogAuthorized()) return;
 
   const entries: ChangelogEntry[] = changelogData as ChangelogEntry[];
   const latestVersion = entries[0]?.version;

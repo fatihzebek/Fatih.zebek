@@ -326,7 +326,7 @@ export const RepairHistoryPage = async () => {
             </div>
             ${step.user ? `<div style="font-size: 0.75rem; color: #64748B; margin-top: 3px;">İşlem Yapan: <strong>${step.user.split('@')[0]}</strong></div>` : ''}
             ${step.detail ? `<div style="font-size: 0.8rem; color: #E2E8F0; margin-top: 5px; font-style: italic; background: rgba(0,0,0,0.3); padding: 5px 9px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.05);">${step.detail}</div>` : ''}
-            ${step.image ? `<div style="margin-top: 8px; text-align: left;"><img src="${step.image}" style="max-width: 100%; max-height: 120px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); cursor: pointer;" onclick="window.open('${step.image}', '_blank')" title="Büyütmek için tıklayın" /></div>` : ''}
+            ${step.image ? `<div style="margin-top: 8px; text-align: left;"><img src="${step.image}" style="max-width: 100%; max-height: 120px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'" onclick="window.showImageLightbox(this.src)" title="Büyütmek için tıklayın" /></div>` : ''}
           </div>
         </div>
       `;
@@ -535,7 +535,8 @@ export const RepairHistoryPage = async () => {
     }
 
     const user = (window as any).currentUser;
-    const isAdmin = user?.email?.toLowerCase().includes('admin') || user?.email === 'fatih.zebek@demirerholding.com' || user?.email === 'furkan.yildirim@demirerholding.com';
+    const userProfile = (window as any).appState?.userProfile || (window as any).userProfile;
+    const isAdmin = userProfile?.role === 'ADMIN' || user?.email?.toLowerCase().includes('admin') || user?.email === 'fatih.zebek@demirerholding.com';
 
     return items.map(rep => {
       const sourceWhName = warehouses.find(w => w.id === rep.sourceWarehouseId)?.name || rep.sourceWarehouseId || 'Merkez';

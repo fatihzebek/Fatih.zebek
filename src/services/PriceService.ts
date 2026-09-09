@@ -10,6 +10,7 @@ import {
   serverTimestamp, 
   writeBatch 
 } from 'firebase/firestore';
+import anemonPrices from '../data/anemon_prices.json';
 
 export interface MaterialPriceEntry {
   id?: string;
@@ -19,6 +20,8 @@ export interface MaterialPriceEntry {
   entryDate: string; // YYYY-MM-DD
   price: number;
   currency: 'EUR' | 'USD' | 'TRY';
+  warehouseId?: string; // '2688', '3439', 'GENEL', etc.
+  warehouseName?: string; // 'Anemon İntepe Depo', 'Alize Sarıkaya Depo', etc.
   quantity?: number;
   invoiceNo?: string;
   supplier?: string;
@@ -33,10 +36,12 @@ export interface GroupedMaterialPrice {
   sapNo: string;
   description: string;
   pricesByYear: Record<number, MaterialPriceEntry>;
+  pricesByWarehouse?: Record<string, MaterialPriceEntry>;
   allEntries: MaterialPriceEntry[];
   latestEntry?: MaterialPriceEntry;
   averagePrice?: number;
   primaryCurrency?: 'EUR' | 'USD' | 'TRY';
+  primaryWarehouse?: string;
 }
 
 class PriceService {
@@ -47,6 +52,7 @@ class PriceService {
 
   /**
    * Retrieves all material price records sorted by year descending, then date descending.
+   * Merges Firestore custom records with baseline Anemon warehouse dataset.
    */
   async getAllPrices(forceRefresh = false): Promise<MaterialPriceEntry[]> {
     const now = Date.now();
@@ -58,17 +64,22 @@ class PriceService {
       const q = query(collection(db, this.collectionName), orderBy('year', 'desc'));
       const snapshot = await getDocs(q);
       const list: MaterialPriceEntry[] = [];
+      const seenIds = new Set<string>();
 
       snapshot.forEach(docSnap => {
         const data = docSnap.data();
+        const id = docSnap.id;
+        seenIds.add(id);
         list.push({
-          id: docSnap.id,
+          id: id,
           sapNo: String(data.sapNo || '').trim(),
           description: String(data.description || '').trim(),
           year: Number(data.year) || new Date().getFullYear(),
           entryDate: data.entryDate || '',
           price: Number(data.price) || 0,
           currency: data.currency || 'EUR',
+          warehouseId: data.warehouseId || 'GENEL',
+          warehouseName: data.warehouseName || (data.warehouseId === '2688' ? 'Anemon İntepe Depo' : 'Genel Liste'),
           quantity: data.quantity !== undefined ? Number(data.quantity) : undefined,
           invoiceNo: data.invoiceNo || '',
           supplier: data.supplier || '',
@@ -80,17 +91,29 @@ class PriceService {
         });
       });
 
+      // Merge with baseline Anemon prices if not already overridden in Firestore
+      (anemonPrices as MaterialPriceEntry[]).forEach(base => {
+        if (!seenIds.has(base.id || '')) {
+          list.push({
+            ...base,
+            warehouseId: base.warehouseId || '2688',
+            warehouseName: base.warehouseName || 'Anemon İntepe Depo'
+          });
+        }
+      });
+
       this.cachedPrices = list;
       this.lastFetchTime = now;
       return list;
     } catch (error) {
-      console.error('[PriceService] Error fetching material prices:', error);
-      return this.cachedPrices || [];
+      console.error('[PriceService] Error fetching material prices from db, using baseline:', error);
+      this.cachedPrices = anemonPrices as MaterialPriceEntry[];
+      return this.cachedPrices;
     }
   }
 
   /**
-   * Returns price entries grouped by SAP Number for cross-year comparison tables.
+   * Returns price entries grouped by SAP Number for cross-year & warehouse comparison tables.
    */
   async getGroupedPrices(forceRefresh = false): Promise<GroupedMaterialPrice[]> {
     const all = await this.getAllPrices(forceRefresh);
@@ -103,6 +126,7 @@ class PriceService {
           sapNo: entry.sapNo,
           description: entry.description,
           pricesByYear: {},
+          pricesByWarehouse: {},
           allEntries: []
         };
       }
@@ -119,6 +143,14 @@ class PriceService {
       if (!existingYearEntry || (entry.entryDate && entry.entryDate > (existingYearEntry.entryDate || ''))) {
         map[sap].pricesByYear[entry.year] = entry;
       }
+
+      // Keep latest price entry per warehouse
+      const wId = entry.warehouseId || 'GENEL';
+      if (!map[sap].pricesByWarehouse) map[sap].pricesByWarehouse = {};
+      const existingWarehouseEntry = map[sap].pricesByWarehouse![wId];
+      if (!existingWarehouseEntry || (entry.entryDate && entry.entryDate > (existingWarehouseEntry.entryDate || ''))) {
+        map[sap].pricesByWarehouse![wId] = entry;
+      }
     });
 
     // Compute latest & averages
@@ -131,12 +163,13 @@ class PriceService {
 
       item.latestEntry = item.allEntries[0];
       item.primaryCurrency = item.latestEntry?.currency || 'EUR';
+      item.primaryWarehouse = item.latestEntry?.warehouseName || 'Genel Liste';
 
       // Compute average price for items in the same currency
       const sameCurrencyEntries = item.allEntries.filter(e => e.currency === item.primaryCurrency && e.price > 0);
       if (sameCurrencyEntries.length > 0) {
         const sum = sameCurrencyEntries.reduce((acc, curr) => acc + curr.price, 0);
-        item.averagePrice = Number((sum / sameCurrencyEntries.length).toFixed(2));
+        item.averagePrice = Number((sum / sameCurrencyEntries.length).toFixed(4));
       } else {
         item.averagePrice = item.latestEntry?.price || 0;
       }
@@ -151,7 +184,7 @@ class PriceService {
    * Saves or updates a single price record.
    */
   async savePriceEntry(entry: Omit<MaterialPriceEntry, 'id'>, id?: string): Promise<string> {
-    const docId = id || (entry.sapNo ? `${entry.sapNo.trim()}_${entry.year}_${Date.now()}` : doc(collection(db, this.collectionName)).id);
+    const docId = id || (entry.sapNo ? `${entry.sapNo.trim()}_${entry.warehouseId || 'GENEL'}_${entry.year}_${Date.now()}` : doc(collection(db, this.collectionName)).id);
     const docRef = doc(db, this.collectionName, docId);
 
     const payload: any = {
@@ -161,6 +194,8 @@ class PriceService {
       entryDate: entry.entryDate || new Date().toISOString().split('T')[0],
       price: Number(entry.price) || 0,
       currency: entry.currency || 'EUR',
+      warehouseId: entry.warehouseId || 'GENEL',
+      warehouseName: entry.warehouseName || 'Genel Liste',
       quantity: entry.quantity !== undefined ? Number(entry.quantity) : 1,
       invoiceNo: String(entry.invoiceNo || '').trim(),
       supplier: String(entry.supplier || '').trim(),
@@ -201,7 +236,7 @@ class PriceService {
       const batch = writeBatch(db);
 
       chunk.forEach(entry => {
-        const docId = `${entry.sapNo.trim()}_${entry.year}_${Math.random().toString(36).substring(2, 9)}`;
+        const docId = `${entry.sapNo.trim()}_${entry.warehouseId || 'GENEL'}_${entry.year}_${Math.random().toString(36).substring(2, 9)}`;
         const docRef = doc(db, this.collectionName, docId);
         batch.set(docRef, {
           sapNo: String(entry.sapNo || '').trim(),
@@ -210,6 +245,8 @@ class PriceService {
           entryDate: entry.entryDate || new Date().toISOString().split('T')[0],
           price: Number(entry.price) || 0,
           currency: entry.currency || 'EUR',
+          warehouseId: entry.warehouseId || 'GENEL',
+          warehouseName: entry.warehouseName || 'Genel Liste',
           quantity: entry.quantity !== undefined ? Number(entry.quantity) : 1,
           invoiceNo: String(entry.invoiceNo || '').trim(),
           supplier: String(entry.supplier || '').trim(),
@@ -227,6 +264,41 @@ class PriceService {
 
     this.cachedPrices = null;
     return savedCount;
+  }
+
+  /**
+   * Fast lookup for a material price in a warehouse.
+   * Checks warehouse-specific entries first, then fallback to general/latest entries.
+   */
+  async getPrice(sapNo: string, warehouseId?: string, warehouseName?: string): Promise<{ price: number; currency: 'EUR' | 'USD' | 'TRY'; entry?: MaterialPriceEntry } | null> {
+    if (!sapNo) return null;
+    const all = await this.getAllPrices();
+    const cleanSap = String(sapNo).trim();
+    const cleanWId = String(warehouseId || '').trim();
+    const cleanWName = String(warehouseName || '').toLowerCase().trim();
+    const isCurrentAnemon = cleanWName.includes('anemon') || cleanWId === '2688';
+
+    // 1. Warehouse specific match
+    const warehouseMatch = all.find(e => {
+      if (String(e.sapNo).trim() !== cleanSap || e.price <= 0) return false;
+      
+      const isEntryAnemon = (e.warehouseId === '2688' || (e.warehouseName && e.warehouseName.toLowerCase().includes('anemon')));
+      if (isEntryAnemon) {
+        return isCurrentAnemon;
+      }
+
+      if (cleanWId && e.warehouseId === cleanWId) return true;
+      if (cleanWName && e.warehouseName && e.warehouseName.toLowerCase().includes(cleanWName)) return true;
+      if (e.warehouseId === 'GENEL') return true;
+
+      return false;
+    });
+
+    if (warehouseMatch) {
+      return { price: warehouseMatch.price, currency: warehouseMatch.currency || 'EUR', entry: warehouseMatch };
+    }
+
+    return null;
   }
 }
 
