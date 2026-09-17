@@ -125,3 +125,185 @@ export const formatTeamName = (teamStr: string): string => {
   // For person names or other strings, apply formatDisplayName
   return formatDisplayName(teamStr);
 };
+
+/**
+ * Returns the designated field team leader responsible for a given site or warehouse.
+ * Mappings:
+ * - Anemon İntepe, Alize Sarıkaya, Alize Çamseki -> Harun DALKIRAN
+ * - Dares Datça -> Süleyman AŞKIN
+ * - Mare Manastır, Alize Germiyan -> Gökmen KÖKSAL
+ * - Alize Keltepe, Alize Çataltepe -> EMRE ACAR
+ * - Doğal Sayalar, Alize Kuyucak -> İbrahim ÖZKARA
+ */
+export const getSiteTeamLeader = (siteOrWarehouse: string): string => {
+  if (!siteOrWarehouse) return 'Saha Ekip Lideri';
+  const val = siteOrWarehouse.toLowerCase();
+
+  // Anemon İntepe (2688), Alize Sarıkaya (3439), Alize Çamseki (3243)
+  if (
+    val.includes('anemon') || val.includes('intepe') || val.includes('i̇ntepe') || val.includes('2688') ||
+    val.includes('sarıkaya') || val.includes('sarikaya') || val.includes('3439') ||
+    val.includes('çamseki') || val.includes('camseki') || val.includes('3243')
+  ) {
+    return 'Harun DALKIRAN';
+  }
+
+  // Dares Datça (3213)
+  if (val.includes('dares') || val.includes('datça') || val.includes('datca') || val.includes('3213')) {
+    return 'Süleyman AŞKIN';
+  }
+
+  // Mare Manastır (2678), Alize Germiyan (0752)
+  if (
+    val.includes('mare') || val.includes('manastır') || val.includes('manastir') || val.includes('2678') ||
+    val.includes('germiyan') || val.includes('0752')
+  ) {
+    return 'Gökmen KÖKSAL';
+  }
+
+  // Alize Keltepe (3245), Alize Çataltepe (3892)
+  if (
+    val.includes('keltepe') || val.includes('3245') ||
+    val.includes('çataltepe') || val.includes('cataltepe') || val.includes('çataltape') || val.includes('cataltape') || val.includes('3892')
+  ) {
+    return 'EMRE ACAR';
+  }
+
+  // Doğal Sayalar (2990), Alize Kuyucak (3793)
+  if (
+    val.includes('sayalar') || val.includes('2990') ||
+    val.includes('kuyucak') || val.includes('3793')
+  ) {
+    return 'İbrahim ÖZKARA';
+  }
+
+  return 'Saha Ekip Lideri';
+};
+
+/**
+ * Returns the email address of the designated field team leader for a given site or warehouse.
+ */
+export const getSiteTeamLeaderEmail = (siteOrWarehouse: string): string => {
+  const leader = getSiteTeamLeader(siteOrWarehouse);
+  if (leader.includes('Harun')) return 'harun.dalkiran@demirerholding.com';
+  if (leader.includes('Süleyman') || leader.includes('Suleyman') || leader.includes('AŞKIN')) return 'suleyman.askin@demirerholding.com';
+  if (leader.includes('Gökmen') || leader.includes('Gokmen') || leader.includes('KÖKSAL')) return 'gokmen.koksal@demirerholding.com';
+  if (leader.includes('Emre') || leader.includes('ACAR')) return 'emre.acar@demirerholding.com';
+  if (leader.includes('İbrahim') || leader.includes('Ibrahim') || leader.includes('ÖZKARA')) return 'ibrahim.ozkara@demirerholding.com';
+  return '';
+};
+
+/**
+ * Normalizes warehouse names to ensure proper Turkish characters (e.g. Sarikaya -> Sarıkaya).
+ */
+export const fixTurkishWarehouseName = (name?: string | null): string => {
+  if (!name) return '';
+  return name
+    .replace(/Sarikaya/gi, 'Sarıkaya')
+    .replace(/Camseki/gi, 'Çamseki')
+    .replace(/Cataltepe/gi, 'Çataltepe')
+    .replace(/Degirmentepe/gi, 'Değirmentepe')
+    .replace(/Koytepe/gi, 'Köytepe')
+    .replace(/Intepe/gi, 'İntepe')
+    .replace(/Gokceada/gi, 'Gökçeada');
+};
+
+/**
+ * Standardizes repair duration into 'H:MM dk' format (e.g. 45 -> '0:45 dk', 90 -> '1:30 dk').
+ */
+export const formatRepairDuration = (val?: string | null): string => {
+  if (!val) return '-';
+  const trimmed = val.trim();
+  if (trimmed.includes('dk') || trimmed.includes('saat')) return trimmed;
+
+  // If just digits like '45'
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
+    if (num < 60) {
+      return `0:${String(num).padStart(2, '0')} dk`;
+    } else {
+      const h = Math.floor(num / 60);
+      const m = num % 60;
+      return `${h}:${String(m).padStart(2, '0')} dk`;
+    }
+  }
+
+  // If '0:45' or '1:30'
+  if (/^\d+:\d+$/.test(trimmed)) {
+    const [h, m] = trimmed.split(':').map(Number);
+    return `${h}:${String(m).padStart(2, '0')} dk`;
+  }
+
+  return `${trimmed} dk`;
+};
+
+/**
+ * Safely parses any date input (Firestore Timestamp, ISO string, DD.MM.YYYY string, number, or Date)
+ * into a valid Date object. Falls back to new Date() if invalid.
+ */
+export const parseSafeDate = (raw: any): Date => {
+  if (!raw) return new Date();
+
+  // Firestore Timestamp with toDate()
+  if (typeof raw.toDate === 'function') {
+    try {
+      const d = raw.toDate();
+      if (d instanceof Date && !isNaN(d.getTime())) return d;
+    } catch (e) {}
+  }
+
+  // Already a Date object
+  if (raw instanceof Date) {
+    return isNaN(raw.getTime()) ? new Date() : raw;
+  }
+
+  // Number (epoch ms or seconds)
+  if (typeof raw === 'number') {
+    const ms = raw < 10000000000 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+
+  // Firestore timestamp-like plain object { seconds: number, nanoseconds: number }
+  if (typeof raw === 'object' && typeof raw.seconds === 'number') {
+    const d = new Date(raw.seconds * 1000);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.toLowerCase().includes('invalid')) return new Date();
+
+    // Check Turkish DD.MM.YYYY [HH:mm[:ss]]
+    const trMatch = trimmed.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (trMatch) {
+      const day = parseInt(trMatch[1], 10);
+      const month = parseInt(trMatch[2], 10) - 1;
+      const year = parseInt(trMatch[3], 10);
+      const hour = trMatch[4] ? parseInt(trMatch[4], 10) : 0;
+      const min = trMatch[5] ? parseInt(trMatch[5], 10) : 0;
+      const sec = trMatch[6] ? parseInt(trMatch[6], 10) : 0;
+      const d = new Date(year, month, day, hour, min, sec);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    // Try standard Date.parse (ISO 8601 etc)
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  return new Date();
+};
+
+/**
+ * Formats any date input into 'DD.MM.YYYY HH:mm' Turkish format safely.
+ */
+export const formatSafeDateTime = (raw: any): string => {
+  const d = parseSafeDate(raw);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
+};

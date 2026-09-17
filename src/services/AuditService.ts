@@ -16,9 +16,12 @@ class AuditService {
         teamPersonnel: any[],
         materials: any[],
         notes: string,
-        matFormNo: string
+        matFormNo: string,
+        tamirFormNo?: string,
+        formDate?: string,
+        photos?: string[]
     }, isSilent = false) {
-        if (!currentTask?.id) return;
+        if (!currentTask?.id || currentTask?.isEditMode) return;
         
         try {
             // Update context locally and save to localStorage immediately for instant offline durability
@@ -29,19 +32,37 @@ class AuditService {
             currentTask.maintenanceData.materials = data.materials;
             currentTask.maintenanceData.notes = data.notes;
             currentTask.maintenanceData.matFormNo = data.matFormNo;
+            if (data.tamirFormNo) currentTask.maintenanceData.tamirFormNo = data.tamirFormNo;
+            if (data.formDate) {
+                currentTask.maintenanceData.formDate = data.formDate;
+                currentTask.maintenanceData.date = data.formDate;
+                currentTask.date = data.formDate;
+            }
+            if (data.photos) currentTask.maintenanceData.photos = data.photos;
+
             localStorage.setItem('activeTaskContext', JSON.stringify(currentTask));
 
             const docRef = doc(db, 'tasks', currentTask.id);
             const safeData = JSON.parse(JSON.stringify(data));
-            const updatePromise = updateDoc(docRef, {
+            const updatePayload: any = {
                 'maintenanceData.checklist': safeData.checklist || [],
                 'maintenanceData.workSessions': safeData.workSessions || [],
                 'maintenanceData.teamPersonnel': safeData.teamPersonnel || [],
                 'maintenanceData.materials': safeData.materials || [],
                 'maintenanceData.notes': safeData.notes || '',
                 'maintenanceData.matFormNo': safeData.matFormNo || '',
+                'maintenanceData.tamirFormNo': safeData.tamirFormNo || '',
+                'maintenanceData.formDate': safeData.formDate || '',
+                'maintenanceData.photos': safeData.photos || [],
                 'workflow.guncellenmeTarihi': serverTimestamp()
-            });
+            };
+
+            if (safeData.formDate) {
+                updatePayload['date'] = safeData.formDate;
+                updatePayload['taskInfo.tarih'] = safeData.formDate;
+            }
+
+            const updatePromise = updateDoc(docRef, updatePayload);
 
             // Race the Firestore write with a 1.5s timeout.
             // If the user is offline or connection is slow, we still count it as a successful local save

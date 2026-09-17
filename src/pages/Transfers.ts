@@ -221,6 +221,9 @@ export const TransferPage = async (userProfile?: UserProfile | null) => {
               <button type="button" onclick="window.exportTransfersListToExcel()" class="btn-cyber" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600; background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); color: #10B981; margin-left: 8px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='rgba(16, 185, 129, 0.18)'; this.style.color='#fff'" onmouseout="this.style.background='rgba(16, 185, 129, 0.08)'; this.style.color='#10B981'">
                 <i class="fa-solid fa-file-excel"></i> EXCEL İNDİR
               </button>
+              <button type="button" onclick="window.toggleAllMsfAccordions()" id="btn-toggle-all-msf" class="btn-cyber-outline" style="font-size: 0.65rem; padding: 4px 8px; font-weight: 600; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-cyan); border-color: rgba(0, 242, 254, 0.3);">
+                <i class="fa-solid fa-arrows-up-down"></i> <span id="btn-toggle-all-msf-text">TÜMÜNÜ AÇ</span>
+              </button>
             </div>
           </div>
 
@@ -265,6 +268,45 @@ let msfListUnsubscribe: (() => void) | null = null;
 let msfPage = 1;
 const msfPageSize = 5;
 let msfAddedItems: Array<{ materialCode: string, materialName: string, quantity: number, condition?: 'NEW' | 'REVISED' | 'DEFECT' | 'SCRAP' }> = [];
+const msfExpandedCards = new Set<string>();
+let allMsfExpanded = false;
+
+(window as any).toggleMsfAccordion = (id: string) => {
+  const body = document.getElementById(`msf-acc-body-${id}`);
+  const icon = document.getElementById(`msf-acc-icon-${id}`);
+  if (!body) return;
+  const isHidden = body.style.display === 'none';
+  body.style.display = isHidden ? 'block' : 'none';
+  if (icon) {
+    icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+  }
+  if (isHidden) {
+    msfExpandedCards.add(id);
+  } else {
+    msfExpandedCards.delete(id);
+  }
+};
+
+(window as any).toggleAllMsfAccordions = () => {
+  allMsfExpanded = !allMsfExpanded;
+  const btnText = document.getElementById('btn-toggle-all-msf-text');
+  const btnIcon = document.querySelector('#btn-toggle-all-msf i');
+  if (btnText) btnText.textContent = allMsfExpanded ? 'TÜMÜNÜ KAPAT' : 'TÜMÜNÜ AÇ';
+  if (btnIcon) btnIcon.className = allMsfExpanded ? 'fa-solid fa-chevron-up' : 'fa-solid fa-arrows-up-down';
+
+  document.querySelectorAll('.msf-accordion-content').forEach((el: any) => {
+    el.style.display = allMsfExpanded ? 'block' : 'none';
+  });
+  document.querySelectorAll('.msf-acc-icon').forEach((el: any) => {
+    (el as HTMLElement).style.transform = allMsfExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
+  });
+
+  if (allMsfExpanded) {
+    loadedTransfersList.forEach(t => msfExpandedCards.add(t.id));
+  } else {
+    msfExpandedCards.clear();
+  }
+};
 
 (window as any).changeMsfPage = (delta: number) => {
   msfPage += delta;
@@ -954,12 +996,17 @@ let msfAddedItems: Array<{ materialCode: string, materialName: string, quantity:
       ? t.resolvedAt.toDate().toLocaleString('tr-TR') 
       : (t.resolvedAt?.seconds ? new Date(t.resolvedAt.seconds * 1000).toLocaleString('tr-TR') : (normStatus === 'YOLDA' ? '<span style="color: #F59E0B; font-weight:bold;">Yolda</span>' : '---'));
 
+    const isExpanded = msfExpandedCards.has(t.id);
+    const itemCount = isV2 ? t.items.length : 1;
+    const itemsCountBadge = `<span style="font-size: 0.65rem; color: #94A3B8; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-box-open" style="color: var(--accent-cyan);"></i> ${itemCount} Kalem</span>`;
+
     return `
-      <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1rem; background: rgba(15, 23, 42, 0.4); border-radius: 12px; transition: all 0.3s ease; border: 1px solid rgba(255, 255, 255, 0.04); border-left: 4px solid ${cardBorderColor}; box-shadow: 0 4px 20px rgba(0,0,0,0.15);" onmouseover="this.style.background='rgba(15, 23, 42, 0.55)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.background='rgba(15, 23, 42, 0.4)'; this.style.transform='none';">
+      <div class="glass-panel" style="padding: 0.9rem 1.25rem; margin-bottom: 0.75rem; background: rgba(15, 23, 42, 0.4); border-radius: 12px; transition: all 0.25s ease; border: 1px solid rgba(255, 255, 255, 0.04); border-left: 4px solid ${cardBorderColor}; box-shadow: 0 4px 20px rgba(0,0,0,0.15);" onmouseover="this.style.background='rgba(15, 23, 42, 0.55)';" onmouseout="this.style.background='rgba(15, 23, 42, 0.4)';">
         
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 0.6rem; margin-bottom: 0.6rem;">
+        <!-- Accordion Header (Click to Toggle) -->
+        <div onclick="window.toggleMsfAccordion('${t.id}')" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; cursor: pointer; user-select: none;">
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <i id="msf-acc-icon-${t.id}" class="fa-solid fa-chevron-down msf-acc-icon" style="transition: transform 0.25s ease; color: var(--accent-cyan); font-size: 0.85rem; transform: ${isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'};"></i>
             <span style="font-family: monospace; font-size: 1rem; font-weight: 800; color: var(--accent-cyan); letter-spacing: 0.5px;">${msfNo}</span>
             ${directionBadge}
             <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 700; color: var(--text-main); background: rgba(0, 0, 0, 0.2); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.04);">
@@ -969,27 +1016,28 @@ let msfAddedItems: Array<{ materialCode: string, materialName: string, quantity:
               <i class="fa-solid fa-location-dot" style="color: #EF4444;"></i>
               <span>${toName}</span>
             </div>
+            ${itemsCountBadge}
           </div>
           
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <button onclick="window.printMsfVoucher('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: var(--text-main); border-color: rgba(255,255,255,0.15); background: transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.color='var(--text-main)'">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;" onclick="event.stopPropagation();">
+            <button onclick="event.stopPropagation(); window.printMsfVoucher('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: var(--text-main); border-color: rgba(255,255,255,0.15); background: transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'; this.style.color='var(--text-main)'">
               <i class="fa-solid fa-print"></i> Yazdır
             </button>
             
             ${showCancel ? `
-              <button onclick="window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+              <button onclick="event.stopPropagation(); window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
                 <i class="fa-solid fa-ban"></i> İptal Et (Sil)
               </button>
             ` : ''}
 
             ${showReject ? `
-              <button onclick="window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
+              <button onclick="event.stopPropagation(); window.rejectMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.18)'; this.style.borderColor='#EF4444'" onmouseout="this.style.background='rgba(239, 68, 68, 0.08)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">
                 <i class="fa-solid fa-ban"></i> Reddet
               </button>
             ` : ''}
 
             ${showApprove ? `
-              <button onclick="window.approveMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: 700; transition: all 0.2s; box-shadow: 0 0 10px rgba(16,185,129,0.05);" onmouseover="this.style.background='rgba(16,185,129,0.18)'; this.style.borderColor='#10B981'; this.style.boxShadow='0 0 15px rgba(16,185,129,0.15)';" onmouseout="this.style.background='rgba(16,185,129,0.08)'; this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.boxShadow='0 0 10px rgba(16,185,129,0.05)'">
+              <button onclick="event.stopPropagation(); window.approveMsfTransfer('${t.id}')" class="btn-cyber-mini" style="font-size: 0.65rem; padding: 4px 12px; color: #10B981; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.08); font-weight: 700; transition: all 0.2s; box-shadow: 0 0 10px rgba(16,185,129,0.05);" onmouseover="this.style.background='rgba(16,185,129,0.18)'; this.style.borderColor='#10B981'; this.style.boxShadow='0 0 15px rgba(16,185,129,0.15)';" onmouseout="this.style.background='rgba(16,185,129,0.08)'; this.style.borderColor='rgba(16, 185, 129, 0.3)'; this.style.boxShadow='0 0 10px rgba(16,185,129,0.05)'">
                 <i class="fa-solid fa-circle-check"></i> Teslim Al
               </button>
             ` : ''}
@@ -1000,46 +1048,51 @@ let msfAddedItems: Array<{ materialCode: string, materialName: string, quantity:
           </div>
         </div>
 
-        <!-- Shipping & Metadata Grid -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; margin-bottom: 0.75rem;">
-          <div>
-            <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-user-circle"></i> TALEBİ OLUŞTURAN</span>
-            <span style="color: var(--text-main); font-weight: 600; font-family: monospace; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${t.requestedBy}">${t.requestedBy}</span>
-          </div>
-          <div>
-            <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-paper-plane"></i> SEVK YÖNTEMİ</span>
-            <span style="color: var(--text-main); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">${deliveryMethodStr}</span>
-          </div>
-          <div>
-            <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-info"></i> TAŞIYICI DETAYI</span>
-            <span style="color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${deliveryDetailStr}">${deliveryDetailStr}</span>
-          </div>
-          <div>
-            <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-clock"></i> GÖNDERİM TARİHİ</span>
-            <span style="color: var(--text-main); font-weight: 600;">${createdDateStr}</span>
-          </div>
-          <div>
-            <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-check"></i> TESLİM TARİHİ</span>
-            <span style="color: var(--text-main); font-weight: 600;">${resolvedDateStrHTML}</span>
-          </div>
-        </div>
-
-        <!-- Materials Section -->
-        <div style="background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.02); border-radius: 8px; padding: 8px 12px;">
-          <span style="font-size: 0.6rem; color: #64748B; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;"><i class="fa-solid fa-box-open"></i> Sevk Edilen Malzemeler</span>
-          <div style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 3px;">
-            ${itemsMarkup}
-          </div>
-        </div>
-
-        ${t.rejectionReason ? `
-          <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; color: #ef4444; margin-top: 0.6rem; display: flex; align-items: start; gap: 8px;">
-            <i class="fa-solid fa-circle-info" style="margin-top: 2px; font-size: 0.85rem;"></i>
+        <!-- Accordion Collapsible Body -->
+        <div id="msf-acc-body-${t.id}" class="msf-accordion-content" style="display: ${isExpanded ? 'block' : 'none'}; margin-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 0.75rem;">
+          
+          <!-- Shipping & Metadata Grid -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; margin-bottom: 0.75rem;">
             <div>
-              <strong>Red/İptal Gerekçesi:</strong> ${t.rejectionReason}
+              <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-user-circle"></i> TALEBİ OLUŞTURAN</span>
+              <span style="color: var(--text-main); font-weight: 600; font-family: monospace; font-size: 0.7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${t.requestedBy}">${t.requestedBy}</span>
+            </div>
+            <div>
+              <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-paper-plane"></i> SEVK YÖNTEMİ</span>
+              <span style="color: var(--text-main); font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">${deliveryMethodStr}</span>
+            </div>
+            <div>
+              <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-info"></i> TAŞIYICI DETAYI</span>
+              <span style="color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;" title="${deliveryDetailStr}">${deliveryDetailStr}</span>
+            </div>
+            <div>
+              <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-clock"></i> GÖNDERİM TARİHİ</span>
+              <span style="color: var(--text-main); font-weight: 600;">${createdDateStr}</span>
+            </div>
+            <div>
+              <span style="color: #64748B; font-weight: 700; font-size: 0.58rem; display: block; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px;"><i class="fa-solid fa-circle-check"></i> TESLİM TARİHİ</span>
+              <span style="color: var(--text-main); font-weight: 600;">${resolvedDateStrHTML}</span>
             </div>
           </div>
-        ` : ''}
+
+          <!-- Materials Section -->
+          <div style="background: rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.02); border-radius: 8px; padding: 8px 12px;">
+            <span style="font-size: 0.6rem; color: #64748B; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px;"><i class="fa-solid fa-box-open"></i> Sevk Edilen Malzemeler</span>
+            <div style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 3px;">
+              ${itemsMarkup}
+            </div>
+          </div>
+
+          ${t.rejectionReason ? `
+            <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 8px; padding: 8px 12px; font-size: 0.72rem; color: #ef4444; margin-top: 0.6rem; display: flex; align-items: start; gap: 8px;">
+              <i class="fa-solid fa-circle-info" style="margin-top: 2px; font-size: 0.85rem;"></i>
+              <div>
+                <strong>Red/İptal Gerekçesi:</strong> ${t.rejectionReason}
+              </div>
+            </div>
+          ` : ''}
+
+        </div>
 
       </div>
     `;

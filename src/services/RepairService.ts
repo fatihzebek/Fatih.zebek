@@ -22,6 +22,7 @@ export interface RepairRecord {
   dispatchedAt?: any; // Transfer Tarihi
   dispatchedBy?: string; // Sevk eden atölye yetkilisi
   completedAt?: any; // Depoya giriş anı
+  completedBy?: string; // Depoya kabul eden yetkili
   scrappedAt?: any; // Hurdaya ayrılma zamanı
   scrappedBy?: string; // Hurdaya ayıran usta/yetkili
   scrapReason?: string; // Hurda gerekçesi / açıklaması
@@ -394,27 +395,107 @@ class RepairService {
     try {
       // 1. Add repaired stock to the target warehouse as REVISED, prefixed with R
       const sapNoWithR = repair.sapNo.toUpperCase().startsWith('R') ? repair.sapNo : 'R' + repair.sapNo;
+      const cleanDNo = (repair.dispatchNo || '').replace(/^(form\s*no:?\s*|sevk\s*no:?\s*|#\s*)/i, '').trim();
+      const dispatchNote = `Tamir Sonrası Revize Parça Girişi${cleanDNo ? ` (Sevk #${cleanDNo})` : ''}${repair.serialNo ? ` [Seri: ${repair.serialNo}]` : ''}`;
+
       await warehouseService.updateStockBySap(
         repair.targetWarehouseId,
         sapNoWithR,
         repair.quantity,
         {
           user: user,
-          reason: 'Tamir Sonrası Revize Parça Girişi',
-          materialName: repair.description
+          reason: dispatchNote,
+          materialName: repair.description,
+          formNo: cleanDNo || repair.dispatchNo || ''
         },
-        'REVISED'
+        'REVISED',
+        undefined,
+        repair.serialNo || '',
+        dispatchNote
       );
 
       // 2. Update repair status to COMPLETED
       const docRef = doc(db, 'repairs', repair.id);
       await updateDoc(docRef, {
         status: 'COMPLETED',
-        completedAt: serverTimestamp()
+        completedAt: serverTimestamp(),
+        completedBy: user
       });
       this.invalidateCache();
     } catch (error) {
       console.error("Error accepting returned repair:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rejects a returned dispatch item at warehouse because of transit or physical damage,
+   * marks original repair as REJECTED, and creates a new return entry to Workshop (MTA)
+   * with PENDING_ARRIVAL status, damage explanation, and photos.
+   */
+  async rejectAndReturnDamagedRepair(params: {
+    originalRepair: RepairRecord;
+    user: string;
+    reason: string;
+    damageImageUrl?: string;
+    returnFormNo?: string;
+  }) {
+    const { originalRepair, user, reason, damageImageUrl, returnFormNo } = params;
+    if (!originalRepair.id) return;
+
+    try {
+      const origDocRef = doc(db, 'repairs', originalRepair.id);
+      
+      // 1. Mark original dispatch record as REJECTED
+      const origUpdate: any = {
+        status: 'REJECTED',
+        rejectedAt: serverTimestamp(),
+        rejectedBy: user,
+        rejectReason: reason,
+        lastUpdated: serverTimestamp()
+      };
+      if (damageImageUrl) {
+        origUpdate.repairImageUrl = damageImageUrl;
+      }
+      if (returnFormNo) {
+        origUpdate.dispatchNo = returnFormNo;
+      }
+      await updateDoc(origDocRef, origUpdate);
+
+      // 2. Create new return record routed back to MTA
+      const sourceWh = originalRepair.targetWarehouseId || originalRepair.sourceWarehouseId || 'SAHA';
+      const cleanFormNo = returnFormNo || `İADE-${originalRepair.dispatchNo || originalRepair.id.slice(-5)}`;
+
+      const newRepairData: any = {
+        sapNo: originalRepair.sapNo,
+        serialNo: originalRepair.serialNo || '',
+        description: originalRepair.description,
+        quantity: originalRepair.quantity || 1,
+        sourceWarehouseId: sourceWh,
+        targetWarehouseId: 'MTA',
+        workshopId: 'MTA',
+        sentBy: user,
+        sentAt: serverTimestamp(),
+        status: 'PENDING_ARRIVAL',
+        faultCode: 'SEVK_HASARI',
+        faultDesc: `Sevkiyatta Hasarlı Geldi: ${reason}`,
+        preRepairNote: `Sevkiyatta hasar tespit edilerek sahadan geri gönderildi. Orijinal Sevk: ${originalRepair.dispatchNo || '-'}`,
+        dispatchNo: cleanFormNo,
+        repairStage: 'DIAGNOSIS',
+        testStatus: 'UNTESTED',
+        priority: 'HIGH',
+        createdAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+      };
+
+      if (damageImageUrl) {
+        newRepairData.repairImageUrl = damageImageUrl;
+      }
+
+      await addDoc(this.collectionRef, newRepairData);
+      this.invalidateCache();
+    } catch (error) {
+      console.error("Error rejecting and returning damaged repair:", error);
       throw error;
     }
   }

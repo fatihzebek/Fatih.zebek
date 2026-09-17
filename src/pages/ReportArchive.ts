@@ -202,6 +202,7 @@ const archiveItemsPerPage = 50;
     });
 
     const totalItems = filtered.length;
+    (window as any).archiveFilteredReports = filtered;
     const totalPages = Math.ceil(totalItems / archiveItemsPerPage) || 1;
 
     let currPage = (window as any).archiveCurrentPage || 1;
@@ -353,9 +354,38 @@ const archiveItemsPerPage = 50;
 };
 
 (window as any).downloadSelectedAsZip = async (siteName: string, siteId: string) => {
-    const checkboxes = document.querySelectorAll('.archive-checkbox:checked');
-    if (checkboxes.length === 0) {
-        alert("Lütfen indirilecek en az 1 rapor seçin.");
+    const checkedBoxes = Array.from(document.querySelectorAll('.archive-checkbox:checked')) as HTMLInputElement[];
+    const allFiltered = (window as any).archiveFilteredReports || (window as any).archiveReports || [];
+    const totalVisibleBoxes = document.querySelectorAll('.archive-checkbox').length;
+    
+    let reportsToDownload: any[] = [];
+    
+    if (checkedBoxes.length === 0) {
+        if (allFiltered.length > 0 && confirm(`Hiçbir rapor işaretlenmedi.\n\nFiltrelenen ${allFiltered.length} adet raporun TÜMÜNÜ indirmek istiyor musunuz?`)) {
+            reportsToDownload = allFiltered;
+        } else {
+            alert("Lütfen indirilecek en az 1 rapor seçin.");
+            return;
+        }
+    } else if (allFiltered.length > checkedBoxes.length && checkedBoxes.length === totalVisibleBoxes) {
+        const wantAll = confirm(`Sayfadaki ${checkedBoxes.length} rapor seçildi.\n\nFiltrelenen TÜM ${allFiltered.length} raporu mu indirmek istersiniz?\n\n[Tamam]: TÜM ${allFiltered.length} Raporu İndir\n[İptal]: Yalnızca sayfadaki ${checkedBoxes.length} Raporu İndir`);
+        if (wantAll) {
+            reportsToDownload = allFiltered;
+        } else {
+            const checkedNos = new Set(checkedBoxes.map(cb => cb.value));
+            reportsToDownload = allFiltered.filter((r: any) => checkedNos.has(r.reportNo));
+        }
+    } else {
+        const checkedNos = new Set(checkedBoxes.map(cb => cb.value));
+        reportsToDownload = allFiltered.filter((r: any) => checkedNos.has(r.reportNo));
+        if (reportsToDownload.length === 0) {
+            const allReports = (window as any).archiveReports || [];
+            reportsToDownload = allReports.filter((r: any) => checkedNos.has(r.reportNo));
+        }
+    }
+
+    if (reportsToDownload.length === 0) {
+        alert("İndirilecek rapor bulunamadı.");
         return;
     }
     
@@ -363,13 +393,14 @@ const archiveItemsPerPage = 50;
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(5px);';
     modal.innerHTML = `
-        <div style="background: #1e293b; padding: 2rem; border-radius: 12px; border: 1px solid var(--accent-cyan); width: 400px; max-width: 90vw; text-align: center; box-shadow: 0 0 30px rgba(0,242,254,0.2);">
+        <div style="background: #1e293b; padding: 2rem; border-radius: 12px; border: 1px solid var(--accent-cyan); width: 420px; max-width: 90vw; text-align: center; box-shadow: 0 0 30px rgba(0,242,254,0.2);">
             <i class="fa-solid fa-file-zipper fa-bounce" style="font-size: 3rem; color: var(--accent-cyan); margin-bottom: 1rem;"></i>
-            <h3 style="margin-bottom: 1rem;">ZIP Arşivi Hazırlanıyor...</h3>
-            <div style="width: 100%; background: rgba(0,0,0,0.5); border-radius: 8px; height: 16px; margin-bottom: 1rem; overflow: hidden;">
-                <div id="zip-progress-bar" style="width: 0%; height: 100%; background: var(--accent-cyan); transition: width 0.3s;"></div>
+            <h3 style="margin-bottom: 0.5rem; color: #fff; font-family: 'Rajdhani', sans-serif; font-size: 1.4rem;">ZIP Arşivi Hazırlanıyor...</h3>
+            <p id="zip-current-name" style="color: var(--accent-cyan); font-size: 0.8rem; margin-bottom: 1rem; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Hazırlanıyor...</p>
+            <div style="width: 100%; background: rgba(0,0,0,0.5); border-radius: 8px; height: 16px; margin-bottom: 1rem; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);">
+                <div id="zip-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00f2fe, #4facfe); transition: width 0.3s;"></div>
             </div>
-            <p id="zip-progress-text" style="color: var(--text-muted); font-size: 0.9rem;">0 / ${checkboxes.length} rapor işlendi</p>
+            <p id="zip-progress-text" style="color: var(--text-muted); font-size: 0.9rem; font-weight: 600;">0 / ${reportsToDownload.length} rapor işlendi</p>
             <p style="color: #ffcc00; font-size: 0.75rem; margin-top: 1rem;"><i class="fa-solid fa-triangle-exclamation"></i> Lütfen bu pencereyi kapatmayın veya sayfayı yenilemeyin.</p>
         </div>
     `;
@@ -377,6 +408,7 @@ const archiveItemsPerPage = 50;
     
     try {
         const { serviceReportService } = await import('../services/ServiceReportService');
+        const { renderReportPDF } = await import('../components/ReportTemplate');
         
         // Dynamically load JSZip and html2pdf
         if (!(window as any).html2pdf) {
@@ -405,111 +437,131 @@ const archiveItemsPerPage = 50;
         }
 
         const zip = new (window as any).JSZip();
-        // Create root folder
-        const cleanSiteName = siteName.replace(/[^a-zA-Z0-9]/g, '_');
-        const rootFolder = zip.folder(cleanSiteName);
-        const arizaFolder = rootFolder.folder('Ariza');
-        const bakimFolder = rootFolder.folder('Bakim');
+        // Clean site name preserving Turkish characters
+        const cleanSiteName = (siteName || (window as any).archiveSiteName || 'Saha').replace(/[\\/:*?"<>|]/g, '-').trim();
+        // Subfolders directly inside zip with proper Turkish characters
+        const arizaFolder = zip.folder('Arıza');
+        const bakimFolder = zip.folder('Bakım');
         
         let completed = 0;
         const downloadedIds: string[] = [];
         
-        // Render helper
+        // Standard A4 PDF Options matching EmailService and single PDF export
         const baseOpt = {
-            margin: 10,
-            image: { type: 'png', quality: 1 },
-            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: 900 },
+            margin: [8, 8, 8, 8],
+            image: { type: 'jpeg', quality: 0.88 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollY: 0 },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'], before: ['.html2pdf__page-break', '.section-break'], avoid: ['tr', '.pdf-no-break', 'img'] }
+            pagebreak: { 
+                mode: ['css', 'legacy'], 
+                before: '.html2pdf__page-break', 
+                avoid: ['tr', '.pdf-no-break', '.report-section', '.ohs-day-card', 'img'] 
+            }
         };
 
-        const originalHtmlFontSize = document.documentElement.style.fontSize;
-        document.documentElement.style.fontSize = '12px';
-
-        try {
-            for (let i = 0; i < checkboxes.length; i++) {
-                const cb = checkboxes[i] as HTMLInputElement;
-                const reportNo = cb.value;
-                const type = cb.getAttribute('data-type'); // 'Bakim' or 'Ariza'
-                const turbineNo = cb.getAttribute('data-turbin');
-                const template = cb.getAttribute('data-template');
-                
-                const report = await serviceReportService.getReportByNo(reportNo);
-                if (!report) continue;
-                
-                if (report.id) downloadedIds.push(report.id);
-                
-                const htmlStr = await renderReportPDF(report);
-                
-                // Create invisible DOM element for html2pdf
-                const wrapper = document.createElement('div');
-                wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:900px;background:#fff;z-index:-1;';
-                wrapper.innerHTML = htmlStr;
-                document.body.appendChild(wrapper);
-                
-                // Give browser time to render DOM, CSS, and images
-                const images = wrapper.querySelectorAll('img');
-                if (images.length > 0) {
-                  await Promise.all(Array.from(images).map((img: any) => {
+        for (let i = 0; i < reportsToDownload.length; i++) {
+            const reportItem = reportsToDownload[i];
+            const reportNo = reportItem.reportNo;
+            
+            const currentNameEl = document.getElementById('zip-current-name');
+            if (currentNameEl) currentNameEl.innerText = `${reportNo} hazırlanıyor...`;
+            
+            // Get full report if not fully in memory
+            const report = (reportItem.materials && reportItem.personnel) 
+                ? reportItem 
+                : ((await serviceReportService.getReportByNo(reportNo)) || reportItem);
+            
+            if (!report) continue;
+            if (report.id) downloadedIds.push(report.id);
+            
+            const typeName = (report.templateName || report.faultCode || '').toLowerCase();
+            const rawType = (report.type || '').toUpperCase();
+            const isBakim = rawType === 'BAKIM' || typeName.includes('bakım') || typeName.includes('bakim') || typeName.includes('yağ') || typeName.includes('temizlik') || typeName.includes('kontrol') || typeName.includes('t44') || typeName.includes('t13');
+            
+            const htmlStr = renderReportPDF(report);
+            
+            // Create temporary container offscreen (width: 720px for A4)
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 720px; background: #ffffff; z-index: -99999;';
+            wrapper.innerHTML = htmlStr;
+            document.body.appendChild(wrapper);
+            
+            const targetElement = (wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
+            if (targetElement) {
+                targetElement.style.width = '710px';
+                targetElement.style.maxWidth = '710px';
+                targetElement.style.boxSizing = 'border-box';
+            }
+            
+            // Wait for images to load
+            const images = wrapper.querySelectorAll('img');
+            if (images.length > 0) {
+                await Promise.all(Array.from(images).map((img: any) => {
                     if (img.complete) return Promise.resolve();
                     return new Promise(res => { img.onload = res; img.onerror = res; });
-                  }));
-                }
-                await new Promise(r => setTimeout(r, 500));
-                
-                // Get PDF as blob (must pass the container, not the fixed wrapper)
-                const targetElement = wrapper.querySelector('#pdf-container') || wrapper.firstElementChild || wrapper;
-                const pdfBlob = await (window as any).html2pdf().set(baseOpt).from(targetElement).outputPdf('blob');
-                
-                // Add to zip folder
-                const d = new Date(report.date);
-                const y = d.getFullYear();
-                const m = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                const dateStr = `${y}.${m}.${day}`;
-                
-                const mcfStr = report.matFormNo ? `_(MÇF_${report.matFormNo})` : '';
-                const actionStr = ((type === 'Bakim' ? report.templateName : report.faultCode) || 'Rapor').replace(/\s+/g, '_');
-                const siteStr = (report.siteName || 'Saha').replace(/\s+/g, '_');
-                const turbStr = (turbineNo || 'T').replace(/\s+/g, '_');
-                let fileName = `${dateStr}-${siteStr}-${actionStr}-${turbStr}${mcfStr}.pdf`;
-                fileName = fileName.replace(/[\\/:*?"<>|]/g, '-').trim();
-                
-                if (type === 'Bakim') {
-                    bakimFolder.file(fileName, pdfBlob);
-                } else {
-                    arizaFolder.file(fileName, pdfBlob);
-                }
-                
-                // Clean up DOM
-                document.body.removeChild(wrapper);
-                
-                completed++;
-                document.getElementById('zip-progress-bar')!.style.width = `${(completed / checkboxes.length) * 100}%`;
-                document.getElementById('zip-progress-text')!.innerText = `${completed} / ${checkboxes.length} rapor işlendi`;
+                }));
             }
-        } finally {
-            document.documentElement.style.fontSize = originalHtmlFontSize;
+            await new Promise(r => setTimeout(r, 350));
+            
+            // Generate PDF Blob
+            const pdfBlob = await (window as any).html2pdf().set(baseOpt).from(targetElement).outputPdf('blob');
+            
+            // Clean up DOM immediately
+            if (wrapper.parentNode) {
+                wrapper.parentNode.removeChild(wrapper);
+            }
+            
+            // Generate clean filename
+            const d = report.date ? new Date(report.date) : new Date();
+            const isValidDate = !isNaN(d.getTime());
+            const dateStr = isValidDate 
+                ? `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` 
+                : 'Tarihsiz';
+            
+            const mcfStr = report.matFormNo ? `_(MÇF_${report.matFormNo})` : '';
+            const actionStr = ((isBakim ? report.templateName : report.faultCode) || 'Rapor').replace(/\s+/g, '_');
+            const siteStr = (report.siteName || cleanSiteName || 'Saha').replace(/\s+/g, '_');
+            const turbStr = (report.turbineNo || 'T').replace(/\s+/g, '_');
+            const repNoStr = report.reportNo ? `-${report.reportNo}` : '';
+            let fileName = `${dateStr}-${siteStr}-${actionStr}-${turbStr}${repNoStr}${mcfStr}.pdf`;
+            fileName = fileName.replace(/[\\/:*?"<>|]/g, '-').trim();
+            
+            if (isBakim) {
+                bakimFolder.file(fileName, pdfBlob);
+            } else {
+                arizaFolder.file(fileName, pdfBlob);
+            }
+            
+            completed++;
+            const bar = document.getElementById('zip-progress-bar');
+            const pText = document.getElementById('zip-progress-text');
+            if (bar) bar.style.width = `${(completed / reportsToDownload.length) * 100}%`;
+            if (pText) pText.innerText = `${completed} / ${reportsToDownload.length} rapor işlendi`;
         }
         
         // Generate Zip and trigger download
-        document.getElementById('zip-progress-text')!.innerText = "ZIP dosyası oluşturuluyor, lütfen bekleyin...";
+        const pText = document.getElementById('zip-progress-text');
+        if (pText) pText.innerText = "ZIP dosyası paketleniyor, lütfen bekleyin...";
         const zipBlob = await zip.generateAsync({ type: "blob" });
         (window as any).saveAs(zipBlob, `${cleanSiteName}_Raporlar.zip`);
         
         // Mark as downloaded in DB
         if (downloadedIds.length > 0) {
-            await serviceReportService.markAsDownloaded(downloadedIds);
+            try {
+                await serviceReportService.markAsDownloaded(downloadedIds);
+            } catch (e) {
+                console.warn("markAsDownloaded warning:", e);
+            }
         }
         
-        document.body.removeChild(modal);
-        alert("Toplu arşivleme başarıyla tamamlandı!");
-        // Refresh page
-        (window as any).navigate('reports-archive', siteId);
+        if (modal.parentNode) modal.parentNode.removeChild(modal);
+        alert(`Toplu arşivleme başarıyla tamamlandı!\nToplam ${completed} rapor indirildi.`);
+        // Refresh table
+        (window as any).renderArchiveTable();
         
     } catch (err: any) {
         console.error("ZIP Error", err);
-        document.body.removeChild(modal);
+        if (modal.parentNode) modal.parentNode.removeChild(modal);
         alert("Toplu indirme sırasında bir hata oluştu: " + err.message);
     }
 };
@@ -824,8 +876,13 @@ export const ReportArchivePage = async (siteId?: string) => {
             <span id="preview-report-no" style="font-size: 0.7rem; color: var(--accent-cyan); letter-spacing: 1px;">Yükleniyor...</span>
           </div>
         </div>
-        <div style="display: flex; gap: 1rem;">
-          <button onclick="window.closeReport()" class="cyber-button" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 8px 16px; cursor: pointer;">
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          ${isFen ? `
+          <button id="modal-send-email-btn" onclick="window.sendReportEmailFromModal(event)" class="cyber-button" style="background: rgba(0, 242, 254, 0.12); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 8px 16px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 700; border-radius: 6px;">
+            <i class="fa-solid fa-envelope"></i> E-POSTA GÖNDER
+          </button>
+          ` : ''}
+          <button onclick="window.closeReport()" class="cyber-button" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; padding: 8px 16px; cursor: pointer; border-radius: 6px;">
             <i class="fa-solid fa-xmark"></i> KAPAT
           </button>
         </div>
@@ -1090,6 +1147,68 @@ export const ReportArchivePage = async (siteId?: string) => {
       modal.classList.add('hidden');
       document.body.style.overflow = 'auto';
     }
+};
+
+(window as any).sendReportEmailFromModal = async (event?: Event) => {
+    const reportNoEl = document.getElementById('preview-report-no');
+    if (!reportNoEl) return;
+    const reportNo = reportNoEl.innerText.trim();
+    if (!reportNo || reportNo === 'Yükleniyor...') return;
+
+    const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+    const userEmail = (currentUser?.email || '').toLowerCase();
+    const isFen = userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'fen' || userEmail.includes('fatih.zebek');
+    if (!isFen) {
+        alert('Bu işlem yalnızca Fatih Zebek için yetkilendirilmiştir.');
+        return;
+    }
+
+    const defaultEmail = currentUser?.email || 'fatih.zebek@demirerholding.com';
+    const targetEmail = prompt('Raporun ve resmi PDF ekinin gönderileceği e-posta adresi:', defaultEmail);
+    if (!targetEmail) return;
+
+    const btn = (event?.currentTarget as HTMLButtonElement) || document.getElementById('modal-send-email-btn');
+    const oldHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF HAZIRLANIYOR & GÖNDERİLİYOR...';
+        (btn as HTMLButtonElement).disabled = true;
+    }
+
+    try {
+        const { serviceReportService } = await import('../services/ServiceReportService');
+        const { emailService } = await import('../services/EmailService');
+        const report = await serviceReportService.getReportByNo(reportNo);
+        if (!report) {
+            alert('Rapor veritabanında bulunamadı.');
+            return;
+        }
+
+        const res = await emailService.sendReportEmail(report, targetEmail.trim());
+        if (res.success) {
+            alert(`✅ BAŞARILI!\n\nRapor ve yeni PDF formatı başarıyla "${targetEmail.trim()}" adresine e-posta ile iletildi.`);
+        } else {
+            alert(`⚠️ E-posta uyarısı: ${res.message}`);
+        }
+    } catch (err: any) {
+        alert('E-posta gönderilirken hata oluştu: ' + (err?.message || err));
+    } finally {
+        if (btn) {
+            btn.innerHTML = oldHtml || '<i class="fa-solid fa-envelope"></i> E-POSTA GÖNDER';
+            (btn as HTMLButtonElement).disabled = false;
+        }
+    }
+};
+
+(window as any).sendTestEmail = async (reportNo = 'DG_SY07092026888', targetEmail = 'fatih.zebek@demirerholding.com') => {
+    const { serviceReportService } = await import('../services/ServiceReportService');
+    const { emailService } = await import('../services/EmailService');
+    const report = await serviceReportService.getReportByNo(reportNo);
+    if (!report) {
+        console.error('Rapor bulunamadı:', reportNo);
+        return { success: false, message: 'Rapor bulunamadı' };
+    }
+    console.log(`[Test Email] ${reportNo} -> ${targetEmail} gönderiliyor...`);
+    return await emailService.sendReportEmail(report, targetEmail);
 };
 
 (window as any).openAiExecutiveSummary = async () => {
@@ -1393,9 +1512,18 @@ export const ReportArchivePage = async (siteId?: string) => {
             if (modal && modalContent) {
                 if (previewReportNo) previewReportNo.innerText = report.reportNo;
                 
-                // Add Admin Telemetry Analysis Card if user is Admin
-                const currentUser = (window as any).currentUser;
-                const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+                // Check user permissions
+                const currentUser = (window as any).currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}');
+                const userEmail = (currentUser?.email || '').toLowerCase();
+                const isFen = userEmail === 'fatih.zebek@demirerholding.com' || userEmail === 'fen' || userEmail.includes('fatih.zebek');
+                const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || isFen;
+                
+                // Show Send Email button only for Fatih Zebek
+                const sendEmailBtn = modal?.querySelector('#modal-send-email-btn') as HTMLElement;
+                if (sendEmailBtn) {
+                    sendEmailBtn.style.display = isFen ? 'flex' : 'none';
+                }
+
                 let telemetryHtml = '';
                 
                 if (isAdmin) {
@@ -1695,13 +1823,14 @@ export const ReportArchivePage = async (siteId?: string) => {
                 html2canvas: { 
                     scale: 2, 
                     useCORS: true, 
-                    backgroundColor: '#ffffff'
+                    backgroundColor: '#ffffff',
+                    scrollY: 0
                 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { 
                     mode: ['css', 'legacy'], 
                     before: '.html2pdf__page-break', 
-                    avoid: ['tr', 'img'] 
+                    avoid: ['tr', '.pdf-no-break', '.report-section', '.ohs-day-card', 'img'] 
                 }
             };
 

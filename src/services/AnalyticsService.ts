@@ -86,22 +86,36 @@ const getCanonicalName = (name: string) => {
   return found || name;
 };
 
+function normalizeTurkish(s: string): string {
+  return (s || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ı/g, 'i')
+    .replace(/i̇/g, 'i')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+export const isExemptOfficeOrIsg = (name: string): boolean => {
+  if (!name) return false;
+  const clean = normalizeTurkish(name);
+  return (
+    clean.includes('fatihzebek') ||
+    clean.includes('furkanyildirim') ||
+    clean.includes('sercanyetkin') ||
+    clean.includes('sercanyetgin') ||
+    clean.includes('necatozturk')
+  );
+};
+
 class AnalyticsService {
   get personnel() {
     const details = personnelService.getPersonnelDetailsList();
-    const officeStaff = [
-      'fatih zebek',
-      'sercan yetki',
-      'furkan yıldırım',
-      'furkan yildirim',
-      'necat öztürk',
-      'necat ozturk'
-    ];
     return personnelService.getPersonnelList()
-      .filter(name => {
-        const clean = name.toLocaleLowerCase('tr-TR').trim();
-        return !officeStaff.some(os => clean.includes(os) || os.includes(clean));
-      })
+      .filter(name => !isExemptOfficeOrIsg(name))
       .map(name => {
         const detail = details.find(d => d.name.toLocaleLowerCase('tr-TR') === name.toLocaleLowerCase('tr-TR'));
         return {
@@ -132,7 +146,8 @@ class AnalyticsService {
           let off = new Date(2000, 0, 1, endH, endM);
           if (off < on) off = new Date(2000, 0, 2, endH, endM);
           
-          const pCount = session.personnel?.length || 0;
+          const validPersonnel = (session.personnel || []).filter(name => !isExemptOfficeOrIsg(name));
+          const pCount = validPersonnel.length;
           let duration = (off.getTime() - on.getTime()) / (1000 * 60 * 60);
           
           totalManHours += duration * pCount;
@@ -148,8 +163,7 @@ class AnalyticsService {
           }
 
           let otTotal = 0;
-          const pList = session.personnel || [];
-          pList.forEach((name: string) => {
+          validPersonnel.forEach((name: string) => {
             let otHours = DateTimeUtils.calculateOvertimeHours(
               session.date || report.date || new Date().toISOString().split('T')[0],
               session.startTime,
@@ -181,7 +195,7 @@ class AnalyticsService {
           const representativeOt = pCount > 0 ? (otTotal / pCount) : 0;
           if (otTotal > 0 && pCount > 0) {
             overtimeSegments.push({
-              personnel: session.personnel,
+              personnel: validPersonnel,
               startTime: session.startTime,
               endTime: session.endTime,
               hours: Number(representativeOt.toFixed(2))
@@ -194,7 +208,8 @@ class AnalyticsService {
     } else {
       const onStr = report.timeManagement?.maintenanceOn;
       const offStr = report.timeManagement?.maintenanceOff;
-      const personnelCount = report.personnel?.length || 0;
+      const validFallbackPersonnel = (report.personnel || []).filter(name => !isExemptOfficeOrIsg(name));
+      const personnelCount = validFallbackPersonnel.length;
 
       if (onStr && offStr && personnelCount > 0) {
         try {
@@ -209,8 +224,7 @@ class AnalyticsService {
           (this as any).lastTurbineDuration = durationHours;
 
           let otTotal = 0;
-          const pList = report.personnel || [];
-          pList.forEach((name: string) => {
+          validFallbackPersonnel.forEach((name: string) => {
             const otHours = DateTimeUtils.calculateOvertimeHours(
               report.date || new Date().toISOString().split('T')[0],
               onStr,
@@ -226,7 +240,7 @@ class AnalyticsService {
           const representativeOt = personnelCount > 0 ? (otTotal / personnelCount) : 0;
           if (otTotal > 0) {
             overtimeSegments.push({
-              personnel: report.personnel || [],
+              personnel: validFallbackPersonnel,
               startTime: onStr,
               endTime: offStr,
               hours: Number(representativeOt.toFixed(2))
@@ -326,6 +340,7 @@ class AnalyticsService {
           stats.overtimeSegments.forEach(seg => {
             seg.personnel.forEach(pName => {
               if (r.voidedOvertimes && r.voidedOvertimes.includes(pName)) return;
+              if (isExemptOfficeOrIsg(pName)) return;
               overtimeDetails.push({
                 personnelName: getCanonicalName(pName),
                 date: r.date,

@@ -149,20 +149,20 @@ export const renderReportPDF = (report: ServiceReport) => {
         else if (type === 'dropdown') {
             details = `<strong>Seçim:</strong> ${vals[0] || '-'}`;
         }
-        if (details) advHtml = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(0,85,170,0.06); border: 1px solid rgba(0,85,170,0.1); border-radius: 4px; font-size: 0.96rem; color: #004488;">${details}</div>`;
+        if (details) advHtml = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(0,85,170,0.06); border: 1px solid rgba(0,85,170,0.1); border-radius: 4px; font-size: 0.82rem; color: #004488; word-break: break-word; line-height: 1.25;">${details}</div>`;
       }
 
       return `
         <tr style="background: ${rowBg}; page-break-inside: avoid; break-inside: avoid;">
-          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center; font-weight: 700; color: #555;">${(idx + 1).toString().padStart(2, '0')}</td>
-          <td style="border: 1px solid #bbb; padding: 4px 6px; font-weight: ${item.status === 'NOT_OK' ? '700' : '400'};${item.status === 'NOT_OK' ? ' color: #b91c1c;' : ''}; word-break: break-word;">
+          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center; font-weight: 700; color: #555; vertical-align: middle;">${(idx + 1).toString().padStart(2, '0')}</td>
+          <td style="border: 1px solid #bbb; padding: 4px 6px; font-weight: ${item.status === 'NOT_OK' ? '700' : '400'};${item.status === 'NOT_OK' ? ' color: #b91c1c;' : ''}; word-break: break-word; vertical-align: middle; line-height: 1.3;">
             ${item.text}
             ${advHtml}
           </td>
-          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center;">
-            <span style="background: ${statusBg}; color: ${statusColor}; padding: 1px 4px; border-radius: 3px; font-weight: 800; font-size: 0.85rem; border: 1px solid ${statusColor}33; display: inline-block;">${statusLabel}</span>
+          <td style="border: 1px solid #bbb; padding: 4px 2px; text-align: center; vertical-align: middle;">
+            <span style="background: ${statusBg}; color: ${statusColor}; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.76rem; border: 1px solid ${statusColor}40; display: inline-block; white-space: nowrap; letter-spacing: 0.2px;">${statusLabel}</span>
           </td>
-          <td style="border: 1px solid #bbb; padding: 4px 6px; font-size: 0.92rem; color: ${item.status === 'NOT_OK' ? '#b91c1c' : '#666'}; font-style: ${item.comment ? 'normal' : 'italic'}; word-break: break-word;">
+          <td style="border: 1px solid #bbb; padding: 4px 8px; font-size: 0.85rem; color: ${item.status === 'NOT_OK' ? '#b91c1c' : '#444'}; font-style: ${item.comment ? 'normal' : 'italic'}; word-break: break-word; line-height: 1.3; vertical-align: middle;">
             ${item.comment || '-'}
           </td>
         </tr>`;
@@ -202,18 +202,18 @@ export const renderReportPDF = (report: ServiceReport) => {
         <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #bbb; border-bottom: none;">
           BAKIM DENETİM LİSTESİ
         </div>
-        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.92rem; table-layout: fixed;">
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.88rem; table-layout: fixed;">
           <colgroup>
             <col style="width: 32px;">
-            <col>
-            <col style="width: 105px;">
-            <col style="width: 130px;">
+            <col style="width: 310px;">
+            <col style="width: 125px;">
+            <col style="width: 217px;">
           </colgroup>
           <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
-            <th style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center;">NO</th>
-            <th style="border: 1px solid #bbb; padding: 4px 6px; text-align: left; font-weight: 700;">KONTROL MADDESİ</th>
-            <th style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center;">DURUM</th>
-            <th style="border: 1px solid #bbb; padding: 4px 6px; font-weight: 700; text-align: left;">AÇIKLAMA</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700; text-align: center;">NO</th>
+            <th style="border: 1px solid #bbb; padding: 5px 6px; text-align: left; font-weight: 700;">KONTROL MADDESİ</th>
+            <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700; text-align: center;">DURUM</th>
+            <th style="border: 1px solid #bbb; padding: 5px 6px; font-weight: 700; text-align: left;">AÇIKLAMA</th>
           </tr>`;
           
     checklist.forEach((item, i) => {
@@ -224,28 +224,28 @@ export const renderReportPDF = (report: ServiceReport) => {
     
     if (notOkCount > 0) {
       checklistHtml += `
-        <div style="margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
+        <div style="margin-bottom: 12px;">
           <div style="background: #fef2f2; padding: 4px 10px; font-weight: 800; font-size: 1rem; border: 1px solid #ef4444; border-bottom: none; color: #b91c1c;">
             🚨 ANALİZ VE BULGULAR (${notOkCount})
           </div>
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #ef4444; font-size: 0.92rem; table-layout: fixed;">
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #ef4444; font-size: 0.88rem; table-layout: fixed;">
             <colgroup>
               <col style="width: 32px;">
-              <col style="width: 40%;">
-              <col style="width: 55%;">
+              <col style="width: 310px;">
+              <col style="width: 342px;">
             </colgroup>
             <tr style="background: #fef2f2; page-break-inside: avoid; break-inside: avoid;">
-              <th style="border: 1px solid #ef4444; padding: 4px 2px; font-weight: 700; text-align: center;">NO</th>
-              <th style="border: 1px solid #ef4444; padding: 4px 6px; text-align: left; font-weight: 700;">Kontrol Maddesi</th>
-              <th style="border: 1px solid #ef4444; padding: 4px 6px; text-align: left; font-weight: 700;">Tamamlanamama Nedeni / Arıza Bulgusu</th>
+              <th style="border: 1px solid #ef4444; padding: 5px 2px; font-weight: 700; text-align: center;">NO</th>
+              <th style="border: 1px solid #ef4444; padding: 5px 6px; text-align: left; font-weight: 700;">Kontrol Maddesi</th>
+              <th style="border: 1px solid #ef4444; padding: 5px 6px; text-align: left; font-weight: 700;">Tamamlanamama Nedeni / Arıza Bulgusu</th>
             </tr>
             ${checklist.filter(item => item.status === 'NOT_OK').map((item) => {
               const originalIndex = checklist.indexOf(item);
               return `
                 <tr style="background: #fff; page-break-inside: avoid; break-inside: avoid;">
-                  <td style="border: 1px solid #ef4444; padding: 4px 2px; text-align: center; font-weight: 800; color: #b91c1c;">${(originalIndex + 1).toString().padStart(2, '0')}</td>
-                  <td style="border: 1px solid #ef4444; padding: 4px 6px; font-weight: 600; word-break: break-word;">${item.text}</td>
-                  <td style="border: 1px solid #ef4444; padding: 4px 6px; color: #b91c1c; font-weight: 500; word-break: break-word;">${item.comment || 'Açıklama girilmemiş'}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px 2px; text-align: center; font-weight: 800; color: #b91c1c; vertical-align: middle;">${(originalIndex + 1).toString().padStart(2, '0')}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px 6px; font-weight: 600; word-break: break-word; line-height: 1.25; vertical-align: middle;">${item.text}</td>
+                  <td style="border: 1px solid #ef4444; padding: 4px 6px; color: #b91c1c; font-weight: 500; word-break: break-word; line-height: 1.25; vertical-align: middle;">${item.comment || 'Açıklama girilmemiş'}</td>
                 </tr>`;
             }).join('')}
           </table>
@@ -282,11 +282,11 @@ let ohsHtml = '';
           const note = ohs[`q${i}Note`] || '';
           
           itemsHtml += `
-            <tr style="background: ${index % 2 === 0 ? '#fff' : '#fafbfd'};">
-              <td style="border: 1px solid #bbb; padding: 6px; font-weight: 700; text-align: center; color: #555;">${i}</td>
-              <td style="border: 1px solid #bbb; padding: 6px 10px; font-size: 1.08rem;">${q}</td>
-              <td style="border: 1px solid #bbb; padding: 6px 10px; font-weight: 700; text-align: center; color: #16a34a;">${name} <br><span style="font-size: 0.75rem; color:#555;">(Onaylandı)</span></td>
-              <td style="border: 1px solid #bbb; padding: 6px 10px; font-size: 1.08rem; color: #cc0000; font-style: ${note ? 'normal' : 'italic'};">${note || '-'}</td>
+            <tr style="background: ${index % 2 === 0 ? '#fff' : '#fafbfd'}; page-break-inside: avoid; break-inside: avoid;">
+              <td style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center; color: #555;">${i}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 6px; font-size: 0.82rem; line-height: 1.25;">${q}</td>
+              <td style="border: 1px solid #bbb; padding: 4px 4px; font-weight: 700; text-align: center; color: #16a34a; font-size: 0.82rem; line-height: 1.2;">${name} <br><span style="font-size: 0.72rem; color:#555; font-weight: 500;">(Onaylandı)</span></td>
+              <td style="border: 1px solid #bbb; padding: 4px 6px; font-size: 0.82rem; color: #cc0000; font-style: ${note ? 'normal' : 'italic'}; line-height: 1.2;">${note || '-'}</td>
             </tr>
           `;
         });
@@ -298,30 +298,27 @@ let ohsHtml = '';
         }
 
         return `
-            <div class="html2pdf__page-break" style="page-break-before: always; break-before: page; height: 0;"></div>
-            <table class="ohs-table-block" style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.92rem; table-layout: fixed; margin-top: 5px; margin-bottom: 15px;">
-              <colgroup>
-                <col style="width: 32px;">
-                <col>
-                <col style="width: 130px;">
-                <col style="width: 130px;">
-              </colgroup>
-              <tr style="page-break-inside: avoid; break-inside: avoid;">
-                <td colspan="4" style="background: #e8ecf1; padding: 6px 10px; font-weight: 800; font-size: 1.1rem; border: 1px solid #bbb;">${dayIndex + 1}. GÜN İSG VE SAHA GÜVENLİK ONAYLARI</td>
-              </tr>
-              <tr style="page-break-inside: avoid; break-inside: avoid;">
-                <td colspan="4" style="background: #e8ecf1; padding: 0 10px 6px; border: 1px solid #bbb; text-align: right; font-weight: 800; font-size: 0.95rem;">
-                  ${dateStr || ''}
-                </td>
-              </tr>
-              <tr style="background: #f5f7fa; page-break-inside: avoid; break-inside: avoid;">
-                <th style="border: 1px solid #bbb; padding: 5px 2px; font-weight: 700; text-align: center;">NO</th>
-                <th style="border: 1px solid #bbb; padding: 5px 6px; font-weight: 700; text-align: left;">İSG KONTROL MADDESİ</th>
-                <th style="border: 1px solid #bbb; padding: 5px 4px; font-weight: 700; text-align: center;">ONAYLAYAN PERSONEL</th>
-                <th style="border: 1px solid #bbb; padding: 5px 4px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
-              </tr>
-              ${itemsHtml}
-            </table>
+            <div class="ohs-day-card report-section" style="page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 12px;">
+              <div style="background: #e8ecf1; padding: 4px 10px; font-weight: 800; font-size: 0.95rem; border: 1px solid #bbb; border-bottom: none; display: flex; justify-content: space-between; align-items: center;">
+                <span>${dayIndex + 1}. GÜN İSG VE SAHA GÜVENLİK ONAYLARI</span>
+                <span style="font-size: 0.88rem; font-weight: 800; color: #222;">${dateStr || ''}</span>
+              </div>
+              <table class="ohs-table-block" style="width: 100%; border-collapse: collapse; border: 1px solid #bbb; font-size: 0.82rem; table-layout: fixed;">
+                <colgroup>
+                  <col style="width: 30px;">
+                  <col>
+                  <col style="width: 125px;">
+                  <col style="width: 125px;">
+                </colgroup>
+                <tr style="background: #f5f7fa; font-size: 0.8rem; page-break-inside: avoid; break-inside: avoid;">
+                  <th style="border: 1px solid #bbb; padding: 4px 2px; font-weight: 700; text-align: center;">NO</th>
+                  <th style="border: 1px solid #bbb; padding: 4px 6px; font-weight: 700; text-align: left;">İSG KONTROL MADDESİ</th>
+                  <th style="border: 1px solid #bbb; padding: 4px 4px; font-weight: 700; text-align: center;">ONAYLAYAN PERSONEL</th>
+                  <th style="border: 1px solid #bbb; padding: 4px 4px; font-weight: 700; text-align: left;">EKLENEN NOT / SORUN</th>
+                </tr>
+                ${itemsHtml}
+              </table>
+            </div>
           `;
       }).join('');
     }
@@ -351,7 +348,7 @@ let ohsHtml = '';
             box-sizing: border-box !important;
           }
 
-          tr, td, th, img, .info-card, .chart-container, .scada-data, .pdf-no-break, .report-section {
+          tr, td, th, img, .info-card, .chart-container, .scada-data, .pdf-no-break, .report-section, .ohs-day-card {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
@@ -374,7 +371,7 @@ let ohsHtml = '';
         #pdf-container table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         #pdf-container table th, #pdf-container table td { word-wrap: break-word !important; overflow-wrap: break-word !important; box-sizing: border-box !important; }
         #pdf-container .pdf-no-break { page-break-inside: avoid !important; break-inside: avoid !important; }
-        #pdf-container .report-section { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 12px; }
+        #pdf-container .report-section, #pdf-container .ohs-day-card { page-break-inside: avoid !important; break-inside: avoid !important; margin-bottom: 12px; }
         .html2pdf__page-break { page-break-before: always !important; break-before: page !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; }
       </style>
 

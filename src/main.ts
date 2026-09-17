@@ -1,14 +1,3 @@
-// NATIVE INDEXEDDB CACHE CLEAR (ON VERSION UPGRADE)
-if (typeof window !== 'undefined') {
-  const cacheVersion = 'v1.0.5';
-  if (localStorage.getItem('firestore_cache_ver') !== cacheVersion) {
-    try {
-      window.indexedDB.deleteDatabase('firestore/[DEFAULT]/dh-servis-rapor/main');
-      localStorage.setItem('firestore_cache_ver', cacheVersion);
-    } catch (e) {}
-  }
-}
-
 import './style.css'
 import { offlineSyncService } from './services/OfflineSyncService';
 import './components/VoiceAgentModal';
@@ -283,6 +272,43 @@ fixSap55533To56633();
         const files = item.files.map((f: any) => offlineSyncService.base64ToFile(f.data, f.name, f.type));
         await serviceReportService.saveReport(item.report, files);
         await offlineSyncService.removeReportFromQueue(item.id);
+
+        // Process stock deduction and reservations for offline report
+        const rep = item.report;
+        if (rep && rep.materials && rep.materials.length > 0) {
+          try {
+            const { warehouseService } = await import('./services/WarehouseService');
+            const siteWhId = warehouseService.resolveWarehouseId(rep.siteId) || rep.siteId;
+            const userTeam = rep.team || '';
+            let usedWhId = siteWhId;
+            if (userTeam.toLowerCase().includes('team')) {
+              const num = userTeam.match(/\d+/);
+              if (num) {
+                usedWhId = `team_Team_${num[0].padStart(2, '0')}`;
+              }
+            }
+            await offlineSyncService.processPendingStockAction({
+              id: 'stock_' + rep.reportNo,
+              reportNo: rep.reportNo,
+              siteId: rep.siteId,
+              siteName: rep.siteName || '',
+              turbineNo: rep.turbineNo || '',
+              turbineSerial: rep.turbineSerial || '',
+              matFormNo: rep.matFormNo || '',
+              faultCode: rep.faultCode || '',
+              faultDesc: rep.faultDesc || '',
+              user: rep.createdBy || 'Sistem',
+              usedWarehouseId: usedWhId,
+              siteWarehouseId: siteWhId,
+              materials: rep.materials,
+              taskId: rep.taskId || null,
+              notes: rep.notes || '',
+              timestamp: Date.now()
+            });
+          } catch (stkErr) {
+            console.warn("[OfflineSync] Çevrimdışı rapor stok düşümünde uyarı:", stkErr);
+          }
+        }
         
         // Send notification to ADMIN
         const { db } = await import('./firebase');
@@ -308,6 +334,23 @@ fixSap55533To56633();
   }
 };
 
+(window as any).syncPendingStockActions = async () => {
+  await offlineSyncService.syncAllPendingStockActions();
+};
+
+window.addEventListener('online', () => {
+  (window as any).syncOfflineReports?.();
+  offlineSyncService.syncAllPendingStockActions();
+});
+
+// Periodic background sync every 60 seconds
+setInterval(() => {
+  if (navigator.onLine) {
+    (window as any).syncOfflineReports?.();
+    offlineSyncService.syncAllPendingStockActions();
+  }
+}, 60000);
+
 import { dataService, DataService } from './services/DataService'
 import { authService } from './services/AuthService'
 import { taskService } from './services/TaskService'
@@ -322,7 +365,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'card-tracking' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management' | 'email-recipients';
 
 interface AppState {
   currentPage: Page
@@ -414,9 +457,17 @@ const Sidebar = () => {
              email === 'emir.unver@demirerholding.com';
     }
 
-    // Strict super admin lock: 'users' (Kullanıcı Yetkileri) is ONLY accessible by Fatih Zebek
-    if (tab === 'users') {
+    // Strict super admin lock: 'users' (Kullanıcı Yetkileri) and 'email-recipients' is ONLY accessible by Fatih Zebek
+    if (tab === 'users' || tab === 'email-recipients') {
       return email === 'fatih.zebek@demirerholding.com' || (email?.includes('fatih.zebek') ?? false);
+    }
+
+    // Strict lock: 'card-tracking' is ONLY accessible by ADMIN or MALZEME_YONETIMI
+    if (tab === 'card-tracking') {
+      return userRole === 'ADMIN' || 
+             userRole === 'MALZEME_YONETIMI' || 
+             email === 'hursit.akter@demirerholding.com' || 
+             email === 'emir.unver@demirerholding.com';
     }
 
     // STRICT SECURITY: Restricted & Price-Sensitive Modules are NEVER accessible to field service teams/technicians!
@@ -452,7 +503,7 @@ const Sidebar = () => {
     if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') {
       const allowedForMalzemeYonetimi = [
         'siparis', 'turbines', 'material-pricing', 'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
-        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-performance', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'
+        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-performance', 'workshop-dispatches', 'card-tracking', 'workshop-returned', 'workshop-scrap'
       ];
       if (allowedForMalzemeYonetimi.includes(tab)) return true;
       return false; // Absolutely restrict from tasks, etc.
@@ -773,7 +824,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${(isAllowed('workshop-tasks') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('workshop-components') || isAllowed('workshop-dispatches') || isAllowed('workshop-returned') || isAllowed('workshop-scrap') || isAllowed('workshop') || profile?.role === 'ADMIN' || (profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') ? `
+        ${(isAllowed('workshop-tasks') || isAllowed('repair-history') || isAllowed('workshop-stock') || isAllowed('workshop-components') || isAllowed('workshop-dispatches') || isAllowed('card-tracking') || isAllowed('workshop-returned') || isAllowed('workshop-scrap') || isAllowed('workshop') || profile?.role === 'ADMIN' || (profile?.role as any) === 'TAMİR' || (profile?.role as any) === 'TAMIR') ? `
           <div class="nav-section-label" ${navDragAttr('sec-workshop')}>Merkez Tamir Atölyesi</div>
         ` : ''}
 
@@ -809,7 +860,7 @@ const Sidebar = () => {
         ` : ''}
         ${(isAllowed('workshop-returned') || isAllowed('workshop-dispatches')) ? `
           <li class="nav-item ${state.currentPage === 'workshop-returned' ? 'active' : ''}" ${navDragAttr('workshop-returned')} onclick="window.navigate('workshop-returned')">
-            <i class="fa-solid fa-arrows-spin" style="color: #F59E0B;"></i> Sahadan Geri Gelen Kartlar
+            <i class="fa-solid fa-truck-ramp-box" style="color: #F59E0B;"></i> Sahadan Sevk Edilenler
           </li>
         ` : ''}
         ${isAllowed('workshop-scrap') ? `
@@ -818,7 +869,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${((isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
+        ${((isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('card-tracking') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
           <div class="nav-section-label" ${navDragAttr('sec-depo')}>Depo Yönetimi</div>
         ` : ''}
 
@@ -845,6 +896,11 @@ const Sidebar = () => {
         ${(profile?.role === 'ADMIN' || isAllowed('material-analytics')) ? `
           <li class="nav-item ${state.currentPage === 'material-analytics' ? 'active' : ''}" ${navDragAttr('material-analytics')} onclick="window.navigate('material-analytics')">
             <i class="fa-solid fa-chart-pie" style="color: #f472b6;"></i> Malzeme Tüketim Analizi
+          </li>
+        ` : ''}
+        ${isAllowed('card-tracking') ? `
+          <li class="nav-item ${state.currentPage === 'card-tracking' ? 'active' : ''}" ${navDragAttr('card-tracking')} onclick="window.navigate('card-tracking')">
+            <i class="fa-solid fa-bolt" style="color: #00f3ff;"></i> Kart & Türbin Takip
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('material-pricing') || isMaterialManager) ? `
@@ -938,6 +994,9 @@ const Sidebar = () => {
         ${((state.userProfile?.email || profile?.email || '').toLowerCase().includes('fatih.zebek')) ? `
           <li class="nav-item ${state.currentPage === 'users' ? 'active' : ''}" ${navDragAttr('users')} onclick="window.navigate('users')">
             <i class="fa-solid fa-user-gear" style="color: #f43f5e;"></i> Kullanıcı Yetki
+          </li>
+          <li class="nav-item ${state.currentPage === 'email-recipients' ? 'active' : ''}" ${navDragAttr('email-recipients')} onclick="window.navigate('email-recipients')">
+            <i class="fa-solid fa-envelope-circle-check" style="color: #f59e0b;"></i> E-Posta Dağıtım
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN' || isAllowed('personnel-management')) ? `
@@ -1749,6 +1808,17 @@ const getContent = async () => {
       const { UserManagementPage } = await import('./pages/UserManagement');
       return await UserManagementPage();
     }
+    case 'email-recipients': {
+      const email = (state.userProfile?.email || '').toLowerCase();
+      if (!email.includes('fatih.zebek')) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">E-posta dağıtım listelerini yönetme izni yalnızca Ana Yöneticiye aittir.</p>
+        </div>`;
+      }
+      const { UserManagementPage } = await import('./pages/UserManagement');
+      return await UserManagementPage('emails');
+    }
     case 'personnel-management': {
       const { PersonnelManagementPage } = await import('./pages/PersonnelManagement');
       return await PersonnelManagementPage();
@@ -1806,6 +1876,22 @@ const getContent = async () => {
       const { WorkshopDispatchesPage } = await import('./pages/WorkshopDispatches');
       return await WorkshopDispatchesPage();
     }
+    case 'card-tracking': {
+      const userRole = state.userProfile?.role?.toUpperCase();
+      const email = (state.userProfile?.email || '').toLowerCase();
+      const isAllowedUser = userRole === 'ADMIN' || 
+                            userRole === 'MALZEME_YONETIMI' || 
+                            email === 'hursit.akter@demirerholding.com' || 
+                            email === 'emir.unver@demirerholding.com';
+      if (!isAllowedUser) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Kart & Türbin Takip sayfası yalnızca Admin ve Malzeme Yönetimi yetkisine açıktır.</p>
+        </div>`;
+      }
+      const { CardTrackingPage } = await import('./pages/CardTracking');
+      return await CardTrackingPage();
+    }
     case 'workshop-returned': {
       const { WorkshopReturnedPage } = await import('./pages/WorkshopReturned');
       return await WorkshopReturnedPage();
@@ -1817,6 +1903,10 @@ const getContent = async () => {
     case 'field-scraps': {
       const { FieldScrapsPage } = await import('./pages/FieldScraps');
       return await FieldScrapsPage();
+    }
+    case 'card-passport': {
+      const { CardPassportPage } = await import('./pages/CardPassport');
+      return await CardPassportPage();
     }
     case 'MALZEME_YONETIMI': {
       const { MaterialManagementPage } = await import('./pages/MaterialManagement');
@@ -2059,7 +2149,14 @@ const getContent = async () => {
     }
     (window as any)._draftAuditUnsubscribe = null;
   }
-  state.currentPage = page as Page;
+  const cleanPage = page.includes('?') ? page.split('?')[0] : page;
+  state.currentPage = cleanPage as Page;
+  if (page.includes('?')) {
+    const searchStr = page.substring(page.indexOf('?') + 1);
+    try {
+      window.history.replaceState(null, '', '?' + searchStr);
+    } catch (_) {}
+  }
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) sidebar.classList.remove('mobile-active');
 

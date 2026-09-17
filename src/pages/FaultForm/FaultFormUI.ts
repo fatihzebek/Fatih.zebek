@@ -113,7 +113,14 @@ export const FaultFormUI = {
             `;
         }
 
-        const backAction = `(function(){ if(localStorage.getItem('fromTemplates') === 'true') { localStorage.removeItem('fromTemplates'); window.navigate('templates'); } else { window.navigate('tasks'); } })()`;
+        const isEditMode = !!currentTask?.isEditMode || !!(window as any).isEditMode;
+        const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+        const userEmail = (currentUser?.email || '').toLowerCase().trim();
+        const userRole = (currentUser?.role || '').toUpperCase();
+        const isFatihZebekOrAdmin = userEmail === 'fatih.zebek@demirerholding.com' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek') || userRole === 'ADMIN';
+        const backAction = isEditMode 
+            ? "window.navigate('reports-archive')" 
+            : `(function(){ if(localStorage.getItem('fromTemplates') === 'true') { localStorage.removeItem('fromTemplates'); window.navigate('templates'); } else { window.navigate('tasks'); } })()`;
 
         return `
             <div class="fade-in-up content-area">
@@ -185,11 +192,17 @@ export const FaultFormUI = {
                       </div>
                       <div style="display: flex; flex-direction: column; gap: 1.5rem; width: 100%;">
                         <!-- Row 1: Tarih, Türbin Seri No, Türbin No, Bölge / Depo -->
-                        ${isWarehouse ? `
+                        ${(() => {
+                          const defaultFormDate = currentTask?.maintenanceData?.formDate || 
+                                                  currentTask?.maintenanceData?.date || 
+                                                  currentTask?.formDate || 
+                                                  (currentTask?.date ? currentTask.date.split('T')[0] : '') || 
+                                                  new Date().toISOString().split('T')[0];
+                          return isWarehouse ? `
                           <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; width: 100%;">
                             <div class="form-group">
                               <label style="color: var(--text-dim); font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">TARİH</label>
-                              <input type="date" id="form-date" class="cyber-input" value="${currentTask?.date ? currentTask.date.split('T')[0] : new Date().toISOString().split('T')[0]}" required>
+                              <input type="date" id="form-date" class="cyber-input" value="${defaultFormDate}" required>
                             </div>
                             <div class="form-group">
                               <label style="color: #10B981; font-size: 0.7rem; font-weight: 800; letter-spacing: 1px; display: block; margin-bottom: 0.5rem;">
@@ -205,7 +218,7 @@ export const FaultFormUI = {
                           <div class="fault-form-top-row" style="display: grid; width: 100%;">
                             <div class="form-group">
                               <label>TARİH</label>
-                              <input type="date" id="form-date" class="cyber-input" value="${currentTask?.date ? currentTask.date.split('T')[0] : new Date().toISOString().split('T')[0]}" required>
+                              <input type="date" id="form-date" class="cyber-input" value="${defaultFormDate}" required>
                             </div>
                             <div class="form-group">
                               <label>TÜRBİN SERİ NO</label>
@@ -221,7 +234,8 @@ export const FaultFormUI = {
                               <input type="hidden" id="form-site" value="${currentTask?.realSiteId || currentTask?.siteId || ''}">
                             </div>
                           </div>
-                        `}
+                        `;
+                        })()}
 
                         <!-- Row 2: Arıza Kodu / Planlı Kontrol & Açıklama -->
                         <div style="display: ${hideFaultFields ? 'none' : 'flex'}; gap: 1.5rem; flex-wrap: wrap; width: 100%;">
@@ -423,14 +437,28 @@ export const FaultFormUI = {
                   </div>
 
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-bottom: 3rem;">
-                    <button type="button" id="save-draft-btn" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 171, 0, 0.08); border: 1px solid rgba(255, 171, 0, 0.4); color: var(--accent-orange); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="window.saveMaintenanceDraft()">
-                      <i class="fa-solid fa-floppy-disk"></i> TASLAĞI KAYDET
-                    </button>
-                    <div style="display: flex; gap: 0.6rem;">
-                      <button type="button" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-muted); display: inline-flex; align-items: center; cursor: pointer;" onclick="${backAction}">İPTAL</button>
-                      <button type="submit" id="submit-form-btn" class="btn-cyber" style="padding: 0 1.1rem; height: 32px; font-size: 0.72rem; font-weight: 900; border-radius: 6px; background: rgba(0, 230, 118, 0.12); border: 1px solid #00e676; color: #00e676; box-shadow: 0 0 12px rgba(0, 230, 118, 0.15); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
-                        <i class="fa-solid fa-paper-plane"></i> RAPORU KAYDET VE GÖNDER
+                    ${(!isEditMode || isFatihZebekOrAdmin) ? `
+                      <button type="button" id="save-draft-btn" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 171, 0, 0.08); border: 1px solid rgba(255, 171, 0, 0.4); color: var(--accent-orange); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="window.saveMaintenanceDraft()" title="Değişiklikleri sessizce kaydeder">
+                        <i class="fa-solid fa-floppy-disk"></i> TASLAĞI KAYDET
                       </button>
+                    ` : `<div></div>`}
+                    <div style="display: flex; gap: 0.6rem; align-items: center;">
+                      <button type="button" class="btn-cyber-outline" style="padding: 0 0.85rem; height: 32px; font-size: 0.72rem; font-weight: 800; border-radius: 6px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--text-muted); display: inline-flex; align-items: center; cursor: pointer;" onclick="${backAction}">İPTAL</button>
+                      
+                      ${isEditMode ? `
+                        ${isFatihZebekOrAdmin ? `
+                          <button type="button" id="silent-update-btn" class="btn-cyber" style="padding: 0 1.1rem; height: 32px; font-size: 0.72rem; font-weight: 900; border-radius: 6px; background: rgba(0, 242, 254, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); box-shadow: 0 0 12px rgba(0, 242, 254, 0.15); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="window.submitFaultForm(false)">
+                            <i class="fa-solid fa-check"></i> RAPORU GÜNCELLE (E-POSTASIZ)
+                          </button>
+                        ` : ''}
+                        <button type="button" id="submit-form-btn" class="btn-cyber" style="padding: 0 1.1rem; height: 32px; font-size: 0.72rem; font-weight: 900; border-radius: 6px; background: rgba(0, 230, 118, 0.12); border: 1px solid #00e676; color: #00e676; box-shadow: 0 0 12px rgba(0, 230, 118, 0.15); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;" onclick="window.submitFaultForm(true)">
+                          <i class="fa-solid fa-paper-plane"></i> GÜNCELLE VE E-POSTA GÖNDER
+                        </button>
+                      ` : `
+                        <button type="submit" id="submit-form-btn" class="btn-cyber" style="padding: 0 1.1rem; height: 32px; font-size: 0.72rem; font-weight: 900; border-radius: 6px; background: rgba(0, 230, 118, 0.12); border: 1px solid #00e676; color: #00e676; box-shadow: 0 0 12px rgba(0, 230, 118, 0.15); display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                          <i class="fa-solid fa-paper-plane"></i> RAPORU KAYDET VE GÖNDER
+                        </button>
+                      `}
                     </div>
                   </div>
                 </form>

@@ -60,6 +60,12 @@ export const MaterialAnalyticsPage = async (userProfile?: any) => {
   const getPriceInfo = (sapNo: string, siteName?: string) => {
     if (!canViewPrices || !sapNo || sapNo === '-' || sapNo === '---') return null;
     const clean = sapNo.trim().toUpperCase();
+    
+    // R ve T ile başlayan malzemelerin birim fiyatı 0 EUR
+    if (clean.startsWith('R') || clean.startsWith('T')) {
+      return { price: 0, currency: 'EUR' };
+    }
+
     const num = clean.replace(/^0+/, '');
     const siteClean = (siteName || '').toLowerCase().trim();
 

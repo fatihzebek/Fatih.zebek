@@ -1231,15 +1231,21 @@ class WarehouseService {
       const colRef = collection(db, 'warehouses', warehouseId, 'inventory_v2');
       let normalizedSap = sapNo.toString().trim();
       if (condition === 'REVISED') {
-        normalizedSap = normalizedSap.toUpperCase().startsWith('R') ? normalizedSap : 'R' + normalizedSap;
+        if (normalizedSap.toUpperCase().startsWith('T')) {
+          // Saha ekip onarımı: T ön ekini koru, başına R ekleme
+        } else if (!normalizedSap.toUpperCase().startsWith('R')) {
+          normalizedSap = 'R' + normalizedSap;
+        }
       }
       const cleanSap = normalizedSap;
       const numSap = Number(cleanSap);
       const strippedSap = cleanSap.replace(/^0+/, '');
 
       const matchesCondition = (item: any) => {
-        const itemCond = item.condition || 'NEW';
-        const condMatch = itemCond === condition;
+        const sapUpper = String(item.sapNo || '').trim().toUpperCase();
+        const isSapRevised = sapUpper.startsWith('R') || sapUpper.startsWith('T');
+        const itemCond = item.condition || (isSapRevised ? 'REVISED' : 'NEW');
+        const condMatch = itemCond === condition || (condition === 'REVISED' && isSapRevised);
         if (serialNo) {
           const itemSerial = String(item.serialNo || '').trim();
           const searchSerial = String(serialNo).trim();
@@ -1421,7 +1427,11 @@ class WarehouseService {
     
     let normalizedSap = sapNo.toString().trim();
     if (condition === 'REVISED') {
-      normalizedSap = normalizedSap.toUpperCase().startsWith('R') ? normalizedSap : 'R' + normalizedSap;
+      if (normalizedSap.toUpperCase().startsWith('T')) {
+        // Saha ekip onarımı: T ön ekini koru, başına R ekleme
+      } else if (!normalizedSap.toUpperCase().startsWith('R')) {
+        normalizedSap = 'R' + normalizedSap;
+      }
     }
     
     let description = logInfo.materialName || 'Bilinmeyen Malzeme';

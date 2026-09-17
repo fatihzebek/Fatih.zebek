@@ -1469,6 +1469,339 @@ class ExcelService {
 
     XLSX.writeFile(wb, `${fileName}.xlsx`);
   }
+
+  exportSodexoToExcel(
+    data: any[], 
+    fileName: string, 
+    periodTitle: string,
+    holidayAuditData?: {
+      holidays: string[];
+      allPersonnel: any[];
+      allRows: any[];
+    }
+  ) {
+    const formatDateToTurkish = (dateStr: string): string => {
+      if (!dateStr) return '';
+      const trimmed = dateStr.trim();
+      if (trimmed.includes('-')) {
+        const [y, m, d] = trimmed.split('-');
+        return `${d}.${m}.${y}`;
+      }
+      return trimmed;
+    };
+
+    const decimalToTimeStr = (decimal: number): string => {
+      if (isNaN(decimal) || decimal <= 0) return '00:00';
+      const totalMinutes = Math.round(decimal * 60);
+      const hrs = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+
+    // 1. Build Summary List: Group by Personnel and Company
+    const summaryMap = new Map<string, { company: string; name: string; sodexoCount: number }>();
+    data.forEach(r => {
+      const name = r.personnel;
+      if (!summaryMap.has(name)) {
+        summaryMap.set(name, {
+          company: r.company || 'Bilinmiyor',
+          name: name,
+          sodexoCount: 0
+        });
+      }
+      if (r.sodexo) {
+        summaryMap.get(name)!.sodexoCount += 1;
+      }
+    });
+
+    const summaryList = Array.from(summaryMap.values()).sort((a, b) => {
+      const compCmp = a.company.localeCompare(b.company, 'tr-TR');
+      if (compCmp !== 0) return compCmp;
+      return a.name.localeCompare(b.name, 'tr-TR');
+    });
+
+    let totalSodexoMeals = 0;
+    summaryList.forEach(s => { totalSodexoMeals += s.sodexoCount; });
+
+    const summaryData = summaryList.map((item, idx) => ({
+      'SIRA': idx + 1,
+      'ŞİRKET': item.company,
+      'PERSONEL': item.name,
+      'TOPLAM SODEXO YEMEK (ADET)': item.sodexoCount
+    }));
+
+    // Add Grand Total row
+    summaryData.push({
+      'SIRA': '' as any,
+      'ŞİRKET': 'GENEL TOPLAM',
+      'PERSONEL': `${summaryList.length} Personel`,
+      'TOPLAM SODEXO YEMEK (ADET)': totalSodexoMeals
+    });
+
+    // 2. Build Details List: Each day with approved Sodexo
+    const detailRows: any[] = [];
+    data.forEach(row => {
+      if (!row.sodexo) return;
+      const sessions = (row.sessions && row.sessions.length > 0) ? row.sessions : [row];
+      const timeRanges = sessions.map((s: any) => `${s.startTime || '---'} - ${s.endTime || '---'}`).join(' / ');
+
+      detailRows.push({
+        'ŞİRKET': row.company || 'Bilinmiyor',
+        'PERSONEL': row.personnel,
+        'TARİH': formatDateToTurkish(row.date),
+        'SAHA': row.siteName || '---',
+        'TÜRBİN NO': row.turbineNo || '---',
+        'RAPOR NO': row.reportNo || '---',
+        'ARIZA KODU': row.faultCode || '---',
+        'ÇALIŞMA SAATLERİ': timeRanges,
+        'SODEXO YEMEK': '1 ADET YEMEK',
+        'DURUM': 'ONAYLANDI'
+      });
+    });
+
+    // Sort details alphabetically by Company, Personnel, Date
+    detailRows.sort((a, b) => {
+      const compResult = a['ŞİRKET'].localeCompare(b['ŞİRKET'], 'tr-TR');
+      if (compResult !== 0) return compResult;
+      const nameResult = a['PERSONEL'].localeCompare(b['PERSONEL'], 'tr-TR');
+      if (nameResult !== 0) return nameResult;
+      const dateA = a['TARİH'].split('.').reverse().join('-');
+      const dateB = b['TARİH'].split('.').reverse().join('-');
+      return dateA.localeCompare(dateB);
+    });
+
+    // Build workbook
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Sodexo Özet
+    const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+    this.styleWorksheet(wsSummary, true);
+    wsSummary['!cols'] = [
+      { wch: 8 },  // Sıra
+      { wch: 30 }, // Şirket
+      { wch: 28 }, // Personel
+      { wch: 28 }  // Toplam Sodexo
+    ];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Sodexo Hak Ediş Özeti');
+
+    // Sheet 2: Sodexo Detay
+    const wsDetails = XLSX.utils.json_to_sheet(detailRows);
+    this.styleWorksheet(wsDetails, false);
+    wsDetails['!cols'] = [
+      { wch: 25 }, // Şirket
+      { wch: 25 }, // Personel
+      { wch: 14 }, // Tarih
+      { wch: 22 }, // Saha
+      { wch: 12 }, // Türbin
+      { wch: 20 }, // Rapor No
+      { wch: 15 }, // Arıza Kodu
+      { wch: 22 }, // Çalışma Saatleri
+      { wch: 18 }, // Sodexo Yemek
+      { wch: 16 }  // Durum
+    ];
+    XLSX.utils.book_append_sheet(wb, wsDetails, 'Sodexo Günlük Detaylar');
+
+    // Sheet 3: Resmi Tatil Nöbet Kontrolü (Atlananlar & Yazılanlar)
+    if (holidayAuditData) {
+      const SITE_ID_MAP: Record<string, string> = {
+        '2688': 'Anemon İntepe',
+        '3439': 'Alize Sarıkaya',
+        '3793': 'Alize Kuyucak',
+        '3243': 'Alize Çamseki',
+        '3245': 'Alize Keltepe',
+        '3892': 'Alize Çataltepe',
+        '0752': 'Alize Germiyan',
+        '2678': 'Mare Manastır',
+        '2990': 'Doğal Sayalar',
+        '3213': 'Dares Datça'
+      };
+
+      const getRegionName = (baseSites: string[]): string => {
+        if (!baseSites || baseSites.length === 0) return 'Diğer / Merkez';
+        if (baseSites.some(id => id === '2688' || id === '3439' || id === '3243')) return '1. Bölge (Anemon, Sarıkaya, Çamseki)';
+        if (baseSites.some(id => id === '2990' || id === '3793')) return '2. Bölge (Sayalar, Kuyucak)';
+        if (baseSites.some(id => id === '3245' || id === '3892')) return '3. Bölge (Keltepe, Çataltepe)';
+        if (baseSites.some(id => id === '2678' || id === '0752')) return '4. Bölge (Mare, Germiyan)';
+        if (baseSites.some(id => id === '3213')) return '5. Bölge (Dares, Datça)';
+        return 'Diğer / Merkez';
+      };
+
+      const HOLIDAY_NAMES: Record<string, string> = {
+        '2026-01-01': 'Yılbaşı',
+        '2026-03-19': 'Ramazan Bayramı Arifesi',
+        '2026-03-20': 'Ramazan Bayramı 1. Gün',
+        '2026-03-21': 'Ramazan Bayramı 2. Gün',
+        '2026-03-22': 'Ramazan Bayramı 3. Gün',
+        '2026-04-23': 'Ulusal Egemenlik ve Çocuk Bayramı',
+        '2026-05-01': 'Emek ve Dayanışma Günü',
+        '2026-05-19': 'Atatürk\'ü Anma, Gençlik ve Spor Bayramı',
+        '2026-05-26': 'Kurban Bayramı Arifesi',
+        '2026-05-27': 'Kurban Bayramı 1. Gün',
+        '2026-05-28': 'Kurban Bayramı 2. Gün',
+        '2026-05-29': 'Kurban Bayramı 3. Gün',
+        '2026-05-30': 'Kurban Bayramı 4. Gün',
+        '2026-07-15': 'Demokrasi ve Milli Birlik Günü',
+        '2026-08-30': 'Zafer Bayramı',
+        '2026-10-28': 'Cumhuriyet Bayramı Arifesi',
+        '2026-10-29': 'Cumhuriyet Bayramı'
+      };
+
+      const norm = (s: string) => (s || '').toLocaleLowerCase('tr-TR').replace(/[^a-z0-9]/gi, '');
+
+      const isExemptOfficeStaff = (name: string): boolean => {
+        if (!name) return false;
+        const n = norm(name);
+        return (
+          n.includes('fatihzebek') ||
+          n.includes('furkanyildirim') ||
+          n.includes('sercanyetkin') ||
+          n.includes('sercanyetgin') ||
+          n.includes('necatozturk')
+        );
+      };
+
+      const activePersonnel = (holidayAuditData.allPersonnel || []).filter((p: any) => {
+        return !isExemptOfficeStaff(p.name);
+      });
+
+      // Sort personnel by Region, Site, and Name
+      activePersonnel.sort((a: any, b: any) => {
+        const regA = getRegionName(a.baseSites || []);
+        const regB = getRegionName(b.baseSites || []);
+        const regCmp = regA.localeCompare(regB, 'tr-TR');
+        if (regCmp !== 0) return regCmp;
+
+        const siteA = SITE_ID_MAP[a.baseSites?.[0]] || '';
+        const siteB = SITE_ID_MAP[b.baseSites?.[0]] || '';
+        const siteCmp = siteA.localeCompare(siteB, 'tr-TR');
+        if (siteCmp !== 0) return siteCmp;
+
+        return a.name.localeCompare(b.name, 'tr-TR');
+      });
+
+      const auditRows: any[] = [];
+      const holidays = holidayAuditData.holidays || [];
+
+      holidays.forEach(hDate => {
+        const hName = HOLIDAY_NAMES[hDate] || (DateTimeUtils.isPublicHoliday(hDate) ? 'Resmi Tatil' : 'Tatil / Nöbet Günü');
+        const holidayTitle = `${formatDateToTurkish(hDate)} - ${hName}`;
+
+        activePersonnel.forEach((p: any) => {
+          const regName = getRegionName(p.baseSites || []);
+          const siteName = SITE_ID_MAP[p.baseSites?.[0]] || 'Kayıtlı Saha Yok';
+
+          // Find matching row in this holiday date
+          const rowMatch = (holidayAuditData.allRows || []).find((r: any) => {
+            return norm(r.personnel) === norm(p.name) && r.date === hDate && r.status !== 'deleted';
+          });
+
+          // Sadece nöbetçi yazılan veya sahada çalışan personeller eklensin
+          if (!rowMatch) return;
+
+          let durum = 'NÖBETÇİ / 1 SODEXO YAZILDI';
+          let gorevTuru = rowMatch.approvedHours > 0 ? 'Sahada Çalıştı' : 'Evde Nöbetçi';
+          let onaylananMesai = decimalToTimeStr(rowMatch.approvedHours);
+          let sodexoYemek = '1 ADET SODEXO (ONAYLI)';
+          let raporNo = rowMatch.reportNo || '---';
+          let aciklama = rowMatch.sessions?.[0]?.note || (rowMatch.type === 'RESMI_TATIL_NOBET' ? 'Resmi Tatil Nöbeti' : 'Çalışma / Nöbet');
+
+          if (!rowMatch.sodexo) {
+            durum = '⚠️ KAYIT VAR (SODEXO EKSİK)';
+            gorevTuru = rowMatch.approvedHours > 0 ? 'Sahada Çalıştı' : 'Kayıt Var';
+            onaylananMesai = decimalToTimeStr(rowMatch.approvedHours);
+            sodexoYemek = 'SODEXO EKSİK / YOK';
+            aciklama = 'Sodexo İşaretlenmemiş';
+          }
+
+          auditRows.push({
+            'RESMİ TATİL': holidayTitle,
+            'BÖLGE': regName,
+            'KAYITLI SAHA': rowMatch.siteName || siteName,
+            'ŞİRKET': rowMatch.company || p.company || 'Demirer Enerji',
+            'PERSONEL': p.name,
+            'SODEXO YEMEK': rowMatch.sodexo ? '1 ADET SODEXO (ONAYLI)' : 'SODEXO EKSİK / YOK'
+          });
+        });
+      });
+
+      if (auditRows.length === 0) {
+        auditRows.push({
+          'RESMİ TATİL': '---',
+          'BÖLGE': '---',
+          'KAYITLI SAHA': '---',
+          'ŞİRKET': '---',
+          'PERSONEL': '---',
+          'SODEXO YEMEK': 'Bu dönemde resmi tatil nöbet kaydı bulunmamaktadır'
+        });
+      }
+
+      const wsHolidayAudit = XLSX.utils.json_to_sheet(auditRows);
+      this.styleHolidayAuditWorksheet(wsHolidayAudit);
+      wsHolidayAudit['!cols'] = [
+        { wch: 30 }, // RESMİ TATİL
+        { wch: 36 }, // BÖLGE
+        { wch: 22 }, // KAYITLI SAHA
+        { wch: 44 }, // ŞİRKET
+        { wch: 26 }, // PERSONEL
+        { wch: 28 }  // SODEXO YEMEK
+      ];
+      XLSX.utils.book_append_sheet(wb, wsHolidayAudit, 'Resmi Tatil Nöbet Kontrolü');
+    }
+
+    XLSX.writeFile(wb, `${fileName}.xlsx`);
+  }
+
+  styleHolidayAuditWorksheet(ws: any) {
+    if (!ws || !ws['!ref']) return;
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) continue;
+
+        const cell = ws[cellRef];
+        const font: any = { name: "Arial", size: 10, color: { rgb: "1E293B" } };
+        const alignment: any = { vertical: "center", horizontal: "center" };
+        let border: any = {
+          top: { style: "thin", color: { rgb: "E2E8F0" } },
+          bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+          left: { style: "thin", color: { rgb: "E2E8F0" } },
+          right: { style: "thin", color: { rgb: "E2E8F0" } }
+        };
+        let fill: any = null;
+
+        if (r === 0) {
+          // Header row
+          fill = { fgColor: { rgb: "1E1B4B" } }; // Deep purple / indigo
+          font.color = { rgb: "FFFFFF" };
+          font.bold = true;
+          font.size = 10.5;
+          border.bottom = { style: "medium", color: { rgb: "6366F1" } };
+        } else {
+          // Data row zebra
+          if (r % 2 === 0) {
+            fill = { fgColor: { rgb: "F8FAFC" } };
+          }
+
+          // Column 5 is 'SODEXO YEMEK'
+          if (c === 5) {
+            const val = String(cell.v || '').toUpperCase();
+            if (val.includes('ONAYLI') || val.includes('1 ADET')) {
+              font.color = { rgb: "166534" }; // Dark bold green
+              font.bold = true;
+            } else if (val.includes('EKSİK') || val.includes('YOK')) {
+              font.color = { rgb: "991B1B" }; // Dark bold red
+              font.bold = true;
+            }
+          }
+        }
+
+        cell.s = { font, alignment, border };
+        if (fill) cell.s.fill = fill;
+      }
+    }
+  }
 }
 
 export const excelService = new ExcelService();

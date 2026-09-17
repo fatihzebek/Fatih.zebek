@@ -2,6 +2,8 @@ import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { ServiceReport } from './ServiceReportService';
 import { renderReportPDF } from '../components/ReportTemplate';
+import { getSiteTeamLeader, fixTurkishWarehouseName, formatRepairDuration, formatDisplayName, formatSafeDateTime } from '../utils/formatters';
+import { emailSettingsService } from './EmailSettingsService';
 
 /**
  * Returns the email API endpoint URL.
@@ -30,7 +32,15 @@ class EmailService {
     report: ServiceReport, 
     customRecipient?: string
   ): Promise<{ success: boolean; message: string }> {
-    const recipient = customRecipient || DEFAULT_REPORT_EMAIL;
+    let recipient = customRecipient;
+    if (!recipient) {
+      try {
+        const configured = await emailSettingsService.getRecipients('reportEmails');
+        recipient = configured.length > 0 ? configured.join(', ') : DEFAULT_REPORT_EMAIL;
+      } catch {
+        recipient = DEFAULT_REPORT_EMAIL;
+      }
+    }
     const reportNo = report.reportNo || 'Bilinmeyen Rapor';
     const turbineStr = (report as any).turbineNo || (report as any).turbineName || '';
     const siteTurbine = `${report.siteName || ''} ${turbineStr ? '- ' + turbineStr : ''}`.trim();
@@ -80,7 +90,7 @@ class EmailService {
       if (resData?.success) {
         console.log(`[EmailService] Rapor ve PDF eki Gmail (dhrapor@gmail.com) üzerinden başarıyla iletildi: ${reportNo}`);
         if ((window as any).showToast) {
-          (window as any).showToast('BAŞARILI', `Rapor ve resmi PDF eki (${recipient}) adresine iletildi.`, 'success');
+          (window as any).showToast('BAŞARILI', 'Rapor ve resmi PDF eki Servis Merkezine iletildi.', 'success');
         }
       } else {
         const errStr = resData?.error || 'E-posta servisi yanıt vermedi';
@@ -92,7 +102,7 @@ class EmailService {
 
       return {
         success: true,
-        message: `Rapor e-postası ve resmi PDF eki (${recipient}) adresine başarıyla iletildi.`
+        message: 'Rapor e-postası ve resmi PDF eki Servis Merkezine başarıyla iletildi.'
       };
     } catch (err: any) {
       console.error('[EmailService] E-posta gönderim hatası:', err);
@@ -169,13 +179,14 @@ class EmailService {
           html2canvas: { 
               scale: 2, 
               useCORS: true, 
-              backgroundColor: '#ffffff'
+              backgroundColor: '#ffffff',
+              scrollY: 0
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
           pagebreak: { 
               mode: ['css', 'legacy'], 
               before: '.html2pdf__page-break', 
-              avoid: ['tr', 'img'] 
+              avoid: ['tr', '.pdf-no-break', '.report-section', '.ohs-day-card', 'img'] 
           }
       };
 
@@ -423,73 +434,101 @@ class EmailService {
       const dateStr = new Date().toLocaleString('tr-TR');
       const totalQty = data.items.reduce((sum, it) => sum + (it.quantity || 1), 0);
 
+      const formatPersonName = (raw: string) => {
+        if (!raw) return '-';
+        if (raw.includes('@')) {
+          const part = raw.split('@')[0];
+          return part.split('.').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+        }
+        return raw;
+      };
+
+      const formattedSender = formatPersonName(data.senderName);
+      const resolvedRecipient = (!data.recipientName || data.recipientName.includes('Ekibi') || data.recipientName.includes('Sorumlusu') || data.recipientName === 'Hurşit Akter')
+        ? getSiteTeamLeader(data.targetWarehouseName)
+        : data.recipientName;
+      const formattedRecipient = formatPersonName(resolvedRecipient);
+      const displayFormNo = data.dispatchNo && (data.dispatchNo.toUpperCase().includes('FORM') || data.dispatchNo.toUpperCase().includes('MÇT'))
+        ? data.dispatchNo
+        : `Form NO: ${data.dispatchNo || '-'}`;
+
       const rows = data.items.map((it, idx) => `
         <tr style="page-break-inside: avoid; background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-          <td style="border: 1px solid #475569; padding: 6px 4px; text-align: center; font-weight: bold; font-size: 11px;">${idx + 1}</td>
-          <td style="border: 1px solid #475569; padding: 6px 4px; font-family: monospace; font-weight: bold; font-size: 11px; color: #1e40af;">${it.sapNo}</td>
-          <td style="border: 1px solid #475569; padding: 6px 4px; font-family: monospace; font-weight: bold; font-size: 11px; color: #047857;">${it.serialNo || '-'}</td>
-          <td style="border: 1px solid #475569; padding: 6px 8px; font-size: 11px;">
+          <td style="border: 1px solid #475569; padding: 5px 3px; text-align: center; font-weight: bold; font-size: 10px;">${idx + 1}</td>
+          <td style="border: 1px solid #475569; padding: 5px 4px; font-family: monospace; font-weight: bold; font-size: 10px; color: #1e40af;">${it.sapNo}</td>
+          <td style="border: 1px solid #475569; padding: 5px 4px; font-family: monospace; font-weight: bold; font-size: 10px; color: #047857;">${it.serialNo || '-'}</td>
+          <td style="border: 1px solid #475569; padding: 5px 6px; font-size: 10px;">
             <div style="font-weight: 700; color: #0f172a;">${it.description}</div>
-            ${it.repairNotes ? `<div style="font-size: 10px; color: #059669; margin-top: 2px;">🔧 Onarım Notu: ${it.repairNotes}</div>` : ''}
-            ${it.faultCode && it.faultCode !== '-' ? `<div style="font-size: 10px; color: #b45309;">⚠️ Arıza: ${it.faultCode}</div>` : ''}
+            ${(() => {
+              const raw = String(it.repairNotes || '').trim();
+              const isTurbine = raw.toLowerCase().includes('türbinde') || raw.toLowerCase().includes('turbinde');
+              const hasCustom = raw && raw.toLowerCase() !== 'onarım bekliyor' && raw.toLowerCase() !== 'onarim bekliyor' && !raw.includes('Onarıldı');
+              const text = isTurbine
+                ? (hasCustom ? `6. Onarıldı (Türbinde Test) - ${raw}` : '6. Onarıldı (Türbinde Test)')
+                : (hasCustom ? `5. Onarıldı & Test Edildi - ${raw}` : '5. Onarıldı & Test Edildi');
+              const color = isTurbine ? '#b45309' : '#047857';
+              const icon = isTurbine ? '⚠️' : '✅';
+              return `<div style="font-size: 9px; font-weight: 700; color: ${color}; margin-top: 1.5px;">${icon} ${text}</div>`;
+            })()}
+            ${it.faultCode && it.faultCode !== '-' ? `<div style="font-size: 8.5px; color: #b45309; margin-top: 1px;">Arıza: ${it.faultCode}</div>` : ''}
           </td>
-          <td style="border: 1px solid #475569; padding: 6px 4px; text-align: center; font-weight: bold; font-size: 12px;">${it.quantity}</td>
-          <td style="border: 1px solid #475569; padding: 6px 4px; text-align: center; font-size: 11px;">Adet</td>
+          <td style="border: 1px solid #475569; padding: 5px 3px; text-align: center; font-weight: bold; font-size: 11px;">${it.quantity}</td>
+          <td style="border: 1px solid #475569; padding: 5px 3px; text-align: center; font-size: 10px;">Adet</td>
         </tr>
       `).join('');
 
       const htmlContent = `
-        <div id="dispatch-pdf-container" style="font-family: 'Segoe UI', Arial, sans-serif; background: #ffffff; color: #0f172a; padding: 16px; box-sizing: border-box; width: 880px;">
+        <div id="dispatch-pdf-container" style="font-family: 'Segoe UI', Arial, sans-serif; background: #ffffff; color: #0f172a; padding: 12px; box-sizing: border-box; width: 710px; max-width: 710px;">
           <!-- Top Header Table -->
-          <table style="width: 100%; border-collapse: collapse; border-bottom: 3px solid #002d6b; padding-bottom: 10px; margin-bottom: 14px;">
+          <table style="width: 100%; border-collapse: collapse; border-bottom: 2px solid #002d6b; padding-bottom: 8px; margin-bottom: 10px;">
             <tr>
-              <td style="width: 32%; vertical-align: middle;">
-                <div style="font-weight: 900; font-size: 20px; color: #002d6b; letter-spacing: 0.5px;">DEMİRER HOLDİNG</div>
-                <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 1px;">RÜZGAR ENERJİ SANTRALLERİ</div>
+              <td style="width: 30%; vertical-align: middle;">
+                <div style="font-weight: 900; font-size: 17px; color: #002d6b; letter-spacing: 0.5px;">DEMİRER HOLDİNG</div>
+                <div style="font-size: 9px; color: #64748b; font-weight: 600; margin-top: 1px;">RÜZGAR ENERJİ SANTRALLERİ</div>
               </td>
-              <td style="width: 42%; text-align: center; vertical-align: middle;">
-                <div style="font-size: 14px; font-weight: 900; color: #0f172a; text-transform: uppercase;">MERKEZ TAMİR ATÖLYESİ (MTA)</div>
-                <div style="font-size: 12px; font-weight: 700; color: #002d6b; margin-top: 2px;">REVİZE MALZEME SEVK & TESLİM-TESELLÜM FORMU</div>
+              <td style="width: 44%; text-align: center; vertical-align: middle;">
+                <div style="font-size: 13px; font-weight: 900; color: #0f172a; text-transform: uppercase;">MERKEZ TAMİR ATÖLYESİ (MTA)</div>
+                <div style="font-size: 11px; font-weight: 700; color: #002d6b; margin-top: 2px;">REVİZE MALZEME SEVK & TESLİM-TESELLÜM FORMU</div>
               </td>
               <td style="width: 26%; text-align: right; vertical-align: middle;">
-                <div style="font-size: 13px; font-weight: 800; font-family: monospace; color: #002d6b; background: #f1f5f9; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-block;">${data.dispatchNo}</div>
-                <div style="font-size: 10px; color: #64748b; margin-top: 3px;">Tarih: ${dateStr}</div>
+                <div style="font-size: 12px; font-weight: 800; font-family: monospace; color: #002d6b; background: #f1f5f9; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-block; white-space: nowrap;">${displayFormNo}</div>
+                <div style="font-size: 9px; color: #64748b; margin-top: 3px; white-space: nowrap;">Tarih: ${dateStr}</div>
               </td>
             </tr>
           </table>
 
           <!-- Meta Information Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px;">
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10.5px;">
             <tr>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">🏢 Çıkış Deposu:</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 700; width: 28%;">Merkez Tamir Atölyesi (MTA)</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">📍 Hedef Saha / Depo:</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 800; color: #002d6b; font-size: 12px; width: 28%;">${data.targetWarehouseName}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">🏢 Çıkış Deposu:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 700; width: 28%;">Merkez Tamir Atölyesi (MTA)</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">📍 Hedef Saha / Depo:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 800; color: #002d6b; font-size: 11.5px; width: 28%;">${data.targetWarehouseName}</td>
             </tr>
             <tr>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">👨‍🔧 Teslim Eden (Atölye):</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 700;">${data.senderName}</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">👤 Teslim Alacak Sorumlu:</td>
-              <td style="padding: 6px 8px; border: 1px solid #cbd5e1; font-weight: 800; color: #b45309;">${data.recipientName}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">👨‍🔧 Teslim Eden (Atölye):</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 700;">${formattedSender}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">👤 Teslim Alacak Sorumlu:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 800; color: #b45309;">${formattedRecipient}</td>
             </tr>
             ${data.note ? `
               <tr>
-                <td style="padding: 6px 8px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">📝 Kargo / Sevk Notu:</td>
-                <td colspan="3" style="padding: 6px 8px; border: 1px solid #cbd5e1; color: #334155;">${data.note}</td>
+                <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">📝 Kargo / Sevk Notu:</td>
+                <td colspan="3" style="padding: 5px 6px; border: 1px solid #cbd5e1; color: #334155;">${data.note}</td>
               </tr>
             ` : ''}
           </table>
 
           <!-- Materials Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-top: 8px;">
+          <table style="width: 100%; border-collapse: collapse; margin-top: 6px; table-layout: fixed;">
             <thead>
               <tr style="background: #e2e8f0; color: #0f172a;">
-                <th style="border: 1px solid #475569; padding: 7px 4px; width: 30px; text-align: center; font-size: 11px;">#</th>
-                <th style="border: 1px solid #475569; padding: 7px 6px; width: 85px; font-size: 11px; text-align: left;">SAP No</th>
-                <th style="border: 1px solid #475569; padding: 7px 6px; width: 95px; font-size: 11px; text-align: left;">Seri No</th>
-                <th style="border: 1px solid #475569; padding: 7px 8px; font-size: 11px; text-align: left;">Malzeme Tanımı & Onarım Özeti</th>
-                <th style="border: 1px solid #475569; padding: 7px 4px; width: 50px; text-align: center; font-size: 11px;">Miktar</th>
-                <th style="border: 1px solid #475569; padding: 7px 4px; width: 45px; text-align: center; font-size: 11px;">Birim</th>
+                <th style="border: 1px solid #475569; padding: 6px 3px; width: 26px; text-align: center; font-size: 10.5px;">#</th>
+                <th style="border: 1px solid #475569; padding: 6px 4px; width: 75px; font-size: 10.5px; text-align: left;">SAP No</th>
+                <th style="border: 1px solid #475569; padding: 6px 4px; width: 85px; font-size: 10.5px; text-align: left;">Seri No</th>
+                <th style="border: 1px solid #475569; padding: 6px 6px; font-size: 10.5px; text-align: left;">Malzeme Tanımı & Onarım Özeti</th>
+                <th style="border: 1px solid #475569; padding: 6px 3px; width: 48px; text-align: center; font-size: 10.5px;">Miktar</th>
+                <th style="border: 1px solid #475569; padding: 6px 3px; width: 44px; text-align: center; font-size: 10.5px;">Birim</th>
               </tr>
             </thead>
             <tbody>
@@ -497,52 +536,52 @@ class EmailService {
             </tbody>
             <tfoot>
               <tr style="background: #f1f5f9;">
-                <td colspan="4" style="border: 1px solid #475569; padding: 7px 8px; text-align: right; font-weight: 800; font-size: 11px;">TOPLAM SEVK MİKTARI:</td>
-                <td style="border: 1px solid #475569; padding: 7px 4px; text-align: center; font-weight: 900; font-size: 12px; color: #002d6b;">${totalQty}</td>
-                <td style="border: 1px solid #475569; padding: 7px 4px; text-align: center; font-weight: bold; font-size: 11px;">Adet</td>
+                <td colspan="4" style="border: 1px solid #475569; padding: 6px 8px; text-align: right; font-weight: 800; font-size: 10.5px;">TOPLAM SEVK MİKTARI:</td>
+                <td style="border: 1px solid #475569; padding: 6px 3px; text-align: center; font-weight: 900; font-size: 11.5px; color: #002d6b;">${totalQty}</td>
+                <td style="border: 1px solid #475569; padding: 6px 3px; text-align: center; font-weight: bold; font-size: 10.5px;">Adet</td>
               </tr>
             </tfoot>
           </table>
 
           <!-- Signatures Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-top: 28px; page-break-inside: avoid;">
+          <table style="width: 100%; border-collapse: collapse; margin-top: 24px; page-break-inside: avoid;">
             <tr>
-              <td style="width: 48%; border: 1px solid #64748b; padding: 10px; vertical-align: top; background: #ffffff;">
-                <div style="font-weight: 800; font-size: 11px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
+              <td style="width: 48%; border: 1px solid #64748b; padding: 8px 10px; vertical-align: top; background: #ffffff;">
+                <div style="font-weight: 800; font-size: 10.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
                   TESLİM EDEN (MTA ATÖLYE SORUMLUSU)
                 </div>
-                <div style="font-size: 11px; margin-top: 6px; font-weight: 600;">Ad Soyad: ${data.senderName}</div>
-                <div style="font-size: 11px; margin-top: 24px; color: #64748b;">İmza: ___________________________</div>
+                <div style="font-size: 10.5px; margin-top: 6px; font-weight: 600;">Ad Soyad: ${formattedSender}</div>
+                <div style="font-size: 10.5px; margin-top: 22px; color: #64748b;">İmza: ___________________________</div>
               </td>
               <td style="width: 4%;"></td>
-              <td style="width: 48%; border: 1px solid #64748b; padding: 10px; vertical-align: top; background: #ffffff;">
-                <div style="font-weight: 800; font-size: 11px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
+              <td style="width: 48%; border: 1px solid #64748b; padding: 8px 10px; vertical-align: top; background: #ffffff;">
+                <div style="font-weight: 800; font-size: 10.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
                   TESLİM ALAN (LOJİSTİK & AMBAR SORUMLUSU)
                 </div>
-                <div style="font-size: 11px; margin-top: 6px; font-weight: 600;">Ad Soyad: ${data.recipientName}</div>
-                <div style="font-size: 11px; margin-top: 24px; color: #64748b;">İmza: ___________________________</div>
+                <div style="font-size: 10.5px; margin-top: 6px; font-weight: 600;">Ad Soyad: ${formattedRecipient}</div>
+                <div style="font-size: 10.5px; margin-top: 22px; color: #64748b;">İmza: ___________________________</div>
               </td>
             </tr>
           </table>
 
-          <div style="margin-top: 20px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+          <div style="margin-top: 18px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
             Bu resmi belge Demirer Holding Saha Servis & Atölye Yönetim Sistemi (DH-Servis) tarafından üretilmiştir.
           </div>
         </div>
       `;
 
       const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'position: fixed; left: 0; top: 0; width: 900px; background: #ffffff; z-index: -99999; opacity: 0; pointer-events: none;';
+      wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 710px; background: #ffffff; z-index: -99999;';
       wrapper.innerHTML = htmlContent;
       document.body.appendChild(wrapper);
 
       const targetElement = (wrapper.querySelector('#dispatch-pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
       if (targetElement) {
-        targetElement.style.width = '880px';
-        targetElement.style.minWidth = '880px';
-        targetElement.style.maxWidth = '880px';
+        targetElement.style.width = '710px';
+        targetElement.style.minWidth = '710px';
+        targetElement.style.maxWidth = '710px';
         targetElement.style.margin = '0';
-        targetElement.style.padding = '16px';
+        targetElement.style.padding = '12px';
         targetElement.style.boxSizing = 'border-box';
         targetElement.style.background = '#ffffff';
       }
@@ -550,19 +589,13 @@ class EmailService {
       await new Promise(r => setTimeout(r, 400));
 
       const opt = {
-        margin: [8, 6, 8, 6],
+        margin: [8, 8, 8, 8],
         filename: `Malzeme_Sevk_Formu_${data.dispatchNo}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { 
           scale: 2, 
           useCORS: true, 
-          backgroundColor: '#ffffff',
-          x: 0,
-          y: 0,
-          scrollX: 0,
-          scrollY: 0,
-          width: 880,
-          windowWidth: 900
+          backgroundColor: '#ffffff'
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'], before: ['.html2pdf__page-break', '.section-break'], avoid: ['tr', '.pdf-no-break', 'img'] }
@@ -610,7 +643,15 @@ class EmailService {
     },
     customRecipient?: string
   ): Promise<{ success: boolean; message: string }> {
-    const recipient = customRecipient || DEFAULT_DISPATCH_EMAILS;
+    let recipient = customRecipient;
+    if (!recipient) {
+      try {
+        const configured = await emailSettingsService.getRecipients('dispatchEmails');
+        recipient = configured.length > 0 ? configured.join(', ') : DEFAULT_DISPATCH_EMAILS;
+      } catch {
+        recipient = DEFAULT_DISPATCH_EMAILS;
+      }
+    }
     const subject = `[DH-SERVİS MALZEME SEVK] Merkez Tamir Atölyesi ➔ ${dispatchData.targetWarehouseName} (${dispatchData.dispatchNo})`;
     const htmlBody = this.buildDispatchEmailHTML(dispatchData);
 
@@ -756,8 +797,18 @@ class EmailService {
                     <td style="font-family: monospace; font-weight: bold; color: #10B981;">${it.serialNo || '-'}</td>
                     <td>
                       <div style="font-weight: 600; color: #0F172A;">${it.description}</div>
-                      ${it.repairNotes ? `<div style="font-size: 11px; color: #059669; margin-top: 2px;">🔧 Onarım: ${it.repairNotes}</div>` : ''}
-                      ${it.faultCode && it.faultCode !== '-' ? `<div style="font-size: 11px; color: #D97706;">⚠️ Arıza: ${it.faultCode}</div>` : ''}
+                      ${(() => {
+                        const raw = String(it.repairNotes || '').trim();
+                        const isTurbine = raw.toLowerCase().includes('türbinde') || raw.toLowerCase().includes('turbinde');
+                        const hasCustom = raw && raw.toLowerCase() !== 'onarım bekliyor' && raw.toLowerCase() !== 'onarim bekliyor' && !raw.includes('Onarıldı');
+                        const text = isTurbine
+                          ? (hasCustom ? `6. Onarıldı (Türbinde Test) - ${raw}` : '6. Onarıldı (Türbinde Test)')
+                          : (hasCustom ? `5. Onarıldı & Test Edildi - ${raw}` : '5. Onarıldı & Test Edildi');
+                        const color = isTurbine ? '#d97706' : '#059669';
+                        const icon = isTurbine ? '⚠️' : '✅';
+                        return `<div style="font-size: 11px; font-weight: 700; color: ${color}; margin-top: 2px;">${icon} ${text}</div>`;
+                      })()}
+                      ${it.faultCode && it.faultCode !== '-' ? `<div style="font-size: 11px; color: #D97706; margin-top: 1px;">⚠️ Arıza: ${it.faultCode}</div>` : ''}
                     </td>
                     <td style="text-align: center; font-weight: 700; color: #0F172A;">${it.quantity} Adet</td>
                   </tr>
@@ -769,6 +820,177 @@ class EmailService {
           <div class="footer">
             Bu e-posta <strong>DH-Servis Otomasyon Sistemi</strong> tarafından otomatik olarak üretilmiştir.<br>
             Merkez Tamir Atölyesi (MTA) ve Saha Depoları Malzeme Takip Modülü.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Sends email notification when a damaged material is rejected at warehouse and returned to MTA.
+   */
+  async sendDamageReturnEmail(data: {
+    returnFormNo: string;
+    warehouseName: string;
+    user: string;
+    reason: string;
+    damageImageUrl?: string;
+    item: {
+      sapNo: string;
+      serialNo?: string;
+      description: string;
+      quantity?: number;
+      originalDispatchNo?: string;
+      faultCode?: string;
+    };
+  }): Promise<{ success: boolean; message: string }> {
+    let recipient = DEFAULT_DISPATCH_EMAILS;
+    try {
+      const configured = await emailSettingsService.getRecipients('damageReturnEmails');
+      if (configured.length > 0) recipient = configured.join(', ');
+    } catch {
+      recipient = DEFAULT_DISPATCH_EMAILS;
+    }
+    const subject = `[DH-SERVİS SEVK HASARI İADESİ] ${data.warehouseName} ➔ MTA (${data.returnFormNo})`;
+    const htmlBody = this.buildDamageReturnEmailHTML(data);
+
+    try {
+      const res = await fetch(getEmailEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipient,
+          subject: subject,
+          html: htmlBody
+        })
+      });
+
+      const resData = await res.json().catch(() => null);
+      if (resData?.success) {
+        console.log(`[EmailService] Hasar iade maili başarıyla iletildi: ${data.returnFormNo}`);
+        if ((window as any).showToast) {
+          (window as any).showToast('İADE BİLDİRİMİ GÖNDERİLDİ', 'Hasar tutanağı ve bildirim e-postası yöneticilere iletildi.', 'success');
+        }
+        return { success: true, message: 'E-posta başarıyla iletildi.' };
+      } else {
+        const errStr = resData?.error || 'E-posta servisi yanıt vermedi';
+        console.warn('[EmailService] Hasar iade e-posta uyarısı:', errStr);
+        return { success: false, message: errStr };
+      }
+    } catch (err: any) {
+      console.error('[EmailService] Hasar iade e-posta hatası:', err);
+      return { success: false, message: `E-posta gönderilemedi: ${err?.message || err}` };
+    }
+  }
+
+  private buildDamageReturnEmailHTML(data: {
+    returnFormNo: string;
+    warehouseName: string;
+    user: string;
+    reason: string;
+    damageImageUrl?: string;
+    item: {
+      sapNo: string;
+      serialNo?: string;
+      description: string;
+      quantity?: number;
+      originalDispatchNo?: string;
+      faultCode?: string;
+    };
+  }): string {
+    const dateStr = new Date().toLocaleString('tr-TR');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 20px; }
+          .card { max-width: 680px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #7F1D1D 0%, #1E1B4B 100%); color: #FFFFFF; padding: 24px; text-align: center; border-bottom: 4px solid #EF4444; }
+          .content { padding: 24px; }
+          .info-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          .info-table td { padding: 8px 12px; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
+          .info-label { font-weight: bold; color: #64748B; width: 35%; }
+          .info-val { color: #0F172A; font-weight: 600; }
+          .reason-box { background: #FEF2F2; border: 1px solid #FECACA; border-left: 4px solid #EF4444; border-radius: 6px; padding: 14px 16px; margin: 16px 0; }
+          .photo-box { text-align: center; margin: 16px 0; padding: 14px; background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; }
+          .footer { background-color: #F1F5F9; text-align: center; padding: 16px; font-size: 12px; color: #94A3B8; border-top: 1px solid #E2E8F0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="header">
+            <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #FCA5A5; letter-spacing: 0.5px;">DEMİRER HOLDİNG - SEVK HASARI İADE TUTANAĞI</h1>
+            <p style="margin: 6px 0 0 0; font-size: 13px; color: #E2E8F0;">${data.warehouseName} ➔ Merkez Tamir Atölyesi (MTA)</p>
+          </div>
+          
+          <div class="content">
+            <table class="info-table">
+              <tr>
+                <td class="info-label">📋 İade Form No:</td>
+                <td class="info-val" style="color: #DC2626; font-family: monospace; font-size: 15px; font-weight: 800;">${data.returnFormNo}</td>
+              </tr>
+              <tr>
+                <td class="info-label">🏢 İade Eden Saha / Depo:</td>
+                <td class="info-val">${data.warehouseName}</td>
+              </tr>
+              <tr>
+                <td class="info-label">📦 Gelen Sevk / MÇT No:</td>
+                <td class="info-val" style="font-family: monospace;">${data.item.originalDispatchNo || '-'}</td>
+              </tr>
+              <tr>
+                <td class="info-label">👤 Bildiren Personel:</td>
+                <td class="info-val">${data.user}</td>
+              </tr>
+              <tr>
+                <td class="info-label">📅 Tutanak Tarihi:</td>
+                <td class="info-val">${dateStr}</td>
+              </tr>
+            </table>
+
+            <h3 style="font-size: 15px; color: #0F172A; margin: 18px 0 8px 0; border-bottom: 2px solid #E2E8F0; padding-bottom: 6px;">İade Edilen Malzeme Bilgileri</h3>
+            <table class="info-table">
+              <tr>
+                <td class="info-label">SAP No:</td>
+                <td class="info-val" style="font-family: monospace; color: #0284C7; font-weight: 800;">${data.item.sapNo}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Seri No:</td>
+                <td class="info-val" style="font-family: monospace; font-weight: 800;">${data.item.serialNo || '-'}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Malzeme Tanımı:</td>
+                <td class="info-val">${data.item.description}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Miktar:</td>
+                <td class="info-val" style="color: #DC2626; font-weight: 800;">${data.item.quantity || 1} Adet</td>
+              </tr>
+            </table>
+
+            <div class="reason-box">
+              <strong style="color: #991B1B; display: block; margin-bottom: 6px; font-size: 14px;">⚠️ Hasar Açıklaması / Tespit Tutanağı:</strong>
+              <div style="color: #7F1D1D; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap;">${data.reason}</div>
+            </div>
+
+            ${data.damageImageUrl ? `
+              <div class="photo-box">
+                <strong style="color: #475569; display: block; margin-bottom: 8px; font-size: 13px;">📷 Tutanak Fotoğrafı / Hasar Görseli:</strong>
+                <a href="${data.damageImageUrl}" target="_blank" style="display: inline-block; text-decoration: none;">
+                  <img src="${data.damageImageUrl}" alt="Hasar Fotoğrafı" style="max-width: 100%; max-height: 280px; border-radius: 8px; border: 1px solid #CBD5E1; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
+                  <span style="display: block; font-size: 12px; color: #2563EB; margin-top: 6px;">🔍 Fotoğrafı Tam Boyutta Görüntülemek İçin Tıklayın</span>
+                </a>
+              </div>
+            ` : ''}
+
+          </div>
+
+          <div class="footer">
+            Bu e-posta <strong>DH-Servis Otomasyon Sistemi</strong> tarafından otomatik olarak üretilmiştir.<br>
+            Merkez Tamir Atölyesi (MTA) ve Saha Depoları Sevk Kontrol Modülü.
           </div>
         </div>
       </body>
@@ -800,7 +1022,13 @@ class EmailService {
       note?: string;
     }>;
   }): Promise<{ success: boolean; message: string }> {
-    const recipient = 'fatih.zebek@demirerholding.com, hursit.akter@demirerholding.com, emir.unver@demirerholding.com';
+    let recipient = 'fatih.zebek@demirerholding.com, hursit.akter@demirerholding.com, emir.unver@demirerholding.com';
+    try {
+      const configured = await emailSettingsService.getRecipients('auditReportEmails');
+      if (configured.length > 0) recipient = configured.join(', ');
+    } catch {
+      recipient = 'fatih.zebek@demirerholding.com, hursit.akter@demirerholding.com, emir.unver@demirerholding.com';
+    }
     const hasDiscrepancy = data.discrepancies.length > 0;
     const diffStatus = hasDiscrepancy ? `⚠️ ${data.discrepancies.length} Kalem Fark Bulundu` : `✅ 0 Fark (Birebir Uyumlu)`;
     const subject = `[DH-SERVİS SAYIM RAPORU] ${data.warehouseName} - ${data.user} (${diffStatus})`;
@@ -858,7 +1086,13 @@ class EmailService {
       note?: string;
     }>;
   }): Promise<{ success: boolean; message: string }> {
-    const managers = ['fatih.zebek@demirerholding.com', 'hursit.akter@demirerholding.com', 'emir.unver@demirerholding.com'];
+    let managers = ['fatih.zebek@demirerholding.com', 'hursit.akter@demirerholding.com', 'emir.unver@demirerholding.com'];
+    try {
+      const configured = await emailSettingsService.getRecipients('auditApprovalEmails');
+      if (configured.length > 0) managers = configured;
+    } catch {
+      // fallback to managers
+    }
     const recipientList = new Set<string>();
     
     if (data.userEmail && data.userEmail.includes('@')) {
@@ -1216,7 +1450,7 @@ class EmailService {
             <div class="notice-box">
               <strong>🔒 EMNİYET & KONTROL BİLGİLENDİRMESİ:</strong><br>
               Depo stokları personelin sayımı sonrası <strong>otomatik olarak değiştirilmemiştir</strong>.<br>
-              Fiziksel sayım miktarlarının sistem stoğuna yansıtılması için <strong>Fatih Zebek</strong>, <strong>Hurşit Akter</strong> veya <strong>Emir Ünver</strong> tarafından DH-Servis sistemindeki <em>"Depo Yönetimi ➔ Sayım Geçmişi"</em> ekranından onaylanması gerekmektedir.
+              Fiziksel sayım miktarlarının sistem stoğuna yansıtılması için <strong>Emir Ünver</strong> veya <strong>Hurşit Akter</strong> tarafından DH-Servis sistemindeki <em>"Depo Yönetimi ➔ Sayım Geçmişi"</em> ekranından onaylanması gerekmektedir.
             </div>
 
           </div>
@@ -1252,7 +1486,13 @@ class EmailService {
       note?: string;
     }>;
   }): Promise<{ success: boolean; message: string }> {
-    const managers = ['fatih.zebek@demirerholding.com', 'hursit.akter@demirerholding.com', 'emir.unver@demirerholding.com'];
+    let managers = ['fatih.zebek@demirerholding.com', 'hursit.akter@demirerholding.com', 'emir.unver@demirerholding.com'];
+    try {
+      const configured = await emailSettingsService.getRecipients('auditRevisionEmails');
+      if (configured.length > 0) managers = configured;
+    } catch {
+      // fallback to managers
+    }
     const recipientList = new Set<string>();
     
     if (data.userEmail && data.userEmail.includes('@')) {
@@ -1440,6 +1680,432 @@ class EmailService {
       </html>
     `;
   }
+
+  /**
+   * Generates formal A4 PDF file for Field Material Maintenance & Repair Form (Saha Malzeme Bakım & Onarım Formu).
+   */
+  async generateTeamRepairPDFFile(data: TeamRepairFormData): Promise<File | null> {
+    try {
+      await this.ensureHtml2PdfLoaded();
+      if (!(window as any).html2pdf) {
+        console.warn('[EmailService] html2pdf kütüphanesi yüklenemedi.');
+        return null;
+      }
+
+      const dateStr = formatSafeDateTime(data.completedAt || data.date);
+      const cleanWarehouseName = fixTurkishWarehouseName(data.warehouseName);
+      const cleanDuration = formatRepairDuration(data.repairDuration);
+      const displayFormNo = data.formNo || `Servis Onarım ${data.newSapNo}_001`;
+      const cleanTech = formatDisplayName(data.technician || 'Saha Teknisyeni');
+      const cleanTurbine = data.turbine || data.turbineNo || '-';
+
+      let usedMaterialsRows = '';
+      if (data.usedMaterials && data.usedMaterials.length > 0) {
+        usedMaterialsRows = data.usedMaterials.map((m: any, idx: number) => {
+          const isFromStock = m.deductedFromStock === true;
+          const matMcf = m.mcfNo || data.mcfNo || '';
+          const mcfText = (isFromStock && matMcf && matMcf !== '-') ? ` (MÇF: ${matMcf})` : '';
+          const badgeText = isFromStock ? `[Depo Stoğu${mcfText}]` : '[Harici Sarf]';
+          const badgeColor = isFromStock ? '#059669' : '#64748b';
+          return `
+          <tr style="border-bottom: 1px solid #cbd5e1;">
+            <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-size: 10px;">${idx + 1}</td>
+            <td style="padding: 4px 8px; border: 1px solid #cbd5e1; font-size: 10px; font-weight: 600;">
+              <span style="color: ${badgeColor}; font-weight: 700; margin-right: 4px;">${badgeText}</span>
+              ${m.name || m.description || '-'}
+            </td>
+            <td style="padding: 4px 6px; text-align: center; border: 1px solid #cbd5e1; font-size: 10px; font-weight: 700;">${m.qty} Adet</td>
+          </tr>
+        `;
+        }).join('');
+      } else {
+        usedMaterialsRows = `
+          <tr>
+            <td colspan="3" style="padding: 6px 8px; text-align: center; color: #64748b; font-style: italic; border: 1px solid #cbd5e1; font-size: 10px;">
+              Onarım esnasında harici sarf malzeme / yedek parça kullanılmamıştır.
+            </td>
+          </tr>
+        `;
+      }
+
+      const htmlContent = `
+        <div id="team-repair-pdf-container" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #0f172a; width: 710px; background: #ffffff; line-height: 1.35; padding: 12px; box-sizing: border-box;">
+          <!-- Header -->
+          <table style="width: 100%; border-bottom: 2px solid #002d6b; padding-bottom: 8px; margin-bottom: 12px;">
+            <tr>
+              <td style="width: 30%; vertical-align: middle;">
+                <div style="font-size: 18px; font-weight: 900; color: #002d6b; letter-spacing: -0.5px;">DEMİRER HOLDİNG</div>
+              </td>
+              <td style="width: 45%; text-align: center; vertical-align: middle;">
+                <div style="font-size: 13.5px; font-weight: 900; color: #002d6b; text-transform: uppercase; letter-spacing: 0.5px;">MALZEME BAKIM & ONARIM FORMU</div>
+              </td>
+              <td style="width: 25%; text-align: right; vertical-align: middle;">
+                <div style="font-size: 11px; font-weight: 800; font-family: monospace; color: #002d6b; background: #f1f5f9; padding: 3px 8px; border-radius: 4px; border: 1px solid #cbd5e1; display: inline-block;">${displayFormNo}</div>
+                <div style="font-size: 9px; color: #64748b; margin-top: 3px;">Tarih: ${dateStr}</div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Warehouse & General Info Table -->
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 10.5px;">
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">📍 Saha / Depo:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 800; color: #002d6b; width: 28%;">${cleanWarehouseName}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">👨‍🔧 Onarımı Yapan:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 700; width: 28%;">${cleanTech}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">⏱️ Onarım Süresi:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #0284c7;">${cleanDuration}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">📦 Yeni Raf No:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 800; color: #b45309;">${data.shelfNo}</td>
+            </tr>
+          </table>
+
+          <!-- Material Details Section -->
+          <div style="background: #002d6b; color: #ffffff; padding: 4px 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; margin-top: 8px; border-radius: 4px 4px 0 0;">
+            📦 ONARILAN MALZEME KÜNYESİ
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10.5px;">
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">Orijinal SAP No:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; width: 28%;">${data.originalSapNo}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; width: 22%; color: #475569;">Yeni Stok SAP No:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: 800; color: #2563eb; width: 28%;">${data.newSapNo} (TAMİRLİ)</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Malzeme Açıklaması:</td>
+              <td colspan="3" style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #0f172a;">${data.description}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Seri Numarası:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-family: monospace; font-weight: bold; color: #16a34a;">${data.serialNo || '-'}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Onarılan Miktar:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: bold;">${data.quantity} Adet</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Söküldüğü Türbin:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-weight: 600;">${cleanTurbine}</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Rapor & MÇF No:</td>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; font-size: 10px;">${data.reportNo || '-'} ${data.mcfNo ? `(MÇF: ${data.mcfNo})` : ''}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 6px; border: 1px solid #cbd5e1; background: #f8fafc; font-weight: bold; color: #475569;">Arıza Kodu & Nedeni:</td>
+              <td colspan="3" style="padding: 5px 6px; border: 1px solid #cbd5e1; color: #b91c1c; font-weight: 600;">
+                ${data.faultCode || '-'} ${data.faultDesc ? `| ${data.faultDesc}` : ''}
+              </td>
+            </tr>
+          </table>
+
+          <!-- Actions Taken Section -->
+          <div style="background: #002d6b; color: #ffffff; padding: 4px 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; border-radius: 4px 4px 0 0;">
+            🛠️ YAPILAN İŞLEMLER VE ONARIM DETAYI
+          </div>
+          <div style="border: 1px solid #cbd5e1; border-top: none; padding: 10px 12px; font-size: 10.5px; background: #ffffff; color: #1e293b; min-height: 70px; white-space: pre-wrap; margin-bottom: 12px;">
+            ${data.actionNotes || 'Detay girilmedi.'}
+          </div>
+
+          <!-- Used Materials Section -->
+          <div style="background: #002d6b; color: #ffffff; padding: 4px 8px; font-size: 11px; font-weight: 800; text-transform: uppercase; border-radius: 4px 4px 0 0;">
+            🔩 ONARIMDA KULLANILAN SARF MALZEMELER / PARÇALAR
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10px;">
+            <thead>
+              <tr style="background: #e2e8f0; color: #0f172a;">
+                <th style="border: 1px solid #cbd5e1; padding: 4px; width: 30px; text-align: center;">#</th>
+                <th style="border: 1px solid #cbd5e1; padding: 4px 8px; text-align: left;">Parça Adı / SAP No</th>
+                <th style="border: 1px solid #cbd5e1; padding: 4px; width: 80px; text-align: center;">Miktar</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${usedMaterialsRows}
+            </tbody>
+          </table>
+
+          <!-- Signatures Section -->
+          <table style="width: 100%; border-collapse: collapse; margin-top: 14px; page-break-inside: avoid;">
+            <tr>
+              <td style="width: 48%; border: 1px solid #64748b; padding: 8px 10px; vertical-align: top; background: #ffffff;">
+                <div style="font-weight: 800; font-size: 10.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
+                  ONARIMI YAPAN TEKNİSYEN
+                </div>
+                <div style="font-size: 10.5px; margin-top: 6px; font-weight: 600;">Ad Soyad: ${cleanTech}</div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Kullanıcı: ${data.completedBy}</div>
+                <div style="font-size: 10.5px; margin-top: 20px; color: #64748b;">İmza: ___________________________</div>
+              </td>
+              <td style="width: 4%;"></td>
+              <td style="width: 48%; border: 1px solid #64748b; padding: 8px 10px; vertical-align: top; background: #ffffff;">
+                <div style="font-weight: 800; font-size: 10.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #0f172a;">
+                  TESLİM ALAN / MALZEME YÖNETİMİ
+                </div>
+                <div style="font-size: 10.5px; margin-top: 6px; font-weight: 600;">Ad Soyad: ___________________________</div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Raf Kaydı Onayı: [ ${data.shelfNo} ]</div>
+                <div style="font-size: 10.5px; margin-top: 20px; color: #64748b;">İmza: ___________________________</div>
+              </td>
+            </tr>
+          </table>
+
+          <div style="margin-top: 16px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+            Bu resmi bakım formu Demirer Holding Saha Servis & Depo Yönetim Sistemi (DH-Servis) tarafından otomatik olarak üretilmiştir.
+          </div>
+        </div>
+      `;
+
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'position: absolute; left: -9999px; top: 0; width: 710px; background: #ffffff; z-index: -99999;';
+      wrapper.innerHTML = htmlContent;
+      document.body.appendChild(wrapper);
+
+      const targetElement = (wrapper.querySelector('#team-repair-pdf-container') || wrapper.firstElementChild || wrapper) as HTMLElement;
+      if (targetElement) {
+        targetElement.style.width = '710px';
+        targetElement.style.minWidth = '710px';
+        targetElement.style.maxWidth = '710px';
+        targetElement.style.margin = '0';
+        targetElement.style.padding = '12px';
+        targetElement.style.boxSizing = 'border-box';
+        targetElement.style.background = '#ffffff';
+      }
+
+      await new Promise(r => setTimeout(r, 400));
+
+      const formNoClean = displayFormNo.replace(/\s+/g, '_');
+      const opt = {
+        margin: [8, 8, 8, 8],
+        filename: `${formNoClean}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          scrollY: 0,
+          scrollX: 0
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.pdf-no-break'] }
+      };
+
+      const originalHtmlFontSize = document.documentElement.style.fontSize;
+      document.documentElement.style.fontSize = '12px';
+
+      let pdfBlob: Blob | null = null;
+      try {
+        pdfBlob = await (window as any).html2pdf().set(opt).from(targetElement).outputPdf('blob');
+      } finally {
+        document.documentElement.style.fontSize = originalHtmlFontSize;
+        if (wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+      }
+
+      if (pdfBlob && pdfBlob.size > 1000) {
+        console.log(`[EmailService] Saha Onarım Formu PDF'i üretildi: ${formNoClean}.pdf (${pdfBlob.size} bytes)`);
+        return new File([pdfBlob], `${formNoClean}.pdf`, { type: 'application/pdf' });
+      }
+    } catch (e) {
+      console.warn('[EmailService] Saha Onarım PDF üretimi hatası:', e);
+    }
+    return null;
+  }
+
+  /**
+   * Generates clean white-themed email HTML body for completed field team repairs.
+   */
+  buildTeamRepairEmailHTML(data: TeamRepairFormData): string {
+    const dateStr = formatSafeDateTime(data.completedAt || data.date);
+    const cleanWarehouseName = fixTurkishWarehouseName(data.warehouseName);
+    const cleanDuration = formatRepairDuration(data.repairDuration);
+    const displayFormNo = data.formNo || `Servis Onarım ${data.newSapNo}_001`;
+    const cleanTech = formatDisplayName(data.technician || 'Saha Teknisyeni');
+    const cleanTurbine = data.turbine || data.turbineNo || '-';
+
+    let usedMatList = '';
+    if (data.usedMaterials && data.usedMaterials.length > 0) {
+      usedMatList = data.usedMaterials.map((m: any) => {
+        const isFromStock = m.deductedFromStock === true;
+        const matMcf = m.mcfNo || data.mcfNo || '';
+        const mcfText = (isFromStock && matMcf && matMcf !== '-') ? ` - MÇF: ${matMcf}` : '';
+        const badge = isFromStock 
+          ? `<span style="background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 6px;">Depo Stoğundan Düşüldü${mcfText}</span>`
+          : '<span style="background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-left: 6px;">Harici Sarf / Stok Etkilenmedi</span>';
+        return `<li style="margin-bottom: 6px;"><strong>${m.name || m.description || '-'}:</strong> ${m.qty} Adet ${badge}</li>`;
+      }).join('');
+    } else {
+      usedMatList = '<li style="color: #64748B;"><em>Kullanılan harici parça yok.</em></li>';
+    }
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #F8FAFC; color: #334155; margin: 0; padding: 20px; }
+          .card { max-width: 680px; margin: 0 auto; background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); overflow: hidden; }
+          .header { background: linear-gradient(135deg, #002d6b 0%, #0284c7 100%); color: #FFFFFF; padding: 22px 24px; border-bottom: 4px solid #14F195; }
+          .banner { background: #DCFCE7; border-bottom: 1px solid #86EFAC; padding: 12px 24px; color: #166534; font-weight: 700; font-size: 13px; }
+          .content { padding: 24px; }
+          .info-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+          .info-title { font-size: 16px; font-weight: 800; color: #0F172A; margin-bottom: 10px; border-bottom: 1px solid #E2E8F0; padding-bottom: 6px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12.5px; }
+          .info-label { color: #64748B; font-weight: 600; }
+          .desc-box { background-color: #F8FAFC; border-left: 4px solid #0284C7; padding: 14px; border-radius: 4px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #1E293B; margin-top: 6px; border: 1px solid #E2E8F0; border-left: 4px solid #0284C7; }
+          .tech-box { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; font-size: 12.5px; background: #F8FAFC; padding: 12px 16px; border-radius: 6px; border: 1px solid #E2E8F0; }
+          .section-title { font-size: 14px; font-weight: 800; color: #0F172A; margin: 0 0 8px 0; border-bottom: 2px solid #0284C7; padding-bottom: 4px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <!-- Header -->
+          <div class="header">
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; opacity: 0.9;">DEMİRER HOLDİNG</div>
+            <h2 style="margin: 6px 0 0 0; font-size: 19px; font-weight: 800; color: #FFFFFF;">MALZEME BAKIM & ONARIM FORMU</h2>
+            <div style="font-size: 12px; margin-top: 4px; opacity: 0.95;">Form No: <strong style="font-family: monospace; color: #FFFFFF;">${displayFormNo}</strong> • ${dateStr}</div>
+          </div>
+
+          <!-- Status Banner -->
+          <div class="banner">
+            ✅ Parça saha onarımı tamamlanmış ve <strong>${data.newSapNo}</strong> koduyla <strong>TAMİRLİ</strong> stoğa alınmıştır.
+          </div>
+
+          <div class="content">
+            <!-- Material Card -->
+            <div class="info-box">
+              <div class="info-title">${data.description}</div>
+              <div class="info-grid">
+                <div><span class="info-label">Orijinal SAP:</span> <strong style="color: #D97706; font-family: monospace;">${data.originalSapNo}</strong></div>
+                <div><span class="info-label">Yeni Tamirli SAP:</span> <strong style="color: #0284C7; font-family: monospace;">${data.newSapNo}</strong></div>
+                <div><span class="info-label">Seri No:</span> <strong style="color: #059669; font-family: monospace;">${data.serialNo || '-'}</strong></div>
+                <div><span class="info-label">Miktar:</span> <strong>${data.quantity} Adet</strong></div>
+                <div><span class="info-label">Depo / Saha:</span> <strong style="color: #0F172A;">${cleanWarehouseName}</strong></div>
+                <div><span class="info-label">Raf Numarası:</span> <strong style="color: #D97706; font-family: monospace;">${data.shelfNo}</strong></div>
+                <div><span class="info-label">Söküldüğü Türbin:</span> <strong>${cleanTurbine}</strong></div>
+                <div><span class="info-label">Rapor / MÇF:</span> <strong>${data.reportNo || '-'} (MÇF: ${data.mcfNo || '-'})</strong></div>
+              </div>
+            </div>
+
+            <!-- Repair Actions -->
+            <div style="margin-bottom: 20px;">
+              <h4 class="section-title">🛠️ Yapılan İşlemler / Onarım Detayı</h4>
+              <div class="desc-box">${data.actionNotes}</div>
+            </div>
+
+            <!-- Technician & Duration -->
+            <div class="tech-box">
+              <div><span class="info-label">Onarımı Yapan Teknisyen:</span><br><strong style="color: #0F172A; font-size: 13px;">${cleanTech}</strong></div>
+              <div><span class="info-label">Onarım Süresi:</span><br><strong style="color: #0284C7; font-size: 13px;">${cleanDuration}</strong></div>
+            </div>
+
+            <!-- Used Materials -->
+            <div style="margin-bottom: 10px;">
+              <h4 class="section-title">🔩 Kullanılan Sarf Malzemeler / Parçalar</h4>
+              <ul style="margin: 0; padding-left: 20px; font-size: 12.5px; color: #334155; line-height: 1.6;">
+                ${usedMatList}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Sends formal field team repair completion email with A4 PDF attachment.
+   * Default recipients: Fatih Zebek, Emir Ünver, Hurşit Akter.
+   */
+  async sendTeamRepairCompletedEmail(
+    formData: TeamRepairFormData,
+    customRecipient?: string
+  ): Promise<{ success: boolean; message: string }> {
+    let recipient = customRecipient;
+    if (!recipient) {
+      try {
+        const configured = await emailSettingsService.getRecipients('teamRepairEmails');
+        recipient = configured.length > 0 ? configured.join(', ') : DEFAULT_DISPATCH_EMAILS;
+      } catch {
+        recipient = DEFAULT_DISPATCH_EMAILS;
+      }
+    }
+    const cleanWarehouseName = fixTurkishWarehouseName(formData.warehouseName);
+    const displayFormNo = formData.formNo || `Servis Onarım ${formData.newSapNo}_001`;
+    const subject = `[DH-SERVİS SAHA ONARIM FORMU] ${cleanWarehouseName} - ${displayFormNo} - ${formData.description}`;
+    const htmlBody = this.buildTeamRepairEmailHTML(formData);
+
+    try {
+      // 1. Generate A4 PDF Attachment
+      const pdfFile = await this.generateTeamRepairPDFFile(formData);
+      let base64Content = '';
+      if (pdfFile) {
+        base64Content = await this.blobToBase64(pdfFile);
+      }
+
+      const formNoClean = displayFormNo.replace(/\s+/g, '_');
+      const filename = `${formNoClean}.pdf`;
+
+      // 2. Dispatch email
+      const res = await fetch(getEmailEndpoint(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipient,
+          subject: subject,
+          html: htmlBody,
+          pdfBase64: base64Content,
+          filename: filename
+        })
+      });
+
+      const resData = await res.json().catch(() => null);
+      if (resData?.success) {
+        console.log(`[EmailService] Saha onarım maili ve PDF eki başarıyla iletildi: ${formData.newSapNo} -> ${recipient}`);
+        if ((window as any).showToast) {
+          (window as any).showToast('E-POSTA & PDF GÖNDERİLDİ', 'Saha onarım formu ve PDF eki Servis Merkezine iletildi.', 'success');
+        }
+        return { success: true, message: 'E-posta ve PDF Servis Merkezine başarıyla iletildi.' };
+      } else {
+        const errStr = resData?.error || 'E-posta servisi yanıt vermedi';
+        console.warn('[EmailService] E-posta gönderim uyarısı:', errStr);
+        return { success: false, message: errStr };
+      }
+    } catch (err: any) {
+      console.error('[EmailService] Saha onarım e-posta hatası:', err);
+      return { success: false, message: err?.message || err };
+    }
+  }
+}
+
+export interface TeamRepairFormData {
+  formNo: string;
+  date?: string;
+  warehouseName: string;
+  warehouseId: string;
+  originalSapNo: string;
+  newSapNo: string;
+  description: string;
+  newDescription: string;
+  serialNo?: string;
+  quantity: number;
+  turbine?: string;
+  turbineNo?: string;
+  reportNo?: string;
+  mcfNo?: string;
+  faultCode?: string;
+  faultDesc?: string;
+  assignedTeam?: string;
+  sentBy?: string;
+  actionNotes: string;
+  technician: string;
+  repairDuration?: string;
+  shelfNo: string;
+  usedMaterials?: Array<{
+    name: string;
+    qty: number;
+    sapNo?: string;
+    description?: string;
+    deductedFromStock?: boolean;
+    shelfNo?: string;
+  }>;
+  completedBy: string;
+  completedAt?: any;
 }
 
 export const emailService = new EmailService();

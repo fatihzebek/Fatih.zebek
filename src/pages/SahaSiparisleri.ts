@@ -38,6 +38,8 @@ const loadSahaSapCatalog = async () => {
   return cachedSahaSapList;
 };
 
+let activeUserProfile: any = null;
+
 // 5 Sites assigned to Furkan YILDIRIM for Demands & Pre-approval
 export const FURKAN_DEMAND_SITES = ['3245', '3213', '3892', '2678', '0752'];
 // 3245: Alize Keltepe, 3213: Dares Datça, 3892: Alize Çataltepe, 2678: Mare Manastır, 0752: Alize Germiyan
@@ -52,11 +54,23 @@ export const isFurkanUser = (user: any): boolean => {
 };
 
 export const isSuperAdminUser = (user: any): boolean => {
-  return user?.role === 'ADMIN' || user?.email?.toLowerCase()?.includes('fatih.zebek');
+  const email = (user?.email || '').toLowerCase().trim();
+  const role = (user?.role || '').toUpperCase();
+  return role === 'ADMIN' || email.includes('fatih.zebek') || email.includes('emir.unver');
+};
+
+export const isMaterialManagerUser = (user: any): boolean => {
+  const email = (user?.email || '').toLowerCase().trim();
+  const role = (user?.role || '').toUpperCase();
+  return role === 'MALZEME_YONETIMI' || email.includes('hursit.akter') || email.includes('hursit.aktar');
+};
+
+export const getCurrentUserForDemands = (): any => {
+  return activeUserProfile || (window as any).appState?.userProfile || (window as any).currentUser || authService.getCurrentUser();
 };
 
 export const getVisibleSitesForUser = (user: any, allSites: any[]) => {
-  if (isSuperAdminUser(user) || user?.role === 'MALZEME_YONETIMI' || user?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') {
+  if (isSuperAdminUser(user) || isMaterialManagerUser(user)) {
     return allSites;
   }
   if (isFurkanUser(user)) {
@@ -69,21 +83,27 @@ export const getVisibleSitesForUser = (user: any, allSites: any[]) => {
 };
 
 export const canUserApproveDemand = (user: any, demand: MaterialDemand): boolean => {
-  if (isSuperAdminUser(user)) return true; // Admin can approve any demand across all sites
-  if (isFurkanUser(user) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true; // Furkan can approve his 5 sites
+  const u = user || getCurrentUserForDemands();
+  if (!u) return false;
+  if (isSuperAdminUser(u)) return true; // Admin / Fatih / Emir can approve any demand across all sites
+  if (isMaterialManagerUser(u)) return true; // Malzeme Yönetimi (Hurşit Aktar) can approve any demand across all sites
+  if (isFurkanUser(u) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true; // Furkan can approve his 5 sites
   return false;
 };
 
 export const canUserEditDemand = (user: any, demand: MaterialDemand): boolean => {
-  if (isSuperAdminUser(user)) return true;
-  if (isFurkanUser(user) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true;
-  if (user?.role === 'MALZEME_YONETIMI' || user?.email?.toLowerCase() === 'hursit.akter@demirerholding.com') return true;
-  if (demand.requesterId === user?.uid) return true;
+  const u = user || getCurrentUserForDemands();
+  if (!u) return false;
+  if (isSuperAdminUser(u)) return true;
+  if (isMaterialManagerUser(u)) return true;
+  if (isFurkanUser(u) && FURKAN_DEMAND_SITES.includes(demand.siteId)) return true;
+  if (demand.requesterId === u?.uid) return true;
   return false;
 };
 
 export const SahaSiparisleriPage = async (userProfile: any) => {
-  const currentUser = userProfile || (window as any).currentUser || authService.getCurrentUser();
+  activeUserProfile = userProfile;
+  const currentUser = getCurrentUserForDemands();
   const allSites = dataService.getSortedSites();
   const sites = getVisibleSitesForUser(currentUser, allSites);
 
@@ -880,14 +900,14 @@ let demandsUnsubscribe: (() => void) | null = null;
 };
 
 (window as any).applyDemandFilters = () => {
-  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const currentUser = getCurrentUserForDemands();
   const allSites = dataService.getSites();
   const visibleSites = getVisibleSitesForUser(currentUser, allSites);
   const visibleSiteIds = new Set(visibleSites.map((s: any) => s.id));
 
   // Filter demands that this user is permitted to see
   const userPermittedDemands = allDemandsList.filter(d => {
-    if (isSuperAdminUser(currentUser) || currentUser?.role === 'MALZEME_YONETIMI') return true;
+    if (isSuperAdminUser(currentUser) || isMaterialManagerUser(currentUser)) return true;
     if (isFurkanUser(currentUser)) {
       return FURKAN_DEMAND_SITES.includes(d.siteId);
     }
@@ -958,7 +978,7 @@ let demandsUnsubscribe: (() => void) | null = null;
     return;
   }
 
-  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const currentUser = getCurrentUserForDemands();
 
   const statusMap: Record<MaterialDemandStatus, { label: string; class: string; icon: string }> = {
     'PENDING_REVIEW': { label: 'Ön Kontrol Bekliyor', class: 'pending', icon: 'fa-clock' },
@@ -1764,7 +1784,7 @@ let demandsUnsubscribe: (() => void) | null = null;
     };
   });
 
-  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const currentUser = getCurrentUserForDemands();
   const btn = document.getElementById('btn-confirm-approve') as HTMLButtonElement;
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {
@@ -1819,7 +1839,7 @@ let demandsUnsubscribe: (() => void) | null = null;
     return;
   }
 
-  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const currentUser = getCurrentUserForDemands();
   const btn = document.getElementById('btn-confirm-reject') as HTMLButtonElement;
   const origHtml = btn ? btn.innerHTML : '';
   if (btn) {

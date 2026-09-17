@@ -23,6 +23,7 @@ let cachedDashboardData: {
   reminders?: any[];
   transfers?: any[];
   reports?: any[];
+  repairs?: any[];
 } = {};
 
 export const DashboardPage = async () => {
@@ -37,7 +38,7 @@ export const DashboardPage = async () => {
   const isCacheEmpty = !cachedDashboardData.tasks;
   if (isCacheEmpty) {
     try {
-      const [freshTasks, freshLeaves, freshReminders, freshTransfers, freshReports] = await Promise.all([
+      const [freshTasks, freshLeaves, freshReminders, freshTransfers, freshReports, freshRepairs] = await Promise.all([
         taskService.getTasks(),
         (async () => {
           let freshLeaves: any[] = [];
@@ -63,7 +64,15 @@ export const DashboardPage = async () => {
         })(),
         turbineReminderService.getPendingReminders(),
         transferService.getTransfers(),
-        serviceReportService.getAllReports()
+        serviceReportService.getAllReports(),
+        (async () => {
+          try {
+            const { repairService } = await import('../services/RepairService');
+            return await repairService.getRepairs();
+          } catch (e) {
+            return [];
+          }
+        })()
       ]);
 
       cachedDashboardData = {
@@ -71,7 +80,8 @@ export const DashboardPage = async () => {
         pendingLeaves: freshLeaves,
         reminders: freshReminders,
         transfers: freshTransfers,
-        reports: freshReports
+        reports: freshReports,
+        repairs: freshRepairs
       };
     } catch (err) {
       console.error("Failed initial dashboard data load:", err);
@@ -84,6 +94,7 @@ export const DashboardPage = async () => {
   let reminders: any[] = cachedDashboardData.reminders || [];
   let transfers: any[] = cachedDashboardData.transfers || [];
   let reports: any[] = cachedDashboardData.reports || [];
+  let repairs: any[] = cachedDashboardData.repairs || [];
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayTime = new Date(todayStr).getTime();
@@ -117,6 +128,79 @@ export const DashboardPage = async () => {
     startOfCreated.setHours(0, 0, 0, 0);
     const daysPending = Math.max(0, Math.round((startOfToday.getTime() - startOfCreated.getTime()) / (1000 * 60 * 60 * 24)));
     return { ...t, dateText, daysPending };
+  });
+
+  // Incoming Workshop Dispatches (MTA -> Saha Depoları / Ekipler)
+  const allowedWarehouses = (currentUser?.allowedWarehouses || []).map((w: string) => w.toLowerCase().trim());
+  const allowedSitesLower = allowedSites.map((s: string) => s.toLowerCase().trim());
+
+  const incomingWorkshopRepairs = repairs.filter(r => {
+    if (r.status !== 'SENT_BACK') return false;
+    if (isAdmin) return true;
+    const tWh = (r.targetWarehouseId || '').toLowerCase().trim();
+    if (!tWh) return false;
+    const matchesWh = allowedWarehouses.includes(tWh);
+    const matchesSite = allowedSitesLower.some((s: string) => s === tWh || tWh.includes(s) || s.includes(tWh));
+    const matchesTeam = userTeamId && tWh === userTeamId;
+    return matchesWh || matchesSite || matchesTeam;
+  });
+
+  interface WorkshopAlertGroup {
+    key: string;
+    dispatchNo: string;
+    displayFormNo: string;
+    targetWarehouseId: string;
+    targetWarehouseName: string;
+    itemsCount: number;
+    itemsSummary: string;
+    dispatchedBy: string;
+    dateText: string;
+    daysPending: number;
+  }
+
+  const workshopAlertGroups: Record<string, any[]> = {};
+  incomingWorkshopRepairs.forEach(r => {
+    const dNo = (r.dispatchNo && String(r.dispatchNo).trim() !== '') ? String(r.dispatchNo).trim() : ('ID_' + r.id);
+    const key = `${dNo}___${r.targetWarehouseId || 'UNKNOWN'}`;
+    if (!workshopAlertGroups[key]) workshopAlertGroups[key] = [];
+    workshopAlertGroups[key].push(r);
+  });
+
+  const warningWorkshopDispatches: WorkshopAlertGroup[] = Object.entries(workshopAlertGroups).map(([key, items]) => {
+    const first = items[0];
+    const dNo = (first.dispatchNo && String(first.dispatchNo).trim() !== '') ? String(first.dispatchNo).trim() : '';
+    const displayFormNo = dNo ? (dNo.toUpperCase().includes('FORM') || dNo.toUpperCase().includes('MÇT') ? dNo : `Form NO: ${dNo}`) : `Sevk #${first.id.slice(-5)}`;
+
+    let createdDate = new Date();
+    let dateText = 'Bilinmeyen Tarih';
+    const ts = first.dispatchedAt || first.repairedAt || first.sentAt;
+    if (ts) {
+      createdDate = ts.toDate ? ts.toDate() : new Date(ts);
+      dateText = createdDate.toLocaleDateString('tr-TR');
+    }
+
+    const startOfCreated = new Date(createdDate);
+    startOfCreated.setHours(0, 0, 0, 0);
+    const daysPending = Math.max(0, Math.round((startOfToday.getTime() - startOfCreated.getTime()) / (1000 * 60 * 60 * 24)));
+
+    const wh = dataService.getWarehouses().find(w => w.id === first.targetWarehouseId);
+    const targetWarehouseName = wh ? wh.name.replace(/\s*[Dd]epo(su)?\s*$/, '') : (first.targetWarehouseId || 'Saha Deposu');
+
+    let summary = items.map(it => it.description || it.sapNo).slice(0, 3).join(', ');
+    if (items.length > 3) summary += '...';
+
+    return {
+      key,
+      dispatchNo: dNo,
+      displayFormNo,
+      targetWarehouseId: first.targetWarehouseId,
+      targetWarehouseName,
+      itemsCount: items.length,
+      itemsSummary: summary,
+      dispatchedBy: first.dispatchedBy || first.receivedBy || 'Atölye Sorumlusu',
+      dateText,
+      daysPending
+    };
   });
   
   const isFatihOrAdmin = currentUser?.role === 'ADMIN' || 
@@ -653,13 +737,40 @@ export const DashboardPage = async () => {
       </div>
       ` : ''}
 
-      ${warningTransfers.length > 0 ? `
-      <!-- PENDING TRANSFERS ALERT PANEL -->
+      ${(warningTransfers.length + warningWorkshopDispatches.length) > 0 ? `
+      <!-- PENDING SHIPMENTS ALERT PANEL (TRANSFERS & WORKSHOP DISPATCHES) -->
       <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #f59e0b; background: rgba(245, 158, 11, 0.03); box-shadow: 0 0 20px rgba(245, 158, 11, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
         <h3 style="font-size: 0.85rem; color: #f59e0b; margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
-          <i class="fa-solid fa-truck-fast"></i> YOLDA / BEKLEYEN SEVKİYATLAR (${warningTransfers.length})
+          <i class="fa-solid fa-truck-fast"></i> YOLDA / BEKLEYEN SEVKİYATLAR (${warningTransfers.length + warningWorkshopDispatches.length})
         </h3>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto; padding-right: 4px;">
+          
+          <!-- Incoming Workshop Dispatches (MTA -> Saha) -->
+          ${warningWorkshopDispatches.map(w => {
+            const daysLabel = w.daysPending >= 3 
+              ? `<span style="font-size: 0.65rem; font-weight: 800; color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; animation: pulse 2s infinite;"><i class="fa-solid fa-clock"></i> ${w.daysPending} GÜNDÜR YOLDA</span>`
+              : `<span style="font-size: 0.65rem; font-weight: 800; color: #14F195; background: rgba(20, 241, 149, 0.12); border: 1px solid rgba(20, 241, 149, 0.3); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;"><i class="fa-solid fa-wrench"></i> ATÖLYE SEVKİYATI</span>`;
+
+            return `
+              <div onclick="window.selectWarehouseAndNavigate ? window.selectWarehouseAndNavigate('${w.targetWarehouseId}') : window.navigate('warehouses')" class="reminder-alert-item" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(20, 241, 149, 0.02); border: 1px solid ${w.daysPending >= 3 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(20, 241, 149, 0.3)'}; border-radius: 8px; transition: all 0.2s;" onmouseover="this.style.background='rgba(20, 241, 149, 0.06)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.02)'">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <span style="font-weight: 700; color: #fff; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
+                    Merkez Tamir Atölyesi ➔ ${w.targetWarehouseName} Depo
+                    ${daysLabel}
+                  </span>
+                  <span style="font-size: 0.8rem; color: var(--text-muted); font-family: 'Rajdhani', sans-serif;">
+                    <strong style="color: #14F195;">${w.displayFormNo}</strong> (${w.itemsCount} Kalem): ${w.itemsSummary} <span style="color: #64748B;">— (Sevk Eden: ${w.dispatchedBy})</span>
+                  </span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span style="font-size: 0.7rem; font-weight: 700; color: #14F195; background: rgba(20, 241, 149, 0.1); border: 1px solid rgba(20, 241, 149, 0.25); padding: 3px 8px; border-radius: 4px;">${w.dateText}</span>
+                  <i class="fa-solid fa-chevron-right" style="color: rgba(255,255,255,0.2); font-size: 0.8rem;"></i>
+                </div>
+              </div>
+            `;
+          }).join('')}
+
+          <!-- Inter-Warehouse Transfers -->
           ${warningTransfers.map(t => {
             const daysLabel = t.daysPending >= 3 
               ? `<span style="font-size: 0.65rem; font-weight: 800; color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px; animation: pulse 2s infinite;"><i class="fa-solid fa-clock"></i> ${t.daysPending} GÜNDÜR YOLDA</span>`

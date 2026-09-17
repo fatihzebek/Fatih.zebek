@@ -1,8 +1,8 @@
-import { warehouseState, isUserFatihZebek, isPcbMaterial, isIgbtMaterial } from './WarehouseState';
+import { warehouseState, isUserFatihZebek, isPcbMaterial, isIgbtMaterial, canViewTamirBekleyenler } from './WarehouseState';
 
 export const switchTab = async (tabName: string, id: string) => {
-  const tabs = ['tab-ENVANTER', 'tab-PCB', 'tab-IGBT', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI', 'tab-DEFECT', 'tab-TRANSFERLER', 'tab-UNPRICED'];
-  const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI', 'view-DEFECT', 'view-TRANSFERLER', 'view-UNPRICED'];
+  const tabs = ['tab-ENVANTER', 'tab-PCB', 'tab-IGBT', 'tab-ANALİZ', 'tab-SAYIM', 'tab-SAYIM_GECMISI', 'tab-DEPO_HAREKETLERI', 'tab-DEFECT', 'tab-TRANSFERLER', 'tab-UNPRICED', 'tab-TAMIR_BEKLEYENLER'];
+  const views = ['view-ENVANTER', 'view-ANALİZ', 'view-SAYIM', 'view-SAYIM_GECMISI', 'view-DEPO_HAREKETLERI', 'view-DEFECT', 'view-TRANSFERLER', 'view-UNPRICED', 'view-TAMIR_BEKLEYENLER'];
   
   tabs.forEach(t => {
     const el = document.getElementById(t);
@@ -14,6 +14,7 @@ export const switchTab = async (tabName: string, id: string) => {
         else if (t === 'tab-UNPRICED') activeColor = '#F59E0B';
         else if (t === 'tab-PCB') activeColor = '#38BDF8';
         else if (t === 'tab-IGBT') activeColor = '#A855F7';
+        else if (t === 'tab-TAMIR_BEKLEYENLER') activeColor = '#F59E0B';
         
         el.style.color = activeColor;
         el.style.border = `1px solid ${activeColor}`;
@@ -70,6 +71,12 @@ export const switchTab = async (tabName: string, id: string) => {
      }
   }
 
+  if (tabName === 'TAMIR_BEKLEYENLER') {
+     if ((window as any).loadTamirBekleyenler) {
+        (window as any).loadTamirBekleyenler();
+     }
+  }
+
   if (tabName === 'DEPO_HAREKETLERI') {
      const searchInput = document.getElementById('depo-hareketleri-search') as HTMLInputElement;
      if (searchInput) {
@@ -93,6 +100,7 @@ export const renderTabsHTML = (currentWarehouseId: string, currentTab: string, i
   const canViewPrices = warehouseState.canViewPrices;
   const unpricedCount = warehouseState.unpricedItems?.length || 0;
   const isFatihZebek = isUserFatihZebek();
+  const canRepairTab = canViewTamirBekleyenler();
 
   const validItems = (warehouseState.inventoryItems || []).filter(i => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && i.status !== 'HURDAYA_AYRILDI');
   const pcbCount = validItems.filter(i => isPcbMaterial(i)).length;
@@ -129,6 +137,9 @@ export const renderTabsHTML = (currentWarehouseId: string, currentTab: string, i
         <div onclick="window.switchTab('TRANSFERLER', 'tab-TRANSFERLER')" id="tab-TRANSFERLER" data-active="${currentTab === 'TRANSFERLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TRANSFERLER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'TRANSFERLER' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
           <i class="fa-solid fa-truck-ramp-box"></i> TRANSFERLER
         </div>
+        <div onclick="window.switchTab('TAMIR_BEKLEYENLER', 'tab-TAMIR_BEKLEYENLER')" id="tab-TAMIR_BEKLEYENLER" data-active="${currentTab === 'TAMIR_BEKLEYENLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TAMIR_BEKLEYENLER' ? '#F59E0B' : '#94A3B8'}; border: 1px solid ${currentTab === 'TAMIR_BEKLEYENLER' ? '#F59E0B' : 'transparent'}; border-radius: 6px; font-weight: 700; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+          <i class="fa-solid fa-wrench" style="color:#F59E0B;"></i> TAMİR BEKLEYEN ÜRÜNLER (<span id="tamir-bekleyen-tab-count">0</span>)
+        </div>
       ` : `
         ${currentWarehouseId !== 'MTA' ? `
           <div onclick="window.switchTab('ANALİZ', 'tab-ANALİZ')" id="tab-ANALİZ" data-active="${currentTab === 'ANALİZ' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'ANALİZ' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'ANALİZ' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
@@ -147,6 +158,9 @@ export const renderTabsHTML = (currentWarehouseId: string, currentTab: string, i
           </div>
           <div onclick="window.switchTab('TRANSFERLER', 'tab-TRANSFERLER')" id="tab-TRANSFERLER" data-active="${currentTab === 'TRANSFERLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TRANSFERLER' ? '#14F195' : '#94A3B8'}; border: 1px solid ${currentTab === 'TRANSFERLER' ? '#14F195' : 'transparent'}; border-radius: 6px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
             <i class="fa-solid fa-truck-ramp-box"></i> TRANSFERLER
+          </div>
+          <div onclick="window.switchTab('TAMIR_BEKLEYENLER', 'tab-TAMIR_BEKLEYENLER')" id="tab-TAMIR_BEKLEYENLER" data-active="${currentTab === 'TAMIR_BEKLEYENLER' ? 'true' : 'false'}" style="padding: 0.35rem 0.75rem; font-size: 0.78rem; color: ${currentTab === 'TAMIR_BEKLEYENLER' ? '#F59E0B' : '#94A3B8'}; border: 1px solid ${currentTab === 'TAMIR_BEKLEYENLER' ? '#F59E0B' : 'transparent'}; border-radius: 6px; font-weight: 700; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;" onmouseover="this.style.color='#E2E8F0'" onmouseout="if(this.dataset.active!=='true')this.style.color='#94A3B8'">
+            <i class="fa-solid fa-wrench" style="color:#F59E0B;"></i> TAMİR BEKLEYEN ÜRÜNLER (<span id="tamir-bekleyen-tab-count">0</span>)
           </div>
         ` : ''}
       `}

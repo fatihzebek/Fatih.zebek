@@ -5,9 +5,10 @@ import { tsiService } from '../services/TsiService';
 import { personnelService } from '../services/PersonnelService';
 import { formatDisplayName } from '../utils/formatters';
 import { AdvancedPermissionStudio } from './AdvancedPermissionStudio';
+import { EmailRecipientsManager } from '../components/EmailRecipientsManager';
 
 
-export const UserManagementPage = async () => {
+export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'emails') => {
   // Clean up any detached modal elements left on document.body from previous page renders
   ['permission-modal', 'new-user-modal', 'preset-templates-modal'].forEach(id => {
     const existing = document.getElementById(id);
@@ -25,6 +26,13 @@ export const UserManagementPage = async () => {
       searchInput.removeAttribute('readonly');
       searchInput.value = '';
       (window as any).filterUsersList('');
+    }
+
+    // Initialize Email Recipients Manager
+    const emailMgr = new EmailRecipientsManager('um-emails-view-container', users);
+    (window as any)._activeEmailManager = emailMgr;
+    if (initialMode === 'emails') {
+      emailMgr.init();
     }
   }, 200);
   
@@ -178,6 +186,18 @@ export const UserManagementPage = async () => {
           Yetkiler: <span style="color: var(--text-main);">${tabCount} Sayfa</span> | <span style="color: var(--text-main);">${siteCount} Santral</span> | <span style="color: var(--text-main);">${warehouseCount} Depo</span>
         </div>
 
+        <!-- Password Display -->
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; flex-shrink: 0; min-width: 130px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); padding: 3px 8px; border-radius: 6px;">
+          <i class="fa-solid fa-key" style="color: #f59e0b; font-size: 0.65rem;"></i>
+          <span id="pass-display-${user.uid}" style="font-family: monospace; font-size: 0.75rem; font-weight: 700; color: #fff; letter-spacing: 1px;">••••••</span>
+          <button type="button" class="action-icon-btn" style="width: 22px; height: 22px; font-size: 0.65rem; padding: 0;" onclick="window.togglePasswordVisibility('${user.uid}', '${user.password ? encodeURIComponent(user.password) : ''}')" title="Şifreyi Göster/Gizle">
+            <i class="fa-solid fa-eye" id="pass-icon-${user.uid}"></i>
+          </button>
+          <button type="button" class="action-icon-btn" style="width: 22px; height: 22px; font-size: 0.65rem; padding: 0;" onclick="window.copyStudioPassword('${user.password ? encodeURIComponent(user.password) : ''}')" title="Kopyala">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        </div>
+
         <!-- Actions -->
         <div style="display: flex; gap: 1rem; align-items: center; justify-content: flex-end; width: 180px; flex-shrink: 0;">
           ${user.role !== 'ADMIN' && canEdit ? `
@@ -269,11 +289,14 @@ export const UserManagementPage = async () => {
           
           <!-- View Switcher -->
           <div style="display: inline-flex; background: rgba(0,0,0,0.5); padding: 3px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
-            <button id="um-view-studio-btn" class="um-mode-switch-btn active" onclick="window.switchUserManagementView('studio')">
+            <button id="um-view-studio-btn" class="um-mode-switch-btn ${initialMode !== 'classic' && initialMode !== 'emails' ? 'active' : ''}" onclick="window.switchUserManagementView('studio')">
               <i class="fa-solid fa-shield-halved" style="color: var(--accent-cyan);"></i> YETKİ STÜDYOSU <span style="font-size: 0.6rem; background: rgba(0, 242, 254, 0.2); color: var(--accent-cyan); padding: 1px 5px; border-radius: 4px; font-weight: 800;">YENİ</span>
             </button>
-            <button id="um-view-classic-btn" class="um-mode-switch-btn" onclick="window.switchUserManagementView('classic')">
+            <button id="um-view-classic-btn" class="um-mode-switch-btn ${initialMode === 'classic' ? 'active' : ''}" onclick="window.switchUserManagementView('classic')">
               <i class="fa-solid fa-list-ul"></i> KLASİK LİSTE
+            </button>
+            <button id="um-view-emails-btn" class="um-mode-switch-btn ${initialMode === 'emails' ? 'active' : ''}" onclick="window.switchUserManagementView('emails')">
+              <i class="fa-solid fa-envelope" style="color: #f59e0b;"></i> E-POSTA DAĞITIM
             </button>
           </div>
         </div>
@@ -288,7 +311,7 @@ export const UserManagementPage = async () => {
       </div>
 
       <!-- Classic View Container -->
-      <div id="um-classic-view-container" style="display: none;">
+      <div id="um-classic-view-container" style="display: ${initialMode === 'classic' ? 'block' : 'none'};">
       <!-- Search Bar -->
       <div style="position: relative; margin-bottom: 2rem; max-width: 400px;">
         <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); opacity: 0.6; font-size: 0.9rem;"></i>
@@ -348,9 +371,12 @@ export const UserManagementPage = async () => {
       </div> <!-- End um-classic-view-container -->
 
       <!-- Studio View Container -->
-      <div id="um-studio-view-container" style="display: block;">
+      <div id="um-studio-view-container" style="display: ${initialMode !== 'classic' && initialMode !== 'emails' ? 'block' : 'none'};">
         ${studio.render()}
       </div>
+
+      <!-- Email Recipients View Container -->
+      <div id="um-emails-view-container" style="display: ${initialMode === 'emails' ? 'block' : 'none'};"></div>
       <style>
         .user-row:hover {
           background: rgba(255, 255, 255, 0.03);
@@ -1278,16 +1304,19 @@ export const UserManagementPage = async () => {
   document.getElementById('new-user-modal')?.classList.add('hidden');
 };
 
-(window as any).togglePasswordVisibility = (uid: string, pass: string) => {
+(window as any).togglePasswordVisibility = (uid: string, encodedPass: string) => {
   const display = document.getElementById(`pass-display-${uid}`);
   const icon = document.getElementById(`pass-icon-${uid}`);
   if (!display || !icon) return;
 
+  const rawPass = encodedPass ? decodeURIComponent(encodedPass) : '';
   if (display.textContent === '••••••') {
-    display.textContent = pass;
+    display.textContent = rawPass || '(Yok)';
+    display.style.color = rawPass ? 'var(--accent-cyan)' : '#ef4444';
     icon.classList.replace('fa-eye', 'fa-eye-slash');
   } else {
     display.textContent = '••••••';
+    display.style.color = '#fff';
     icon.classList.replace('fa-eye-slash', 'fa-eye');
   }
 };
@@ -2509,22 +2538,34 @@ const renderGranularSubPermissions = (tabId: string, context: 'new' | 'edit' | '
 // ADVANCED PERMISSION STUDIO - WINDOW INTERFACE HANDLERS
 // =========================================================================
 
-(window as any).switchUserManagementView = (mode: 'classic' | 'studio') => {
+(window as any).switchUserManagementView = (mode: 'classic' | 'studio' | 'emails') => {
   const classicContainer = document.getElementById('um-classic-view-container');
   const studioContainer = document.getElementById('um-studio-view-container');
+  const emailsContainer = document.getElementById('um-emails-view-container');
   const classicBtn = document.getElementById('um-view-classic-btn');
   const studioBtn = document.getElementById('um-view-studio-btn');
+  const emailsBtn = document.getElementById('um-view-emails-btn');
+
+  if (classicContainer) classicContainer.style.display = 'none';
+  if (studioContainer) studioContainer.style.display = 'none';
+  if (emailsContainer) emailsContainer.style.display = 'none';
+
+  if (classicBtn) classicBtn.classList.remove('active');
+  if (studioBtn) studioBtn.classList.remove('active');
+  if (emailsBtn) emailsBtn.classList.remove('active');
 
   if (mode === 'studio') {
-    if (classicContainer) classicContainer.style.display = 'none';
     if (studioContainer) studioContainer.style.display = 'block';
-    if (classicBtn) classicBtn.classList.remove('active');
     if (studioBtn) studioBtn.classList.add('active');
+  } else if (mode === 'emails') {
+    if (emailsContainer) emailsContainer.style.display = 'block';
+    if (emailsBtn) emailsBtn.classList.add('active');
+    if ((window as any)._activeEmailManager) {
+      (window as any)._activeEmailManager.init();
+    }
   } else {
     if (classicContainer) classicContainer.style.display = 'block';
-    if (studioContainer) studioContainer.style.display = 'none';
     if (classicBtn) classicBtn.classList.add('active');
-    if (studioBtn) studioBtn.classList.remove('active');
   }
 };
 
@@ -2783,3 +2824,59 @@ const renderGranularSubPermissions = (tabId: string, context: 'new' | 'edit' | '
     console.warn(`[Permission Matrix] Saved locally:`, err);
   }
 };
+
+(window as any).toggleStudioPassword = (uid: string, encodedPass: string) => {
+  const display = document.getElementById(`studio-pass-val-${uid}`);
+  const icon = document.getElementById(`studio-pass-icon-${uid}`);
+  if (!display || !icon) return;
+
+  const rawPass = encodedPass ? decodeURIComponent(encodedPass) : '';
+  if (display.textContent === '••••••••') {
+    display.textContent = rawPass || '(Tanımlı Şifre Yok)';
+    display.style.color = rawPass ? 'var(--accent-cyan)' : '#ef4444';
+    icon.classList.replace('fa-eye', 'fa-eye-slash');
+  } else {
+    display.textContent = '••••••••';
+    display.style.color = '#fff';
+    icon.classList.replace('fa-eye-slash', 'fa-eye');
+  }
+};
+
+(window as any).copyStudioPassword = (encodedPass: string) => {
+  const rawPass = encodedPass ? decodeURIComponent(encodedPass) : '';
+  if (!rawPass) {
+    alert("Kullanıcının veritabanında kayıtlı bir şifresi bulunmuyor.");
+    return;
+  }
+  navigator.clipboard.writeText(rawPass).then(() => {
+    (window as any).showToast?.('BAŞARILI', 'Şifre panoya kopyalandı!', 'success') || alert('Şifre panoya kopyalandı!');
+  }).catch(() => {
+    prompt("Şifreyi kopyalayabilirsiniz:", rawPass);
+  });
+};
+
+(window as any).promptChangeStudioUserPassword = async (uid: string) => {
+  const studio = (window as any)._activePermissionStudio;
+  const user = studio?.users?.find((u: any) => (u.uid || u._id || u.id) === uid);
+  const userName = user?.displayName || user?.email || 'Kullanıcı';
+
+  const currentPass = user?.password || '';
+  const newPass = prompt(`🔑 ${userName} için yeni bir şifre belirleyin:\n(En az 6 karakter)`, currentPass);
+  if (newPass === null) return;
+
+  const trimmed = newPass.trim();
+  if (trimmed.length < 6) {
+    alert("⚠️ Şifre en az 6 karakter olmalıdır!");
+    return;
+  }
+
+  try {
+    await userService.updatePermissions(uid, { password: trimmed });
+    if (user) user.password = trimmed;
+    (window as any).showToast?.('BAŞARILI', `${userName} şifresi güncellendi: ${trimmed}`, 'success') || alert(`✅ ${userName} kullanıcısının şifresi başarıyla "${trimmed}" olarak güncellendi!`);
+    (window as any).refreshStudioWorkspace?.();
+  } catch (err: any) {
+    alert(`❌ Şifre güncellenirken hata oluştu: ${err.message}`);
+  }
+};
+

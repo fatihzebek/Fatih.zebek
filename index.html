@@ -3,10 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      // PWA / Service Worker önbellek çakışmalarını otomatik çözmek için global hata dinleyici
+      // PWA / Service Worker önbellek çakışmalarını döngüye girmeden tek seferlik çözmek için hata dinleyici
       window.addEventListener('error', function(e) {
         var msg = e.message || '';
-        if (msg.indexOf('Unexpected token') > -1 || msg.indexOf('Failed to fetch') > -1 || msg.indexOf('ChunkLoadError') > -1) {
+        // Sadece gerçek bundle yükleme hatalarında (ChunkLoadError veya HTML dönüşen chunk) çalıştır
+        if (msg.indexOf("Unexpected token '<'") > -1 || msg.indexOf('ChunkLoadError') > -1) {
+          var lastReload = parseInt(sessionStorage.getItem('last_cache_reload') || '0', 10);
+          var now = Date.now();
+          // Son 20 saniye içinde zaten yenileme yapıldıysa Safari kilitlenmesini engellemek için dur
+          if (now - lastReload < 20000) {
+            console.warn('Önbellek yenileme sınırı: Döngüyü engellemek için yenileme iptal edildi.');
+            return;
+          }
+          sessionStorage.setItem('last_cache_reload', String(now));
           console.warn('Önbellek çakışması tespit edildi, temizlenip yenileniyor...');
           if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -19,7 +28,7 @@
             });
           }
           setTimeout(function() {
-            window.location.reload(true);
+            window.location.reload();
           }, 800);
         }
       }, true);
@@ -39,16 +48,6 @@
     <!-- Leaflet Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <!-- Tailwind & Lucide -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script>
-      tailwind.config = {
-        corePlugins: {
-          preflight: false,
-        }
-      }
-    </script>
   </head>
   <body>
     <div id="app"></div>

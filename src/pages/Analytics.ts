@@ -1,4 +1,4 @@
-import { analyticsService, getFaultMainCategory } from '../services/AnalyticsService';
+import { analyticsService, getFaultMainCategory, isExemptOfficeOrIsg } from '../services/AnalyticsService';
 import { serviceReportService } from '../services/ServiceReportService';
 import { taskService } from '../services/TaskService';
 import { dataService } from '../services/DataService';
@@ -6,14 +6,18 @@ import * as XLSX from 'xlsx';
 
 export const AnalyticsPage = async () => {
   const currentPeriod = localStorage.getItem('analytics_period') || 'this-month';
-  const activeTab = localStorage.getItem('analytics_active_tab') || 'personnel';
+  let activeTab = localStorage.getItem('analytics_active_tab') || 'personnel';
+  if (activeTab === 'materials') activeTab = 'personnel';
   const personnelSortBy = localStorage.getItem('analytics_personnel_sort_by') || 'mastery';
   const personnelSortOrder = localStorage.getItem('analytics_personnel_sort_order') || 'desc';
 
   const allReports = (await serviceReportService.getAllReports()).filter(r => {
     if (!r.date) return false;
     const d = new Date(r.date);
-    return !isNaN(d.getTime());
+    if (isNaN(d.getTime())) return false;
+    // Rapor Arşivi ile birebir %100 senkronizasyon (Manuel bakım planları ve iade edilenleri hariç tut)
+    if (r.status === 'returned' || r.team === 'MANUEL' || (r.reportNo || '').startsWith('MAN-')) return false;
+    return true;
   });
   let reports = [...allReports];
   const tasks = await taskService.getTasks();
@@ -166,7 +170,10 @@ export const AnalyticsPage = async () => {
   // 5. Team (Ekip) Load Distribution
   const teamMap: Record<string, { teamName: string; personnelCount: number; totalHours: number; bakimCount: number; arizaCount: number; overtimeHours: number; members: string[] }> = {};
   data.personnelMetrics.forEach(p => {
+    if (isExemptOfficeOrIsg(p.name)) return;
     const tName = p.team ? p.team.trim() : 'Ekip Atanmamış';
+    const upperTeam = tName.toLocaleUpperCase('tr-TR');
+    if (upperTeam === 'İSG' || upperTeam === 'ISG' || upperTeam === 'OFİS' || upperTeam === 'OFIS') return;
     if (!teamMap[tName]) {
       teamMap[tName] = { teamName: tName, personnelCount: 0, totalHours: 0, bakimCount: 0, arizaCount: 0, overtimeHours: 0, members: [] };
     }
@@ -702,6 +709,7 @@ export const AnalyticsPage = async () => {
   };
 
   // Site Detail Modal with Dynamic Date Filter
+  // Site Detail Modal with Dynamic Date Filter & Operation Breakdown (Bakım / Arıza Teknisyenleri)
   (window as any).showSiteDetails = (siteName: string, period: string = currentPeriod, startStr?: string, endStr?: string) => {
     const existing = document.getElementById('site-details-modal');
     if (existing) existing.remove();
@@ -713,24 +721,252 @@ export const AnalyticsPage = async () => {
 
     const siteFilteredReports = filterReportsByPeriod(siteAllReports, period, startStr, endStr);
     const siteData = analyticsService.generateUnifiedAnalysis(siteFilteredReports, []);
-    const activePersonnel = siteData.personnelMetrics.filter(p => (p.bakimCount + p.arizaCount) > 0);
+
+    // Sort reports descending by date
+    siteFilteredReports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const bakimReports = siteFilteredReports.filter(r => r.type === 'BAKIM');
+    const arizaReports = siteFilteredReports.filter(r => r.type === 'ARIZA');
+
+    // Default to BAKIM if there are bakıms, otherwise ARIZA or ALL
+    let currentTab: 'BAKIM' | 'ARIZA' | 'ALL' = bakimReports.length > 0 ? 'BAKIM' : (arizaReports.length > 0 ? 'ARIZA' : 'ALL');
+    let selectedTechnician: string | null = null;
+    let searchQuery = '';
+
+    const getReportPersonnel = (r: any): string[] => {
+      const sessionP = (r.workSessions || []).flatMap((ws: any) => ws.personnel || []);
+      const repP = r.personnel || [];
+      return Array.from(new Set([...repP, ...sessionP]))
+        .filter(p => p && typeof p === 'string' && p.trim() !== '' && !isExemptOfficeOrIsg(p));
+    };
+
+    const computePersonnelSummary = (repList: any[]) => {
+      const map: Record<string, { name: string; count: number; totalHours: number; turbines: Set<string> }> = {};
+      repList.forEach(r => {
+        const tNo = r.turbineNo || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.turbineNo : '') || '';
+        const plist = getReportPersonnel(r);
+
+        let [h, m] = (r.timeManagement?.interventionDuration || '00:00').split(':').map(Number);
+        let dur = (isNaN(h) ? 0 : h) + ((isNaN(m) ? 0 : m) / 60);
+        if (r.workSessions && r.workSessions.length > 0) {
+          dur = 0;
+          r.workSessions.forEach((ws: any) => {
+            const [wh, wm] = (ws.duration || '00:00').split(':').map(Number);
+            dur += (isNaN(wh) ? 0 : wh) + ((isNaN(wm) ? 0 : wm) / 60);
+          });
+        }
+
+        plist.forEach(pName => {
+          if (!map[pName]) {
+            map[pName] = { name: pName, count: 0, totalHours: 0, turbines: new Set() };
+          }
+          map[pName].count++;
+          map[pName].totalHours += dur;
+          if (tNo) map[pName].turbines.add(tNo);
+        });
+      });
+
+      return Object.values(map).sort((a, b) => b.count - a.count || b.totalHours - a.totalHours);
+    };
 
     const modal = document.createElement('div');
     modal.id = 'site-details-modal';
     modal.className = 'cyber-modal-overlay fade-in';
     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px);';
 
+    const renderContent = () => {
+      const container = document.getElementById('site-modal-content-area');
+      if (!container) return;
+
+      // Update button active styles
+      const btnBakim = document.getElementById('site-btn-tab-bakim');
+      const btnAriza = document.getElementById('site-btn-tab-ariza');
+      const btnAll = document.getElementById('site-btn-tab-all');
+
+      if (btnBakim) btnBakim.className = `btn-filter ${currentTab === 'BAKIM' ? 'active' : ''}`;
+      if (btnAriza) btnAriza.className = `btn-filter ${currentTab === 'ARIZA' ? 'active' : ''}`;
+      if (btnAll) btnAll.className = `btn-filter ${currentTab === 'ALL' ? 'active' : ''}`;
+
+      // Determine active list of reports
+      let baseList = currentTab === 'BAKIM' ? bakimReports : (currentTab === 'ARIZA' ? arizaReports : siteFilteredReports);
+
+      // Compute technicians who worked on this specific operation
+      const techSummary = computePersonnelSummary(baseList);
+
+      // Filter reports by selected technician and search query
+      let displayedReports = baseList;
+      if (selectedTechnician) {
+        displayedReports = displayedReports.filter(r => getReportPersonnel(r).includes(selectedTechnician!));
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLocaleLowerCase('tr-TR');
+        displayedReports = displayedReports.filter(r => {
+          const tNo = (r.turbineNo || '').toLocaleLowerCase('tr-TR');
+          const desc = (r.faultDesc || r.templateName || r.description || '').toLocaleLowerCase('tr-TR');
+          const plist = getReportPersonnel(r).join(' ').toLocaleLowerCase('tr-TR');
+          const repNo = (r.reportNo || '').toLocaleLowerCase('tr-TR');
+          return tNo.includes(q) || desc.includes(q) || plist.includes(q) || repNo.includes(q);
+        });
+      }
+
+      const operationTitle = currentTab === 'BAKIM' ? 'BAKIM İÇİN GELEN TEKNİSYENLER' : (currentTab === 'ARIZA' ? 'ARIZA İÇİN GELEN TEKNİSYENLER' : 'GÖREV ALAN TEKNİSYENLER');
+      const operationBadgeColor = currentTab === 'BAKIM' ? '#4ade80' : (currentTab === 'ARIZA' ? '#60a5fa' : 'var(--accent-cyan)');
+      const operationBadgeBg = currentTab === 'BAKIM' ? 'rgba(34,197,94,0.15)' : (currentTab === 'ARIZA' ? 'rgba(59,130,246,0.15)' : 'rgba(0,242,254,0.1)');
+      const operationBadgeBorder = currentTab === 'BAKIM' ? 'rgba(34,197,94,0.3)' : (currentTab === 'ARIZA' ? 'rgba(59,130,246,0.3)' : 'rgba(0,242,254,0.25)');
+
+      container.innerHTML = `
+        <!-- 1. KİMLER GELMİŞ? (Teknisyen Kartları) -->
+        <div style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+              <i class="fa-solid fa-users" style="color: ${operationBadgeColor};"></i> ${operationTitle} (${techSummary.length} Kişi)
+            </div>
+            ${selectedTechnician ? `
+              <button onclick="window.clearSelectedTechnician()" class="btn-cyber-mini" style="padding: 2px 8px; font-size: 0.72rem; color: #f87171; border-color: rgba(248,113,113,0.3);">
+                <i class="fa-solid fa-xmark"></i> Filtreyi Kaldır (${selectedTechnician})
+              </button>
+            ` : `<span style="font-size: 0.72rem; color: var(--text-muted);">Kartlara tıklayarak teknisyenin girdiği türbinleri süzebilirsiniz</span>`}
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.6rem; max-height: 180px; overflow-y: auto;" class="custom-scrollbar">
+            ${techSummary.length > 0 ? techSummary.map(t => {
+              const isSelected = selectedTechnician === t.name;
+              const turbList = Array.from(t.turbines).sort().join(', ');
+              const countLabel = currentTab === 'BAKIM' ? `${t.count} Bakım` : (currentTab === 'ARIZA' ? `${t.count} Arıza` : `${t.count} Görev`);
+              return `
+                <div 
+                  onclick="window.selectTechnicianFilter('${t.name}')" 
+                  style="cursor: pointer; background: ${isSelected ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isSelected ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.08)'}; border-radius: 8px; padding: 0.6rem 0.8rem; transition: all 0.2s;"
+                  onmouseover="if(!${isSelected}) this.style.borderColor='rgba(255,255,255,0.2)'"
+                  onmouseout="if(!${isSelected}) this.style.borderColor='rgba(255,255,255,0.08)'"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <strong style="color: #fff; font-size: 0.82rem;">${t.name}</strong>
+                    <span style="background: ${operationBadgeBg}; border: 1px solid ${operationBadgeBorder}; color: ${operationBadgeColor}; font-weight: 800; font-size: 0.7rem; padding: 1px 6px; border-radius: 10px;">
+                      ${countLabel}
+                    </span>
+                  </div>
+                  <div style="font-size: 0.72rem; color: var(--accent-cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${turbList ? 'Türbinler: ' + turbList : ''}">
+                    ${turbList ? `<i class="fa-solid fa-wind" style="font-size: 0.65rem; margin-right: 4px;"></i>${turbList}` : 'Türbin belirtilmemiş'}
+                  </div>
+                  <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 2px;">
+                    Efor: <strong>${Math.round(t.totalHours * 10) / 10}h</strong>
+                  </div>
+                </div>
+              `;
+            }).join('') : '<div style="color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">Bu operasyon için teknisyen kaydı bulunamadı.</div>'}
+          </div>
+        </div>
+
+        <!-- 2. HANGİ TÜRBİNLERE GİRİLMİŞ? (Rapor Listesi) -->
+        <div style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: #fff; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-file-lines" style="color: var(--accent-cyan);"></i> GERÇEKLEŞEN GÖREVLER (${displayedReports.length} Rapor)
+            </div>
+            ${searchQuery ? `<button onclick="window.clearSiteModalSearch()" class="btn-cyber-mini" style="padding: 2px 6px; font-size: 0.7rem;"><i class="fa-solid fa-xmark"></i> Aramayı Temizle</button>` : ''}
+          </div>
+
+          <table class="cyber-table">
+            <thead>
+              <tr>
+                <th style="width: 90px;">TARİH</th>
+                <th style="width: 80px; text-align: center;">TÜRBİN</th>
+                <th style="width: 80px; text-align: center;">TÜR</th>
+                <th>İŞ TANIMI / AÇIKLAMA</th>
+                <th>BİRLİKTE GİDEN EKİP (ARKADAŞLAR)</th>
+                <th style="width: 65px; text-align: center;">SÜRE</th>
+                <th style="width: 60px; text-align: right;">RAPOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${displayedReports.length > 0 ? displayedReports.map(r => {
+                const plist = getReportPersonnel(r);
+                const isBakim = r.type === 'BAKIM';
+                const tNo = r.turbineNo || (r.turbineSerial ? dataService.findTurbineBySerial(r.turbineSerial)?.turbineNo : '-') || '-';
+                const desc = isBakim ? getMaintenanceTitle(r) : (r.faultDesc || r.faultCode || 'Genel Arıza');
+                const durStr = getReportDurationStr(r);
+
+                const teamBadges = plist.length > 0 
+                  ? plist.map(name => {
+                      const isHighlighted = selectedTechnician === name;
+                      return `<span style="display: inline-flex; align-items: center; gap: 4px; background: ${isHighlighted ? 'rgba(0,242,254,0.2)' : 'rgba(255,255,255,0.06)'}; border: 1px solid ${isHighlighted ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.12)'}; padding: 2px 7px; border-radius: 4px; margin: 2px; font-weight: ${isHighlighted ? '800' : '600'}; color: #fff; font-size: 0.74rem;"><i class="fa-solid fa-user" style="font-size: 0.65rem; color: var(--accent-cyan);"></i>${name}</span>`;
+                    }).join('')
+                  : '<span style="color: var(--text-muted); font-size: 0.75rem;">-</span>';
+
+                return `
+                  <tr>
+                    <td style="font-family: monospace; font-size: 0.8rem; color: #cbd5e1;">${new Date(r.date).toLocaleDateString('tr-TR')}</td>
+                    <td style="text-align: center;">
+                      <span style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; font-family: monospace; font-weight: 800; color: var(--accent-cyan); font-size: 0.8rem;">${tNo}</span>
+                    </td>
+                    <td style="text-align: center;">
+                      <span style="background: ${isBakim ? 'rgba(34,197,94,0.15)' : 'rgba(59,130,246,0.15)'}; border: 1px solid ${isBakim ? 'rgba(34,197,94,0.4)' : 'rgba(59,130,246,0.4)'}; color: ${isBakim ? '#4ade80' : '#60a5fa'}; padding: 2px 8px; border-radius: 4px; font-weight: 800; font-size: 0.7rem; letter-spacing: 0.5px;">${r.type}</span>
+                    </td>
+                    <td>
+                      <div style="font-weight: 600; color: #fff; font-size: 0.82rem; line-height: 1.3;">${desc}</div>
+                      ${r.reportNo ? `<span style="font-size: 0.68rem; color: var(--text-muted); font-family: monospace;">Rapor: ${r.reportNo}</span>` : ''}
+                    </td>
+                    <td>
+                      <div style="display: flex; flex-wrap: wrap; gap: 2px;">
+                        ${teamBadges}
+                      </div>
+                    </td>
+                    <td style="text-align: center; font-family: monospace; font-weight: 700; color: #cbd5e1; font-size: 0.8rem;">${durStr}</td>
+                    <td style="text-align: right;">
+                      <button onclick="(window as any).navigate('archive'); setTimeout(() => (window as any).openReportModal('${r.id}'), 300); document.getElementById('site-details-modal')?.remove()" class="btn-cyber-mini" style="padding: 3px 8px; font-size: 0.72rem;" title="Rapor Detayını Gör">
+                        <i class="fa-solid fa-file-lines"></i> Aç
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('') : '<tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">Bu kriterde rapor bulunamadı.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    };
+
+    (window as any).setSiteModalOperationTab = (tab: 'BAKIM' | 'ARIZA' | 'ALL') => {
+      currentTab = tab;
+      selectedTechnician = null;
+      renderContent();
+    };
+
+    (window as any).selectTechnicianFilter = (techName: string) => {
+      selectedTechnician = selectedTechnician === techName ? null : techName;
+      renderContent();
+    };
+
+    (window as any).clearSelectedTechnician = () => {
+      selectedTechnician = null;
+      renderContent();
+    };
+
+    (window as any).filterSiteModalSearch = (query: string) => {
+      searchQuery = query;
+      renderContent();
+    };
+
+    (window as any).clearSiteModalSearch = () => {
+      searchQuery = '';
+      const inp = document.getElementById('site-modal-search-input') as HTMLInputElement;
+      if (inp) inp.value = '';
+      renderContent();
+    };
+
     modal.innerHTML = `
-      <div class="glass-panel" style="width: 92%; max-width: 950px; max-height: 88vh; padding: 2rem; position: relative; border-top: 4px solid var(--accent-cyan); overflow: hidden; display: flex; flex-direction: column;">
+      <div class="glass-panel" style="width: 95%; max-width: 1050px; max-height: 90vh; padding: 1.75rem; position: relative; border-top: 4px solid var(--accent-cyan); overflow: hidden; display: flex; flex-direction: column;">
         <button onclick="this.closest('.cyber-modal-overlay').remove()" style="position: absolute; top: 1rem; right: 1.5rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
         
         <!-- Modal Başlık & Canlı Tarih Filtreleme -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
           <div>
             <h3 style="font-family: 'Rajdhani', sans-serif; color: var(--accent-cyan); margin: 0; font-size: 1.4rem;">
-              <i class="fa-solid fa-solar-panel"></i> ${siteName.toUpperCase()} - SAHA ANALİZİ
+              <i class="fa-solid fa-solar-panel"></i> ${siteName.toUpperCase()} - SAHA OPERASYONLARI
             </h3>
-            <span style="font-size: 0.8rem; color: var(--text-muted);">${siteFilteredReports.length} Rapor • ${activePersonnel.length} Görevli Personel</span>
+            <span style="font-size: 0.8rem; color: var(--text-muted);">${siteFilteredReports.length} Toplam Saha Raporu • ${Math.round(siteData.operationSummary.totalManHours)}h Efor</span>
           </div>
 
           <!-- Kompakt Modal Tarih Filtresi -->
@@ -751,51 +987,45 @@ export const AnalyticsPage = async () => {
           </div>
         </div>
 
-        <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
-          <div style="background: rgba(0, 242, 254, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(0, 242, 254, 0.2); font-size: 0.85rem; font-weight: 800; color: #fff;">
-            Toplam Efor: ${siteData.operationSummary.totalManHours}h
+        <!-- 3 Ana Sekme Butonu & Canlı Arama -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.75rem;">
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="site-btn-tab-bakim" class="btn-filter ${currentTab === 'BAKIM' ? 'active' : ''}" onclick="window.setSiteModalOperationTab('BAKIM')" style="font-size: 0.85rem; padding: 0.45rem 1rem; font-weight: 800; color: #4ade80;">
+              <i class="fa-solid fa-wrench" style="margin-right: 4px;"></i> Bakım Operasyonu (${bakimReports.length})
+            </button>
+            <button id="site-btn-tab-ariza" class="btn-filter ${currentTab === 'ARIZA' ? 'active' : ''}" onclick="window.setSiteModalOperationTab('ARIZA')" style="font-size: 0.85rem; padding: 0.45rem 1rem; font-weight: 800; color: #60a5fa;">
+              <i class="fa-solid fa-bolt" style="margin-right: 4px;"></i> Arıza Operasyonu (${arizaReports.length})
+            </button>
+            <button id="site-btn-tab-all" class="btn-filter ${currentTab === 'ALL' ? 'active' : ''}" onclick="window.setSiteModalOperationTab('ALL')" style="font-size: 0.85rem; padding: 0.45rem 1rem; font-weight: 700;">
+              <i class="fa-solid fa-layer-group" style="margin-right: 4px;"></i> Tüm Raporlar (${siteFilteredReports.length})
+            </button>
           </div>
-          <div style="background: rgba(34, 197, 94, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(34, 197, 94, 0.2); font-size: 0.85rem; font-weight: 800; color: #4ade80;">
-            Bakım: ${siteFilteredReports.filter(r => r.type === 'BAKIM').length}
-          </div>
-          <div style="background: rgba(59, 130, 246, 0.08); padding: 0.4rem 0.8rem; border-radius: 6px; border: 1px solid rgba(59, 130, 246, 0.2); font-size: 0.85rem; font-weight: 800; color: #60a5fa;">
-            Arıza: ${siteFilteredReports.filter(r => r.type === 'ARIZA').length}
+
+          <!-- Arama Kutusu -->
+          <div style="position: relative; width: 250px;">
+            <i class="fa-solid fa-search" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #64748B; font-size: 0.8rem;"></i>
+            <input 
+              type="text" 
+              id="site-modal-search-input" 
+              class="cyber-input" 
+              placeholder="Türbin, teknisyen veya arıza ara..." 
+              oninput="window.filterSiteModalSearch(this.value)"
+              style="height: 34px; padding-left: 2rem; padding-right: 1.5rem; font-size: 0.8rem; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; width: 100%; color: #fff;"
+            >
           </div>
         </div>
 
-        <div style="overflow-y: auto; flex: 1;" class="custom-scrollbar">
-          <table class="cyber-table">
-            <thead>
-              <tr>
-                <th>PERSONEL</th>
-                <th style="text-align: center;">BAKIM</th>
-                <th style="text-align: center;">ARIZA</th>
-                <th style="text-align: center;">TOPLAM SAAT</th>
-                <th style="text-align: center;">ONAYLI MESAİ</th>
-                <th style="text-align: right;">SKOR</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${activePersonnel.length > 0 ? activePersonnel.map(p => `
-                <tr class="clickable-row" onclick="window.showPersonnelDetails('${p.name}')" style="cursor: pointer;">
-                  <td style="font-weight: 600;">${p.name}</td>
-                  <td style="text-align: center; color: var(--accent-green); font-weight: 700;">${p.bakimCount}</td>
-                  <td style="text-align: center; color: var(--accent-blue); font-weight: 700;">${p.arizaCount}</td>
-                  <td style="text-align: center; font-family: monospace; font-weight: 700; color: var(--accent-cyan);">${p.totalHours}h</td>
-                  <td style="text-align: center; font-family: monospace; color: var(--accent-orange); font-weight: 700;">${p.overtimeHours > 0 ? p.overtimeHours + 'h' : '-'}</td>
-                  <td style="text-align: right; font-weight: 800; color: #38bdf8;">${p.masteryScore} Puan</td>
-                </tr>
-              `).join('') : '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">Seçili tarih aralığında bu sahada görev kaydı bulunamadı.</td></tr>'}
-            </tbody>
-          </table>
-        </div>
+        <!-- Dinamik İçerik Alanı -->
+        <div id="site-modal-content-area" style="overflow-y: auto; flex: 1;" class="custom-scrollbar"></div>
 
         <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
           <button class="btn-cyber-mini" onclick="this.closest('.cyber-modal-overlay').remove()">KAPAT</button>
         </div>
       </div>
     `;
+
     document.body.appendChild(modal);
+    renderContent();
   };
 
   // Overtime Details Modal
@@ -966,9 +1196,6 @@ export const AnalyticsPage = async () => {
         </button>
         <button class="tab-pill ${activeTab === 'bakim' ? 'active' : ''}" onclick="window.setAnalyticsTab('bakim')">
           <i class="fa-solid fa-wrench"></i> Bakım Takibi (${bakimReports.length})
-        </button>
-        <button class="tab-pill ${activeTab === 'materials' ? 'active' : ''}" onclick="window.setAnalyticsTab('materials')">
-          <i class="fa-solid fa-box-open"></i> Malzeme Tüketimi (${topMaterials.length})
         </button>
         <button class="tab-pill ${activeTab === 'sites' ? 'active' : ''}" onclick="window.setAnalyticsTab('sites')">
           <i class="fa-solid fa-solar-panel"></i> Santraller (${sortedSites.length})
@@ -1329,52 +1556,6 @@ export const AnalyticsPage = async () => {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- ============================================================= -->
-      <!-- 📦 SEKME 5: MALZEME VE SARFİYAT ANALİZİ                      -->
-      <!-- ============================================================= -->
-      ${activeTab === 'materials' ? `
-        <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
-            <div>
-              <h3 style="font-family: 'Rajdhani', sans-serif; margin: 0; font-size: 1.2rem; color: var(--accent-cyan);">
-                <i class="fa-solid fa-box-open"></i> BAKIM VE ARIZALARDA KULLANILAN SAP MALZEMELER
-              </h3>
-              <span style="font-size: 0.75rem; color: var(--text-muted);">Raporlarda kaydedilen yedek parça ve sarf malzemesi tüketimleri</span>
-            </div>
-          </div>
-
-          <div style="overflow-x: auto;">
-            <table class="cyber-table">
-              <thead>
-                <tr>
-                  <th>SAP KODU</th>
-                  <th>MALZEME TANIMI</th>
-                  <th>TÜR</th>
-                  <th style="text-align: center;">TOPLAM SARFİYAT</th>
-                  <th>KULLANILAN SANTRALLER</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${topMaterials.length > 0 ? topMaterials.map(m => {
-                  const siteList = Object.entries(m.sites).map(([site, count]) => `${site} (${count})`).join(', ');
-                  return `
-                    <tr>
-                      <td style="font-family: monospace; font-weight: 700; color: var(--accent-cyan);">${m.sapNo || '-'}</td>
-                      <td style="font-weight: 600; color: #fff;">${m.description}</td>
-                      <td><span class="badge" style="background: rgba(255,255,255,0.05); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem;">${m.type}</span></td>
-                      <td style="text-align: center; font-family: monospace; font-weight: 800; color: #4ade80; font-size: 1rem;">
-                        ${m.totalUsed} Adet
-                      </td>
-                      <td style="font-size: 0.8rem; color: var(--text-muted);">${siteList}</td>
-                    </tr>
-                  `;
-                }).join('') : '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);">Seçili dönemde kullanılan malzeme kaydı bulunamadı.</td></tr>'}
-              </tbody>
-            </table>
           </div>
         </div>
       ` : ''}

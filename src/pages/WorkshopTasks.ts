@@ -38,7 +38,8 @@ import { repairService, type RepairRecord } from '../services/RepairService';
 import { workshopComponentService, type WorkshopComponent } from '../services/WorkshopComponentService';
 import { dataService } from '../services/DataService';
 import { authService } from '../services/AuthService';
-import { doc, updateDoc, arrayUnion, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { getSiteTeamLeader, formatDisplayName } from '../utils/formatters';
+import { doc, updateDoc, arrayUnion, serverTimestamp, writeBatch, collection, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Helper to generate unique MTA serial numbers (e.g. MTA-36256-001)
@@ -1766,6 +1767,8 @@ const setupStreamlinedTaskHandlers = () => {
         updatePayload.testStatus = completionMode === 'TURBINE_TEST' ? 'UNTESTED' : 'TESTED';
         updatePayload.repairedAt = new Date();
         updatePayload.repairedBy = userEmail;
+        const modeLabel = completionMode === 'TURBINE_TEST' ? '6. Onarıldı (Türbinde Test)' : '5. Onarıldı & Test Edildi';
+        updatePayload.repairNotes = workNote ? `${modeLabel} - ${workNote}` : modeLabel;
       }
 
       if (workNote || isCompleted) {
@@ -1868,8 +1871,29 @@ const setupStreamlinedTaskHandlers = () => {
     const selectedCards = allRepairs.filter(r => repairIds.includes(r.id!));
     if (selectedCards.length === 0) return;
 
+    // Calculate next sequential Sevk Form No starting from at least 61
+    let maxFormNo = 61;
+    allRepairs.forEach((r: any) => {
+      const raw = String(r.dispatchNo || r.mctNo || '').trim();
+      const match = raw.match(/\d+/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (!isNaN(num) && num > 0 && num < 100000) {
+          if (num > maxFormNo) maxFormNo = num;
+        }
+      }
+    });
+    const nextFormNo = maxFormNo + 1;
+
     // Default target warehouse (can be the source of first card)
     const defaultWh = selectedCards[0]?.sourceWarehouseId || '';
+    const initialLeader = getSiteTeamLeader(defaultWh);
+
+    (window as any).updateDispatchRecipientPreview = (whId: string) => {
+      const leader = getSiteTeamLeader(whId);
+      const el = document.getElementById('dispatch-recipient-name');
+      if (el) el.textContent = leader;
+    };
 
     const modal = document.createElement('div');
     modal.id = 'dispatch-workflow-modal';
@@ -1909,12 +1933,30 @@ const setupStreamlinedTaskHandlers = () => {
 
         <form id="dispatch-form" onsubmit="event.preventDefault(); window.submitDispatchWorkflow('${repairIds.join(',')}');">
           
+          <!-- Sevk Form No (Otomatik) -->
+          <div style="margin-bottom: 1.25rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <label style="color: #10B981; font-size: 0.8rem; font-weight: 800; text-transform: uppercase;">
+                SEVK FORM NO (OTOMATİK SIRADAKİ) *
+              </label>
+              <span style="font-size: 0.72rem; color: #64748B;">Önceki En Son Form: #${maxFormNo}</span>
+            </div>
+            <input 
+              type="text" 
+              id="dispatch-form-no" 
+              required 
+              class="cyber-input" 
+              value="${nextFormNo}" 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.4); font-family: monospace; font-weight: 800; color: #14F195; font-size: 1.05rem; border: 1px solid rgba(20,241,149,0.4);" 
+            />
+          </div>
+
           <!-- Target Warehouse Dropdown -->
           <div style="margin-bottom: 1.25rem;">
             <label style="display: block; color: #10B981; font-size: 0.8rem; font-weight: 800; text-transform: uppercase; margin-bottom: 0.4rem;">
               HEDEF SEVK DEPOSU / SANTRAL *
             </label>
-            <select id="dispatch-target-wh" required style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #FFF; font-size: 0.88rem; outline: none; cursor: pointer;">
+            <select id="dispatch-target-wh" required onchange="window.updateDispatchRecipientPreview(this.value)" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #FFF; font-size: 0.88rem; outline: none; cursor: pointer;">
               <option value="">-- Hedef Depoyu Seçin --</option>
               ${warehouses.map(w => `
                 <option value="${w.id}" ${w.id === defaultWh ? 'selected' : ''}>
@@ -1922,12 +1964,17 @@ const setupStreamlinedTaskHandlers = () => {
                 </option>
               `).join('')}
             </select>
+            <!-- Sorumlu Ekip Lideri Göstergesi -->
+            <div id="dispatch-recipient-preview" style="margin-top: 6px; font-size: 0.78rem; color: #94A3B8; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-user-check" style="color: #F59E0B;"></i>
+              <span>Teslim Alacak Sorumlu: <strong id="dispatch-recipient-name" style="color: #F59E0B;">${initialLeader}</strong></span>
+            </div>
           </div>
 
-          <!-- Kargo / Takip / İrsaliye No -->
+          <!-- Kargo / Takip / İrsaliye No (Opsiyonel) -->
           <div style="margin-bottom: 1.25rem;">
             <label style="display: block; color: #94A3B8; font-size: 0.78rem; font-weight: 700; margin-bottom: 0.4rem;">
-              KARGO TAKİP NO / SEVK İRSALİYE NO
+              KARGO TAKİP NO / İRSALİYE NO (OPSİYONEL)
             </label>
             <input type="text" id="dispatch-tracking-no" class="cyber-input" placeholder="Örn: YK-98421731 (Yurtiçi Kargo)" style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.4);" />
           </div>
@@ -1960,6 +2007,7 @@ const setupStreamlinedTaskHandlers = () => {
   (window as any).submitDispatchWorkflow = async (rawIdsStr: string) => {
     const ids = rawIdsStr.split(',').filter(Boolean);
     const targetWhId = (document.getElementById('dispatch-target-wh') as HTMLSelectElement)?.value;
+    const formNo = (document.getElementById('dispatch-form-no') as HTMLInputElement)?.value.trim() || '62';
     const trackingNo = (document.getElementById('dispatch-tracking-no') as HTMLInputElement)?.value.trim();
     const note = (document.getElementById('dispatch-note') as HTMLTextAreaElement)?.value.trim();
 
@@ -1976,6 +2024,7 @@ const setupStreamlinedTaskHandlers = () => {
 
     const user = (window as any).currentUser;
     const userEmail = user?.email || user?.displayName || 'Sistem';
+    const siteLeader = getSiteTeamLeader(targetWhId);
 
     try {
       const batch = writeBatch(db);
@@ -1984,8 +2033,8 @@ const setupStreamlinedTaskHandlers = () => {
       for (const id of ids) {
         const docRef = doc(db, 'repairs', id);
         const logLine = trackingNo 
-          ? `Depoya Sevk Edildi (Takip/İrsaliye: ${trackingNo}): ${note || 'Sevk başlatıldı'}`
-          : `Depoya Sevk Edildi: ${note || 'Sevk başlatıldı'}`;
+          ? `Depoya Sevk Edildi (Form NO: ${formNo}, Kargo: ${trackingNo}): ${note || 'Sevk başlatıldı'}`
+          : `Depoya Sevk Edildi (Form NO: ${formNo}): ${note || 'Sevk başlatıldı'}`;
 
         const newNoteLog = {
           date: now,
@@ -1999,7 +2048,8 @@ const setupStreamlinedTaskHandlers = () => {
           targetWarehouseId: targetWhId,
           dispatchedAt: serverTimestamp(),
           dispatchedBy: userEmail,
-          dispatchNo: trackingNo || null,
+          dispatchNo: formNo,
+          trackingNo: trackingNo || null,
           noteLogs: arrayUnion(newNoteLog),
           lastUpdated: serverTimestamp()
         });
@@ -2008,7 +2058,68 @@ const setupStreamlinedTaskHandlers = () => {
       await batch.commit();
 
       repairService.invalidateCache();
-      (window as any).showToast?.('Başarılı', `${ids.length} adet kart hedef depoya sevk edildi!`, 'success');
+      (window as any).showToast?.('Başarılı', `${ids.length} adet kart Form NO: ${formNo} ile hedef depoya sevk edildi!`, 'success');
+
+      // 1. Send in-app notification to target warehouse
+      try {
+        const notifRef = collection(db, 'warehouses', targetWhId, 'notifications');
+        await addDoc(notifRef, {
+          type: 'WORKSHOP_DISPATCH',
+          title: 'Yeni Atölye Sevkiyatı Geldi',
+          message: `Merkez Tamir Atölyesi tarafından ${ids.length} kalem malzeme (Form NO: ${formNo}) deponuza sevk edildi. Teslim alacak: ${siteLeader}. Kabul bekleniyor.`,
+          dispatchNo: formNo,
+          itemCount: ids.length,
+          timestamp: serverTimestamp(),
+          read: false
+        });
+      } catch (notifErr) {
+        console.warn("Could not save warehouse dispatch notification:", notifErr);
+      }
+
+      // 2. Send dispatch email with A4 PDF attachment in background
+      try {
+        const { emailService } = await import('../services/EmailService');
+        const allWhs = dataService.getWarehouses();
+        const targetWh = allWhs.find(w => w.id === targetWhId);
+        const targetWhName = targetWh ? targetWh.name : targetWhId;
+        const currentRepairs = await repairService.getRepairs();
+        const dispatchedItems = currentRepairs.filter(r => !!r.id && ids.includes(r.id));
+
+        const emailNote = trackingNo
+          ? `${note ? note + ' | ' : ''}Kargo Takip / İrsaliye No: ${trackingNo}`
+          : (note || 'Tamiri ve testleri tamamlanan revize sağlam malzemeler depoya sevk edildi.');
+
+        const { getSiteTeamLeaderEmail } = await import('../utils/formatters');
+        const siteLeaderEmail = getSiteTeamLeaderEmail(targetWhName);
+        const { DEFAULT_DISPATCH_EMAILS } = await import('../services/EmailService');
+        const combinedRecipients = [siteLeaderEmail, DEFAULT_DISPATCH_EMAILS].filter(Boolean).join(', ');
+
+        emailService.sendWorkshopDispatchEmail({
+          dispatchNo: formNo,
+          targetWarehouseName: targetWhName,
+          recipientName: siteLeader,
+          senderName: formatDisplayName(user?.displayName || userEmail),
+          note: emailNote,
+          items: dispatchedItems.map(it => {
+            const isTurbine = it.testStatus === 'UNTESTED' || it.repairStage === 'TURBINE_TEST' || String(it.repairNotes || '').toLowerCase().includes('türbinde');
+            const cleanNote = (it.repairNotes && it.repairNotes.toLowerCase() !== 'onarım bekliyor' && it.repairNotes.toLowerCase() !== 'onarim bekliyor' && !it.repairNotes.includes('Onarıldı'))
+              ? ` - ${it.repairNotes}`
+              : '';
+            const statusLabel = isTurbine ? `6. Onarıldı (Türbinde Test)${cleanNote}` : `5. Onarıldı & Test Edildi${cleanNote}`;
+            return {
+              sapNo: it.sapNo,
+              serialNo: it.serialNo || '-',
+              description: it.description,
+              quantity: it.quantity || 1,
+              repairNotes: statusLabel,
+              faultCode: it.faultCode || '-'
+            };
+          })
+        }, combinedRecipients).catch(err => console.warn('Background dispatch email failed:', err));
+      } catch (emailErr) {
+        console.warn("Failed to initiate dispatch email:", emailErr);
+      }
+
       document.getElementById('dispatch-workflow-modal')?.remove();
 
       selectedCompletedIds = [];

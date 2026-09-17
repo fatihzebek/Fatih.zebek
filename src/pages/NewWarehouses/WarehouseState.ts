@@ -214,6 +214,32 @@ export const canViewWarehousePrices = (userProfile?: any): boolean => {
   return Boolean(isAdmin || isMaterialManager);
 };
 
+export const canViewTamirBekleyenler = (userProfile?: any): boolean => {
+  const user = userProfile || warehouseState.userProfile || getUserProfile() || (window as any).appState?.userProfile || (window as any).currentUser;
+  const userRole = (user?.role || '').toUpperCase().trim();
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const isAdmin = userRole === 'ADMIN' || userRole === 'YONETICI' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek');
+  const isMaterialManager = userRole === 'MALZEME_YONETIMI' || 
+    userRole === 'TAMİR' || 
+    userRole === 'TAMIR' || 
+    userEmail === 'hursit.akter@demirerholding.com' ||
+    userEmail === 'emir.unver@demirerholding.com' ||
+    Boolean(warehouseState.isMaterialManager);
+  return Boolean(isAdmin || isMaterialManager);
+};
+
+export const canEditMcfNumber = (userProfile?: any): boolean => {
+  const user = userProfile || warehouseState.userProfile || getUserProfile() || (window as any).appState?.userProfile || (window as any).currentUser;
+  const userRole = (user?.role || '').toUpperCase().trim();
+  const userEmail = (user?.email || '').toLowerCase().trim();
+  const isFatih = userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek');
+  const isAdmin = userRole === 'ADMIN' || isFatih;
+  const isMaterialManager = userRole === 'MALZEME_YONETIMI' || 
+    userEmail === 'hursit.akter@demirerholding.com' ||
+    userEmail === 'hursit.aktar@demirerholding.com';
+  return Boolean(isAdmin || isMaterialManager);
+};
+
 export const getUserProfile = (): any => {
   let userProfile = (window as any).appState?.userProfile || (window as any).currentUser;
   if (!userProfile) {

@@ -730,11 +730,27 @@ export class AdvancedPermissionStudio {
               <div style="font-size: 1.15rem; font-weight: 800; color: #fff; font-family: 'Rajdhani', sans-serif;">
                 ${formatDisplayName(user.displayName || user.email || '')}
               </div>
-              <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; gap: 10px;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
                 <span><i class="fa-regular fa-envelope"></i> ${user.email}</span>
                 <span>•</span>
                 <span>Rol: <strong style="color: var(--accent-cyan);">${user.role}</strong></span>
                 ${isLeader ? `<span style="color: #f97316;">• Ekip Lideri: ${user.managedTeams.join(', ')}</span>` : ''}
+                
+                <!-- Password Display Pill -->
+                <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 2px 8px;">
+                  <i class="fa-solid fa-key" style="color: #f59e0b; font-size: 0.7rem;"></i>
+                  <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">Şifre:</span>
+                  <span id="studio-pass-val-${user.uid || user._id || user.id}" style="font-family: monospace; font-size: 0.8rem; font-weight: 700; color: #fff; letter-spacing: 1px;">••••••••</span>
+                  <button type="button" onclick="window.toggleStudioPassword('${user.uid || user._id || user.id}', '${user.password ? encodeURIComponent(user.password) : ''}')" style="background: transparent; border: none; color: var(--accent-cyan); cursor: pointer; padding: 2px 4px; font-size: 0.75rem; display: inline-flex; align-items: center;" title="Şifreyi Göster/Gizle">
+                    <i class="fa-solid fa-eye" id="studio-pass-icon-${user.uid || user._id || user.id}"></i>
+                  </button>
+                  <button type="button" onclick="window.copyStudioPassword('${user.password ? encodeURIComponent(user.password) : ''}')" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 2px 4px; font-size: 0.75rem; display: inline-flex; align-items: center;" title="Şifreyi Kopyala">
+                    <i class="fa-regular fa-copy"></i>
+                  </button>
+                  <button type="button" onclick="window.promptChangeStudioUserPassword('${user.uid || user._id || user.id}')" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; border-radius: 4px; cursor: pointer; padding: 1px 6px; font-size: 0.65rem; font-weight: 700; display: inline-flex; align-items: center; gap: 3px; margin-left: 2px;" title="Şifreyi Değiştir">
+                    <i class="fa-solid fa-pen"></i> Şifre Değiştir
+                  </button>
+                </div>
               </div>
             </div>
           </div>

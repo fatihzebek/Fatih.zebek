@@ -1,5 +1,6 @@
-import { db } from '../../firebase';
+import { db, storage } from '../../firebase';
 import { collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { dataService } from '../../services/DataService';
 import { statusService } from '../../services/StatusService';
 import { inventoryService } from '../../services/InventoryService';
@@ -13,7 +14,9 @@ import { warehouseService } from '../../services/WarehouseService';
 import { maintenanceService } from '../../services/MaintenanceService';
 import { formatTeamName } from '../../utils/formatters';
 import { ImageCompressor } from '../../utils/imageCompressor';
+import { taskService } from '../../services/TaskService';
 import { qrService } from '../../services/QRService';
+import { offlineSyncService } from '../../services/OfflineSyncService';
 
 function getCanonicalTeamWarehouseId(siteId: string): string {
     const w = window as any;
@@ -1712,7 +1715,8 @@ export class FaultFormController {
             const container = document.getElementById('image-previews');
             const noMsg = document.getElementById('no-photo-msg');
             
-            if (files.length + w.selectedFaultFiles.length > 5) {
+            const totalCount = files.length + (w.selectedFaultFiles?.length || 0) + (w.existingDraftPhotoUrls?.length || 0);
+            if (totalCount > 5) {
                 alert("En fazla 5 fotoğraf yükleyebilirsiniz.");
                 input.value = '';
                 return;
@@ -1738,6 +1742,7 @@ export class FaultFormController {
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         const wrapper = document.createElement('div');
+                        wrapper.className = 'local-file-preview';
                         wrapper.style.position = 'relative';
                         wrapper.style.width = '60px';
                         wrapper.style.height = '60px';
@@ -1783,6 +1788,62 @@ export class FaultFormController {
                 }
                 input.value = '';
             }
+        };
+
+        w.renderDraftPhotoPreviews = () => {
+            const container = document.getElementById('image-previews');
+            const noMsg = document.getElementById('no-photo-msg');
+            if (!container) return;
+
+            const oldThumbs = container.querySelectorAll('.draft-photo-thumb');
+            oldThumbs.forEach(t => t.remove());
+
+            // If selected files have been uploaded and cleared, remove any old local previews to prevent duplicates
+            if (!w.selectedFaultFiles || w.selectedFaultFiles.length === 0) {
+                const localPreviews = container.querySelectorAll('.local-file-preview');
+                localPreviews.forEach(p => p.remove());
+            }
+
+            // Deduplicate URLs
+            w.existingDraftPhotoUrls = Array.from(new Set<string>(w.existingDraftPhotoUrls || []));
+            const urls: string[] = w.existingDraftPhotoUrls;
+            const hasFiles = w.selectedFaultFiles && w.selectedFaultFiles.length > 0;
+            if (urls.length === 0 && !hasFiles) {
+                if (noMsg) noMsg.style.display = 'block';
+                return;
+            }
+            if (noMsg) noMsg.style.display = 'none';
+
+            urls.forEach((url: string) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'draft-photo-thumb';
+                wrapper.style.cssText = 'position: relative; width: 60px; height: 60px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.15); display: inline-block; margin-right: 8px; vertical-align: top;';
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.cssText = 'width: 100%; height: 100%; object-fit: cover; cursor: pointer;';
+                img.onclick = () => window.open(url, '_blank');
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.innerHTML = '<i class="fa-solid fa-times"></i>';
+                btn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: var(--accent-red); color: white; border: none; border-radius: 50%; width: 16px; height: 16px; font-size: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 2;';
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    wrapper.remove();
+                    w.existingDraftPhotoUrls = (w.existingDraftPhotoUrls || []).filter((u: string) => u !== url);
+                    if (w.existingDraftPhotoUrls.length === 0 && (!w.selectedFaultFiles || w.selectedFaultFiles.length === 0) && noMsg) {
+                        noMsg.style.display = 'block';
+                    }
+                    if (typeof w.saveMaintenanceDraft === 'function') {
+                        w.saveMaintenanceDraft(true);
+                    }
+                };
+
+                wrapper.appendChild(img);
+                wrapper.appendChild(btn);
+                container.appendChild(wrapper);
+            });
         };
 
         w.addMaterialRow = (sData?: any, tData?: any) => {
@@ -1837,6 +1898,11 @@ export class FaultFormController {
             const currentTask = w.currentTaskContext;
             if (!currentTask?.id) return;
             
+            if (w.isEditMode) {
+                if (isSilent) return;
+                return w.submitFaultForm(false);
+            }
+            
             const validTechs = getValidPersonnelList();
             if (validTechs.length === 0) {
                 if (!isSilent) {
@@ -1872,6 +1938,41 @@ export class FaultFormController {
                 });
                 w.workSessions = updatedSessions;
 
+                const formDateVal = (document.getElementById('form-date') as HTMLInputElement)?.value || '';
+
+                // If technician explicitly clicks save draft and there are newly added files, upload them to storage
+                if (!isSilent && w.selectedFaultFiles && w.selectedFaultFiles.length > 0) {
+                    if (btn) btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> FOTOĞRAFLAR YÜKLENİYOR...';
+                    w.existingDraftPhotoUrls = w.existingDraftPhotoUrls || [];
+                    for (let i = 0; i < w.selectedFaultFiles.length; i++) {
+                        const file = w.selectedFaultFiles[i];
+                        const path = `reports/drafts/${currentTask.id}/${Date.now()}_${i}_${file.name}`;
+                        const storageRef = ref(storage, path);
+                        try {
+                            const snapshot = await uploadBytes(storageRef, file);
+                            const url = await getDownloadURL(snapshot.ref);
+                            if (!w.existingDraftPhotoUrls.includes(url)) {
+                                w.existingDraftPhotoUrls.push(url);
+                            }
+                        } catch (uploadErr) {
+                            console.error("Draft photo upload error:", uploadErr);
+                        }
+                    }
+                    w.selectedFaultFiles = [];
+                    const imgInput = document.getElementById('fault-images') as HTMLInputElement;
+                    if (imgInput) imgInput.value = '';
+
+                    const container = document.getElementById('image-previews');
+                    if (container) {
+                        const localPreviews = container.querySelectorAll('.local-file-preview');
+                        localPreviews.forEach(p => p.remove());
+                    }
+
+                    if (typeof w.renderDraftPhotoPreviews === 'function') {
+                        w.renderDraftPhotoPreviews();
+                    }
+                }
+
                 const data = {
                     checklist: w.smartAuditItems || [],
                     workSessions: updatedSessions,
@@ -1879,13 +1980,26 @@ export class FaultFormController {
                     materials: w.getMaterialData ? w.getMaterialData() : [],
                     notes: (document.getElementById('form-notes') as HTMLTextAreaElement)?.value || '',
                     matFormNo: (document.getElementById('mat-form-no') as HTMLInputElement)?.value || '',
-                    tamirFormNo: (document.getElementById('tamir-form-no') as HTMLInputElement)?.value || ''
+                    tamirFormNo: (document.getElementById('tamir-form-no') as HTMLInputElement)?.value || '',
+                    formDate: formDateVal,
+                    photos: w.existingDraftPhotoUrls || []
                 };
 
                 // Local crash recovery backup
                 try {
                     localStorage.setItem(`draft_backup_${currentTask.id}`, JSON.stringify(data));
                 } catch (e) {}
+
+                if (currentTask.maintenanceData) {
+                    if (formDateVal) {
+                        currentTask.maintenanceData.formDate = formDateVal;
+                        currentTask.maintenanceData.date = formDateVal;
+                        currentTask.date = formDateVal;
+                    }
+                    if (w.existingDraftPhotoUrls) {
+                        currentTask.maintenanceData.photos = w.existingDraftPhotoUrls;
+                    }
+                }
 
                 await auditService.saveMaintenanceDraft(currentTask, data, isSilent);
                 if (!isSilent) alert("Bakım taslağı başarıyla kaydedildi.");
@@ -1899,12 +2013,12 @@ export class FaultFormController {
         // Auto-save draft every 5 seconds in background to prevent battery/crash data loss
         if (w._autoSaveTimer) clearInterval(w._autoSaveTimer);
         w._autoSaveTimer = setInterval(() => {
-            if (w.currentTaskContext?.id && document.getElementById('detailed-ariza-form')) {
+            if (w.currentTaskContext?.id && document.getElementById('detailed-ariza-form') && !w.isEditMode) {
                 const validTechs = getValidPersonnelList();
                 if (validTechs.length > 0) {
                     w.saveMaintenanceDraft(true);
                 }
-            } else if (w._autoSaveTimer) {
+            } else if (w._autoSaveTimer && !document.getElementById('detailed-ariza-form')) {
                 clearInterval(w._autoSaveTimer);
                 w._autoSaveTimer = null;
             }
@@ -1944,8 +2058,10 @@ export class FaultFormController {
             }
         };
 
-        w.submitFaultForm = async () => {
-            const btn = document.getElementById('submit-form-btn') as HTMLButtonElement;
+        w.submitFaultForm = async (sendEmail = true) => {
+            const btn = (document.getElementById(sendEmail ? 'submit-form-btn' : 'silent-update-btn') as HTMLButtonElement) ||
+                        (document.getElementById('submit-form-btn') as HTMLButtonElement) ||
+                        (document.getElementById('save-draft-btn') as HTMLButtonElement);
             if (!btn) return;
             const orgHtml = btn.innerHTML;
 
@@ -1972,6 +2088,16 @@ export class FaultFormController {
 
             try {
                 const currentTask = w.currentTaskContext;
+                const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+                const userEmail = (currentUser?.email || '').toLowerCase().trim();
+                const userRole = (currentUser?.role || '').toUpperCase();
+                const isFatihZebekOrAdmin = userEmail === 'fatih.zebek@demirerholding.com' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek') || userRole === 'ADMIN';
+
+                // Only Fatih Zebek or Admin can perform silent update without email
+                if (!isFatihZebekOrAdmin) {
+                    sendEmail = true;
+                }
+
                 const isEditMode = !!w.isEditMode;
                 const turbineSerial = (document.getElementById('turbin-seri') as HTMLInputElement).value.trim();
                 const siteId = (document.getElementById('form-site') as HTMLInputElement).value.trim();
@@ -2131,12 +2257,45 @@ export class FaultFormController {
                 }
 
                 // İSG Emniyet Denetimi: Eğer sahada fiziksel çalışma saati girilmişse ve bu tarihe ait İSG kaydı yoksa
-                if (currentTask && currentTask.taskLocationType !== 'WAREHOUSE' && !currentTask.isReturnedReport && currentTask.ohsData) {
-                    const ohsList = Array.isArray(currentTask.ohsData) ? currentTask.ohsData : (currentTask.ohsData?.q1 ? [currentTask.ohsData] : []);
+                if (currentTask && currentTask.taskLocationType !== 'WAREHOUSE' && !currentTask.isReturnedReport && currentTask.ohsData && !currentTask.isCloseOnlyMode) {
+                    let ohsList = Array.isArray(currentTask.ohsData) ? [...currentTask.ohsData] : (currentTask.ohsData?.q1 ? [{ ...currentTask.ohsData }] : []);
                     const coveredDates = new Set(ohsList.map((o: any) => o.date));
-                    const uncoveredSession = workSessions.find((ws: any) => ws.date && !coveredDates.has(ws.date) && (!ws.type || ws.type === 'ÇALIŞMA'));
-                    if (uncoveredSession) {
-                        throw new Error(`DİKKAT: Raporda ${uncoveredSession.date} tarihi için saha çalışma saati girilmiştir ancak bu tarihe ait İSG Saha Güvenlik Kontrolü bulunmamaktadır.\nLütfen iş emirleri ekranından görevi açarak ilgili gün için İSG kontrolünü onaylayınız.`);
+                    const uncoveredSessions = workSessions.filter((ws: any) => ws.date && !coveredDates.has(ws.date) && (!ws.type || ws.type === 'ÇALIŞMA'));
+                    
+                    if (uncoveredSessions.length > 0) {
+                        const uncoveredDates = Array.from(new Set<string>(uncoveredSessions.map((ws: any) => String(ws.date || '')))).filter(Boolean).sort();
+                        const formattedDates = uncoveredDates.map((d: string) => d.includes('-') ? d.split('-').reverse().join('.') : d).join(', ');
+                        
+                        if (ohsList.length > 0) {
+                            const confirmed = confirm(
+                                `⚠️ İSG SAHA GÜVENLİK ONAYI:\n\n` +
+                                `Raporda (${formattedDates}) tarihlerine ait saha çalışma saatleri bulunmaktadır.\n\n` +
+                                `Bu tarihlerdeki müdahalelerde İSG kurallarının eksiksiz uygulandığını ve mevcut İSG onayınızın bu günleri de kapsadığını onaylıyor musunuz?`
+                            );
+                            
+                            if (confirmed) {
+                                const baseOhs = { ...ohsList[0] };
+                                uncoveredDates.forEach(dateStr => {
+                                    ohsList.push({
+                                        ...baseOhs,
+                                        date: dateStr,
+                                        autoExtended: true,
+                                        confirmedAt: new Date().toISOString(),
+                                        confirmedBy: currentUser?.displayName || currentUser?.email || 'Teknisyen'
+                                    });
+                                });
+                                currentTask.ohsData = ohsList;
+                                try {
+                                    await taskService.updateTask(currentTask.id, { ohsData: ohsList });
+                                } catch (updateErr) {
+                                    console.warn("OHS auto-extend update warning:", updateErr);
+                                }
+                            } else {
+                                throw new Error(`DİKKAT: Raporda ${formattedDates} tarihleri için saha çalışma saati girilmiştir ancak bu tarihler için İSG onayı verilmemiştir. Lütfen İSG kontrolünü onaylayınız veya çalışma saatlerini kontrol ediniz.`);
+                            }
+                        } else {
+                            throw new Error(`DİKKAT: Raporda ${formattedDates} tarihi için saha çalışma saati girilmiştir ancak bu tarihe ait İSG Saha Güvenlik Kontrolü bulunmamaktadır.\nLütfen iş emirleri ekranından görevi açarak ilgili gün için İSG kontrolünü onaylayınız.`);
+                        }
                     }
                 }
 
@@ -2154,8 +2313,6 @@ export class FaultFormController {
                 if (missingComments.length > 0) {
                     throw new Error(`Tamamlanamayan ${missingComments.length} adet madde için açıklama girilmesi zorunludur (En az 5 karakter).`);
                 }
-
-                const currentUser = (window as any).currentUser;
 
                 // Calculate checklist accuracy / anti-cheat metrics if it is a maintenance report
                 let auditMetrics: any = null;
@@ -2327,6 +2484,9 @@ export class FaultFormController {
                         if (isPlanli) {
                             return 'Planlı Duruş';
                         }
+                        if (isMaintenance) {
+                            return (c && c !== '---') ? c : (currentTask?.secilenSablon || currentTask?.templateName || 'Bakım');
+                        }
                         return c || '---';
                     })(),
                     faultDesc: (() => {
@@ -2347,8 +2507,12 @@ export class FaultFormController {
                         if (isPlanli) {
                             return d || currentTask?.yoneticiNotu || currentTask?.description || 'Planlı Duruş';
                         }
+                        if (isMaintenance) {
+                            return currentTask?.secilenSablon || currentTask?.templateName || (d && d !== 'Genel Görev' ? d : '') || 'Periyodik Bakım';
+                        }
                         return d || 'Genel Görev';
                     })(),
+                    taskId: currentTask?.id || null,
                     workSessions: workSessions,
                     personnel: personnel,
                     matFormNo: matFormNo,
@@ -2358,7 +2522,8 @@ export class FaultFormController {
                     auditMetrics: auditMetrics,
                     createdBy: currentUser?.email || 'Admin',
                     resolvedDeficiencyId: currentTask?.resolvedDeficiencyId || null,
-                    ohsData: currentTask?.ohsData || null
+                    ohsData: currentTask?.ohsData || null,
+                    imageUrls: [...(w.existingDraftPhotoUrls || [])]
                 };
 
                 const files = w.selectedFaultFiles || [];
@@ -2370,7 +2535,7 @@ export class FaultFormController {
                     const oldMaterials = w.currentInitialData?.materials || [];
                     const newMaterials = reportData.materials || [];
                     
-                    await serviceReportService.updateReport(reportId || '', reportData, files);
+                    await serviceReportService.updateReport(reportId || '', reportData, files, undefined, sendEmail);
                     
                     // Stock adjustment for Edit Mode
                     const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
@@ -2425,51 +2590,6 @@ export class FaultFormController {
                             
                             const detailedNote = `(Rapor Güncelleme: ${reportData.reportNo}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
 
-                            if (type === 'S') {
-                                // Self-healing for legacy merged or duplicated defect records
-                                try {
-                                    const whsToClean = [siteWarehouseId, usedWarehouseId].filter((id): id is string => !!id);
-                                    for (const whId of whsToClean) {
-                                        const colRef = collection(db, 'warehouses', whId, 'inventory_v2');
-                                        const q = query(colRef, where('sapNo', '==', sapNo), where('condition', '==', 'DEFECT'));
-                                        const snap = await getDocs(q);
-                                        
-                                        const hasEmpty = snap.docs.some(d => !d.data().serialNo || d.data().serialNo === '' || d.data().serialNo === '-');
-                                        const hasDuplicates = snap.docs.some((d, idx) => {
-                                            const s = d.data().serialNo;
-                                            return s && snap.docs.findIndex(x => x.data().serialNo === s) !== idx;
-                                        });
-                                        
-                                        const sMaterials = newMaterials.filter((m: any) => String(m.sapNo).trim() === sapNo && m.type?.toUpperCase() === 'S');
-                                        const totalReportQty = sMaterials.reduce((acc: number, m: any) => acc + (parseFloat(m.defectCount) || 0), 0);
-                                        const totalDbQty = snap.docs.reduce((acc: number, d: any) => acc + (parseFloat(d.data().quantity) || 0), 0);
-                                        
-                                        if (hasEmpty || hasDuplicates || totalDbQty !== totalReportQty) {
-                                            // Delete all existing DEFECT records for this sapNo in this warehouse
-                                            const batch = writeBatch(db);
-                                            snap.docs.forEach(doc => {
-                                                batch.delete(doc.ref);
-                                            });
-                                            await batch.commit();
-                                            
-                                            // Re-write them correctly based on the report's sMaterials
-                                            for (const sm of sMaterials) {
-                                                const sNo = String(sm.serialNo || '').trim();
-                                                const qty = parseFloat(sm.defectCount) || 1;
-                                                await warehouseService.updateStockBySap(whId, sapNo, qty, {
-                                                    user: currentUser?.email || 'Sistem',
-                                                    reason: 'Otomatik Veri Senkronizasyonu: Arızalı Sökülen Parça Kayıtları Yenilendi ' + detailedNote,
-                                                    reportNo: reportData.reportNo,
-                                                    materialName: matDesc
-                                                }, 'DEFECT', undefined, sNo);
-                                            }
-                                        }
-                                    }
-                                } catch (err) {
-                                    console.error("Self-healing error:", err);
-                                }
-                            }
-                            
                             if (diffQty === 0) continue;
                             
                             if (type === 'T') {
@@ -2562,159 +2682,72 @@ export class FaultFormController {
                         const { taskService } = await import('../../services/TaskService');
                         await taskService.updateTaskStatus(currentTask.id, 'Tamamlandı').catch(console.warn);
                         localStorage.removeItem('activeTaskContext');
+                        localStorage.removeItem(`draft_backup_${currentTask.id}`);
                         delete w.currentTaskContext;
                     }
 
-                    (window as any).showToast?.('BAŞARILI', 'Rapor başarıyla güncellendi!', 'success');
-                    alert("Rapor başarıyla güncellendi!");
+                    const successMsg = sendEmail ? "Rapor başarıyla güncellendi ve e-posta gönderildi!" : "Rapor başarıyla güncellendi (E-posta gönderilmedi).";
+                    (window as any).showToast?.('BAŞARILI', successMsg, 'success');
+                    alert(successMsg);
                     w.navigate('reports-archive');
                 } else {
                     setBtnStatus('RAPOR KAYDEDİLİYOR...');
                     await serviceReportService.saveReport(reportData, files);
                     
-                    // Stock update
+                    // Stock update via persistent queue
                     const usedWarehouseId = getCanonicalTeamWarehouseId(siteId);
                     const siteWarehouseId = warehouseService.resolveWarehouseId(siteId) || siteId;
 
-                    if (reportData.materials && reportData.materials.length > 0) {
-                        setBtnStatus('STOK DÜŞÜLÜYOR...');
-                        for (const mat of reportData.materials) {
-                            const typeUpper = mat.type?.toUpperCase();
-                            const isTakilan = !mat.type || typeUpper === 'T';
-                            
-                            // 1. Takılan malzeme: Teknisyenin kendi zimmet deposundan (usedWarehouseId) düşülür
-                            if (mat.sapNo && mat.used > 0 && isTakilan && usedWarehouseId) {
-                                // Smart stock deduction: NEW first, then REVISED remainder
-                                const stockItemNew = await warehouseService.getStockBySapAndCondition(usedWarehouseId, mat.sapNo, 'NEW');
-                                const qtyNew = stockItemNew?.quantity || 0;
-                                
-                                const detailedNote = `(Rapor: ${reportData.reportNo}, Arıza Kodu: ${reportData.faultCode || 'Bakım'}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
+                    const stockAction: any = {
+                        id: 'stock_' + reportData.reportNo,
+                        reportNo: reportData.reportNo,
+                        siteId: siteId,
+                        siteName: reportData.siteName || '',
+                        turbineNo: reportData.turbineNo || '',
+                        turbineSerial: reportData.turbineSerial || '',
+                        matFormNo: reportData.matFormNo || '',
+                        faultCode: reportData.faultCode || '',
+                        faultDesc: reportData.faultDesc || '',
+                        user: currentUser?.email || 'Sistem',
+                        usedWarehouseId: usedWarehouseId || '',
+                        siteWarehouseId: siteWarehouseId || '',
+                        materials: reportData.materials || [],
+                        taskId: currentTask?.id || null,
+                        isWarehouse: isWarehouse,
+                        repairedMaterial: isWarehouse ? {
+                            sapNo: currentTask?.repairedMaterial?.sapNo || '',
+                            description: currentTask?.repairedMaterial?.description || '',
+                            quantity: currentTask?.repairedMaterial?.quantity || 1,
+                            itemId: currentTask?.repairedMaterial?.itemId || '',
+                            serialNo: currentTask?.repairedMaterial?.serialNo || ''
+                        } : null,
+                        notes: reportData.notes || '',
+                        timestamp: Date.now()
+                    };
 
-                                if (qtyNew >= mat.used) {
-                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -mat.used, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporu ile Malzeme Kullanımı ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: mat.description,
-                                        turbineNo: reportData.turbineNo,
-                                        turbineSerial: reportData.turbineSerial,
-                                        formNo: reportData.matFormNo
-                                    }, 'NEW');
-                                } else {
-                                    if (qtyNew > 0) {
-                                        await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -qtyNew, {
-                                            user: currentUser?.email || 'Sistem',
-                                            reason: 'Saha Raporu ile Malzeme Kullanımı (Kısmi NEW) ' + detailedNote,
-                                            reportNo: reportData.reportNo,
-                                            materialName: mat.description,
-                                            turbineNo: reportData.turbineNo,
-                                            turbineSerial: reportData.turbineSerial,
-                                            formNo: reportData.matFormNo
-                                        }, 'NEW');
-                                    }
-                                    const remainder = mat.used - qtyNew;
-                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, -remainder, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporu ile Malzeme Kullanımı (Kısmi REVİZE) ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: mat.description,
-                                        turbineNo: reportData.turbineNo,
-                                        turbineSerial: reportData.turbineSerial,
-                                        formNo: reportData.matFormNo
-                                    }, 'REVISED');
-                                }
+                    // 1. Save to persistent offline stock queue as safety net
+                    await offlineSyncService.saveStockActionToQueue(stockAction);
 
-                                if (usedWarehouseId.startsWith('team_') && siteWarehouseId) {
-                                    try {
-                                        await warehouseService.decreaseReservation(siteWarehouseId, mat.sapNo, mat.used, usedWarehouseId);
-                                    } catch (e) {
-                                        console.warn("Failed to decrease reservation:", e);
-                                    }
-                                }
-                            }
+                    // 2. Execute stock deductions immediately with progress
+                    setBtnStatus('STOK DÜŞÜLÜYOR...');
+                    const stockRes = await offlineSyncService.processPendingStockAction(stockAction, (msg: string) => setBtnStatus(msg));
 
-                            
-                            // 2. Defect (Arızalı) malzeme: hem sahanın kendi ana deposuna hem de team zimmet deposuna defect olarak eklenir
-                            if (mat.sapNo && mat.defectCount > 0) {
-                                const detailedNote = `(Rapor: ${reportData.reportNo}, Arıza Kodu: ${reportData.faultCode || 'Bakım'}, Konum: ${reportData.siteName} - ${reportData.turbineNo.toUpperCase().startsWith('T') ? reportData.turbineNo : 'T' + reportData.turbineNo})`;
-                                
-                                if (siteWarehouseId) {
-                                    await warehouseService.updateStockBySap(siteWarehouseId, mat.sapNo, mat.defectCount, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: mat.description
-                                    }, 'DEFECT', undefined, mat.serialNo);
-                                }
-                                
-                                if (usedWarehouseId) {
-                                    await warehouseService.updateStockBySap(usedWarehouseId, mat.sapNo, mat.defectCount, {
-                                        user: currentUser?.email || 'Sistem',
-                                        reason: 'Saha Raporunda Sökülen Arızalı Parça ' + detailedNote,
-                                        reportNo: reportData.reportNo,
-                                        materialName: mat.description
-                                    }, 'DEFECT', undefined, mat.serialNo);
-                                }
-                            }
-                        }
-                    }
-
-                    // Perform main repaired material stock movement for warehouse tasks
-                    if (isWarehouse) {
-                        setBtnStatus('REVİZE PARÇA STOĞA ALINIYOR...');
-                        let mainMatSap = currentTask?.repairedMaterial?.sapNo || '';
-                        let mainMatDesc = currentTask?.repairedMaterial?.description || '';
-                        let mainMatQty = currentTask?.repairedMaterial?.quantity || 1;
-                        let mainMatItemId = currentTask?.repairedMaterial?.itemId || '';
-                        let mainMatSerial = currentTask?.repairedMaterial?.serialNo || '';
-
-                        if (!mainMatSap && currentTask?.yoneticiNotu) {
-                            const match = currentTask.yoneticiNotu.match(/([0-9]{4,8})\s*-\s*([^|(]+)/);
-                            if (match) {
-                                mainMatSap = match[1].trim();
-                                mainMatDesc = match[2].trim();
-                            }
-                        }
-
-                        const targetWarehouseId = currentTask?.warehouseId || currentTask?.siteId || siteWarehouseId;
-
-                        if (mainMatSap && targetWarehouseId) {
-                            if (mainMatItemId) {
-                                await warehouseService.returnDefectToInventory(
-                                    targetWarehouseId,
-                                    mainMatItemId,
-                                    'REVISED',
-                                    currentUser?.email || 'Sistem',
-                                    mainMatSerial,
-                                    `Saha İçi Revizyon (Rapor: ${reportData.reportNo}): ${reportData.notes}`,
-                                    mainMatSap,
-                                    mainMatDesc
-                                );
-                            } else {
-                                await warehouseService.updateStockBySap(
-                                    targetWarehouseId,
-                                    mainMatSap,
-                                    -mainMatQty,
-                                    { user: currentUser?.email || 'Sistem', reason: `Saha İçi Revizyon (Rapor: ${reportData.reportNo})` },
-                                    'DEFECT'
-                                ).catch(console.warn);
-
-                                await warehouseService.updateStockBySap(
-                                    targetWarehouseId,
-                                    mainMatSap,
-                                    mainMatQty,
-                                    { user: currentUser?.email || 'Sistem', reason: `Saha İçi Revizyon Tamamlandı (Rapor: ${reportData.reportNo}): ${reportData.notes}` },
-                                    'REVISED'
-                                );
-                            }
-                        }
+                    if (stockRes.success) {
+                        await offlineSyncService.removeStockActionFromQueue(stockAction.id);
+                    } else {
+                        // Keep only remaining materials in queue
+                        await offlineSyncService.saveStockActionToQueue({
+                            ...stockAction,
+                            materials: stockRes.remainingMaterials
+                        });
+                        console.warn("[FaultForm] Kalan malzemeler arka plan senkronizasyon kuyruğuna alındı:", stockRes.remainingMaterials);
                     }
 
                     if (currentTask && currentTask.id) {
                         setBtnStatus('GÖREV KAPATILIYOR...');
-                        const { taskService } = await import('../../services/TaskService');
-                        await taskService.updateTaskStatus(currentTask.id, 'Tamamlandı');
+                        await taskService.updateTaskStatus(currentTask.id, 'Tamamlandı').catch(console.warn);
                         localStorage.removeItem('activeTaskContext');
+                        localStorage.removeItem(`draft_backup_${currentTask.id}`);
                         delete w.currentTaskContext;
                     }
 
@@ -2731,8 +2764,10 @@ export class FaultFormController {
                     alert("Form gönderilirken bir hata oluştu: " + err.message);
                 }
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = orgHtml;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orgHtml;
+                }
             }
         };
 
@@ -2758,7 +2793,14 @@ export class FaultFormController {
             if (submitBtn) {
                 submitBtn.onclick = (e) => {
                     e.preventDefault();
-                    w.submitFaultForm();
+                    w.submitFaultForm(true);
+                };
+            }
+            const silentBtn = document.getElementById('silent-update-btn');
+            if (silentBtn) {
+                silentBtn.onclick = (e) => {
+                    e.preventDefault();
+                    w.submitFaultForm(false);
                 };
             }
         }, 100);
@@ -2922,6 +2964,15 @@ export class FaultFormController {
         }
         w.renderWorkSessionsUI();
 
+        // Hydrate Form Date
+        const formDateEl = document.getElementById('form-date') as HTMLInputElement;
+        if (formDateEl) {
+            const savedDate = isEditMode 
+                ? (initialData.date ? initialData.date.split('T')[0] : '') 
+                : (initialData?.maintenanceData?.formDate || initialData?.maintenanceData?.date || initialData?.formDate || (initialData?.date ? initialData.date.split('T')[0] : ''));
+            if (savedDate) formDateEl.value = savedDate;
+        }
+
         // Hydrate Notes & MCF / Revision Form No from draft or initialData
         const notesEl = document.getElementById('form-notes') as HTMLTextAreaElement;
         if (notesEl) {
@@ -3069,19 +3120,12 @@ export class FaultFormController {
             });
         }
 
-        // Photos
-        if (isEditMode && (initialData.photos || initialData.imageUrls)) {
-            const container = document.getElementById('image-previews');
-            if (container) {
-                const noMsg = document.getElementById('no-photo-msg');
-                if (noMsg) noMsg.style.display = 'none';
-                const photoList = initialData.photos || initialData.imageUrls || [];
-                photoList.forEach((url: string) => {
-                    const wrapper = document.createElement('div');
-                    wrapper.innerHTML = `<img src="${url}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">`;
-                    container.appendChild(wrapper);
-                });
-            }
+        // Hydrate Photos (Edit Mode & Draft Mode)
+        w.existingDraftPhotoUrls = isEditMode 
+            ? (initialData.photos || initialData.imageUrls || [])
+            : (initialData?.maintenanceData?.photos || initialData?.photos || initialData?.imageUrls || []);
+        if (typeof w.renderDraftPhotoPreviews === 'function') {
+            w.renderDraftPhotoPreviews();
         }
 
         const imgInput = document.getElementById('fault-images');
@@ -3131,6 +3175,17 @@ export class FaultFormController {
                     faultCodeInput.value = 'Planlı Duruş';
                 }
                 faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || 'Planlı Duruş';
+            } else if (!isEditMode && (
+                initialData?.isMaintenance ||
+                initialData?.type === 'BAKIM' ||
+                (initialData?.secilenSablon && !initialData.secilenSablon.toLowerCase().includes('ariza')) ||
+                (initialData?.templateName && !initialData.templateName.toLowerCase().includes('ariza'))
+            )) {
+                const sablonName = initialData?.secilenSablon || initialData?.templateName || 'Bakım';
+                if (faultCodeInput) {
+                    faultCodeInput.value = sablonName;
+                }
+                faultDescEl.value = sablonName;
             }
             if (faultCode && w.loadFaultKnowledgeBase) {
                 w.loadFaultKnowledgeBase(faultCode);

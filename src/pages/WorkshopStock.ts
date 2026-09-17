@@ -2,6 +2,7 @@ import { repairService, type RepairRecord } from '../services/RepairService';
 import { dataService } from '../services/DataService';
 import { inventoryService } from '../services/InventoryService';
 import { warehouseService } from '../services/WarehouseService';
+import { statusService } from '../services/StatusService';
 import * as XLSX from 'xlsx';
 
 const formatDateTime = (ts: any) => {
@@ -35,12 +36,16 @@ export const generateMtaSerialNo = (sapNo: string, allRepairs: RepairRecord[]): 
 
 export const WorkshopStockPage = async () => {
   const currentUser = (window as any).currentUser;
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.email === 'fatih.zebek@demirerholding.com' || (currentUser?.email?.includes('fatih.zebek') ?? false);
-  const username = currentUser?.displayName || currentUser?.email || 'Merkez Tamir Atölyesi';
+  const userProfile = (window as any).appState?.userProfile || (window as any).userProfile;
+  const userEmail = (currentUser?.email || userProfile?.email || '').toLowerCase().trim();
+  const isFatih = userEmail === 'fatih.zebek@demirerholding.com' || userEmail.includes('fatih.zebek');
+  const isAdmin = isFatih || currentUser?.role === 'ADMIN' || userProfile?.role === 'ADMIN';
+  const username = currentUser?.displayName || userProfile?.displayName || currentUser?.email || 'Merkez Tamir Atölyesi';
 
-  // Fetch all unassigned warehouse repair records (exclude sent back and exclude items currently on the bench)
+  // Fetch all unassigned warehouse repair records (exclude unaccepted items, sent back, scrapped, etc.)
   const rawRepairs: RepairRecord[] = await repairService.getRepairs(true);
   const allRepairs: RepairRecord[] = rawRepairs.filter(r => 
+    r.status !== 'PENDING_ARRIVAL' &&
     r.status !== 'SENT_BACK' && 
     r.status !== 'COMPLETED' && 
     r.status !== 'SCRAPPED' && 
@@ -77,15 +82,31 @@ export const WorkshopStockPage = async () => {
       .replace(/[\s_\-.:/()]/g, '');
   };
 
+  // Helper to format shelf number into standard "A-01", "B-09", "C-12" pattern
+  const formatShelfNo = (rawShelf?: string | null): string => {
+    if (!rawShelf || rawShelf === '-' || rawShelf.trim() === '') return '-';
+    const trimmed = rawShelf.trim().toUpperCase();
+    const match = trimmed.match(/^([A-ZÇĞİÖŞÜ]+)[\s\-_]*(\d+)$/i);
+    if (match) {
+      const letters = match[1].toUpperCase();
+      const num = parseInt(match[2], 10);
+      const paddedNum = num < 10 ? `0${num}` : `${num}`;
+      return `${letters}-${paddedNum}`;
+    }
+    return trimmed;
+  };
+  (window as any).formatShelfNo = formatShelfNo;
+
   // Pre-normalize all repair items into memory for ultra-fast instant search (< 1ms)
   allRepairs.forEach((rep: any) => {
     const sourceWh = warehouses.find(w => w.id === rep.sourceWarehouseId)?.name || rep.sourceWarehouseId || '';
+    rep._formattedShelf = formatShelfNo(rep.shelfNo || rep.boxNo);
     rep._normSap = normalizeKey(rep.sapNo || '');
     rep._normSerial = normalizeKey(rep.serialNo || '');
     rep._normDesc = normalizeKey(rep.description || '');
     rep._normFault = normalizeKey(`${rep.faultCode || ''} ${rep.faultDesc || ''}`);
     rep._normWh = normalizeKey(sourceWh);
-    rep._normShelf = normalizeKey(rep.shelfNo || '');
+    rep._normShelf = normalizeKey(rep._formattedShelf !== '-' ? `${rep.shelfNo || ''} ${rep._formattedShelf}` : '');
     rep._fullSearchStr = `${rep._normSap} ${rep._normSerial} ${rep._normDesc} ${rep._normFault} ${rep._normWh} ${rep._normShelf}`;
   });
 
@@ -225,7 +246,7 @@ export const WorkshopStockPage = async () => {
     else if (rep.status === 'REPAIRED') g.repairedCount += qty;
 
     if (rep.priority === 'CRITICAL' || rep.priority === 'HIGH') g.criticalCount++;
-    g.waitingTurnaround = g.pendingCount + g.underRepairCount;
+    g.waitingTurnaround = g.underRepairCount;
   });
 
   // Sort by waiting turnaround (most repair backlog first!)
@@ -248,7 +269,7 @@ export const WorkshopStockPage = async () => {
       );
     }
 
-    return allRepairs.filter((rep: any) => {
+    const filtered = allRepairs.filter((rep: any) => {
       // SAP Filter
       if (sapF && rep.sapNo !== sapF) return false;
 
@@ -256,7 +277,7 @@ export const WorkshopStockPage = async () => {
       if (whF && rep.sourceWarehouseId !== whF) return false;
 
       // Tab filter
-      if (tab === 'DEFECT' && rep.status !== 'PENDING_ARRIVAL') return false;
+      if (tab === 'DEFECT') return false;
       if (tab === 'WAITING_STOCK' || tab === 'UNDER_REPAIR') {
         const isWaiting = rep.status === 'UNDER_REPAIR' && (!rep.assignedTo || rep.assignedTo.trim() === '' || rep.assignedTo === '-') && !rep.repairStage;
         if (!isWaiting) return false;
@@ -281,18 +302,48 @@ export const WorkshopStockPage = async () => {
 
       return true;
     });
+
+    // Sort by Shelf No (A-01, A-02, ... B-01, etc., then items without shelf at the end)
+    filtered.sort((a: any, b: any) => {
+      const aShelf = a._formattedShelf || formatShelfNo(a.shelfNo || a.boxNo);
+      const bShelf = b._formattedShelf || formatShelfNo(b.shelfNo || b.boxNo);
+
+      const aEmpty = !aShelf || aShelf === '-';
+      const bEmpty = !bShelf || bShelf === '-';
+
+      if (aEmpty && !bEmpty) return 1;
+      if (!aEmpty && bEmpty) return -1;
+      if (!aEmpty && !bEmpty) {
+        const shelfCmp = aShelf.localeCompare(bShelf, 'tr', { numeric: true, sensitivity: 'base' });
+        if (shelfCmp !== 0) return shelfCmp;
+      }
+
+      // Secondary sort: SAP NO, then SERİ NO
+      const sapCmp = (a.sapNo || '').localeCompare(b.sapNo || '');
+      if (sapCmp !== 0) return sapCmp;
+      return (a.serialNo || '').localeCompare(b.serialNo || '');
+    });
+
+    return filtered;
   };
 
   // Counts for Stats Cards (Scoped to selected warehouse if active!)
   const totalCount = targetRepairsForSummaries.length;
-  const pendingDefectCount = targetRepairsForSummaries.filter(r => r.status === 'PENDING_ARRIVAL').length;
+  const pendingDefectCount = rawRepairs.filter(r => r.status === 'PENDING_ARRIVAL' && !r.rejectedAt && (!warehouseFilter || r.sourceWarehouseId === warehouseFilter)).length;
   const waitingStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && (!r.assignedTo || r.assignedTo.trim() === '' || r.assignedTo === '-') && !r.repairStage).length;
   const activeWorkOrderCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && ((!!r.assignedTo && r.assignedTo.trim() !== '' && r.assignedTo !== '-') || !!r.repairStage)).length;
   const repairedReadyCount = targetRepairsForSummaries.filter(r => r.status === 'REPAIRED').length;
-  const noSerialStockCount = targetRepairsForSummaries.filter(r => (r.status === 'UNDER_REPAIR' || r.status === 'PENDING_ARRIVAL') && (!r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız')).length;
+  const noSerialStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && (!r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız')).length;
 
   // Global window functions
   (window as any).setWorkshopStockTab = (tab: string) => {
+    if (tab === 'DEFECT') {
+      (window as any)._workshopReturnedTab = 'INCOMING';
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-returned');
+      }
+      return;
+    }
     (window as any)._workshopStockTab = tab;
     (window as any)._workshopStockPage = 1;
     if ((window as any).navigate) {
@@ -573,7 +624,8 @@ export const WorkshopStockPage = async () => {
             </div>
             <div style="margin-top:8px; padding-top:6px; border-top:1px dashed rgba(255,255,255,0.07); font-size:0.78rem; color:#94A3B8; display:flex; flex-direction:column; gap:4px;">
               <div><i class="fa-solid fa-warehouse" style="color:#60A5FA;"></i> Gönderen Saha: <strong style="color:#FFF;">${sourceWhName}</strong></div>
-              ${rep.dispatchNo ? `<div><i class="fa-solid fa-truck-ramp-box" style="color:#14F195;"></i> Sevk No: <strong style="color:#14F195; font-family:monospace;">${rep.dispatchNo}</strong></div>` : ''}
+              ${rep.sentBy ? `<div><i class="fa-solid fa-user" style="color:#F59E0B;"></i> Gönderen Kişi: <strong style="color:#FFF;">${rep.sentBy}</strong></div>` : ''}
+              ${rep.dispatchNo ? `<div><i class="fa-solid fa-file-invoice" style="color:#14F195;"></i> Sevk No: <strong style="color:#14F195; font-family:monospace;">${rep.dispatchNo}</strong></div>` : ''}
               ${rep.faultCode ? `<div><i class="fa-solid fa-triangle-exclamation" style="color:#EF4444;"></i> Arıza: <strong style="color:#EF4444;">${rep.faultCode}</strong> ${rep.faultDesc ? `(${rep.faultDesc})` : ''}</div>` : ''}
             </div>
           </div>
@@ -582,7 +634,7 @@ export const WorkshopStockPage = async () => {
         <div style="display: flex; flex-direction: column; gap: 1.1rem; margin-bottom: 1.5rem;">
           <div>
             <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">ATÖLYE RAF / KONUM (MTA)</label>
-            <input type="text" id="receive-shelf-input" class="cyber-input" placeholder="Örn: Raf-B2, Kutu-04" style="width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.4); border: 1px solid #1E293B; border-radius: 8px; color: #FFF;" value="${rep.shelfNo || ''}">
+            <input type="text" id="receive-shelf-input" class="cyber-input" placeholder="Örn: A-01, B-08, Raf-3" style="width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.4); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-family: monospace; font-weight: 700;" value="${formatShelfNo(rep.shelfNo)}" onblur="this.value = formatShelfNo(this.value)">
           </div>
           <div>
             <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">TESLİM ALMA & FİZİKSEL KONTROL NOTU</label>
@@ -841,13 +893,344 @@ export const WorkshopStockPage = async () => {
     }
   };
 
+  // 2.5 MANUAL REPAIR ENTRY MODAL (Strictly locked to UNDER_REPAIR / Arızalı Stokta)
+  (window as any).onManualEntrySapChange = (val: string) => {
+    const cleanSap = (val || '').trim();
+    const descInput = document.getElementById('manual-entry-desc') as HTMLInputElement;
+    const sapMatchBadge = document.getElementById('manual-entry-sap-match');
+    if (!descInput) return;
+
+    if (!cleanSap) {
+      if (sapMatchBadge) sapMatchBadge.innerHTML = '';
+      return;
+    }
+
+    const mat = inventoryService.getMaterialBySap(cleanSap);
+    if (mat) {
+      descInput.value = mat.d;
+      if (sapMatchBadge) {
+        sapMatchBadge.innerHTML = `<span style="color: #14F195; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-check"></i> Sistemde kayıtlı malzeme bulundu</span>`;
+      }
+    } else {
+      if (sapMatchBadge) {
+        sapMatchBadge.innerHTML = `<span style="color: #94A3B8; font-size: 0.72rem;"><i class="fa-solid fa-circle-info"></i> Yeni/Özel parça tanımı</span>`;
+      }
+    }
+  };
+
+  (window as any).onGenerateManualEntryMtaSerial = () => {
+    const sapInput = document.getElementById('manual-entry-sap') as HTMLInputElement;
+    const serialInput = document.getElementById('manual-entry-serial') as HTMLInputElement;
+    if (!serialInput) return;
+
+    const sapVal = sapInput ? sapInput.value.trim() : '';
+    const generated = generateMtaSerialNo(sapVal || 'KART', rawRepairs);
+    serialInput.value = generated;
+    (window as any).showToast?.('Bilgi', `Yeni seri üretildi: ${generated}`, 'info');
+  };
+
+  (window as any).onManualEntryFaultCodeChange = (val: string) => {
+    const raw = (val || '').trim();
+    const descInput = document.getElementById('manual-entry-fault-desc') as HTMLInputElement;
+    const matchBadge = document.getElementById('manual-entry-fault-match');
+    if (!descInput) return;
+
+    if (!raw) {
+      if (matchBadge) matchBadge.innerHTML = '';
+      return;
+    }
+
+    let found = statusService.getCodeByKod(raw);
+    if (!found) {
+      const norm = raw.replace(/\s+/g, '-').toLowerCase();
+      found = statusService.getAllCodes().find(c => c.KOD.toLowerCase().trim() === norm);
+    }
+
+    if (found && found.Aciklama) {
+      descInput.value = found.Aciklama;
+      if (matchBadge) {
+        matchBadge.innerHTML = `<span style="color: #14F195; font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle-check"></i> Kütüphaneden otomatik getirildi</span>`;
+      }
+    } else {
+      if (matchBadge) {
+        matchBadge.innerHTML = '';
+      }
+    }
+  };
+
+  (window as any).openManualRepairEntryModal = () => {
+    const existing = document.getElementById('manual-repair-entry-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'manual-repair-entry-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+      z-index: 10002; display: flex; align-items: center; justify-content: center; padding: 1.25rem; box-sizing: border-box;
+    `;
+
+    const warehouseOptions = warehouses.map(w => `<option value="${w.id}" ${w.id === 'MTA' ? 'selected' : ''}>${w.name}</option>`).join('');
+
+    modal.innerHTML = `
+      <div class="glass-panel fade-in-up" style="width: 100%; max-width: 620px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.3); box-shadow: 0 20px 40px rgba(0,0,0,0.6); max-height: 92vh; overflow-y: auto; background: #0B101B;">
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:1rem;">
+          <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.45rem; color:#14F195; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:10px;">
+            <i class="fa-solid fa-microchip"></i> MANUEL KART GİRİŞİ (ATÖLYE STOĞU)
+          </h3>
+          <button onclick="document.getElementById('manual-repair-entry-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.3rem; padding: 4px;" onmouseover="this.style.color='#FFF'" onmouseout="this.style.color='#94A3B8'">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Workflow Safety Rule Notice -->
+        <div style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1.4rem; display: flex; align-items: flex-start; gap: 12px;">
+          <i class="fa-solid fa-shield-halved" style="color: #38bdf8; font-size: 1.25rem; margin-top: 2px;"></i>
+          <div style="font-size: 0.82rem; color: #CBD5E1; line-height: 1.45;">
+            <strong style="color: #60a5fa; display: block; margin-bottom: 2px;">ATÖLYE İŞ AKIŞI & KALİTE KONTROL KURALI</strong>
+            Manuel girilen tüm kartlar doğrudan <span style="color: #60a5fa; font-weight: 700;">"Arızalı Stokta (Onarım / Masada Bekliyor)"</span> olarak kaydedilir. Onarım masasına alınıp test ve kontrolleri tamamlanmadan hiçbir kart <strong style="color: #14F195;">"Revize Sağlam"</strong> statüsüne geçirilemez.
+          </div>
+        </div>
+
+        <!-- Form Fields -->
+        <div style="display: flex; flex-direction: column; gap: 1.1rem;">
+          
+          <!-- SAP No & Match Indicator -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <label style="color:#94A3B8; font-size:0.78rem; font-weight:800; text-transform:uppercase;">
+                SAP No <span style="color:#ef4444;">*</span>
+              </label>
+              <div id="manual-entry-sap-match"></div>
+            </div>
+            <input type="text" id="manual-entry-sap" class="cyber-input" placeholder="Örn: 1002345" 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #00f3ff; font-family: monospace; font-weight: 800; font-size: 0.95rem; box-sizing: border-box;" 
+              oninput="window.onManualEntrySapChange(this.value)" 
+              onblur="window.onManualEntrySapChange(this.value)" />
+          </div>
+
+          <!-- Malzeme Tanımı -->
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              Malzeme / Kart Tanımı <span style="color:#ef4444;">*</span>
+            </label>
+            <input type="text" id="manual-entry-desc" class="cyber-input" placeholder="Malzeme tanımı (SAP girilince otomatik doldurulur)" 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-weight: 600; font-size: 0.88rem; box-sizing: border-box;" />
+          </div>
+
+          <!-- Seri No & Auto MTA Generation -->
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              Seri Numarası
+            </label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="manual-entry-serial" class="cyber-input" placeholder="Örn: 24-00123 veya MTA Seri No" 
+                style="flex: 1; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-family: monospace; font-weight: 700; font-size: 0.88rem; box-sizing: border-box;" />
+              <button type="button" onclick="window.onGenerateManualEntryMtaSerial()" class="btn-cyber" 
+                style="background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); padding: 0 1rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-family: 'Rajdhani', sans-serif;"
+                onmouseover="this.style.background='rgba(20, 241, 149, 0.25)'" 
+                onmouseout="this.style.background='rgba(20, 241, 149, 0.15)'"
+                title="Kayıtlı kartlara bakarak sıradaki benzersiz MTA seri numarasını otomatik üret">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> MTA Seri Üret
+              </button>
+            </div>
+          </div>
+
+          <!-- 3-Column Grid: Miktar, Geldiği Depo, Raf/Konum -->
+          <div style="display: grid; grid-template-columns: 90px 1.4fr 1fr; gap: 10px;">
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                Miktar
+              </label>
+              <input type="number" id="manual-entry-qty" value="1" min="1" class="cyber-input" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-weight: 700; text-align: center; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                Geldiği Saha / Depo
+              </label>
+              <select id="manual-entry-source-wh" class="cyber-input" 
+                style="width: 100%; padding: 0.75rem; background: #0F172A; border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-size: 0.85rem; box-sizing: border-box;">
+                ${warehouseOptions}
+              </select>
+            </div>
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                Raf / Kutu Konumu
+              </label>
+              <input type="text" id="manual-entry-shelf" class="cyber-input" placeholder="Örn: A-01, B-08" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #a78bfa; font-family: monospace; font-weight: 800; text-transform: uppercase; box-sizing: border-box;"
+                onblur="this.value = window.formatShelfNo ? window.formatShelfNo(this.value) : this.value" />
+            </div>
+          </div>
+
+          <!-- Locked Status Display Badge -->
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              Giriş Durumu (Kilitli & Güvenli)
+            </label>
+            <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between;">
+              <span style="background: rgba(59, 130, 246, 0.25); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.5); font-size: 0.78rem; font-weight: 800; padding: 4px 10px; border-radius: 5px; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fa-solid fa-boxes-stacked"></i> Arızalı Stokta (Onarım / Masada Bekliyor)
+              </span>
+              <span style="color: #94A3B8; font-size: 0.75rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                <i class="fa-solid fa-lock" style="color: #60a5fa;"></i> Değiştirilemez
+              </span>
+            </div>
+          </div>
+
+          <!-- Fault Code & Desc (Optional) -->
+          <div style="display: grid; grid-template-columns: 150px 1fr; gap: 10px;">
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                Arıza Kodu (Ops.)
+              </label>
+              <input type="text" id="manual-entry-fault-code" class="cyber-input" placeholder="Örn: 42-305" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #ef4444; font-weight: 700; box-sizing: border-box;" 
+                oninput="window.onManualEntryFaultCodeChange(this.value)" 
+                onblur="window.onManualEntryFaultCodeChange(this.value)" />
+            </div>
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label style="color:#94A3B8; font-size:0.78rem; font-weight:800; text-transform:uppercase;">
+                  Arıza Açıklaması / Belirtisi (Ops.)
+                </label>
+                <div id="manual-entry-fault-match"></div>
+              </div>
+              <input type="text" id="manual-entry-fault-desc" class="cyber-input" placeholder="Arıza kodu girilince kütüphaneden otomatik doldurulur" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-size: 0.85rem; box-sizing: border-box;" />
+            </div>
+          </div>
+
+          <!-- Note / Pre-inspection (Optional) -->
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              Kabul / Ön İnceleme Notu (Opsiyonel)
+            </label>
+            <textarea id="manual-entry-note" class="cyber-input" rows="2" placeholder="Fiziki kontrol notu, kart geçmişi veya ilave açıklamalar..." 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #FFF; font-size: 0.85rem; resize: none; box-sizing: border-box;"></textarea>
+          </div>
+
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1.25rem; margin-top: 1.5rem;">
+          <button onclick="document.getElementById('manual-repair-entry-modal').remove()" class="btn-cyber" 
+            style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.7rem 1.25rem; font-size:0.85rem; border-radius:6px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);">
+            İptal
+          </button>
+          <button id="btn-submit-manual-entry" onclick="window.submitManualRepairEntry()" class="btn-cyber" 
+            style="background:linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color:#0A0E17; font-weight:900; padding:0.7rem 1.5rem; font-size:0.85rem; border-radius:6px; cursor:pointer; border:none; box-shadow:0 0 15px rgba(20,241,149,0.3); display: inline-flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif;">
+            <i class="fa-solid fa-floppy-disk"></i> KARTI ATÖLYE STOĞUNA EKLE
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  };
+
+  (window as any).submitManualRepairEntry = async () => {
+    const sapEl = document.getElementById('manual-entry-sap') as HTMLInputElement;
+    const descEl = document.getElementById('manual-entry-desc') as HTMLInputElement;
+    const serialEl = document.getElementById('manual-entry-serial') as HTMLInputElement;
+    const qtyEl = document.getElementById('manual-entry-qty') as HTMLInputElement;
+    const whEl = document.getElementById('manual-entry-source-wh') as HTMLSelectElement;
+    const shelfEl = document.getElementById('manual-entry-shelf') as HTMLInputElement;
+    const faultCodeEl = document.getElementById('manual-entry-fault-code') as HTMLInputElement;
+    const faultDescEl = document.getElementById('manual-entry-fault-desc') as HTMLInputElement;
+    const noteEl = document.getElementById('manual-entry-note') as HTMLTextAreaElement;
+    const submitBtn = document.getElementById('btn-submit-manual-entry') as HTMLButtonElement;
+
+    const sapNo = (sapEl?.value || '').trim();
+    const description = (descEl?.value || '').trim();
+    let serialNo = (serialEl?.value || '').trim();
+    const quantity = Math.max(1, parseInt(qtyEl?.value || '1', 10) || 1);
+    const sourceWarehouseId = whEl?.value || 'MTA';
+    const rawShelf = shelfEl?.value?.trim() || '';
+    const formattedShelf = formatShelfNo(rawShelf);
+    const faultCode = (faultCodeEl?.value || '').trim();
+    const faultDesc = (faultDescEl?.value || '').trim();
+    const note = (noteEl?.value || '').trim();
+
+    if (!sapNo) {
+      alert("Lütfen bir SAP Numarası giriniz.");
+      sapEl?.focus();
+      return;
+    }
+
+    if (!description) {
+      alert("Lütfen Malzeme Tanımı giriniz.");
+      descEl?.focus();
+      return;
+    }
+
+    if (!serialNo) {
+      const wantAuto = confirm("Seri numarası girmediniz. Bu kart için otomatik benzersiz bir MTA seri numarası üretilip kaydedilsin mi?");
+      if (wantAuto) {
+        serialNo = generateMtaSerialNo(sapNo, rawRepairs);
+        if (serialEl) serialEl.value = serialNo;
+      } else {
+        serialNo = 'Seri No Yok';
+      }
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';
+    }
+
+    try {
+      (window as any).showToast?.('İşlem', 'Kart atölye stoğuna kaydediliyor...', 'info');
+
+      await repairService.createRepair({
+        sapNo,
+        serialNo,
+        description,
+        quantity,
+        sourceWarehouseId,
+        workshopId: 'MTA',
+        sentBy: username,
+        receivedBy: username,
+        sentAt: new Date(),
+        receivedAt: new Date(),
+        status: 'UNDER_REPAIR', // Kesin kural: Her zaman UNDER_REPAIR
+        shelfNo: formattedShelf !== '-' ? formattedShelf : undefined,
+        boxNo: formattedShelf !== '-' ? formattedShelf : undefined,
+        faultCode: faultCode || undefined,
+        faultDesc: faultDesc || undefined,
+        preRepairNote: note || undefined,
+        receiveNote: note || undefined,
+        generalNote: 'Manuel Atölye Girişi'
+      });
+
+      document.getElementById('manual-repair-entry-modal')?.remove();
+      (window as any).showToast?.('Başarılı', `SAP: ${sapNo} (${serialNo}) atölye tamir stoğuna başarıyla eklendi.`, 'success');
+
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-stock');
+      }
+    } catch (err: any) {
+      console.error("Manuel kart giriş hatası:", err);
+      alert("Kart kaydedilirken bir hata oluştu: " + (err?.message || err));
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> KARTI ATÖLYE STOĞUNA EKLE';
+      }
+    }
+  };
+
   // 3. EDIT SHELF MODAL
   (window as any).openEditShelfModal = (repairId: string, sapNo: string, currentShelf: string = '') => {
-    const newShelf = prompt(`SAP ${sapNo} için yeni Raf Konumu giriniz:`, currentShelf === '-' ? '' : currentShelf);
+    const newShelf = prompt(`SAP ${sapNo} için yeni Raf Konumu giriniz (Örn: A-01, B-09):`, currentShelf === '-' ? '' : currentShelf);
     if (newShelf === null) return;
 
-    repairService.updateRepair(repairId, { shelfNo: newShelf.trim() || '-' }).then(() => {
-      (window as any).showToast?.('Başarılı', 'Raf konumu güncellendi.', 'success');
+    const formattedShelf = formatShelfNo(newShelf);
+    repairService.updateRepair(repairId, { shelfNo: formattedShelf, boxNo: formattedShelf }).then(() => {
+      (window as any).showToast?.('Başarılı', `Raf konumu "${formattedShelf}" olarak güncellendi.`, 'success');
       if ((window as any).navigate) {
         (window as any).navigate('workshop-stock');
       }
@@ -888,7 +1271,7 @@ export const WorkshopStockPage = async () => {
           <button onclick="document.getElementById('card-history-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.3rem;"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
-        <!-- Info Header Card -->
+        <!-- Material Details Hero -->
         <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
           <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div>
@@ -896,7 +1279,7 @@ export const WorkshopStockPage = async () => {
               <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 0.82rem; color: #94A3B8;">
                 <span><i class="fa-solid fa-barcode" style="color: #00f3ff;"></i> SAP: <strong style="color: #FFF; font-family: monospace;">${rep.sapNo}</strong></span>
                 <span><i class="fa-solid fa-hashtag" style="color: #fbbf24;"></i> Seri No: <strong style="color: #FFF; font-family: monospace;">${rep.serialNo || '-'}</strong></span>
-                <span><i class="fa-solid fa-box-archive" style="color: #a78bfa;"></i> Kutu/Raf: <strong style="color: #FFF;">${rep.shelfNo || rep.boxNo || '-'}</strong></span>
+                <span><i class="fa-solid fa-box-archive" style="color: #a78bfa;"></i> Kutu/Raf: <strong style="color: #FFF;">${formatShelfNo(rep.shelfNo || rep.boxNo)}</strong></span>
                 ${rep.revisionNo ? `<span><i class="fa-solid fa-code-branch" style="color: #34d399;"></i> Rev: <strong style="color: #FFF;">${rep.revisionNo}</strong></span>` : ''}
                 ${rep.countNo ? `<span><i class="fa-solid fa-list-ol" style="color: #f472b6;"></i> Sayım No: <strong style="color: #FFF;">${rep.countNo}</strong></span>` : ''}
                 ${rep.rmrstNo ? `<span><i class="fa-solid fa-file-lines" style="color: #38bdf8;"></i> RMRST: <strong style="color: #FFF;">${rep.rmrstNo}</strong></span>` : ''}
@@ -1129,7 +1512,7 @@ export const WorkshopStockPage = async () => {
     return null;
   };
 
-  // 6. EXCEL TEMPLATE DOWNLOAD (10 Active Columns)
+  // 6. EXCEL TEMPLATE DOWNLOAD (11 Columns with RAF)
   (window as any).downloadWorkshopCardsTemplate = () => {
     const sampleData = [
       {
@@ -1142,6 +1525,7 @@ export const WorkshopStockPage = async () => {
         'TAMİRE GELİŞ TARİHİ': '23.06.2025',
         'TAMİR ÖNCESİ NOT': 'Görsel inceleme yapıldı',
         'TAMİR AÇIKLAMASI': 'onarım bekliyor',
+        'RAF': 'A-01',
         'MÇT NO': '97'
       },
       {
@@ -1154,6 +1538,7 @@ export const WorkshopStockPage = async () => {
         'TAMİRE GELİŞ TARİHİ': '23.06.2025',
         'TAMİR ÖNCESİ NOT': '',
         'TAMİR AÇIKLAMASI': 'hazır ve denenecek',
+        'RAF': 'B-04',
         'MÇT NO': '5'
       }
     ];
@@ -1301,7 +1686,7 @@ export const WorkshopStockPage = async () => {
         const repairNotes = getRowVal(row, 'TAMİR AÇIKLAMASI', 'TAMIR ACIKLAMASI', 'ONARIM NOTLARI', 'ONARIM', 'İŞLEM', 'TAMIR_ACIKLAMASI');
 
         // 12. KUTU / RAF
-        const shelfNo = getRowVal(row, 'KUTU', 'KUTU NO', 'RAF', 'RAF KONUMU', 'KONUM', 'LOKASYON') || '-';
+        const shelfNo = formatShelfNo(getRowVal(row, 'RAF', 'RAF NO', 'RAF NUMARASI', 'RAF_NO', 'RAF KONUMU', 'KUTU', 'KUTU NO', 'KONUM', 'LOKASYON'));
 
         // 13. TAMİR DURUMU (Resilient status mapping)
         const rawStatus = String(getRowVal(row, 'TAMİR DURUMU', 'TAMIR DURUMU', 'DURUM', 'STATUS', 'TAMIR_DURUMU') || '').toLowerCase();
@@ -1353,12 +1738,12 @@ export const WorkshopStockPage = async () => {
           countNo: String(countNo),
           rmrstNo: String(rmrstNo),
           revisionNo: String(revisionNo),
-          mctNo: String(mctNo),
-          dispatchNo: String(mctNo),
-          transferStatus: String(transferStatus),
-          dispatchedAt: parsedTransferDate || undefined,
-          transferSite: String(transferSite),
-          generalNote: String(generalNote)
+          mctNo: String(mctNo || '-'),
+          dispatchNo: status === 'SENT_BACK' ? String(mctNo || '-') : undefined,
+          transferStatus: String(transferStatus || '-'),
+          dispatchedAt: status === 'SENT_BACK' ? (parsedTransferDate || undefined) : undefined,
+          transferSite: String(transferSite || '-'),
+          generalNote: String(generalNote || '-')
         });
       }
 
@@ -1446,10 +1831,10 @@ export const WorkshopStockPage = async () => {
   };
 
   (window as any).clearAllWorkshopStock = async () => {
-    if (!confirm("⚠️ DİKKAT: Atölye Tamir Stoğundaki TÜM kart kayıtları silinecek ve liste tamamen sıfırlanacaktır.\n\nEmin misiniz?")) {
+    if (!confirm("⚠️ DİKKAT: Atölye Tamir Stoğundaki arızalı ve işlemdeki kart kayıtları sıfırlanacaktır.\n\n🛡️ GÜVENLİK KORUMASI AKTİF:\nSevk edilmiş olan kartlar, teslim edilen malzemeler ve sevk formları KESİNLİKLE SİLİNMEZ ve KORUNACAKTIR.\n\nDevam etmek istiyor musunuz?")) {
       return;
     }
-    const secondConfirm = prompt("İşlemi onaylamak için lütfen 'SIFIRLA' yazınız:");
+    const secondConfirm = prompt("Atölye tamir stoğunu sıfırlamak için lütfen 'SIFIRLA' yazınız:");
     if (secondConfirm !== 'SIFIRLA') {
       alert("İşlem iptal edildi.");
       return;
@@ -1461,7 +1846,7 @@ export const WorkshopStockPage = async () => {
         <div class="glass-panel" style="background: #0B101B; border: 1px solid #EF4444; border-radius: 14px; padding: 2rem; width: 90%; max-width: 480px; text-align: center; box-shadow: 0 0 30px rgba(239,68,68,0.3);">
           <div style="font-size: 2.2rem; color: #EF4444; margin-bottom: 0.5rem;"><i class="fa-solid fa-trash-can fa-bounce"></i></div>
           <h3 style="font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; color: #FFF; font-weight: 800; margin: 0 0 0.5rem 0;">ATÖLYE LİSTESİ SIFIRLANIYOR</h3>
-          <p id="clear-progress-status" style="color: #94A3B8; font-size: 0.88rem; margin-bottom: 1.25rem;">Kart kayıtları taranıyor...</p>
+          <p id="clear-progress-status" style="color: #94A3B8; font-size: 0.88rem; margin-bottom: 1.25rem;">Atölye kart kayıtları filtreleniyor (Sevk edilenler korunuyor)...</p>
           <div style="width: 100%; height: 12px; background: rgba(255,255,255,0.08); border-radius: 6px; overflow: hidden; border: 1px solid rgba(239,68,68,0.3); margin-bottom: 0.75rem;">
             <div id="clear-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #EF4444 0%, #f97316 100%); transition: width 0.2s ease; box-shadow: 0 0 10px #EF4444;"></div>
           </div>
@@ -1485,21 +1870,33 @@ export const WorkshopStockPage = async () => {
       if (bar) bar.style.width = `${pct}%`;
       if (countEl) countEl.innerText = `${processed} / ${total} Kart`;
       if (pctEl) pctEl.innerText = `%${pct}`;
-      if (statusEl) statusEl.innerText = `Kartlar veritabanından siliniyor (%${pct})...`;
+      if (statusEl) statusEl.innerText = `Atölye kartları veritabanından siliniyor (%${pct})...`;
     };
 
     try {
       const allItems = await repairService.getRepairs(true);
-      const allIds = allItems.map(i => i.id).filter(Boolean) as string[];
 
-      updateClearUIProgress(0, allIds.length);
-      const deletedCount = await repairService.deleteRepairsBulk(allIds, (processed, total) => {
+      // 🛡️ KORUMA KALKANI: Sevk edilmiş olanlar (SENT_BACK), sahadakiler (COMPLETED) ve hurdalar (SCRAPPED) ASLA silinmez!
+      const protectedItems = allItems.filter(i => 
+        i.status === 'SENT_BACK' || 
+        i.status === 'COMPLETED' || 
+        i.status === 'SCRAPPED'
+      );
+      const targetItemsToDelete = allItems.filter(i => 
+        i.status !== 'SENT_BACK' && 
+        i.status !== 'COMPLETED' && 
+        i.status !== 'SCRAPPED'
+      );
+      const targetIds = targetItemsToDelete.map(i => i.id).filter(Boolean) as string[];
+
+      updateClearUIProgress(0, targetIds.length);
+      const deletedCount = await repairService.deleteRepairsBulk(targetIds, (processed, total) => {
         updateClearUIProgress(processed, total);
       });
 
       document.getElementById('clear-stock-progress-modal')?.remove();
-      (window as any).showToast?.('Başarılı', `${deletedCount} adet kart başarıyla sıfırlandı.`, 'success');
-      alert(`Tüm atölye kartları başarıyla sıfırlandı (${deletedCount} adet kayıt silindi).`);
+      (window as any).showToast?.('Başarılı', `${deletedCount} adet atölye kartı sıfırlandı. Sevk edilen kartlar güvenle korundu.`, 'success');
+      alert(`Atölye tamir stoğu başarıyla sıfırlandı (${deletedCount} adet atölye kaydı silindi).\n\n🛡️ GÜVENLİK BİLGİSİ: Sevk edilen ${protectedItems.length} adet kartınız ve sevk formlarınız eksiksiz korunmuştur. Yeni Excel listenizi şimdi yükleyebilirsiniz.`);
       if ((window as any).navigate) {
         (window as any).navigate('workshop-stock');
       }
@@ -1680,8 +2077,13 @@ export const WorkshopStockPage = async () => {
           <td style="padding: 0.85rem 0.75rem;">
             <span style="display: inline-flex; align-items: center; gap: 5px; color: #CBD5E1; font-size: 0.82rem; font-weight: 600;">
               <i class="fa-solid fa-location-dot" style="color: #a78bfa; font-size: 0.75rem;"></i>
-              ${item.shelfNo || '<span style="color: #64748B;">-</span>'}
-              <i onclick="window.openEditShelfModal('${item.id}', '${item.sapNo}', '${item.shelfNo || ''}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.6; font-size: 0.68rem; margin-left: 3px;" title="Rafı Değiştir" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"></i>
+              ${(() => {
+                const shelfFmt = formatShelfNo(item.shelfNo || item.boxNo);
+                return shelfFmt !== '-'
+                  ? `<span style="background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.25); padding: 2px 7px; border-radius: 5px; font-weight: 800; font-family: monospace; letter-spacing: 0.5px;">${shelfFmt}</span>`
+                  : `<span style="color: #64748B;">-</span>`;
+              })()}
+              <i onclick="window.openEditShelfModal('${item.id}', '${item.sapNo}', '${formatShelfNo(item.shelfNo || item.boxNo)}')" class="fa-solid fa-pen" style="cursor: pointer; opacity: 0.6; font-size: 0.68rem; margin-left: 3px;" title="Rafı Değiştir" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'"></i>
             </span>
           </td>
 
@@ -1691,6 +2093,16 @@ export const WorkshopStockPage = async () => {
               <i class="fa-solid fa-charging-station" style="color: #fb923c; font-size: 0.75rem;"></i>
               <span>${sourceWhName}</span>
             </div>
+            ${item.sentBy ? `
+              <div style="font-size: 0.71rem; color: #94A3B8; margin-top: 2px;">
+                <i class="fa-solid fa-user" style="font-size: 0.68rem; color: #F59E0B;"></i> ${item.sentBy}
+              </div>
+            ` : ''}
+            ${item.dispatchNo ? `
+              <div style="font-size: 0.7rem; color: #14F195; font-family: monospace; font-weight: 700; margin-top: 1px;">
+                <i class="fa-solid fa-file-invoice" style="font-size: 0.68rem;"></i> ${item.dispatchNo}
+              </div>
+            ` : ''}
             <div style="font-size: 0.7rem; color: #64748B; margin-top: 2px;">
               Geliş: ${formatDateOnly(item.sentAt || item.receivedAt)}
             </div>
@@ -1851,32 +2263,33 @@ export const WorkshopStockPage = async () => {
           <button id="workshop-stock-bulk-take-btn" onclick="window.takeSelectedWorkshopStockToBench()" class="btn-cyber" style="display: none; background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='#14F195'; this.style.color='#0A0E17'" onmouseout="this.style.background='rgba(20, 241, 149, 0.15)'; this.style.color='#14F195'">
             <i class="fa-solid fa-screwdriver-wrench"></i> SEÇİLENLERİ ONARIMA AL (<span id="workshop-stock-take-selected-count">0</span>)
           </button>
-          ${isAdmin ? `
+          ${isFatih ? `
             <button id="workshop-stock-bulk-delete-btn" onclick="window.deleteSelectedWorkshopStock()" class="btn-cyber" style="display: none; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(239, 68, 68, 0.3)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'">
               <i class="fa-solid fa-trash-can"></i> SEÇİLENLERİ SİL (<span id="workshop-stock-selected-count">0</span>)
             </button>
-          ` : ''}
-          <button onclick="window.downloadWorkshopCardsTemplate()" class="btn-cyber" style="background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(59, 130, 246, 0.2)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.1)'" title="Toplu kart girişi için örnek Excel şablonunu indir">
-            <i class="fa-solid fa-file-excel"></i> ŞABLON İNDİR
-          </button>
-          <input type="file" id="workshop-stock-excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.uploadWorkshopCardsFromExcel(event)" />
-          <button onclick="document.getElementById('workshop-stock-excel-upload-input').click()" class="btn-cyber" style="background: rgba(20, 241, 149, 0.1); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.3); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(20, 241, 149, 0.2)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.1)'" title="Excel dosyasından toplu kart yükle">
-            <i class="fa-solid fa-file-arrow-up"></i> EXCEL İLE KART YÜKLE
-          </button>
-          ${isAdmin ? `
+            <button onclick="window.downloadWorkshopCardsTemplate()" class="btn-cyber" style="background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(59, 130, 246, 0.2)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.1)'" title="Toplu kart girişi için örnek Excel şablonunu indir">
+              <i class="fa-solid fa-file-excel"></i> ŞABLON İNDİR
+            </button>
+            <input type="file" id="workshop-stock-excel-upload-input" accept=".xlsx, .xls" style="display: none;" onchange="window.uploadWorkshopCardsFromExcel(event)" />
+            <button onclick="document.getElementById('workshop-stock-excel-upload-input').click()" class="btn-cyber" style="background: rgba(20, 241, 149, 0.1); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.3); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(20, 241, 149, 0.2)'" onmouseout="this.style.background='rgba(20, 241, 149, 0.1)'" title="Excel dosyasından toplu kart yükle">
+              <i class="fa-solid fa-file-arrow-up"></i> EXCEL İLE KART YÜKLE
+            </button>
             <button onclick="window.clearAllWorkshopStock()" class="btn-cyber" style="background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.12)'" title="Atölye kart kayıtlarını tamamen sıfırla">
               <i class="fa-solid fa-trash-can"></i> LİSTEYİ SIFIRLA
             </button>
+            <button onclick="window.exportWorkshopStockExcel()" class="btn-cyber" style="background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(255, 255, 255, 0.1)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'">
+              <i class="fa-solid fa-download"></i> LİSTEYİ İNDİR
+            </button>
+            <button onclick="if(window.navigate) { (window as any)._workshopReturnedTab = 'INCOMING'; window.navigate('workshop-returned'); }" class="btn-cyber" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.35); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" title="Sahadan gelen malzemeleri ve kabul masasını görüntüle">
+              <i class="fa-solid fa-truck-ramp-box"></i> SAHADAN SEVK EDİLENLER
+            </button>
+            <button onclick="window.navigate('workshop-dispatches')" class="btn-cyber" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" title="Sevk edilen malzemeleri görüntüle">
+              <i class="fa-solid fa-truck-fast"></i> SEVK EDİLENLER
+            </button>
+            <button onclick="window.navigate('workshop')" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; border: none; height: 34px; padding: 0 0.95rem; border-radius: 6px; font-size: 0.78rem; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; box-shadow: 0 0 15px rgba(20,241,149,0.25);" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">
+              <i class="fa-solid fa-microchip"></i> KART TAMİR MERKEZİNE GEÇ
+            </button>
           ` : ''}
-          <button onclick="window.exportWorkshopStockExcel()" class="btn-cyber" style="background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" onmouseover="this.style.background='rgba(255, 255, 255, 0.1)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.05)'">
-            <i class="fa-solid fa-download"></i> LİSTEYİ İNDİR
-          </button>
-          <button onclick="window.navigate('workshop-dispatches')" class="btn-cyber" style="background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); height: 34px; padding: 0 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif;" title="Sevk edilen malzemeleri görüntüle">
-            <i class="fa-solid fa-truck-fast"></i> SEVK EDİLENLER
-          </button>
-          <button onclick="window.navigate('workshop')" class="btn-cyber" style="background: linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color: #0A0E17; border: none; height: 34px; padding: 0 0.95rem; border-radius: 6px; font-size: 0.78rem; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; font-family: 'Rajdhani', sans-serif; box-shadow: 0 0 15px rgba(20,241,149,0.25);" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">
-            <i class="fa-solid fa-microchip"></i> KART TAMİR MERKEZİNE GEÇ
-          </button>
         </div>
       </div>
 
@@ -1923,8 +2336,8 @@ export const WorkshopStockPage = async () => {
           <button onclick="window.setWorkshopStockTab('ALL')" style="height: 38px; padding: 0 1rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; border: 1px solid ${activeTab === 'ALL' ? '#00f3ff' : 'rgba(255,255,255,0.08)'}; background: ${activeTab === 'ALL' ? 'rgba(0,243,255,0.15)' : 'rgba(255,255,255,0.02)'}; color: ${activeTab === 'ALL' ? '#00f3ff' : '#94A3B8'}; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
             TÜMÜ (${totalCount})
           </button>
-          <button onclick="window.setWorkshopStockTab('DEFECT')" style="height: 38px; padding: 0 1rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; border: 1px solid ${activeTab === 'DEFECT' ? '#eab308' : 'rgba(255,255,255,0.08)'}; background: ${activeTab === 'DEFECT' ? 'rgba(234,179,8,0.15)' : 'rgba(255,255,255,0.02)'}; color: ${activeTab === 'DEFECT' ? '#eab308' : '#94A3B8'}; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
-            <i class="fa-solid fa-truck" style="margin-right: 6px;"></i> KABUL BEKLEYEN (${pendingDefectCount})
+          <button onclick="if(window.navigate) { (window as any)._workshopReturnedTab = 'INCOMING'; window.navigate('workshop-returned'); }" style="height: 38px; padding: 0 1rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.12); color: #F59E0B; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" title="Sahadan sevk edilen kabul bekleyen kargoları incele ve teslim al">
+            <i class="fa-solid fa-truck-ramp-box" style="margin-right: 6px;"></i> KABUL BEKLEYEN (${pendingDefectCount}) <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem; margin-left: 5px;"></i>
           </button>
           <button onclick="window.setWorkshopStockTab('WAITING_STOCK')" style="height: 38px; padding: 0 1rem; border-radius: 8px; font-size: 0.78rem; font-weight: 800; cursor: pointer; border: 1px solid ${(activeTab === 'WAITING_STOCK' || activeTab === 'UNDER_REPAIR') ? '#3b82f6' : 'rgba(255,255,255,0.08)'}; background: ${(activeTab === 'WAITING_STOCK' || activeTab === 'UNDER_REPAIR') ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)'}; color: ${(activeTab === 'WAITING_STOCK' || activeTab === 'UNDER_REPAIR') ? '#60a5fa' : '#94A3B8'}; transition: all 0.2s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
             <i class="fa-solid fa-boxes-stacked" style="margin-right: 6px;"></i> ARIZALI STOK (${waitingStockCount})
@@ -2054,7 +2467,9 @@ export const WorkshopStockPage = async () => {
                 <th style="padding: 1rem 0.75rem; width: 120px;">SERİ NO</th>
                 <th style="padding: 1rem 0.75rem;">MALZEME TANIMI</th>
                 <th style="padding: 1rem 0.75rem; width: 150px;">DURUM / REVİZE</th>
-                <th style="padding: 1rem 0.75rem; width: 100px;">RAF / KONUM</th>
+                <th style="padding: 1rem 0.75rem; width: 110px; color: #c4b5fd;">
+                  RAF / KONUM <i class="fa-solid fa-arrow-down-a-z" style="font-size: 0.72rem; margin-left: 2px;" title="Rafa göre sıralı"></i>
+                </th>
                 <th style="padding: 1rem 0.75rem; width: 150px;">GELDİĞİ SAHA / DEPO</th>
                 <th style="padding: 1rem 0.75rem; width: 180px;">ARIZA KODU & AÇIKLAMA</th>
                 <th style="padding: 1rem 0.75rem; width: 140px; text-align: center;">TAMİR GEÇMİŞİ</th>

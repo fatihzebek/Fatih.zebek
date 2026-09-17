@@ -163,7 +163,8 @@ class ServiceReportService {
     id: string,
     report: Partial<ServiceReport>,
     files: File[],
-    onProgress?: (msg: string) => void
+    onProgress?: (msg: string) => void,
+    sendEmail: boolean = false
   ) {
     const { updateDoc, doc } = await import('firebase/firestore');
     let imageUrls: string[] = report.imageUrls || [];
@@ -218,16 +219,18 @@ class ServiceReportService {
       });
       this.reportsCache = null; // Invalidate cache
 
-      // Automatic email/pdf notification refresh (safe try-catch)
-      try {
-        const fullReportForEmail: ServiceReport = {
-          id: targetDocId,
-          ...cleanReport,
-          imageUrls
-        };
-        await emailService.sendReportEmail(fullReportForEmail);
-      } catch (emailErr) {
-        console.warn("[Email] E-posta güncelleme uyarısı:", emailErr);
+      // Automatic email/pdf notification refresh (only if explicitly requested)
+      if (sendEmail) {
+        try {
+          const fullReportForEmail: ServiceReport = {
+            id: targetDocId,
+            ...cleanReport,
+            imageUrls
+          };
+          await emailService.sendReportEmail(fullReportForEmail);
+        } catch (emailErr) {
+          console.warn("[Email] E-posta güncelleme uyarısı:", emailErr);
+        }
       }
 
       return targetDocId;

@@ -102,12 +102,24 @@ class PriceService {
         }
       });
 
+      // R ve T ile başlayan ürünlerin birim fiyatını daima 0 olarak sabitle
+      list.forEach(entry => {
+        const u = String(entry.sapNo || '').trim().toUpperCase();
+        if (u.startsWith('R') || u.startsWith('T')) {
+          entry.price = 0;
+        }
+      });
+
       this.cachedPrices = list;
       this.lastFetchTime = now;
       return list;
     } catch (error) {
       console.error('[PriceService] Error fetching material prices from db, using baseline:', error);
-      this.cachedPrices = anemonPrices as MaterialPriceEntry[];
+      const basePrices = (anemonPrices as MaterialPriceEntry[]).map(base => {
+        const u = String(base.sapNo || '').trim().toUpperCase();
+        return (u.startsWith('R') || u.startsWith('T')) ? { ...base, price: 0 } : base;
+      });
+      this.cachedPrices = basePrices;
       return this.cachedPrices;
     }
   }
@@ -272,8 +284,15 @@ class PriceService {
    */
   async getPrice(sapNo: string, warehouseId?: string, warehouseName?: string): Promise<{ price: number; currency: 'EUR' | 'USD' | 'TRY'; entry?: MaterialPriceEntry } | null> {
     if (!sapNo) return null;
-    const all = await this.getAllPrices();
     const cleanSap = String(sapNo).trim();
+    const upperSap = cleanSap.toUpperCase();
+    
+    // R ve T ile başlayan ürünlerin birim fiyatı daima 0 EUR
+    if (upperSap.startsWith('R') || upperSap.startsWith('T')) {
+      return { price: 0, currency: 'EUR' };
+    }
+
+    const all = await this.getAllPrices();
     const cleanWId = String(warehouseId || '').trim();
     const cleanWName = String(warehouseName || '').toLowerCase().trim();
     const isCurrentAnemon = cleanWName.includes('anemon') || cleanWId === '2688';

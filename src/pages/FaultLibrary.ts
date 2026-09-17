@@ -30,36 +30,36 @@ export const FaultLibraryPage = async () => {
     <div class="fade-in-up content-area zoom-tablet" style="max-width: 1400px; margin: 0 auto; padding-bottom: 3rem; font-family: 'Rajdhani', sans-serif;">
       
       <!-- Page Header -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
         <div>
-          <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); padding: 4px 12px; border-radius: 20px; color: var(--accent-cyan); font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; margin-bottom: 0.6rem;">
+          <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.25); padding: 4px 12px; border-radius: 20px; color: var(--accent-cyan); font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; margin-bottom: 0.4rem;">
             <i class="fa-solid fa-microchip"></i> SAHA TECRÜBESİ & AKILLI TEŞHİS MERKEZİ
           </div>
-          <h1 class="page-title" style="margin-bottom: 0.35rem; font-size: 1.85rem; font-weight: 800; letter-spacing: 0.5px;">
+          <h1 class="page-title" style="margin-bottom: 0.25rem; font-size: 1.7rem; font-weight: 800; letter-spacing: 0.5px;">
             <i class="fa-solid fa-brain" style="color: var(--accent-cyan); filter: drop-shadow(0 0 10px rgba(0, 242, 254, 0.5)); margin-right: 8px;"></i> 
             Arıza Çözüm Kütüphanesi
           </h1>
-          <p style="color: var(--text-dim); font-size: 0.9rem; font-weight: 500;">
+          <p style="color: var(--text-dim); font-size: 0.85rem; font-weight: 500; margin-bottom: 0;">
             Geçmiş servis raporlarındaki gerçek teknisyen tecrübeleri, çözümlerde kullanılan parçalar ve saha müdahale geçmişi
           </p>
         </div>
       </div>
 
       <!-- Search & Quick Filter Bar -->
-      <div class="glass-panel" style="padding: 1.4rem; border-radius: 22px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.7), rgba(18, 28, 48, 0.5)); border: 1px solid rgba(0, 242, 254, 0.2); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); margin-bottom: 1.5rem; position: relative; z-index: 2000;">
+      <div class="glass-panel" style="padding: 0.75rem 1.25rem; border-radius: 16px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.7), rgba(18, 28, 48, 0.5)); border: 1px solid rgba(0, 242, 254, 0.2); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5); margin-bottom: 0.65rem; position: relative; z-index: 2000;">
         <div style="position: relative; width: 100%;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-            <label style="font-size: 0.72rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <label style="font-size: 0.7rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;">
               <i class="fa-solid fa-magnifying-glass" style="margin-right: 4px;"></i> ARIZA KODU VEYA AÇIKLAMA İLE SORGULA
             </label>
-            <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">(Örn: 69-19, 42-305, 438-208, Pitch, Fren vb.)</span>
+            <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600;">(Örn: 69-19, 42-305, 438-208, Pitch, Fren vb.)</span>
           </div>
 
-          <div style="position: relative; display: flex; gap: 1rem;">
+          <div style="position: relative; display: flex; gap: 0.75rem;">
             <div style="position: relative; flex-grow: 1;">
-              <i class="fa-solid fa-search" style="position: absolute; left: 1.25rem; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); font-size: 1.05rem; opacity: 0.8;"></i>
+              <i class="fa-solid fa-search" style="position: absolute; left: 1.1rem; top: 50%; transform: translateY(-50%); color: var(--accent-cyan); font-size: 0.95rem; opacity: 0.8;"></i>
               <input type="text" id="lib-fault-search" placeholder="Arıza kodu veya açıklaması yazmaya başlayın..." 
-                     style="background: rgba(0,0,0,0.45); border: 1px solid rgba(0, 242, 254, 0.25); color: #fff; padding: 0.95rem 1rem 0.95rem 3.2rem; border-radius: 14px; width: 100%; font-size: 1rem; font-weight: 600; outline: none; transition: all 0.3s; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);"
+                     style="background: rgba(0,0,0,0.45); border: 1px solid rgba(0, 242, 254, 0.25); color: #fff; padding: 0.6rem 1rem 0.6rem 2.8rem; border-radius: 10px; width: 100%; font-size: 0.95rem; font-weight: 600; outline: none; transition: all 0.3s; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);"
                      oninput="window.handleLibFaultSearch(this.value)"
                      autocomplete="off">
               <div id="lib-fault-results" class="glass-panel hidden search-results-dropdown" style="width: 100%; position: absolute; top: 105%; left: 0; z-index: 1000; padding: 0; max-height: 280px; overflow-y: auto; background: rgba(15, 23, 42, 0.98); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 14px; box-shadow: 0 15px 35px rgba(0,0,0,0.8);"></div>
@@ -190,14 +190,14 @@ export const FaultLibraryPage = async () => {
     // If no past reports found
     if (similar.length === 0) {
       container.innerHTML = `
-        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
           <!-- Fault Header Bar -->
-          <div class="glass-panel" style="padding: 1.5rem 1.8rem; border-radius: 20px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.8), rgba(20, 30, 50, 0.7)); border-left: 4px solid var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div class="glass-panel" style="padding: 0.8rem 1.25rem; border-radius: 14px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.8), rgba(20, 30, 50, 0.7)); border-left: 4px solid var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
             <div>
-              <div style="font-size: 0.68rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px;">SORGULANAN ARIZA KODU</div>
-              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
-                <span style="font-family: monospace; font-size: 2rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">${kod}</span>
-                <span style="font-size: 1.15rem; font-weight: 700; color: #fff;">${titleText}</span>
+              <div style="font-size: 0.65rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 2px;">SORGULANAN ARIZA KODU</div>
+              <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+                <span style="font-family: monospace; font-size: 1.5rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">${kod}</span>
+                <span style="font-size: 1.05rem; font-weight: 700; color: #fff;">${titleText}</span>
               </div>
             </div>
           </div>
@@ -343,7 +343,7 @@ export const FaultLibraryPage = async () => {
 
     // Build Stats HTML
     const statsHtml = `
-      <div class="glass-panel" style="padding: 1.25rem; border-radius: 18px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(0, 242, 254, 0.15); margin-bottom: 1.25rem;">
+      <div class="glass-panel" style="padding: 1.1rem 1.25rem; border-radius: 16px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(0, 242, 254, 0.15); margin-bottom: 0;">
         <div style="font-size: 0.72rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; margin-bottom: 0.9rem; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
           <span><i class="fa-solid fa-chart-line" style="margin-right: 5px;"></i> SAHA İSTATİSTİKLERİ</span>
           <span style="background: rgba(0,242,254,0.1); color: var(--accent-cyan); padding: 2px 8px; border-radius: 6px; font-size: 0.68rem;">Toplam ${similar.length} Müdahale</span>
@@ -414,28 +414,28 @@ export const FaultLibraryPage = async () => {
 
     // Render Full Two-Column Intelligence Dashboard
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
         
         <!-- Action / Header Banner -->
-        <div class="glass-panel" style="padding: 1.5rem 1.8rem; border-radius: 20px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.85), rgba(20, 30, 50, 0.75)); border-left: 4px solid var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);">
+        <div class="glass-panel" style="padding: 0.8rem 1.25rem; border-radius: 14px; background: linear-gradient(135deg, rgba(13, 20, 33, 0.85), rgba(20, 30, 50, 0.75)); border-left: 4px solid var(--accent-cyan); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; box-shadow: 0 10px 30px -10px rgba(0,0,0,0.5);">
           <div>
-            <div style="font-size: 0.68rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px;">SORGULANAN ARIZA KODU</div>
-            <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
-              <span style="font-family: monospace; font-size: 2rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">${kod}</span>
-              <span style="font-size: 1.15rem; font-weight: 700; color: #fff;">${titleText}</span>
+            <div style="font-size: 0.65rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 2px;">SORGULANAN ARIZA KODU</div>
+            <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+              <span style="font-family: monospace; font-size: 1.5rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 1px;">${kod}</span>
+              <span style="font-size: 1.05rem; font-weight: 700; color: #fff;">${titleText}</span>
             </div>
           </div>
         </div>
 
         <!-- 2-Column Responsive Layout -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.5rem; align-items: flex-start;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 0.85rem; align-items: flex-start;">
           
           <!-- Left Column: Statistics & Used Materials -->
-          <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+          <div style="display: flex; flex-direction: column; gap: 0.85rem;">
             ${statsHtml}
 
-            <div class="glass-panel" style="padding: 1.5rem; border-radius: 20px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(245, 158, 11, 0.25);">
-              <div style="font-size: 0.74rem; color: #fbbf24; font-weight: 800; letter-spacing: 1px; margin-bottom: 1.2rem; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+            <div class="glass-panel" style="padding: 1.25rem; border-radius: 16px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(245, 158, 11, 0.25);">
+              <div style="font-size: 0.74rem; color: #fbbf24; font-weight: 800; letter-spacing: 1px; margin-bottom: 1rem; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
                 <span><i class="fa-solid fa-wrench" style="margin-right: 5px;"></i> ÇÖZÜMDE DEĞİŞEN MALZEMELER</span>
                 <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">(Kullanım Sıklığına Göre)</span>
               </div>
@@ -446,8 +446,8 @@ export const FaultLibraryPage = async () => {
           </div>
 
           <!-- Right Column: Colleague Field Notes & Experiences -->
-          <div class="glass-panel" style="padding: 1.5rem; border-radius: 20px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(0, 242, 254, 0.25);">
-            <div style="font-size: 0.74rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; margin-bottom: 1.2rem; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+          <div class="glass-panel" style="padding: 1.25rem; border-radius: 16px; background: rgba(13, 20, 33, 0.5); border: 1px solid rgba(0, 242, 254, 0.25);">
+            <div style="font-size: 0.74rem; color: var(--accent-cyan); font-weight: 800; letter-spacing: 1px; margin-bottom: 1rem; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
               <span><i class="fa-solid fa-clock-rotate-left" style="margin-right: 5px;"></i> SAHA MÜDAHALE ÇÖZÜM NOTLARI</span>
               <span style="background: rgba(0,242,254,0.1); color: var(--accent-cyan); padding: 2px 8px; border-radius: 6px; font-size: 0.68rem; font-weight: 800;">
                 ${resolutionNotes.length} Çözüm Kaydı

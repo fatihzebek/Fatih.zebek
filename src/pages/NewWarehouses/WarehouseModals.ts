@@ -10,6 +10,7 @@ import { ImageCompressor } from '../../utils/imageCompressor';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { personnelService } from '../../services/PersonnelService';
+import { fixTurkishWarehouseName, formatRepairDuration, formatDisplayName, formatSafeDateTime } from '../../utils/formatters';
 
 export function ensureSingleModalInBody(modalId: string): HTMLElement | null {
   const modals = Array.from(document.querySelectorAll(`#${modalId}`));
@@ -1448,7 +1449,9 @@ export const openHistoryModal = async (id: string, name: string) => {
     
     try {
       const logs = await warehouseService.getLogs(warehouseState.currentWarehouse.id);
-      const itemLogs = logs.filter(l => l.itemId === id).sort((a,b:any) => ((b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+      const targetItem = (warehouseState.inventoryItems || []).find((i: any) => i.id === id);
+      const targetSap = targetItem?.sapNo ? String(targetItem.sapNo).trim() : '';
+      const itemLogs = logs.filter(l => l.itemId === id || (targetSap && l.sapNo && String(l.sapNo).trim() === targetSap)).sort((a,b:any) => ((b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
       if(list) {
         if(itemLogs.length === 0) {
           list.innerHTML = '<div style="text-align:center; padding:1rem; color:#94A3B8;">Geçmiş kayıt bulunamadı.</div>';
@@ -1498,6 +1501,16 @@ export const openHistoryModal = async (id: string, name: string) => {
                   <span style="color:#64748B;">${date}</span>
                 </div>
                 <div style="color:#E2E8F0; margin-bottom:0.25rem;">${(window as any).formatDepoUser ? (window as any).formatDepoUser(l.user) : (l.user || 'Sistem')}</div>
+                ${l.serialNo ? `
+                  <div style="display: inline-flex; align-items: center; gap: 5px; background: rgba(20, 241, 149, 0.12); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; font-family: monospace; font-weight: 700; margin-bottom: 0.35rem;">
+                    <i class="fa-solid fa-barcode"></i> Seri No: ${l.serialNo}
+                  </div>
+                ` : ''}
+                ${l.formNo ? `
+                  <div style="display: inline-flex; align-items: center; gap: 4px; background: rgba(96, 165, 250, 0.12); color: #60A5FA; border: 1px solid rgba(96, 165, 250, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-family: monospace; font-weight: 700; margin-bottom: 0.35rem; margin-left: 4px;">
+                    <i class="fa-solid fa-file-lines"></i> Sevk/Form #${l.formNo}
+                  </div>
+                ` : ''}
                 <div style="color:#94A3B8; font-size:0.8rem;">${l.note || ''}</div>
               </div>
             `;
@@ -2180,7 +2193,8 @@ export const openBulkSendToRepairModal = (items: Array<{
       </div>
       
       <div style="margin-bottom:1.25rem; font-size:0.85rem; color:#E2E8F0; flex-shrink:0;">
-        <strong>Sevk No (Otomatik):</strong> <span style="font-family:monospace; color:#14F195; font-weight:bold; font-size:0.95rem; margin-left:4px;">${dispatchNo}</span>
+        <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">Sevk Numarası (Manuel Düzenlenebilir)</label>
+        <input type="text" id="bulk-dispatch-no-input" class="cyber-input" value="${dispatchNo}" style="width:100%; padding:0.6rem 0.85rem; background:rgba(0,0,0,0.4); font-family:monospace; color:#14F195; font-weight:bold; font-size:0.95rem; border:1px solid rgba(20,241,149,0.3); border-radius:6px;">
       </div>
 
       <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 4px;" class="custom-scrollbar">
@@ -2209,6 +2223,8 @@ export const openBulkSendToRepairModal = (items: Array<{
     confirmBtn.onclick = async () => {
       const workshopSelect = document.getElementById('bulk-send-repair-workshop') as HTMLSelectElement;
       const qtyInputs = document.querySelectorAll('.bulk-qty-input') as NodeListOf<HTMLInputElement>;
+      const dispatchNoInput = document.getElementById('bulk-dispatch-no-input') as HTMLInputElement;
+      const finalDispatchNo = (dispatchNoInput?.value || dispatchNo).trim() || dispatchNo;
       
       const itemsWithQty = items.map(item => {
         const input = Array.from(qtyInputs).find(inp => inp.getAttribute('data-id') === item.id);
@@ -2242,7 +2258,7 @@ export const openBulkSendToRepairModal = (items: Array<{
             sentBy: userEmail,
             faultCode: item.faultCode,
             faultDesc: item.faultDesc,
-            dispatchNo: dispatchNo,
+            dispatchNo: finalDispatchNo,
             status: 'PENDING_ARRIVAL'
           } as any);
 
@@ -2261,7 +2277,7 @@ export const openBulkSendToRepairModal = (items: Array<{
                     quantity: 0,
                     status: 'TAMIRE_SEVK_EDILDI',
                     dispatchedQty: item.sendQty,
-                    dispatchNo: dispatchNo,
+                    dispatchNo: finalDispatchNo,
                     dispatchedAt: serverTimestamp(),
                     dispatchedBy: userEmail,
                     lastUpdated: serverTimestamp()
@@ -2277,7 +2293,7 @@ export const openBulkSendToRepairModal = (items: Array<{
                     quantity: 0,
                     status: 'TAMIRE_SEVK_EDILDI',
                     dispatchedQty: item.sendQty,
-                    dispatchNo: dispatchNo,
+                    dispatchNo: finalDispatchNo,
                     dispatchedAt: serverTimestamp(),
                     dispatchedBy: userEmail,
                     lastUpdated: serverTimestamp()
@@ -2296,11 +2312,11 @@ export const openBulkSendToRepairModal = (items: Array<{
             quantity: item.sendQty,
             type: 'REMOVE',
             user: userEmail,
-            note: `Tamir atölyesine sevk edildi. Sevk No: ${dispatchNo}`
+            note: `Tamir atölyesine sevk edildi. Sevk No: ${finalDispatchNo}`
           }).catch(() => {});
         }
 
-        (window as any).showToast?.('Başarılı', `Malzemeler ${dispatchNo} sevk numarası ile başarıyla sevk edildi.`, 'success');
+        (window as any).showToast?.('Başarılı', `Malzemeler ${finalDispatchNo} sevk numarası ile başarıyla sevk edildi.`, 'success');
         modal.remove();
 
         if ((window as any).selectWarehouseAndNavigate) {
@@ -2315,6 +2331,1133 @@ export const openBulkSendToRepairModal = (items: Array<{
     };
   }
 };
+
+/**
+ * Resolves turbine number from service reports using reportNo or mcfNo.
+ */
+export const resolveTurbineFromReports = async (reportNo?: string, mcfNo?: string): Promise<string> => {
+  try {
+    const cleanRepNo = String(reportNo || '').trim();
+    const cleanMcf = String(mcfNo || '').trim();
+    if ((!cleanRepNo || cleanRepNo === '-') && (!cleanMcf || cleanMcf === '-')) {
+      return '-';
+    }
+
+    // 1. First check if serviceReportService has reports loaded in memory
+    try {
+      const { serviceReportService } = await import('../../services/ServiceReportService');
+      const allReports = await serviceReportService.getAllReports().catch(() => []);
+      if (allReports && allReports.length > 0) {
+        const match = allReports.find((r: any) => {
+          if (cleanRepNo && cleanRepNo !== '-' && (r.reportNo === cleanRepNo || r.id === cleanRepNo)) return true;
+          if (cleanMcf && cleanMcf !== '-' && String(r.matFormNo || '').trim() === cleanMcf) return true;
+          return false;
+        });
+        if (match) {
+          const tVal = match.turbineNo || match.turbineSerial || (match as any).turbine;
+          if (tVal && tVal !== '-' && tVal !== 'Bilinmeyen') {
+            return match.siteName ? `${match.siteName} ${tVal}` : tVal;
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 2. Direct Firestore query fallback on serviceReports
+    const { collection, query, where, getDocs, limit } = await import('firebase/firestore');
+    const { db } = await import('../../firebase');
+
+    if (cleanRepNo && cleanRepNo !== '-') {
+      const q = query(collection(db, 'serviceReports'), where('reportNo', '==', cleanRepNo), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const rData = snap.docs[0].data();
+        const tVal = rData.turbineNo || rData.turbineSerial || rData.turbine;
+        if (tVal && tVal !== '-' && tVal !== 'Bilinmeyen') {
+          return rData.siteName ? `${rData.siteName} ${tVal}` : tVal;
+        }
+      }
+    }
+
+    if (cleanMcf && cleanMcf !== '-') {
+      const q = query(collection(db, 'serviceReports'), where('matFormNo', '==', cleanMcf), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const rData = snap.docs[0].data();
+        const tVal = rData.turbineNo || rData.turbineSerial || rData.turbine;
+        if (tVal && tVal !== '-' && tVal !== 'Bilinmeyen') {
+          return rData.siteName ? `${rData.siteName} ${tVal}` : tVal;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[WarehouseModals] resolveTurbineFromReports failed:', e);
+  }
+  return '-';
+};
+
+export const openBulkSendToTeamRepairModal = (items: Array<{
+  id: string;
+  sapNo: string;
+  description: string;
+  quantity: number;
+  serialNo?: string;
+  faultCode?: string;
+  faultDesc?: string;
+  turbine?: string;
+  reportNo?: string;
+  mcfNo?: string;
+}>) => {
+  const modal = document.createElement('div');
+  modal.id = 'bulk-send-team-repair-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+    z-index: 10002; display: flex; align-items: center; justify-content: center;
+  `;
+
+  let itemsRows = items.map((item, idx) => `
+    <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:8px; display:flex; flex-direction:column; gap:6px;">
+      <span style="font-weight:700; color:#FFF; font-size:0.85rem;">${idx + 1}. ${item.description}</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:#94A3B8;">
+        <span>SAP: ${item.sapNo} | Seri: ${item.serialNo || '-'}</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>Miktar:</span>
+          <input type="number" class="bulk-team-qty-input" data-id="${item.id}" value="${item.quantity}" min="1" max="${item.quantity}" style="width:60px; height:26px; background:rgba(0,0,0,0.3); border:1px solid #1E293B; border-radius:4px; color:#FFF; text-align:center; font-size:0.8rem; outline:none;">
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  modal.innerHTML = `
+    <div class="glass-panel fade-in-up" style="width: 100%; max-width: 500px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(245, 158, 11, 0.3); box-shadow: 0 20px 40px rgba(0,0,0,0.5); max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem; flex-shrink:0;">
+        <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.4rem; color:#F59E0B; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+          <i class="fa-solid fa-users-gear"></i> EKİBE TAMİRE GÖNDER
+        </h3>
+        <button onclick="document.getElementById('bulk-send-team-repair-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 4px;" class="custom-scrollbar">
+        <p style="color:#94A3B8; font-size:0.85rem; margin:0; font-weight:600;">Saha Ekip Onarımına Gönderilecek (${items.length} Kalem)</p>
+        ${itemsRows}
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem; flex-shrink:0;">
+        <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">
+          <i class="fa-solid fa-warehouse" style="color:#F59E0B;"></i> Hedef Santral / Depo Havuzu
+        </label>
+        <select id="bulk-team-repair-target-wh" class="cyber-input" style="width:100%; padding:0.65rem 0.85rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF;">
+          ${dataService.getWarehouses().map((w: any) => `<option value="${w.id}" ${w.id === warehouseState.currentWarehouse?.id ? 'selected' : ''}>${w.name}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1rem; flex-shrink:0;">
+        <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">Atanan Ekip / Birim</label>
+        <select id="bulk-team-repair-team" class="cyber-input" style="width:100%; padding:0.65rem 0.85rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF;">
+          <option value="Saha Servis Ekibi">Saha Servis Ekibi (Genel)</option>
+          ${Array.from({ length: 15 }, (_, i) => `<option value="Team ${(i+1).toString().padStart(2, '0')}">Team ${(i+1).toString().padStart(2, '0')}</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:1.5rem; flex-shrink:0;">
+        <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">Yönetici Notu / Onarım Talimatı (Opsiyonel)</label>
+        <textarea id="bulk-team-repair-notes" class="cyber-input" placeholder="Örn: Sızdırmazlık contası kontrol edilip yenilenecek..." style="width:100%; height:60px; padding:0.65rem 0.85rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF; resize:none;"></textarea>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem; flex-shrink:0;">
+        <button onclick="document.getElementById('bulk-send-team-repair-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+        <button id="bulk-confirm-team-repair-btn" class="btn-cyber" style="background:linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color:#0A0E17; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(245,158,11,0.3);">EKİBE GÖNDER</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const confirmBtn = document.getElementById('bulk-confirm-team-repair-btn');
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      const targetWhSelect = document.getElementById('bulk-team-repair-target-wh') as HTMLSelectElement;
+      const targetWhId = targetWhSelect?.value || warehouseState.currentWarehouse.id;
+      const allWarehouses = dataService.getWarehouses();
+      const targetWhObj = allWarehouses.find((w: any) => w.id === targetWhId) || warehouseState.currentWarehouse;
+
+      const teamSelect = document.getElementById('bulk-team-repair-team') as HTMLSelectElement;
+      const notesInput = document.getElementById('bulk-team-repair-notes') as HTMLTextAreaElement;
+      const qtyInputs = document.querySelectorAll('.bulk-team-qty-input') as NodeListOf<HTMLInputElement>;
+      
+      const itemsWithQty = items.map(item => {
+        const input = Array.from(qtyInputs).find(inp => inp.getAttribute('data-id') === item.id);
+        const qty = parseInt(input?.value || '0', 10);
+        return { ...item, sendQty: qty };
+      });
+
+      for (const item of itemsWithQty) {
+        if (isNaN(item.sendQty) || item.sendQty <= 0 || item.sendQty > item.quantity) {
+          alert(`Lütfen "${item.description}" için 1 ile ${item.quantity} arasında geçerli bir miktar girin.`);
+          return;
+        }
+      }
+
+      confirmBtn.setAttribute('disabled', 'true');
+      confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gönderiliyor...';
+
+      try {
+        const { collection, addDoc, serverTimestamp, doc, updateDoc, getDoc, setDoc } = await import('firebase/firestore');
+        const { db } = await import('../../firebase');
+        const currentUser = (window as any).currentUser;
+        const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+        for (const item of itemsWithQty) {
+          // 1. Create team_repairs record
+          await addDoc(collection(db, 'team_repairs'), {
+            warehouseId: targetWhId,
+            warehouseName: targetWhObj.name,
+            originalItemId: item.id,
+            sapNo: item.sapNo,
+            serialNo: item.serialNo || '-',
+            description: item.description,
+            quantity: item.sendQty,
+            turbine: item.turbine || '-',
+            turbineNo: item.turbine || '-',
+            reportNo: item.reportNo || '-',
+            mcfNo: item.mcfNo || '-',
+            faultCode: item.faultCode || '-',
+            faultDesc: item.faultDesc || '-',
+            assignedTeam: teamSelect?.value || 'Saha Servis Ekibi',
+            adminNotes: (notesInput?.value || '').trim(),
+            status: 'PENDING_REPAIR',
+            sentAt: serverTimestamp(),
+            sentBy: userEmail
+          });
+
+          // 2. Direct defect item status update in Firestore inventory_v2
+          if (item.id) {
+            try {
+              const docRef = doc(db, 'warehouses', warehouseState.currentWarehouse.id, 'inventory_v2', item.id);
+              const docSnap = await getDoc(docRef);
+              if (docSnap.exists()) {
+                const invData = docSnap.data();
+                const curQty = invData.quantity || 0;
+                if (item.sendQty >= curQty) {
+                  await updateDoc(docRef, {
+                    quantity: 0,
+                    status: 'EKIP_TAMIRINDE',
+                    dispatchedQty: item.sendQty,
+                    dispatchedAt: serverTimestamp(),
+                    dispatchedBy: userEmail,
+                    lastUpdated: serverTimestamp()
+                  });
+                } else {
+                  await updateDoc(docRef, {
+                    quantity: curQty - item.sendQty,
+                    lastUpdated: serverTimestamp()
+                  });
+                  const newDocRef = doc(collection(db, 'warehouses', warehouseState.currentWarehouse.id, 'inventory_v2'));
+                  await setDoc(newDocRef, {
+                    ...invData,
+                    quantity: 0,
+                    status: 'EKIP_TAMIRINDE',
+                    dispatchedQty: item.sendQty,
+                    dispatchedAt: serverTimestamp(),
+                    dispatchedBy: userEmail,
+                    lastUpdated: serverTimestamp()
+                  });
+                }
+              }
+            } catch (invErr) {
+              console.warn("Direct defect inventory team repair update failed:", invErr);
+            }
+          }
+
+          // 3. Log warehouse movement
+          await warehouseService.addLog(warehouseState.currentWarehouse.id, {
+            itemId: item.id,
+            sapNo: item.sapNo,
+            materialName: item.description,
+            quantity: item.sendQty,
+            type: 'REMOVE',
+            user: userEmail,
+            note: `Saha ekip onarımına sevk edildi. Ekip: ${teamSelect?.value || 'Saha Ekibi'}`
+          }).catch(() => {});
+        }
+
+        (window as any).showToast?.('Başarılı', 'Malzemeler saha ekibi tamir havuzuna başarıyla sevk edildi.', 'success');
+        modal.remove();
+
+        if ((window as any).selectWarehouseAndNavigate) {
+          (window as any).selectWarehouseAndNavigate(warehouseState.currentWarehouse.id);
+        }
+      } catch (e: any) {
+        console.error(e);
+        alert('Ekibe sevk esnasında bir hata oluştu: ' + e.message);
+        confirmBtn.removeAttribute('disabled');
+        confirmBtn.innerHTML = 'EKİBE GÖNDER';
+      }
+    };
+  }
+};
+
+export const openTeamRepairFormModal = async (repairItem: any) => {
+  const modal = document.createElement('div');
+  modal.id = 'team-repair-form-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+    z-index: 10003; display: flex; align-items: center; justify-content: center;
+  `;
+
+  if ((!warehouseState.inventoryItems || warehouseState.inventoryItems.length === 0) && repairItem.warehouseId) {
+    try {
+      warehouseState.inventoryItems = await warehouseService.getInventory(repairItem.warehouseId);
+    } catch(e) {}
+  }
+
+  const validWhStock = (warehouseState.inventoryItems || []).filter(
+    (i: any) => i.condition !== 'DEFECT' && i.condition !== 'SCRAP' && (i.quantity > 0 || i.quantity !== undefined)
+  );
+
+  const currentUser = (window as any).currentUser;
+  const currentUserName = currentUser?.displayName || currentUser?.email?.split('@')[0] || '';
+
+  let initialTurbine = repairItem.turbine && repairItem.turbine !== '-' ? repairItem.turbine : (repairItem.turbineNo && repairItem.turbineNo !== '-' ? repairItem.turbineNo : '');
+  if (!initialTurbine || initialTurbine === '-' || initialTurbine === 'Bilinmeyen') {
+    initialTurbine = await resolveTurbineFromReports(repairItem.reportNo, repairItem.mcfNo);
+    if (initialTurbine && initialTurbine !== '-') {
+      repairItem.turbine = initialTurbine;
+      repairItem.turbineNo = initialTurbine;
+    }
+  }
+  const displayTurbine = initialTurbine && initialTurbine !== '-' ? initialTurbine : '';
+
+  modal.innerHTML = `
+    <datalist id="repair-wh-inventory-datalist">
+      ${validWhStock.map((item: any) => {
+        const s = String(item.sapNo || '').trim();
+        const d = String(item.description || '').trim();
+        const q = item.quantity || 0;
+        const shelf = item.shelfNo ? ` (Raf: ${item.shelfNo})` : '';
+        return `<option value="${s}" label="${d} - Stok: ${q}${shelf}">${s} - ${d}</option>`;
+      }).join('')}
+    </datalist>
+
+    <div class="glass-panel fade-in-up" style="width: 100%; max-width: 720px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.3); box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem; flex-shrink:0;">
+        <div>
+          <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.3rem; color:#14F195; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-wrench"></i> MALZEME BAKIM & ONARIM FORMU
+          </h3>
+          <span style="font-size:0.75rem; color:#94A3B8;">Onarım tamamlandığında parça <strong>T${repairItem.sapNo}</strong> koduyla Tamirli stoğa girecektir.</span>
+        </div>
+        <button onclick="document.getElementById('team-repair-form-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <!-- Item info card -->
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:1rem; border-radius:8px; margin-bottom:1.25rem; flex-shrink:0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span style="font-size:0.95rem; font-weight:800; color:#FFF;">${repairItem.description}</span>
+          <span style="background:rgba(245,158,11,0.15); color:#F59E0B; border:1px solid rgba(245,158,11,0.3); padding:2px 8px; border-radius:4px; font-weight:800; font-size:0.75rem;">SAP: ${repairItem.sapNo}</span>
+        </div>
+        <div style="display:flex; gap:1.5rem; font-size:0.78rem; color:#94A3B8;">
+          <span><strong>Seri:</strong> ${repairItem.serialNo || '-'}</span>
+          <span><strong>Türbin:</strong> <span style="color:#38BDF8; font-weight:700;">${displayTurbine || '-'}</span></span>
+          <span><strong>Miktar:</strong> ${repairItem.quantity || 1} Adet</span>
+          <span><strong>Ekip:</strong> ${repairItem.assignedTeam || '-'}</span>
+        </div>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-right: 4px;" class="custom-scrollbar">
+        <!-- Actions taken -->
+        <div class="form-group">
+          <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.4rem; font-weight:700;">
+            <i class="fa-solid fa-pen-to-square" style="color:#14F195;"></i> Yapılan İşlemler / Onarım Detayı <span style="color:#EF4444;">*</span>
+          </label>
+          <textarea id="repair-action-notes" class="cyber-input" placeholder="Örn: Rulman ve sızdırmazlık keçesi değiştirildi, iç temizlik yapıldı ve mekanik dönüş testi başarılı tamamlandı..." style="width:100%; height:80px; padding:0.75rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF; resize:none; font-size:0.82rem;"></textarea>
+        </div>
+
+        <!-- Used materials -->
+        <div class="form-group" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.07); padding:0.85rem; border-radius:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+            <label style="margin:0; color:#94A3B8; font-size:0.8rem; font-weight:700;">
+              <i class="fa-solid fa-cube" style="color:#38BDF8;"></i> Tamirde Kullanılan Parçalar / Sarf Malzemeler (Opsiyonel)
+            </label>
+            <span style="font-size:0.7rem; color:#64748B;">Sapsız malzeme için SAP alanına <strong>-</strong> yazınız</span>
+          </div>
+
+          <!-- Input fields row -->
+          <div style="display:grid; grid-template-columns: 125px 1fr 65px auto; gap:6px; align-items:flex-end; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; border:1px dashed rgba(56,189,248,0.3);">
+            <div>
+              <span style="font-size:0.7rem; color:#94A3B8; display:block; margin-bottom:3px; font-weight:600;">SAP No (veya -)</span>
+              <input type="text" id="repair-mat-sap-input" list="repair-wh-inventory-datalist" class="cyber-input" placeholder="SAP veya -" style="width:100%; padding:0.45rem 0.5rem; font-size:0.78rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:4px; color:#FFF; font-weight:700;">
+            </div>
+            <div>
+              <span style="font-size:0.7rem; color:#94A3B8; display:block; margin-bottom:3px; font-weight:600;">Malzeme Açıklaması</span>
+              <input type="text" id="repair-mat-desc-input" class="cyber-input" placeholder="Açıklama giriniz..." style="width:100%; padding:0.45rem 0.5rem; font-size:0.78rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:4px; color:#FFF;">
+            </div>
+            <div>
+              <span style="font-size:0.7rem; color:#94A3B8; display:block; margin-bottom:3px; font-weight:600;">Adet</span>
+              <input type="number" id="repair-mat-qty-input" min="1" value="1" class="cyber-input" style="width:100%; padding:0.45rem 0.35rem; font-size:0.78rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:4px; color:#FFF; text-align:center; font-weight:700;">
+            </div>
+            <div>
+              <button type="button" id="repair-mat-add-btn" class="btn-cyber" style="background:#0284C7; color:#FFF; font-size:0.75rem; font-weight:700; padding:0.45rem 0.75rem; border-radius:4px; cursor:pointer; display:flex; align-items:center; gap:4px; white-space:nowrap; border:none; height:32px;">
+                <i class="fa-solid fa-plus"></i> Ekle
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Status feedback for the item being typed -->
+          <div id="repair-mat-status-badge" style="font-size:0.72rem; margin-top:4px; min-height:16px; padding:2px 4px; display:none;"></div>
+
+          <!-- Added materials list -->
+          <div id="repair-added-materials-container" style="margin-top:0.6rem;">
+            <span id="no-used-materials-label" style="color:#64748B; font-size:0.75rem; font-style:italic;">Henüz kullanılan parça eklenmedi (Opsiyonel).</span>
+          </div>
+        </div>
+
+        <!-- Türbin, Raf No, MÇF No, Teknisyen ve Süre -->
+        <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); padding:1rem; border-radius:8px; display:flex; flex-direction:column; gap:0.85rem;">
+          <!-- Satır 1: Söküldüğü Türbin, Raf Numarası, MÇF No -->
+          <div style="display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap:0.85rem; align-items:flex-start;">
+            <div class="form-group" style="margin:0;">
+              <label style="display:block; color:#38BDF8; font-size:0.8rem; margin-bottom:0.35rem; font-weight:700; white-space:nowrap;">
+                <i class="fa-solid fa-fan" style="color:#38BDF8;"></i> Söküldüğü Türbin
+              </label>
+              <input type="text" id="repair-turbine-input" class="cyber-input" value="${displayTurbine}" placeholder="Örn: T01, Sarıkaya T01..." style="width:100%; padding:0.6rem 0.75rem; background:rgba(0,0,0,0.4); border:1px solid rgba(56,189,248,0.4); border-radius:6px; color:#FFF; font-size:0.82rem; font-weight:700;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="display:block; color:#F59E0B; font-size:0.8rem; margin-bottom:0.35rem; font-weight:700; white-space:nowrap;">
+                <i class="fa-solid fa-boxes-stacked" style="color:#F59E0B;"></i> Raf Numarası <span style="color:#EF4444;">*</span>
+              </label>
+              <input type="text" id="repair-shelf-no-input" class="cyber-input" placeholder="Örn: A-01, Raf 3..." style="width:100%; padding:0.6rem 0.75rem; background:rgba(0,0,0,0.4); border:1px solid rgba(245,158,11,0.5); border-radius:6px; color:#FFF; font-size:0.82rem; font-weight:700;">
+            </div>
+            <div class="form-group" id="repair-mcf-group" style="margin:0;">
+              <label style="display:block; color:#F59E0B; font-size:0.8rem; margin-bottom:0.35rem; font-weight:700; white-space:nowrap;">
+                <i class="fa-solid fa-file-invoice" style="color:#F59E0B;"></i> MÇF No <span id="repair-mcf-required" style="color:#EF4444; display:none;">* (Zorunlu)</span>
+              </label>
+              <input type="text" id="repair-mcf-input" class="cyber-input" value="${repairItem.mcfNo && repairItem.mcfNo !== '-' ? repairItem.mcfNo : ''}" placeholder="MÇF No giriniz..." style="width:100%; padding:0.6rem 0.75rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF; font-size:0.82rem; font-weight:700;">
+            </div>
+          </div>
+
+          <!-- Satır 2: Teknisyen ve Süre -->
+          <div style="display:grid; grid-template-columns: 1.4fr 1fr; gap:0.85rem; align-items:flex-start;">
+            <div class="form-group" style="margin:0;">
+              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.35rem; font-weight:700; white-space:nowrap;">
+                <i class="fa-solid fa-user-gear" style="color:#94A3B8;"></i> Onarımı Yapan Teknisyen
+              </label>
+              <input type="text" id="repair-technician-input" class="cyber-input" value="${currentUserName}" placeholder="Teknisyen Adı..." style="width:100%; padding:0.6rem 0.75rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF; font-size:0.82rem; font-weight:600;">
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="display:block; color:#94A3B8; font-size:0.8rem; margin-bottom:0.35rem; font-weight:700; white-space:nowrap;">
+                <i class="fa-solid fa-clock" style="color:#94A3B8;"></i> Onarım Süresi
+              </label>
+              <input type="text" id="repair-duration-input" class="cyber-input" placeholder="Örn: 0:45 dk veya 45..." style="width:100%; padding:0.6rem 0.75rem; background:rgba(0,0,0,0.4); border:1px solid #1E293B; border-radius:6px; color:#FFF; font-size:0.82rem;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem; margin-top:1rem; flex-shrink:0;">
+        <button onclick="document.getElementById('team-repair-form-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.75rem 1.25rem; font-size:0.85rem;">İPTAL</button>
+        <button id="submit-team-repair-btn" class="btn-cyber" style="background:linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color:#0A0E17; font-weight:900; padding:0.75rem 1.5rem; font-size:0.85rem; box-shadow:0 0 15px rgba(20,241,149,0.3);">
+          <i class="fa-solid fa-circle-check"></i> TAMİRİ TAMAMLA VE STOĞA AL
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Added materials state & list rendering
+  const addedUsedMaterials: Array<{
+    name: string;
+    sapNo: string;
+    description: string;
+    qty: number;
+    deductedFromStock: boolean;
+    shelfNo?: string;
+    mcfNo?: string;
+  }> = [];
+
+  const renderAddedMaterials = () => {
+    const container = document.getElementById('repair-added-materials-container');
+    if (!container) return;
+
+    if (addedUsedMaterials.length === 0) {
+      container.innerHTML = `<span id="no-used-materials-label" style="color:#64748B; font-size:0.75rem; font-style:italic;">Henüz kullanılan parça eklenmedi (Opsiyonel).</span>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div style="background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.07); border-radius:6px; overflow:hidden; max-height:160px; overflow-y:auto;" class="custom-scrollbar">
+        <table style="width:100%; border-collapse:collapse; font-size:0.75rem; text-align:left;">
+          <thead>
+            <tr style="background:rgba(255,255,255,0.04); color:#94A3B8; border-bottom:1px solid rgba(255,255,255,0.07); position:sticky; top:0; z-index:1;">
+              <th style="padding:5px 8px; width:85px;">SAP No</th>
+              <th style="padding:5px 8px;">Açıklama</th>
+              <th style="padding:5px 8px; width:55px; text-align:center;">Adet</th>
+              <th style="padding:5px 8px; width:170px;">Stok Durumu</th>
+              <th style="padding:5px 8px; width:30px; text-align:center;">Sil</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${addedUsedMaterials.map((item, idx) => `
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.03); color:#E2E8F0;">
+                <td style="padding:5px 8px; font-weight:700; color:${item.sapNo !== '-' ? '#38BDF8' : '#94A3B8'}; font-family:monospace;">${item.sapNo}</td>
+                <td style="padding:5px 8px; font-weight:600;">${item.description}</td>
+                <td style="padding:5px 8px; text-align:center; font-weight:700; color:#14F195;">${item.qty} Adet</td>
+                <td style="padding:5px 8px;">
+                  ${item.deductedFromStock ? 
+                    `<span style="color:#10B981; font-size:0.7rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-circle-check"></i> Depo Stoğu (${item.shelfNo || '-'})</span>` : 
+                    `<span style="color:#94A3B8; font-size:0.7rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-circle-info"></i> Harici Sarf</span>`}
+                </td>
+                <td style="padding:5px 8px; text-align:center;">
+                  <button type="button" onclick="window.removeRepairUsedMaterial(${idx})" style="background:transparent; border:none; color:#EF4444; cursor:pointer; font-size:0.85rem; padding:2px;" title="Kaldır">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    const hasStockUsed = addedUsedMaterials.some(m => m.deductedFromStock);
+    const mcfReqEl = document.getElementById('repair-mcf-required');
+    const mcfInputEl = document.getElementById('repair-mcf-input') as HTMLInputElement;
+    if (mcfReqEl) {
+      mcfReqEl.style.display = hasStockUsed ? 'inline' : 'none';
+    }
+    if (mcfInputEl) {
+      if (hasStockUsed) {
+        mcfInputEl.style.borderColor = 'rgba(245,158,11,0.8)';
+        if (!mcfInputEl.value) {
+          mcfInputEl.placeholder = 'MÇF No (Zorunludur)...';
+        }
+      } else {
+        mcfInputEl.style.borderColor = '#1E293B';
+        mcfInputEl.placeholder = 'MÇF No giriniz...';
+      }
+    }
+  };
+
+  (window as any).removeRepairUsedMaterial = (idx: number) => {
+    addedUsedMaterials.splice(idx, 1);
+    renderAddedMaterials();
+  };
+
+  const matSapInput = document.getElementById('repair-mat-sap-input') as HTMLInputElement;
+  const matDescInput = document.getElementById('repair-mat-desc-input') as HTMLInputElement;
+  const matQtyInput = document.getElementById('repair-mat-qty-input') as HTMLInputElement;
+  const matAddBtn = document.getElementById('repair-mat-add-btn') as HTMLButtonElement;
+  const matStatusBadge = document.getElementById('repair-mat-status-badge') as HTMLDivElement;
+
+  const updateMatStatus = () => {
+    const rawVal = (matSapInput?.value || '').trim();
+    if (!rawVal) {
+      if (matStatusBadge) matStatusBadge.style.display = 'none';
+      return;
+    }
+    if (matStatusBadge) matStatusBadge.style.display = 'block';
+    const cleanSap = rawVal.split(' - ')[0].trim();
+
+    if (cleanSap === '-') {
+      if (matStatusBadge) {
+        matStatusBadge.innerHTML = `<span style="color:#94A3B8; font-weight:600;"><i class="fa-solid fa-circle-info"></i> Harici Sarf Malzeme (Depo stoğuna dokunulmaz, forma ve PDF'e işlenir)</span>`;
+      }
+      return;
+    }
+
+    const matched = validWhStock.find((i: any) =>
+      String(i.sapNo || '').trim().toLowerCase() === cleanSap.toLowerCase() ||
+      String(i.sapNo || '').trim().toLowerCase() === rawVal.toLowerCase()
+    );
+
+    if (matched) {
+      if (matSapInput) matSapInput.value = matched.sapNo;
+      if (matDescInput) matDescInput.value = matched.description;
+      if (matStatusBadge) {
+        matStatusBadge.innerHTML = `
+          <span style="color:#10B981; font-weight:700;">
+            <i class="fa-solid fa-circle-check"></i> Depo Stoğu Bulundu: ${matched.quantity} Adet Mevcut (Raf: ${matched.shelfNo || '-'}) ➔ Depo Stoğundan Düşülecek
+          </span>
+        `;
+      }
+    } else {
+      if (matStatusBadge) {
+        matStatusBadge.innerHTML = `
+          <span style="color:#F59E0B; font-weight:600;">
+            <i class="fa-solid fa-triangle-exclamation"></i> Depo stoğunda bulunamadı ➔ Harici Sarf olarak eklenecek
+          </span>
+        `;
+      }
+    }
+  };
+
+  matSapInput?.addEventListener('input', updateMatStatus);
+  matSapInput?.addEventListener('change', updateMatStatus);
+
+  const addMaterialItem = () => {
+    const rawSap = (matSapInput?.value || '').trim();
+    const cleanSap = rawSap ? rawSap.split(' - ')[0].trim() : '-';
+    const descVal = (matDescInput?.value || '').trim();
+    const qtyVal = parseInt(matQtyInput?.value || '1', 10);
+
+    if (!descVal && (cleanSap === '-' || !cleanSap)) {
+      alert('Lütfen malzeme açıklamasını giriniz.');
+      matDescInput?.focus();
+      return;
+    }
+
+    if (qtyVal <= 0 || isNaN(qtyVal)) {
+      alert('Lütfen geçerli bir adet giriniz.');
+      matQtyInput?.focus();
+      return;
+    }
+
+    const matched = cleanSap !== '-' ? validWhStock.find((i: any) =>
+      String(i.sapNo || '').trim().toLowerCase() === cleanSap.toLowerCase()
+    ) : null;
+
+    const finalSap = matched ? matched.sapNo : (cleanSap || '-');
+    const finalDesc = matched ? matched.description : (descVal || finalSap);
+    const isDeducted = !!matched;
+
+    addedUsedMaterials.push({
+      name: finalSap !== '-' ? `${finalSap} - ${finalDesc}` : finalDesc,
+      sapNo: finalSap,
+      description: finalDesc,
+      qty: qtyVal,
+      deductedFromStock: isDeducted,
+      shelfNo: matched?.shelfNo || '-'
+    });
+
+    if (matSapInput) matSapInput.value = '';
+    if (matDescInput) matDescInput.value = '';
+    if (matQtyInput) matQtyInput.value = '1';
+    if (matStatusBadge) matStatusBadge.style.display = 'none';
+
+    renderAddedMaterials();
+    matSapInput?.focus();
+  };
+
+  matAddBtn?.addEventListener('click', addMaterialItem);
+
+  [matSapInput, matDescInput, matQtyInput].forEach(el => {
+    el?.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addMaterialItem();
+      }
+    });
+  });
+
+  const durInputEl = document.getElementById('repair-duration-input') as HTMLInputElement;
+  durInputEl?.addEventListener('blur', () => {
+    if (durInputEl.value.trim()) {
+      durInputEl.value = formatRepairDuration(durInputEl.value);
+    }
+  });
+
+  const submitBtn = document.getElementById('submit-team-repair-btn');
+  if (submitBtn) {
+    submitBtn.onclick = async () => {
+      const notesEl = document.getElementById('repair-action-notes') as HTMLTextAreaElement;
+      const techEl = document.getElementById('repair-technician-input') as HTMLInputElement;
+      const durEl = document.getElementById('repair-duration-input') as HTMLInputElement;
+      const shelfEl = document.getElementById('repair-shelf-no-input') as HTMLInputElement;
+      const turbineEl = document.getElementById('repair-turbine-input') as HTMLInputElement;
+
+      const actionNotes = (notesEl?.value || '').trim();
+      const technician = (techEl?.value || currentUserName).trim();
+      const duration = (durEl?.value || '').trim();
+      const shelfNo = (shelfEl?.value || '').trim();
+      const finalTurbine = (turbineEl?.value || displayTurbine || repairItem.turbine || repairItem.turbineNo || '-').trim();
+
+      if (!shelfNo) {
+        alert("Lütfen malzemenin yerleştirileceği Raf Numarasını giriniz (Zorunludur).");
+        shelfEl?.focus();
+        return;
+      }
+
+      if (!actionNotes) {
+        alert("Lütfen yapılan işlemler ve onarım detayını yazınız.");
+        notesEl?.focus();
+        return;
+      }
+
+      // Auto-add any unsubmitted material in the inputs if description or valid SAP was entered
+      const pendingDesc = (matDescInput?.value || '').trim();
+      const pendingSap = (matSapInput?.value || '').trim();
+      if (pendingDesc || (pendingSap && pendingSap !== '-')) {
+        addMaterialItem();
+      }
+
+      const mcfEl = document.getElementById('repair-mcf-input') as HTMLInputElement;
+      const mcfVal = (mcfEl?.value || '').trim();
+
+      const usedMaterials = [...addedUsedMaterials];
+      const hasStockUsed = usedMaterials.some((m: any) => m.deductedFromStock === true);
+      if (hasStockUsed && !mcfVal) {
+        alert("Depo stoğundan malzeme kullanıldığı için Malzeme Çıkış Form Numarası (MÇF No) girilmesi zorunludur.");
+        mcfEl?.focus();
+        return;
+      }
+
+      const finalMcfNo = mcfVal || repairItem.mcfNo || '-';
+
+      submitBtn.setAttribute('disabled', 'true');
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Stoğa Alınıyor...';
+
+      try {
+        const cleanSap = String(repairItem.sapNo || '').trim();
+        const baseSap = cleanSap.replace(/^[RT]+/i, '');
+        const newSapNo = `T${baseSap}`;
+        const cleanDesc = String(repairItem.description || '').trim();
+        const baseDesc = cleanDesc.replace(/^(tamirli|revize)\s*/i, '');
+        const newDescription = `Tamirli ${baseDesc}`;
+        const qty = Number(repairItem.quantity || 1);
+
+        const currentUser = (window as any).currentUser;
+        const userEmail = currentUser?.email || currentUser?.displayName || 'Sistem';
+
+        // 1. Add repaired item to inventory_v2 as REVISED
+        await warehouseService.updateStockBySap(
+          repairItem.warehouseId,
+          newSapNo,
+          qty,
+          {
+            user: userEmail,
+            reason: `Saha İçi Ekip Onarımı Tamamlandı (${cleanSap} -> ${newSapNo}): ${actionNotes}`,
+            materialName: newDescription
+          },
+          'REVISED',
+          shelfNo,
+          repairItem.serialNo && repairItem.serialNo !== '-' ? repairItem.serialNo : '',
+          `Saha Onarımı (${technician}): ${actionNotes}`
+        );
+
+        // 2. Decrement any spare parts used from current warehouse stock (only those matched with warehouse stock)
+        for (const mat of usedMaterials) {
+          if (mat.deductedFromStock && mat.sapNo) {
+            mat.mcfNo = finalMcfNo;
+            try {
+              await warehouseService.updateStockBySap(
+                repairItem.warehouseId,
+                mat.sapNo,
+                -mat.qty,
+                {
+                  user: userEmail,
+                  reason: `Saha Malzeme Onarımında Kullanıldı (${newSapNo} - ${newDescription})`,
+                  materialName: mat.description || mat.name,
+                  formNo: finalMcfNo !== '-' ? finalMcfNo : undefined
+                },
+                'NEW'
+              );
+            } catch (stockErr) {
+              console.warn(`[TeamRepair] ${mat.sapNo} stok düşüş uyarısı:`, stockErr);
+            }
+          }
+        }
+
+        // 3. Generate Form No: Servis Onarım T57413_001, _002 ...
+        const { doc, updateDoc, serverTimestamp, collection, getDocs } = await import('firebase/firestore');
+        const { db } = await import('../../firebase');
+
+        let seqNumber = 1;
+        try {
+          const repairsSnap = await getDocs(collection(db, 'team_repairs'));
+          let maxSeq = 0;
+          repairsSnap.forEach((d) => {
+            const data = d.data();
+            const fNo = String(data?.formNo || '');
+            const docSap = String(data?.newSapNo || data?.sapNo || '');
+            if (fNo.includes(newSapNo) || docSap.includes(baseSap)) {
+              const match = fNo.match(/_(\d{3,})$/);
+              if (match) {
+                const num = parseInt(match[1], 10);
+                if (!isNaN(num) && num > maxSeq) {
+                  maxSeq = num;
+                }
+              }
+            }
+          });
+          seqNumber = maxSeq + 1;
+        } catch (seqErr) {
+          console.warn('[TeamRepair] Sıra no hesaplama uyarısı:', seqErr);
+        }
+
+        const seqStr = String(seqNumber).padStart(3, '0');
+        const formNo = repairItem.formNo && repairItem.formNo.startsWith('Servis Onarım')
+          ? repairItem.formNo
+          : `Servis Onarım ${newSapNo}_${seqStr}`;
+
+        const cleanDuration = formatRepairDuration(duration);
+        const cleanWarehouse = fixTurkishWarehouseName(warehouseState.currentWarehouse?.name || 'Saha Deposu');
+
+        // 4. Update team_repairs in Firestore
+        if (repairItem.id) {
+          await updateDoc(doc(db, 'team_repairs', repairItem.id), {
+            formNo: formNo,
+            mcfNo: finalMcfNo,
+            status: 'COMPLETED',
+            completedAt: serverTimestamp(),
+            completedBy: userEmail,
+            technician: technician,
+            turbine: finalTurbine,
+            turbineNo: finalTurbine,
+            actionNotes: actionNotes,
+            repairDuration: cleanDuration,
+            shelfNo: shelfNo,
+            newSapNo: newSapNo,
+            newDescription: newDescription,
+            usedMaterials: usedMaterials
+          });
+        }
+
+        // 5. Update defect item in inventory_v2 if originalItemId exists
+        if (repairItem.originalItemId) {
+          const origDocRef = doc(db, 'warehouses', repairItem.warehouseId, 'inventory_v2', repairItem.originalItemId);
+          await updateDoc(origDocRef, {
+            status: 'TAMIR_EDILDI',
+            quantity: 0,
+            lastUpdated: serverTimestamp()
+          }).catch(console.warn);
+        }
+
+        // 6. Send formal email with A4 PDF attachment
+        try {
+          const { emailService } = await import('../../services/EmailService');
+          const formData: any = {
+            formNo: formNo,
+            date: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            warehouseName: cleanWarehouse,
+            warehouseId: repairItem.warehouseId,
+            originalSapNo: cleanSap,
+            newSapNo: newSapNo,
+            description: cleanDesc,
+            newDescription: newDescription,
+            serialNo: repairItem.serialNo && repairItem.serialNo !== '-' ? repairItem.serialNo : '-',
+            quantity: qty,
+            turbine: finalTurbine,
+            turbineNo: finalTurbine,
+            reportNo: repairItem.reportNo || '-',
+            mcfNo: finalMcfNo,
+            faultCode: repairItem.faultCode || '-',
+            faultDesc: repairItem.faultDesc || '',
+            assignedTeam: repairItem.assignedTeam || '-',
+            sentBy: repairItem.sentBy || '-',
+            actionNotes: actionNotes,
+            technician: technician,
+            repairDuration: cleanDuration,
+            shelfNo: shelfNo,
+            usedMaterials: usedMaterials,
+            completedBy: userEmail
+          };
+          await emailService.sendTeamRepairCompletedEmail(formData);
+        } catch (emailErr) {
+          console.warn('[WarehouseModals] E-posta & PDF gönderimi uyarısı:', emailErr);
+        }
+
+        modal.remove();
+        (window as any).showToast?.('Başarılı', `"${newDescription}" (${newSapNo}) stoğa alındı ve onarım formu Servis Merkezine iletildi.`, 'success');
+
+        // Refresh lists
+        if (typeof (window as any).loadTamirBekleyenler === 'function') {
+          (window as any).loadTamirBekleyenler();
+        }
+        if (typeof (window as any).renderInventoryTable === 'function') {
+          (window as any).renderInventoryTable();
+        }
+        if ((window as any).selectWarehouseAndNavigate) {
+          (window as any).selectWarehouseAndNavigate(repairItem.warehouseId);
+        }
+      } catch (err: any) {
+        console.error("Saha onarım tamamlama hatası:", err);
+        alert("İşlem sırasında hata oluştu:\n" + err.message);
+        submitBtn.removeAttribute('disabled');
+        submitBtn.innerHTML = '<i class="fa-solid fa-circle-check"></i> TAMİRİ TAMAMLA VE STOĞA AL';
+      }
+    };
+  }
+};
+
+export const openViewTeamRepairFormModal = (repairItem: any) => {
+  const modal = document.createElement('div');
+  modal.id = 'view-team-repair-form-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+    z-index: 10003; display: flex; align-items: center; justify-content: center;
+  `;
+
+  const dateStr = formatSafeDateTime(repairItem.completedAt || repairItem.date || repairItem.createdAt);
+  let turbineVal = repairItem.turbine && repairItem.turbine !== '-' 
+    ? repairItem.turbine 
+    : (repairItem.turbineNo && repairItem.turbineNo !== '-' ? repairItem.turbineNo : '-');
+
+  const cleanOriginalSap = String(repairItem.sapNo || '').replace(/^[RT]+/i, '');
+  const originalSap = cleanOriginalSap || '-';
+  const newSap = repairItem.newSapNo || `T${originalSap}`;
+  
+  // Format formNo as "Servis Onarım T57413_001" if it was old SOF format
+  let formNo = repairItem.formNo || '';
+  if (!formNo || formNo.startsWith('SOF-')) {
+    formNo = `Servis Onarım ${newSap}_001`;
+  }
+  const cleanWarehouse = fixTurkishWarehouseName(warehouseState.currentWarehouse?.name || repairItem.warehouseName || 'Saha Deposu');
+  const duration = formatRepairDuration(repairItem.repairDuration || '-');
+  const materialName = repairItem.newDescription || repairItem.description || '-';
+  const shelfNo = repairItem.shelfNo || '-';
+  const technician = formatDisplayName(repairItem.technician || repairItem.completedBy || '-');
+  const actionNotes = repairItem.actionNotes || 'Yapılan işlem açıklaması bulunamadı.';
+  const usedMaterials = repairItem.usedMaterials || [];
+
+  const usedMaterialsHtml = usedMaterials.length > 0 
+    ? usedMaterials.map((m: any, idx: number) => {
+        const isFromStock = m.deductedFromStock === true;
+        const matMcf = m.mcfNo || repairItem.mcfNo || '';
+        const mcfBadge = (isFromStock && matMcf && matMcf !== '-') 
+          ? `<span style="background:rgba(245,158,11,0.15); color:#F59E0B; border:1px solid rgba(245,158,11,0.3); padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700; margin-left:6px;"><i class="fa-solid fa-file-invoice"></i> MÇF: ${matMcf}</span>` 
+          : '';
+        const sourceBadge = isFromStock 
+          ? `<span style="background:rgba(20,241,149,0.15); color:#14F195; border:1px solid rgba(20,241,149,0.3); padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700; margin-left:6px;"><i class="fa-solid fa-boxes-stacked"></i> Depo Stoğu</span>${mcfBadge}`
+          : '<span style="background:rgba(148,163,184,0.15); color:#94A3B8; border:1px solid rgba(148,163,184,0.3); padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700; margin-left:6px;"><i class="fa-solid fa-screwdriver-wrench"></i> Harici Sarf</span>';
+        return `
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+          <td style="padding: 6px 8px; color: #94A3B8;">${idx + 1}</td>
+          <td style="padding: 6px 8px; font-weight: 600; color: #E2E8F0;">
+            ${m.name || m.description || '-'} ${sourceBadge}
+          </td>
+          <td style="padding: 6px 8px; text-align: center; color: #38BDF8; font-weight: 700;">${m.qty} Adet</td>
+        </tr>
+      `;
+    }).join('')
+    : `<tr><td colspan="3" style="padding: 8px; text-align: center; color: #64748B; font-style: italic;">Harici yedek parça / sarf malzeme kullanılmadı.</td></tr>`;
+
+  modal.innerHTML = `
+    <div class="glass-panel fade-in-up" style="width: 100%; max-width: 650px; padding: 2rem; border-radius: 16px; border: 1px solid rgba(20, 241, 149, 0.3); box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-height: 90vh; display: flex; flex-direction: column;">
+      
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:1rem; flex-shrink:0;">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.3rem; color:#14F195; font-weight:800; letter-spacing:0.5px;">
+              <i class="fa-solid fa-file-circle-check"></i> MALZEME BAKIM & ONARIM FORMU
+            </h3>
+            <span style="background:rgba(20,241,149,0.15); color:#14F195; border:1px solid rgba(20,241,149,0.3); padding:2px 8px; border-radius:4px; font-weight:800; font-size:0.75rem;">ONARILDI & STOKTA</span>
+          </div>
+          <div style="font-size:0.75rem; color:#94A3B8; margin-top:3px;">Form No: <strong style="color:#00f2ff; font-family:monospace;">${formNo}</strong> | Tarih: ${dateStr}</div>
+        </div>
+        <button onclick="document.getElementById('view-team-repair-form-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; padding-right: 4px;" class="custom-scrollbar">
+        
+        <!-- Material Info Box -->
+        <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); padding:1rem; border-radius:8px;">
+          <div style="font-size:1rem; font-weight:800; color:#FFF; margin-bottom:0.6rem;">${materialName}</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.8rem;">
+            <div><span style="color:#94A3B8;">Orijinal SAP:</span> <strong style="color:#F59E0B; font-family:monospace;">${originalSap}</strong></div>
+            <div><span style="color:#94A3B8;">Yeni Tamirli SAP:</span> <strong style="color:#00f2ff; font-family:monospace;">${newSap}</strong></div>
+            <div><span style="color:#94A3B8;">Seri No:</span> <strong style="color:#10B981; font-family:monospace;">${repairItem.serialNo || '-'}</strong></div>
+            <div><span style="color:#94A3B8;">Miktar:</span> <strong>${repairItem.quantity || 1} Adet</strong></div>
+            <div><span style="color:#94A3B8;">Depo / Saha:</span> <strong style="color:#FFF;">${cleanWarehouse}</strong></div>
+            <div><span style="color:#94A3B8;">Raf Numarası:</span> <strong style="color:#F59E0B; font-family:monospace;">${shelfNo}</strong></div>
+            <div><span style="color:#94A3B8;">Söküldüğü Türbin:</span> <strong id="view-repair-turbine-val" style="color:#38BDF8; font-weight:700;">${turbineVal}</strong></div>
+            <div><span style="color:#94A3B8;">Rapor / MÇF:</span> <strong>${repairItem.reportNo || '-'} ${repairItem.mcfNo ? `(MÇF: ${repairItem.mcfNo})` : ''}</strong></div>
+            <div><span style="color:#94A3B8;">Arıza Kodu:</span> <strong style="color:#EF4444;">${repairItem.faultCode || '-'}</strong></div>
+          </div>
+        </div>
+
+        <!-- Action Notes -->
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:#14F195; margin-bottom:0.4rem; text-transform:uppercase;">
+            <i class="fa-solid fa-wrench"></i> Yapılan İşlemler / Onarım Detayı
+          </div>
+          <div style="background:rgba(0,0,0,0.3); border:1px solid #1E293B; border-radius:6px; padding:0.85rem; font-size:0.82rem; color:#E2E8F0; line-height:1.4; white-space:pre-wrap;">
+${actionNotes}
+          </div>
+        </div>
+
+        <!-- Technician & Duration -->
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:0.75rem; border-radius:6px; font-size:0.8rem;">
+          <div><span style="color:#94A3B8;">Onarımı Yapan Teknisyen:</span><br><strong style="color:#FFF;">${technician}</strong></div>
+          <div><span style="color:#94A3B8;">Onarım Süresi:</span><br><strong style="color:#0284c7; font-weight:700;">${duration}</strong></div>
+        </div>
+
+        <!-- Used Materials -->
+        <div>
+          <div style="font-size:0.8rem; font-weight:700; color:#38BDF8; margin-bottom:0.4rem; text-transform:uppercase;">
+            <i class="fa-solid fa-cube"></i> Kullanılan Sarf Malzemeler / Parçalar
+          </div>
+          <table style="width:100%; border-collapse:collapse; font-size:0.78rem; background:rgba(0,0,0,0.2); border:1px solid #1E293B; border-radius:6px; overflow:hidden;">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.03); color:#94A3B8; text-align:left;">
+                <th style="padding:6px 8px; width:30px;">#</th>
+                <th style="padding:6px 8px;">Malzeme</th>
+                <th style="padding:6px 8px; width:80px; text-align:center;">Miktar</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${usedMaterialsHtml}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- Action Footer -->
+      <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid rgba(255,255,255,0.05); padding-top:1.25rem; margin-top:1rem; flex-shrink:0;">
+        <button onclick="document.getElementById('view-team-repair-form-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.6rem 1.1rem; font-size:0.82rem;">KAPAT</button>
+        <div style="display:flex; gap:8px;">
+          <button id="resend-team-repair-email-btn" class="btn-cyber" style="background:rgba(59,130,246,0.15); border:1px solid #3B82F6; color:#60A5FA; font-weight:800; padding:0.6rem 1.1rem; font-size:0.82rem; cursor:pointer; display:flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-envelope"></i> E-POSTAYI TEKRAR GÖNDER
+          </button>
+          <button id="download-team-repair-pdf-btn" class="btn-cyber" style="background:linear-gradient(135deg, #14F195 0%, #00cc6a 100%); color:#0A0E17; font-weight:900; padding:0.6rem 1.25rem; font-size:0.82rem; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 0 15px rgba(20,241,149,0.3);">
+            <i class="fa-solid fa-download"></i> PDF İNDİR
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const formData: any = {
+    formNo: formNo,
+    date: dateStr,
+    completedAt: repairItem.completedAt || repairItem.date || repairItem.createdAt,
+    warehouseName: cleanWarehouse,
+    warehouseId: repairItem.warehouseId,
+    originalSapNo: originalSap,
+    newSapNo: newSap,
+    description: repairItem.description || materialName,
+    newDescription: materialName,
+    serialNo: repairItem.serialNo || '-',
+    quantity: repairItem.quantity || 1,
+    turbine: turbineVal,
+    turbineNo: turbineVal,
+    reportNo: repairItem.reportNo || '-',
+    mcfNo: repairItem.mcfNo || '-',
+    faultCode: repairItem.faultCode || '-',
+    faultDesc: repairItem.faultDesc || '',
+    assignedTeam: repairItem.assignedTeam || '-',
+    sentBy: repairItem.sentBy || '-',
+    actionNotes: actionNotes,
+    technician: technician,
+    repairDuration: duration,
+    shelfNo: shelfNo,
+    usedMaterials: usedMaterials,
+    completedBy: repairItem.completedBy || technician
+  };
+
+  // Auto-resolve turbine if missing from reports and update DOM + Firestore
+  if (!turbineVal || turbineVal === '-' || turbineVal === 'Bilinmeyen') {
+    resolveTurbineFromReports(repairItem.reportNo, repairItem.mcfNo).then(async (foundTurbine) => {
+      if (foundTurbine && foundTurbine !== '-') {
+        turbineVal = foundTurbine;
+        repairItem.turbine = foundTurbine;
+        repairItem.turbineNo = foundTurbine;
+        formData.turbine = foundTurbine;
+        formData.turbineNo = foundTurbine;
+        const turbineEl = document.getElementById('view-repair-turbine-val');
+        if (turbineEl) turbineEl.textContent = foundTurbine;
+        if (repairItem.id) {
+          try {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const { db } = await import('../../firebase');
+            await updateDoc(doc(db, 'team_repairs', repairItem.id), {
+              turbine: foundTurbine,
+              turbineNo: foundTurbine
+            });
+          } catch(e) {}
+        }
+      }
+    });
+  }
+
+  // PDF Download Handler
+  const pdfBtn = document.getElementById('download-team-repair-pdf-btn');
+  if (pdfBtn) {
+    pdfBtn.onclick = async () => {
+      pdfBtn.setAttribute('disabled', 'true');
+      pdfBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> PDF Hazırlanıyor...';
+      try {
+        const { emailService } = await import('../../services/EmailService');
+        const pdfFile = await emailService.generateTeamRepairPDFFile(formData);
+        if (pdfFile) {
+          const url = URL.createObjectURL(pdfFile);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = pdfFile.name;
+          a.click();
+          URL.revokeObjectURL(url);
+          (window as any).showToast?.('Başarılı', 'Saha Onarım Formu PDF dosyası indirildi.', 'success');
+        } else {
+          alert('PDF dosyası üretilemedi.');
+        }
+      } catch (err: any) {
+        alert('PDF indirme hatası: ' + err.message);
+      } finally {
+        pdfBtn.removeAttribute('disabled');
+        pdfBtn.innerHTML = '<i class="fa-solid fa-download"></i> PDF İNDİR';
+      }
+    };
+  }
+
+  // Resend Email Handler
+  const emailBtn = document.getElementById('resend-team-repair-email-btn');
+  if (emailBtn) {
+    emailBtn.onclick = async () => {
+      emailBtn.setAttribute('disabled', 'true');
+      emailBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gönderiliyor...';
+      try {
+        const { emailService } = await import('../../services/EmailService');
+
+        // If the record in Firestore still had old SOF formNo or missing turbine, upgrade it permanently
+        if (repairItem.id) {
+          try {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const { db } = await import('../../firebase');
+            const updatePayload: any = {};
+            if (!repairItem.formNo || repairItem.formNo.startsWith('SOF-')) {
+              updatePayload.formNo = formNo;
+              updatePayload.repairDuration = duration;
+              repairItem.formNo = formNo;
+              repairItem.repairDuration = duration;
+            }
+            if (turbineVal && turbineVal !== '-') {
+              updatePayload.turbine = turbineVal;
+              updatePayload.turbineNo = turbineVal;
+            }
+            if (Object.keys(updatePayload).length > 0) {
+              await updateDoc(doc(db, 'team_repairs', repairItem.id), updatePayload);
+            }
+          } catch(e) {}
+        }
+
+        const res = await emailService.sendTeamRepairCompletedEmail(formData);
+        if (res.success) {
+          (window as any).showToast?.('Başarılı', 'Saha onarım formu ve PDF eki Servis Merkezine tekrar iletildi.', 'success');
+        } else {
+          alert('E-posta gönderilemedi: ' + res.message);
+        }
+      } catch (err: any) {
+        alert('E-posta gönderim hatası: ' + err.message);
+      } finally {
+        emailBtn.removeAttribute('disabled');
+        emailBtn.innerHTML = '<i class="fa-solid fa-envelope"></i> E-POSTAYI TEKRAR GÖNDER';
+      }
+    };
+  }
+};
+
+(window as any).openViewTeamRepairFormModal = openViewTeamRepairFormModal;
 
 export const openBulkScrapModal = (items: Array<{
   id: string;
@@ -3083,6 +4226,8 @@ export const saveQuickTurbineType = async () => {
 (window as any).openSendToRepairModal = openSendToRepairModal;
 (window as any).scrapDefectiveItem = scrapDefectiveItem;
 (window as any).openBulkSendToRepairModal = openBulkSendToRepairModal;
+(window as any).openBulkSendToTeamRepairModal = openBulkSendToTeamRepairModal;
+(window as any).openTeamRepairFormModal = openTeamRepairFormModal;
 (window as any).openBulkScrapModal = openBulkScrapModal;
 (window as any).approveWarehouseMsfTransfer = approveWarehouseMsfTransfer;
 (window as any).rejectWarehouseMsfTransfer = rejectWarehouseMsfTransfer;
@@ -3096,3 +4241,21 @@ export const saveQuickTurbineType = async () => {
 (window as any).openQuickTurbineTypeModal = openQuickTurbineTypeModal;
 (window as any).closeQuickTurbineTypeModal = closeQuickTurbineTypeModal;
 (window as any).saveQuickTurbineType = saveQuickTurbineType;
+(window as any).openViewTeamRepairFormModal = openViewTeamRepairFormModal;
+
+export const openViewTeamRepairFormModalById = async (repairId: string) => {
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const { db } = await import('../../firebase');
+    const snap = await getDoc(doc(db, 'team_repairs', repairId));
+    if (snap.exists()) {
+      openViewTeamRepairFormModal({ id: snap.id, ...snap.data() });
+    } else {
+      alert('Onarım formu kaydı bulunamadı.');
+    }
+  } catch (e: any) {
+    console.error('Onarım formu açma hatası:', e);
+    alert('Hata: ' + e.message);
+  }
+};
+(window as any).openViewTeamRepairFormModalById = openViewTeamRepairFormModalById;
