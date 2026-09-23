@@ -5,7 +5,7 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  role: 'ADMIN' | 'TECHNICIAN' | 'GUEST' | 'MALZEME_YONETIMI' | 'TAMİR' | 'USER';
+  role: 'ADMIN' | 'TECHNICIAN' | 'GUEST' | 'MALZEME_YONETIMI' | 'TAMİR' | 'USER' | 'DEMIRER_ISG' | 'ISG';
   password?: string;
   allowedTabs: Record<string, any>; // Granular permissions: { tabId: { subPermission: boolean } }
   allowedSites: string[]; // Site IDs

@@ -56,6 +56,7 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
     { id: 'asset-custody', label: 'Malzeme Zimmeti' },
     { id: 'tickets-page', label: 'Saha Destek (Ticket)' },
     { id: 'image-pool', label: 'Görsel Ürün Tarama' },
+    { id: 'isg-management', label: 'İSG & KKD Yönetimi' },
     { id: 'kkd-kontrol', label: 'KKD Muayene Takip' },
     { id: 'olcu-aletleri', label: 'Ölçü Aletleri Kalibrasyon' },
     { id: 'tork-aletleri', label: 'Tork Aletleri Kalibrasyon' },
@@ -168,6 +169,9 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
                 rText = 'AMBAR';
               } else if (user.role === 'TAMİR') {
                 rText = 'ATÖLYE';
+              } else if (user.role === 'DEMIRER_ISG' || user.role === 'ISG') {
+                rText = 'İSG UZMANI';
+                badgeStyle = 'background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);';
               } else if (user.role === 'USER') {
                 rText = 'KULLANICI';
                 badgeStyle = 'background: rgba(0, 242, 254, 0.08); color: var(--accent-cyan); border: 1px solid rgba(0, 242, 254, 0.2);';
@@ -475,6 +479,7 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
                     <option value="USER">Kullanıcı (Ofis)</option>
                     <option value="MALZEME_YONETIMI">Malzeme Yönetimi / Ambar Sorumlusu</option>
                     <option value="TAMİR">Atölye Sorumlusu</option>
+                    <option value="DEMIRER_ISG">Demirer İSG Uzmanı</option>
                     <option value="GUEST">Misafir / İzleyici</option>
                     <option value="ADMIN">Yönetici / Admin</option>
                   </select>
@@ -713,6 +718,7 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
             <option value="USER">Kullanıcı Şablonu</option>
             <option value="MALZEME_YONETIMI">Malzeme Sorumlusu</option>
             <option value="TAMİR">Atölye Sorumlusu</option>
+            <option value="DEMIRER_ISG">Demirer İSG Uzmanı</option>
             <option value="GUEST">Misafir Şablonu</option>
           </select>
         </div>
@@ -1432,6 +1438,7 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
   else if (role === 'USER') roleText = 'Kullanıcı';
   else if (role === 'MALZEME_YONETIMI') roleText = 'Malzeme Sorumlusu';
   else if (role === 'TAMİR') roleText = 'Atölye Sorumlusu';
+  else if (role === 'DEMIRER_ISG' || role === 'ISG') roleText = 'Demirer İSG Uzmanı';
   else if (role === 'GUEST') roleText = 'Misafir';
 
   const desc = `${roleText} şablonu yüklenecektir. Bu işlem formdaki mevcut yetki işaretlerini sıfırlayıp şablon yetkilerini aktaracaktır. Devam etmek istiyor musunuz?`;
@@ -1521,6 +1528,14 @@ export const UserManagementPage = async (initialMode?: 'studio' | 'classic' | 'e
           'warehouses': ['addMaterial', 'editMaterial', 'countStock'],
           'reports-archive': ['downloadPdf'],
           'transfers': ['approveTransfer']
+        };
+      } else if (role === 'DEMIRER_ISG' || role === 'ISG') {
+        defaultTabs = [
+          'isg-management',
+          'kkd-kontrol'
+        ];
+        defaultSubs = {
+          'kkd-kontrol': ['addInspection', 'editInspection']
         };
       } else if (role === 'GUEST') {
         defaultTabs = ['dashboard', 'tasks', 'turbines', 'reports-archive', 'tsi-library'];
@@ -2232,14 +2247,14 @@ const granularOptions = {
       });
     } else {
       if (role === 'USER') {
-        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'tickets-page', 'tsi-library'];
+        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'tickets-page', 'tsi-library', 'isg-management'];
         defaultSubs = {
           'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],
           'tickets-page': ['createTicket', 'replyTicket']
         };
       } else if (role === 'TECHNICIAN') {
-        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'visual-bom', 'tickets-page', 'tsi-library', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
+        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'visual-bom', 'tickets-page', 'tsi-library', 'isg-management', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
         defaultSubs = {
           'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],
@@ -2264,6 +2279,11 @@ const granularOptions = {
           'warehouses': ['addMaterial', 'editMaterial', 'countStock'],
           'reports-archive': ['downloadPdf'],
           'transfers': ['approveTransfer']
+        };
+      } else if (role === 'DEMIRER_ISG' || role === 'ISG') {
+        defaultTabs = ['isg-management', 'kkd-kontrol'];
+        defaultSubs = {
+          'kkd-kontrol': ['addInspection', 'editInspection']
         };
       } else if (role === 'GUEST') {
         defaultTabs = ['dashboard', 'tasks', 'turbines', 'reports-archive', 'tsi-library'];

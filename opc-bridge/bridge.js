@@ -288,6 +288,78 @@ async function syncTurbines() {
 
 let scadaStatusCache = {};
 
+const SITE_NAME_TO_ID = {
+    'Alize Germiyan': '0752',
+    'Mare Manastır': '2678',
+    'Anemon İntepe': '2688',
+    'Alize Sarıkaya': '3439',
+    'Alize Çamseki': '3243',
+    'Doğal Sayalar': '2990',
+    'Alize Kuyucak': '3793',
+    'Dares Datça': '3213',
+    'Alize Keltepe': '3245',
+    'Alize Çataltepe': '3892'
+};
+
+const TEAM_SITE_MAPPING = {
+    'team01': ['2678', '0752'],
+    'team1': ['2678', '0752'],
+    'team02': ['2678', '0752'],
+    'team2': ['2678', '0752'],
+    'team12': ['2678', '0752'],
+    'team03': ['2688', '3439', '3243'],
+    'team3': ['2688', '3439', '3243'],
+    'team04': ['2688', '3439', '3243'],
+    'team4': ['2688', '3439', '3243'],
+    'team13': ['2688', '3439', '3243'],
+    'team15': ['2688', '3439', '3243'],
+    'team06': ['2990', '3793'],
+    'team6': ['2990', '3793'],
+    'team08': ['2990', '3793'],
+    'team8': ['2990', '3793'],
+    'team09': ['2990', '3793'],
+    'team9': ['2990', '3793'],
+    'team14': ['2990', '3793'],
+    'team05': ['3213'],
+    'team5': ['3213'],
+    'team10': ['3213'],
+    'team07': ['3245', '3892'],
+    'team7': ['3245', '3892'],
+    'team11': ['3245', '3892']
+};
+
+function isSubscriptionEligibleForSite(sub, siteIdOrName) {
+    if (!sub) return false;
+    const email = (sub.user || '').toLowerCase().trim();
+    const role = (sub.role || '').toUpperCase().trim();
+
+    // 1. Admins, Fatih ZEBEK, and Furkan YILDIRIM receive ALL notifications across all sites
+    if (
+        role === 'ADMIN' ||
+        email === 'fatih.zebek@demirerholding.com' ||
+        email.includes('fatih.zebek') ||
+        email === 'furkan.yildirim@demirerholding.com' ||
+        email.includes('furkan.yildirim')
+    ) {
+        return true;
+    }
+
+    // Resolve site ID
+    const siteId = SITE_NAME_TO_ID[siteIdOrName] || siteIdOrName;
+    if (!siteId) return false;
+
+    // 2. Check allowedSites
+    const allowedSites = sub.allowedSites || [];
+    if (allowedSites.includes(siteId) || allowedSites.includes('all') || allowedSites.includes(siteIdOrName)) {
+        return true;
+    }
+
+    // 3. Check team mapping
+    const rawTeam = (sub.team || sub.displayName || email || '').replace(/\s+/g, '').toLowerCase();
+    const teamSites = TEAM_SITE_MAPPING[rawTeam] || [];
+    return teamSites.includes(siteId);
+}
+
 async function fetchSubscriptionsRest() {
     const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/push_subscriptions?key=${API_KEY}`;
     try {
@@ -295,13 +367,23 @@ async function fetchSubscriptionsRest() {
         const docs = response.data.documents || [];
         return docs.map(doc => {
             const fields = doc.fields || {};
+            const allowedSitesArr = [];
+            if (fields.allowedSites && fields.allowedSites.arrayValue && fields.allowedSites.arrayValue.values) {
+                fields.allowedSites.arrayValue.values.forEach(v => {
+                    if (v.stringValue) allowedSitesArr.push(v.stringValue);
+                });
+            }
             return {
                 endpoint: fields.endpoint ? fields.endpoint.stringValue : '',
                 keys: {
                     p256dh: fields.keys && fields.keys.mapValue && fields.keys.mapValue.fields && fields.keys.mapValue.fields.p256dh ? fields.keys.mapValue.fields.p256dh.stringValue : '',
                     auth: fields.keys && fields.keys.mapValue && fields.keys.mapValue.fields && fields.keys.mapValue.fields.auth ? fields.keys.mapValue.fields.auth.stringValue : ''
                 },
-                user: fields.user ? fields.user.stringValue : 'Bilinmeyen Kullanıcı'
+                user: fields.user ? fields.user.stringValue : 'Bilinmeyen Kullanıcı',
+                displayName: fields.displayName ? fields.displayName.stringValue : '',
+                role: fields.role ? fields.role.stringValue : 'user',
+                team: fields.team ? fields.team.stringValue : '',
+                allowedSites: allowedSitesArr
             };
         }).filter(sub => sub.endpoint && sub.keys.p256dh && sub.keys.auth);
     } catch (error) {
@@ -353,13 +435,12 @@ function startPushNotificationListener() {
                         url: '/turbines'
                     });
 
-                    // Her bir cihaza gönder (Temporarily muted by user request)
-                    console.log(`🔇 Push bildirim gönderimi geçici olarak askıya alındı (Kullanıcı talebi).`);
-                    /*
-                    subscriptions.forEach(sub => {
+                    const targetSite = tMeta.siteName;
+                    const eligibleSubs = subscriptions.filter(sub => isSubscriptionEligibleForSite(sub, targetSite));
+                    console.log(`📡 Arıza push gönderiliyor: ${eligibleSubs.length}/${subscriptions.length} cihaz uygun bulundu.`);
+                    eligibleSubs.forEach(sub => {
                         sendPushNotification(sub, payload);
                     });
-                    */
                 }
             }
         });
@@ -420,7 +501,10 @@ function startTaskClaimListener() {
                             url: '/turbines'
                         });
 
-                        subscriptions.forEach(sub => {
+                        const targetSite = data.taskInfo.siteId || siteName;
+                        const eligibleSubs = subscriptions.filter(sub => isSubscriptionEligibleForSite(sub, targetSite));
+                        console.log(`📡 Görev push gönderiliyor: ${eligibleSubs.length}/${subscriptions.length} cihaz uygun bulundu.`);
+                        eligibleSubs.forEach(sub => {
                             sendPushNotification(sub, payload);
                         });
                     } else {

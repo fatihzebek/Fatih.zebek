@@ -50,8 +50,60 @@ const formatShelfNo = (rawShelf?: string | null): string => {
   return trimmed;
 };
 
+// Helper to generate unique MTA serial numbers (e.g. MTA-36256-001)
+export const generateMtaSerialNo = (sapNo: string, allRepairs: RepairRecord[]): string => {
+  const cleanSap = (sapNo || 'CARD').trim();
+  const prefix = `MTA-${cleanSap}-`;
+  let maxSeq = 0;
+  allRepairs.forEach(r => {
+    if (r.serialNo && r.serialNo.toUpperCase().startsWith(prefix.toUpperCase())) {
+      const numPart = r.serialNo.toUpperCase().replace(prefix.toUpperCase(), '').trim();
+      const num = parseInt(numPart, 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  });
+  const nextSeq = String(maxSeq + 1).padStart(3, '0');
+  return `MTA-${cleanSap}-${nextSeq}`;
+};
+
+export const isMissingSerial = (serial?: string | null): boolean => {
+  if (!serial) return true;
+  const s = serial.trim().toLowerCase();
+  return (
+    s === '' ||
+    s === '-' ||
+    s === 'yok' ||
+    s === 'yoktur' ||
+    s === 'seri yok' ||
+    s === 'seri no yok' ||
+    s === 'seri numarası yok' ||
+    s === 'seri numarasız' ||
+    s === 'tanımsız' ||
+    s === 'none' ||
+    s === 'null' ||
+    s === 'n/a' ||
+    s === 'na' ||
+    s.includes('seri yok') ||
+    s.includes('seri no yok')
+  );
+};
+
 export const WorkshopReturnedPage = async () => {
   const currentUser = (window as any).currentUser;
+  const userProfile = (window as any).appState?.userProfile || (window as any).userProfile;
+  let userEmail = (currentUser?.email || userProfile?.email || '').toLowerCase().trim();
+  if (!userEmail) {
+    try {
+      const storedFallback = localStorage.getItem('dh_auth_fallback');
+      if (storedFallback) {
+        const authData = JSON.parse(storedFallback);
+        userEmail = (authData?.user?.email || '').toLowerCase().trim();
+      }
+    } catch (_) {}
+  }
+  const isFatih = userEmail === 'fatih.zebek@demirerholding.com' || userEmail.includes('fatih.zebek') || userEmail.includes('fatihzebek');
   const username = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Atölye Teknisyeni';
   const allRepairs: RepairRecord[] = await repairService.getRepairs(true);
   const warehouses = dataService.getWarehouses();
@@ -520,6 +572,144 @@ export const WorkshopReturnedPage = async () => {
     }
   };
 
+  // =================== SERIAL ASSIGNMENT MODAL & LOGIC ===================
+  (window as any).openAssignSerialModalInReturned = (repairId: string, sapNo: string, description: string, currentSerial: string) => {
+    const existing = document.getElementById('ret-assign-serial-modal');
+    if (existing) existing.remove();
+
+    const cleanSerial = isMissingSerial(currentSerial) ? '' : currentSerial.trim();
+
+    const modal = document.createElement('div');
+    modal.id = 'ret-assign-serial-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+      z-index: 10002; display: flex; align-items: center; justify-content: center;
+    `;
+
+    modal.innerHTML = `
+      <div class="glass-panel fade-in-up" style="width: 100%; max-width: 500px; padding: 1.75rem; border-radius: 16px; border: 1px solid rgba(236, 72, 153, 0.4); box-shadow: 0 20px 40px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto;">
+        
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.85rem;">
+          <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.3rem; color:#f472b6; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> SERİ NUMARASI EKLE & ATA
+          </h3>
+          <button onclick="document.getElementById('ret-assign-serial-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Info Box -->
+        <div style="margin-bottom:1.25rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.85rem; border-radius:10px;">
+          <div style="font-weight:800; color:#FFF; font-size:0.92rem; line-height:1.3;">${description}</div>
+          <div style="display:flex; gap:12px; margin-top:6px; font-size:0.8rem; color:#94A3B8;">
+            <span><i class="fa-solid fa-barcode" style="color:#00f3ff;"></i> SAP: <strong style="color:#00f3ff; font-family:monospace;">${sapNo}</strong></span>
+            ${cleanSerial ? `<span><i class="fa-solid fa-hashtag" style="color:#10B981;"></i> Mevcut Seri: <strong style="color:#FFF; font-family:monospace;">${cleanSerial}</strong></span>` : '<span style="color:#f472b6;"><i class="fa-solid fa-triangle-exclamation"></i> Seri No Yok</span>'}
+          </div>
+        </div>
+
+        <!-- Input & Auto-Generate Button -->
+        <div style="margin-bottom:1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem; flex-wrap: wrap; gap: 6px;">
+            <label style="color:#94A3B8; font-size:0.8rem; font-weight:700;">SERİ NUMARASI</label>
+            <button type="button" onclick="window.autoGenerateSerialInReturnedModal('${sapNo}')" style="background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.35); padding: 3px 9px; border-radius: 5px; font-size: 0.74rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='#14F195'; this.style.color='#0A0E17';" onmouseout="this.style.background='rgba(20, 241, 149, 0.15)'; this.style.color='#14F195';" title="Sıradaki benzersiz MTA seri numarasını otomatik üret">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Otomatik MTA Seri No Üret
+            </button>
+          </div>
+          <input 
+            type="text" 
+            id="ret-assign-serial-input" 
+            class="cyber-input" 
+            placeholder="Seri no yazın veya otomatik butonuna basın..." 
+            value="${cleanSerial}" 
+            style="width: 100%; height: 42px; background: rgba(0,0,0,0.45); border: 1px solid #334155; border-radius: 8px; color: #FFF; font-weight: 700; font-family: monospace; padding: 0 0.85rem; font-size: 0.92rem; outline: none; box-sizing: border-box;"
+          />
+          <span style="color:#64748B; font-size:0.72rem; margin-top:5px; display:block;">
+            * Kart üzerinde fiziksel bir seri no varsa manuel yazabilirsiniz veya "Otomatik" butonuyla benzersiz MTA kodu üretebilirsiniz.
+          </span>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1.2rem;">
+          <button onclick="document.getElementById('ret-assign-serial-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.6rem 1.1rem; font-size:0.83rem; border-radius:6px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);">İptal</button>
+          <button onclick="window.submitAssignSerialInReturned('${repairId}')" class="btn-cyber" style="background:linear-gradient(135deg, #EC4899 0%, #be185d 100%); color:#FFF; font-weight:800; padding:0.6rem 1.3rem; font-size:0.83rem; border-radius:6px; cursor:pointer; border:none; box-shadow:0 0 15px rgba(236,72,153,0.35); display:inline-flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-floppy-disk"></i> Seri Numarasını Kaydet
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const input = document.getElementById('ret-assign-serial-input') as HTMLInputElement;
+    if (input) setTimeout(() => input.focus(), 100);
+  };
+
+  (window as any).autoGenerateSerialInReturnedModal = async (sapNo: string) => {
+    const input = document.getElementById('ret-assign-serial-input') as HTMLInputElement;
+    if (!sapNo) {
+      alert("SAP numarası bulunamadı.");
+      return;
+    }
+    try {
+      const allRepairsList = await repairService.getRepairs(true);
+      const generated = generateMtaSerialNo(sapNo, allRepairsList);
+      if (input) {
+        input.value = generated;
+        input.style.borderColor = '#14F195';
+        (window as any).showToast?.('Bilgi', `"${generated}" seri numarası üretildi.`, 'info');
+      }
+    } catch (err: any) {
+      alert("Seri no üretme hatası: " + err.message);
+    }
+  };
+
+  (window as any).submitAssignSerialInReturned = async (repairId: string) => {
+    const input = document.getElementById('ret-assign-serial-input') as HTMLInputElement;
+    const newSerial = (input?.value || '').trim();
+    if (!newSerial) {
+      alert("Lütfen geçerli bir seri numarası yazınız veya otomatik üretiniz.");
+      return;
+    }
+    try {
+      (window as any).showToast?.('İşlem', 'Seri numarası kaydediliyor...', 'info');
+      await repairService.updateRepair(repairId, {
+        serialNo: newSerial
+      });
+      repairService.invalidateCache();
+      const modal = document.getElementById('ret-assign-serial-modal');
+      if (modal) modal.remove();
+      (window as any).showToast?.('Başarılı', `Seri numarası "${newSerial}" olarak kaydedildi.`, 'success');
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-returned');
+      }
+    } catch (err: any) {
+      alert("Seri no kaydetme hatası: " + err.message);
+    }
+  };
+
+  // =================== FATIH ZEBEK EXCLUSIVE DELETE ACTION ===================
+  (window as any).deleteRepairRecordInReturned = async (repairId: string, sapNo: string, description: string) => {
+    if (!isFatih) {
+      alert("Bu silme işlemini yapmaya yetkiniz bulunmuyor.");
+      return;
+    }
+    const cleanName = description || 'Sevk Kaydı';
+    if (!confirm(`DİKKAT!\n"${sapNo} - ${cleanName}" kaydını kalıcı olarak silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!`)) {
+      return;
+    }
+    try {
+      (window as any).showToast?.('İşlem', 'Kayıt kalıcı olarak siliniyor...', 'info');
+      await repairService.deleteRepairsBulk([repairId]);
+      (window as any).showToast?.('Başarılı', 'Kayıt kalıcı olarak silindi.', 'success');
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-returned');
+      }
+    } catch (err: any) {
+      alert("Silme hatası: " + err.message);
+    }
+  };
+
   // =================== RENDER INCOMING DISPATCH ROWS ===================
   const renderIncomingRows = (items: RepairRecord[]) => {
     if (items.length === 0) {
@@ -586,11 +776,21 @@ export const WorkshopReturnedPage = async () => {
 
           <!-- 5. Seri No -->
           <td style="padding: 0.75rem 0.6rem; white-space: nowrap;">
-            ${(item.serialNo && item.serialNo !== '-' && item.serialNo.toLowerCase() !== 'yok' && item.serialNo.toLowerCase() !== 'tanımsız') 
-              ? `<span style="color: #FFF; font-family: monospace; font-weight: 800; font-size: 0.82rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">${item.serialNo}</span>` 
-              : `<span style="background: rgba(236, 72, 153, 0.12); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.71rem; font-weight: 700;">
-                  <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem;"></i> Seri Yok
-                </span>`
+            ${!isMissingSerial(item.serialNo) 
+              ? `<div style="display: inline-flex; align-items: center; gap: 5px;">
+                  <span style="color: #FFF; font-family: monospace; font-weight: 800; font-size: 0.82rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">${item.serialNo}</span>
+                  <button onclick="window.openAssignSerialModalInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}', '${item.serialNo}')" style="background: transparent; border: none; color: #94A3B8; cursor: pointer; padding: 2px 4px; font-size: 0.74rem; transition: color 0.2s;" onmouseover="this.style.color='#14F195'" onmouseout="this.style.color='#94A3B8'" title="Seri Numarasını Düzenle">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                </div>` 
+              : `<div style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span style="background: rgba(236, 72, 153, 0.12); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.35); padding: 2px 6px; border-radius: 4px; font-size: 0.71rem; font-weight: 700;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem;"></i> Seri Yok
+                  </span>
+                  <button onclick="window.openAssignSerialModalInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}', '')" style="background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.4); padding: 2px 7px; border-radius: 5px; font-size: 0.71rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; transition: all 0.2s;" onmouseover="this.style.background='#EC4899'; this.style.color='#FFF';" onmouseout="this.style.background='rgba(236, 72, 153, 0.2)'; this.style.color='#f472b6';" title="Seri No Ekle veya Otomatik MTA Seri No Ata">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Seri Ata
+                  </button>
+                </div>`
             }
           </td>
 
@@ -634,6 +834,11 @@ export const WorkshopReturnedPage = async () => {
               <button onclick="window.openCardPassportInReturned('${item.serialNo || item.sapNo}')" style="background: rgba(0, 243, 255, 0.08); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); padding: 4px 7px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; height: 28px; box-sizing: border-box;" title="Kart Yaşam Döngüsü & Pasaport">
                 <i class="fa-solid fa-passport"></i> Pasaport
               </button>
+              ${isFatih ? `
+                <button onclick="window.deleteRepairRecordInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}')" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); padding: 4px 7px; border-radius: 6px; font-size: 0.74rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 28px; min-width: 28px; box-sizing: border-box; transition: all 0.2s;" onmouseover="this.style.background='#EF4444'; this.style.color='#FFF';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#EF4444';" title="Kaydı Kalıcı Olarak Sil (Yalnızca Fatih Zebek)">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              ` : ''}
             </div>
           </td>
         </tr>
@@ -685,9 +890,20 @@ export const WorkshopReturnedPage = async () => {
               <i class="fa-solid fa-barcode"></i> ${item.sapNo}
             </div>
             <div style="display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap;">
-              <span style="font-size: 0.75rem; color: #10B981; font-family: monospace; font-weight: 700;">
-                Seri: ${item.serialNo || '-'}
-              </span>
+              ${!isMissingSerial(item.serialNo)
+                ? `<span style="font-size: 0.75rem; color: #10B981; font-family: monospace; font-weight: 700;">
+                    Seri: ${item.serialNo}
+                  </span>
+                  <button onclick="window.openAssignSerialModalInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}', '${item.serialNo}')" style="background: transparent; border: none; color: #94A3B8; cursor: pointer; padding: 1px 4px; font-size: 0.72rem;" title="Seri No Düzenle">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>`
+                : `<span style="background: rgba(236, 72, 153, 0.12); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.35); padding: 1px 5px; border-radius: 4px; font-size: 0.7rem; font-weight: 700;">
+                    Seri Yok
+                  </span>
+                  <button onclick="window.openAssignSerialModalInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}', '')" style="background: rgba(236, 72, 153, 0.2); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.4); padding: 1px 5px; border-radius: 4px; font-size: 0.7rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Seri No Ekle veya Otomatik MTA Seri No Ata">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Ata
+                  </button>`
+              }
               ${item.faultCode === 'SEVK_HASARI' ? `
                 <span style="background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.5); padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 800;">
                   <i class="fa-solid fa-triangle-exclamation"></i> SEVKİYAT HASARI
@@ -775,6 +991,11 @@ export const WorkshopReturnedPage = async () => {
               <button onclick="window.openCardPassportInReturned('${item.serialNo || item.sapNo}')" style="background: rgba(0, 243, 255, 0.08); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Kart Yaşam Döngüsü & Pasaport">
                 <i class="fa-solid fa-passport"></i> Pasaport
               </button>
+              ${isFatih ? `
+                <button onclick="window.deleteRepairRecordInReturned('${item.id}', '${item.sapNo}', '${(item.description || '').replace(/'/g, "\\'")}')" style="background: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.35); padding: 4px 7px; border-radius: 6px; font-size: 0.74rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; height: 28px; min-width: 28px; box-sizing: border-box; transition: all 0.2s;" onmouseover="this.style.background='#EF4444'; this.style.color='#FFF';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#EF4444';" title="Kaydı Kalıcı Olarak Sil (Yalnızca Fatih Zebek)">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              ` : ''}
             </div>
           </td>
         </tr>

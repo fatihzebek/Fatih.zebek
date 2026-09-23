@@ -221,6 +221,20 @@ export const TaskCreationForm = async (templateId: string) => {
               <select id="wiz-team" class="cyber-input" onchange="window.updateWizData('assignedTeam', this.value)">
                 <option value="">Ekip Seçiniz...</option>
                 ${(() => {
+                  const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+                  const userRole = (currentUser?.role || '').toUpperCase();
+                  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+                  const userName = (currentUser?.displayName || currentUser?.name || '').toLowerCase().trim();
+                  const canCreatePoolTask = userRole === 'ADMIN' || 
+                                            userEmail === 'furkan.yildirim@demirerholding.com' || 
+                                            userEmail.includes('furkan.yildirim') || 
+                                            userName.includes('furkan yıldırım') || 
+                                            userName.includes('furkan yildirim');
+                  return canCreatePoolTask ? `
+                    <option value="HAVUZ" ${wizardData.assignedTeam === 'HAVUZ' ? 'selected' : ''} style="color: #fbbf24; font-weight: 800; background: #1f1b0a;">🌐 Bölge Ortak Görevi (Ekip Seçilmeyecek)</option>
+                  ` : '';
+                })()}
+                ${(() => {
                   const allTeams = Array.from({ length: 15 }, (_, i) => `Team ${String(i + 1).padStart(2, '0')}`);
                   let filteredTeams = allTeams;
                   
@@ -283,7 +297,9 @@ export const TaskCreationForm = async (templateId: string) => {
               ` : ''}
               <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem;">
                 <span style="color: var(--text-muted);">ATANAN EKİP:</span>
-                <span style="font-weight: 700; color: var(--accent-green);">${formatTeamName(wizardData.assignedTeam)}</span>
+                <span style="font-weight: 800; color: ${wizardData.assignedTeam === 'HAVUZ' ? '#fbbf24' : 'var(--accent-green)'};">
+                  ${wizardData.assignedTeam === 'HAVUZ' ? '🌐 Bölge Ortak Görevi' : formatTeamName(wizardData.assignedTeam)}
+                </span>
               </div>
               <div style="margin-top: 1rem; padding: 1rem; background: rgba(255,255,255,0.02); border-radius: 8px;">
                 <span style="color: var(--text-muted); font-size: 0.6rem; display: block; margin-bottom: 0.5rem;">YÖNETİCİ NOTU:</span>

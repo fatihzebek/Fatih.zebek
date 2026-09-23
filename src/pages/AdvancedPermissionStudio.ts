@@ -115,6 +115,7 @@ export const MODULE_CATEGORIES = [
       { id: 'image-pool', label: 'Görsel Ürün Tarama', icon: 'fa-solid fa-camera' },
       { id: 'workshop', label: 'Merkez Tamir Atölyesi', icon: 'fa-solid fa-wrench' },
       { id: 'workshop-stock', label: 'Atölye Stokları', icon: 'fa-solid fa-box-open' },
+      { id: 'isg-management', label: 'İSG & KKD Yönetimi', icon: 'fa-solid fa-shield-halved' },
       { id: 'kkd-kontrol', label: 'KKD Muayene Takip', icon: 'fa-solid fa-helmet-safety' },
       { id: 'olcu-aletleri', label: 'Ölçü Aletleri Kalibrasyon', icon: 'fa-solid fa-ruler-combined' },
       { id: 'tork-aletleri', label: 'Tork Aletleri Kalibrasyon', icon: 'fa-solid fa-wrench' },

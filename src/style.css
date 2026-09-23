@@ -125,11 +125,21 @@ input[type="number"] {
   scrollbar-color: #334155 transparent;
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg-dark);
   color: var(--text-main);
-  overflow-x: hidden;
   font-size: 14px;
 }
 
@@ -160,6 +170,7 @@ body {
   background: radial-gradient(circle at top right, rgba(0, 114, 255, 0.05), transparent);
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -167,6 +178,13 @@ body {
 }
 
 /* Modern Ultra-Fast Page Transition Animation */
+#page-content,
+#page-inner-content {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 #page-inner-content {
   animation: pageFadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -178,7 +196,7 @@ body {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -337,7 +355,6 @@ html {
 
   .content-area {
     padding: 1rem 1.5rem !important;
-    overflow-y: auto;
   }
 
   .fault-form-grid {
@@ -1646,6 +1663,10 @@ select.cyber-input:focus {
 }
 
 .hidden {
+  display: none !important;
+}
+
+.order-modal-overlay:not(.open) {
   display: none !important;
 }
 
@@ -3233,15 +3254,9 @@ body.light-mode .btn-cyber-mini.active {
 @media (max-width: 1024px) {
 
   /* === 1. GLOBAL YATAY TAŞMA KİLİDİ === */
-  html {
-    overflow-x: hidden !important;
+  html, body {
+    overflow: hidden !important;
     max-width: 100vw !important;
-  }
-
-  body {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-    position: relative !important;
   }
 
   .main-content {
@@ -3255,13 +3270,18 @@ body.light-mode .btn-cyber-mini.active {
     box-sizing: border-box !important;
   }
 
-  .content-area,
+  .content-area {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding-bottom: 80px !important;
+  }
+
   #page-content,
   #page-inner-content {
     max-width: 100% !important;
     width: 100% !important;
     box-sizing: border-box !important;
-    padding-bottom: 220px !important;
     /* overflow-x kaldırıldı: dropdown/select listelerinin kesilmesini önler */
   }
 

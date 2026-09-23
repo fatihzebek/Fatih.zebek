@@ -1095,6 +1095,17 @@ class WarehouseService {
     });
   }
 
+  async markAuditAsApprovedWithoutStock(warehouseId: string, auditId: string, approverName: string) {
+    const resolvedWhId = this.resolveWarehouseId(warehouseId);
+    const auditDocRef = doc(db, 'warehouses', resolvedWhId, 'audits', auditId);
+    await updateDoc(auditDocRef, {
+      status: 'APPROVED',
+      approvedBy: approverName,
+      approvedAt: serverTimestamp(),
+      approvalNote: 'Önceden Onaylandı (Arşivlendi)'
+    });
+  }
+
   async requestAuditRevision(warehouseId: string, auditId: string, managerName: string, note: string) {
     const resolvedWhId = this.resolveWarehouseId(warehouseId);
     const auditDocRef = doc(db, 'warehouses', resolvedWhId, 'audits', auditId);
@@ -1124,6 +1135,83 @@ class WarehouseService {
     const warehouseId = this.resolveWarehouseId(id);
     const docRef = doc(db, 'warehouses', warehouseId, 'audits', auditId);
     await updateDoc(docRef, data);
+  }
+
+  async getAllPendingAudits(): Promise<(AuditRecord & { warehouseId: string; warehouseName: string })[]> {
+    const APPROVAL_SYSTEM_START_DATE = new Date('2026-09-04T00:00:00+03:00').getTime();
+    const getAuditEpochTime = (a: any): number => {
+      if (a.timestamp?.toMillis) return a.timestamp.toMillis();
+      if (a.timestamp?.seconds) return a.timestamp.seconds * 1000;
+      if (a.createdAt?.seconds) return a.createdAt.seconds * 1000;
+      if (a.date) {
+        const ddmmyyyy = a.date.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+        if (ddmmyyyy) {
+          return new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`).getTime();
+        }
+        const parsed = Date.parse(a.date);
+        if (!isNaN(parsed)) return parsed;
+      }
+      return 0;
+    };
+
+    const filterAndDeduplicate = (list: (AuditRecord & { warehouseId: string; warehouseName: string })[]) => {
+      // Sort newest first
+      const sorted = [...list].sort((a, b) => getAuditEpochTime(b) - getAuditEpochTime(a));
+      const seen = new Set<string>();
+      const result: (AuditRecord & { warehouseId: string; warehouseName: string })[] = [];
+      for (const item of sorted) {
+        // Exclude legacy audits prior to approval system start date (04.09.2026)
+        if (getAuditEpochTime(item) < APPROVAL_SYSTEM_START_DATE) continue;
+        // Keep ONLY the latest pending audit per warehouse (ignore older superseded counts)
+        if (!seen.has(item.warehouseId)) {
+          seen.add(item.warehouseId);
+          result.push(item);
+        }
+      }
+      return result;
+    };
+
+    try {
+      const q = query(collectionGroup(db, 'audits'), where('status', '==', 'PENDING_APPROVAL'));
+      const snap = await getDocs(q);
+      const whList = dataService.getWarehouses();
+      const results: (AuditRecord & { warehouseId: string; warehouseName: string })[] = [];
+      snap.forEach(docSnap => {
+        const data = docSnap.data() as AuditRecord;
+        const parentWhId = docSnap.ref.parent?.parent?.id || '';
+        const warehouseId = parentWhId || (data as any).warehouseId || '';
+        const wh = whList.find(w => w.id === warehouseId);
+        const warehouseName = (data as any).warehouseName || (wh ? wh.name : warehouseId);
+        results.push({
+          id: docSnap.id,
+          ...data,
+          warehouseId,
+          warehouseName
+        });
+      });
+      return filterAndDeduplicate(results);
+    } catch (e) {
+      console.warn("Falling back to per-warehouse query for pending audits:", e);
+      const whList = dataService.getWarehouses();
+      const allPending: (AuditRecord & { warehouseId: string; warehouseName: string })[] = [];
+      await Promise.all(whList.map(async wh => {
+        try {
+          const col = collection(db, 'warehouses', wh.id, 'audits');
+          const q = query(col, where('status', '==', 'PENDING_APPROVAL'));
+          const s = await getDocs(q);
+          s.forEach(d => {
+            const data = d.data() as AuditRecord;
+            allPending.push({
+              id: d.id,
+              ...data,
+              warehouseId: wh.id,
+              warehouseName: wh.name
+            });
+          });
+        } catch (err) {}
+      }));
+      return filterAndDeduplicate(allPending);
+    }
   }
 
   // --- Field Scraps (Sahalardan Çıkan Hurdalar) ---

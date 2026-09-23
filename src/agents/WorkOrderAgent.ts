@@ -89,11 +89,15 @@ export class WorkOrderAgent extends BaseAgent {
       // ADIM 4: Onay ve Firestore Kaydı
       const isBakim = stepData.type === 'Bakım' || (stepData.type || '').toLowerCase().includes('bakim') || (stepData.type || '').toLowerCase().includes('bakım');
       
+      const isPoolTask = stepData.teamId === 'HAVUZ' || stepData.teamId === 'Atanmadı';
+      const assignedTeam = isPoolTask ? 'Atanmadı' : stepData.teamId;
+      const initialStatus = isPoolTask ? 'Açık Görev' : (stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Görev Oluşturuldu');
+
       const newGorev: Omit<Gorev, 'id' | 'createdAt' | 'updatedAt'> = {
         baslik: baslik,
         aciklama: stepData.description,
         turbinNo: targetTurbineNo,
-        atananEkip: stepData.teamId,
+        atananEkip: isPoolTask ? 'HAVUZ' : stepData.teamId,
         durum: stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Açık',
         secilenSablon: isWarehouseTask ? `Depo İşi: ${stepData.type}` : (isBakim ? 'Bakım Formu' : 'form-ariza')
       };
@@ -117,8 +121,9 @@ export class WorkOrderAgent extends BaseAgent {
         revisionNo: generatedRevisionNo,
         repairedMaterial: stepData.repairedMaterial,
         yoneticiNotu: stepData.description || `Sistemden atanan ${stepData.type} görevi.`,
-        assignedTeam: stepData.teamId,
-        customStatus: stepData.weatherStatus === 'HOLD_WEATHER' ? 'HOLD_WEATHER' : 'Görev Oluşturuldu'
+        assignedTeam: isPoolTask ? 'HAVUZ' : stepData.teamId,
+        isPoolTask: isPoolTask,
+        customStatus: initialStatus
       });
 
       console.log(`[Adım 4] İş emri başarıyla oluşturuldu. ID: ${taskId}`);

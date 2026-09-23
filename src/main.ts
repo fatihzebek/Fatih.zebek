@@ -365,7 +365,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'card-tracking' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management' | 'email-recipients';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-dashboard' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'card-tracking' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management' | 'email-recipients' | 'isg-management' | 'workshop-ai-agent' | 'notification-center';
 
 interface AppState {
   currentPage: Page
@@ -441,6 +441,16 @@ const Sidebar = () => {
     const userRole = profile?.role?.toUpperCase();
     const email = profile?.email?.toLowerCase();
     
+    // Strict security lock: DEMIRER_ISG / ISG role can ONLY access authorized İSG tabs
+    if (userRole === 'DEMIRER_ISG' || userRole === 'ISG') {
+      const allowedDefault = ['isg-management', 'kkd-kontrol'];
+      const customTabs = profile.allowedTabs;
+      if (Array.isArray(customTabs)) {
+        return customTabs.includes(tab);
+      }
+      return allowedDefault.includes(tab);
+    }
+
     // tickets-page (Saha Destek), image-pool (Resim Havuzu) and saha-siparisleri (Saha Siparişleri) are hidden for TAMİR role
     if (tab === 'tickets-page' || tab === 'image-pool' || tab === 'saha-siparisleri') {
       if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') {
@@ -479,7 +489,7 @@ const Sidebar = () => {
     }
 
     // Strict role locks for Workshop & Repair tabs: ONLY ADMIN, MALZEME_YONETIMI, TAMIR, and Furkan YILDIRIM
-    const workshopAndRepairTabs = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'field-scraps', 'card-passport'];
+    const workshopAndRepairTabs = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-ai-agent', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap', 'field-scraps', 'card-passport'];
     if (workshopAndRepairTabs.includes(tab)) {
       if (userRole === 'ADMIN') return true;
       if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') return true;
@@ -499,11 +509,26 @@ const Sidebar = () => {
              email === 'fatih.zebek@demirerholding.com';
     }
 
+    // Strict security lock: 'material-dashboard' is accessible by ADMIN or MALZEME_YONETIMI
+    if (tab === 'material-dashboard') {
+      return userRole === 'ADMIN' || 
+             userRole === 'MALZEME_YONETIMI' || 
+             email === 'hursit.akter@demirerholding.com' || 
+             email === 'fatih.zebek@demirerholding.com';
+    }
+
+    // Strict security lock: 'isg-management' is ONLY accessible by ADMIN and DEMIRER_ISG / ISG roles
+    if (tab === 'isg-management') {
+      const isIsgUser = userRole === 'DEMIRER_ISG' || userRole === 'ISG';
+      const isAdmin = userRole === 'ADMIN' || email === 'fatih.zebek@demirerholding.com';
+      return isAdmin || isIsgUser;
+    }
+
     // Special coordinator override for hursit.akter@demirerholding.com or role MALZEME_YONETIMI
     if (email === 'hursit.akter@demirerholding.com' || userRole === 'MALZEME_YONETIMI') {
       const allowedForMalzemeYonetimi = [
-        'siparis', 'turbines', 'material-pricing', 'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
-        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-performance', 'workshop-dispatches', 'card-tracking', 'workshop-returned', 'workshop-scrap'
+        'material-dashboard', 'siparis', 'turbines', 'material-pricing', 'material-analytics', 'purchase-requests', 'warehouses', 'transfers', 
+        'reports-archive', 'global-history', 'asset-custody', 'repair-history', 'workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-ai-agent', 'workshop-performance', 'workshop-dispatches', 'card-tracking', 'workshop-returned', 'workshop-scrap'
       ];
       if (allowedForMalzemeYonetimi.includes(tab)) return true;
       return false; // Absolutely restrict from tasks, etc.
@@ -511,7 +536,7 @@ const Sidebar = () => {
 
     // TAMİR role access for other tabs
     if ((userRole as any) === 'TAMİR' || (userRole as any) === 'TAMIR') {
-      const allowedForTamir = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'];
+      const allowedForTamir = ['workshop', 'workshop-stock', 'workshop-tasks', 'workshop-components', 'workshop-ai-agent', 'repair-history', 'workshop-dispatches', 'workshop-returned', 'workshop-scrap'];
       if (allowedForTamir.includes(tab)) return true;
       return false;
     }
@@ -703,7 +728,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${(isAllowed('tasks') || isAllowed('new-task') || isAllowed('turbines') || isAllowed('warehouses') || isAllowed('reports-archive') || isAllowed('bakim-planlama') || isAllowed('tickets-page') || isAllowed('workshop') || profile?.role === 'TAMİR' || isAllowed('tsi-library') || isAllowed('fault-library')) ? `
+        ${(isAllowed('tasks') || isAllowed('new-task') || isAllowed('turbines') || isAllowed('warehouses') || isAllowed('reports-archive') || isAllowed('bakim-planlama') || isAllowed('tickets-page') || isAllowed('workshop') || profile?.role === 'TAMİR' || isAllowed('tsi-library') || isAllowed('fault-library') || isAllowed('isg-management')) ? `
           <div class="nav-section-label" ${navDragAttr('sec-saha')}>Saha Operasyon Bölümü</div>
         ` : ''}
 
@@ -807,6 +832,56 @@ const Sidebar = () => {
             <i class="fa-solid fa-headset" style="color: var(--accent-cyan);"></i> Saha Destek
           </li>
         ` : ''}
+        ${isAllowed('isg-management') ? `
+          <!-- 🛡️ İŞ SAĞLIĞI VE GÜVENLİĞİ SUBMENU -->
+          <li class="nav-item has-submenu ${state.currentPage === 'isg-management' ? 'active' : ''}" ${navDragAttr('isg-management')} onclick="window.toggleSubmenu('isg')" style="color: #10b981; font-weight: 700;">
+            <i class="fa-solid fa-shield-halved" style="color: #10b981;"></i> 
+            <span>İş Sağlığı & Güvenliği</span>
+            <span id="isg-sidebar-badge" style="display:none; background:#ef4444; color:white; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:bold; margin-left:auto; box-shadow:0 0 8px rgba(239,68,68,0.5);">0</span>
+            <i class="fa-solid fa-chevron-down submenu-arrow ${state.currentPage === 'isg-management' ? 'rotate-180' : ''}" style="color: #10b981; margin-left: 6px;"></i>
+          </li>
+          <ul id="isg-submenu" class="sub-menu ${state.currentPage === 'isg-management' ? '' : 'hidden'}">
+            <li class="sub-item ${(state.currentPage === 'isg-management' && ((window as any)._isgActiveTab === 'KKD' || !(window as any)._isgActiveTab)) ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('KKD')">
+              <i class="fa-solid fa-vest" style="font-size: 0.65rem; color: #10b981;"></i> KKD Talepleri (DH-FR-019)
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'INVENTORY') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('INVENTORY')">
+              <i class="fa-solid fa-boxes-stacked" style="font-size: 0.65rem; color: #06b6d4;"></i> KKD & İSG Depo Stok
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'NEAR_MISS') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('NEAR_MISS')">
+              <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem; color: #f59e0b;"></i> Ramak Kala & Tehlike
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'MSDS') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('MSDS')">
+              <i class="fa-solid fa-flask-vial" style="font-size: 0.65rem; color: #06b6d4;"></i> Kimyasal & MSDS Formları
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'EQUIPMENT_INSPECTION') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('EQUIPMENT_INSPECTION')">
+              <i class="fa-solid fa-helmet-safety" style="font-size: 0.65rem; color: #fbbf24;"></i> KKD Muayene Takibi
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'DOCUMENTS') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('DOCUMENTS')">
+              <i class="fa-solid fa-file-shield" style="font-size: 0.65rem; color: #a855f7;"></i> İSG Talimat & Prosedürler
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'CERTIFICATES') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('CERTIFICATES')">
+              <i class="fa-solid fa-id-card" style="font-size: 0.65rem; color: #ec4899;"></i> Sertifika & Sağlık Takibi
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'FIRE_SAFETY') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('FIRE_SAFETY')">
+              <i class="fa-solid fa-fire-flame-curved" style="font-size: 0.65rem; color: #ef4444;"></i> Orman & Yangın Güvenliği
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'DISPATCHES') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('DISPATCHES')">
+              <i class="fa-solid fa-plane-departure" style="font-size: 0.65rem; color: #38bdf8;"></i> Geçici Görevlendirme
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'CONTRACTORS') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('CONTRACTORS')">
+              <i class="fa-solid fa-person-digging" style="font-size: 0.65rem; color: #f97316;"></i> Taşeron İSG & Saha Giriş
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'SCORECARDS') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('SCORECARDS')">
+              <i class="fa-solid fa-trophy" style="font-size: 0.65rem; color: #eab308;"></i> Saha & Ekip Puanlama
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'RISK') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('RISK')">
+              <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.65rem; color: #f43f5e;"></i> Risk Analizleri (5x5)
+            </li>
+            <li class="sub-item ${(state.currentPage === 'isg-management' && (window as any)._isgActiveTab === 'PROCUREMENT') ? 'active' : ''}" onclick="window.switchIsgTabAndNavigate('PROCUREMENT')">
+              <i class="fa-solid fa-cart-shopping" style="font-size: 0.65rem; color: #10b981;"></i> İSG Satın Alma & Sipariş
+            </li>
+          </ul>
+        ` : ''}
         ${isAllowed('workshop') || profile?.role === 'TAMİR' ? `
           <li class="nav-item ${state.currentPage === 'workshop' ? 'active' : ''}" ${navDragAttr('workshop')} onclick="window.navigate('workshop')">
             <i class="fa-solid fa-microchip" style="color: #14F195;"></i> Kart Tamir Merkezi
@@ -869,8 +944,14 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${((isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('card-tracking') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
+        ${((isAllowed('material-dashboard') || isAllowed('siparis') || isAllowed('saha-siparisleri') || isAllowed('transfers') || isAllowed('asset-custody') || profile?.role === 'ADMIN' || isAllowed('material-analytics') || isAllowed('card-tracking') || isAllowed('global-history') || isMaterialManager || (isAllowed('warehouses') && profile?.role !== 'TECHNICIAN') || isAllowed('image-pool')) && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
           <div class="nav-section-label" ${navDragAttr('sec-depo')}>Depo Yönetimi</div>
+        ` : ''}
+
+        ${(isAllowed('material-dashboard')) ? `
+          <li class="nav-item ${state.currentPage === 'material-dashboard' ? 'active' : ''}" ${navDragAttr('material-dashboard')} onclick="window.navigate('material-dashboard')">
+            <i class="fa-solid fa-gauge-high" style="color: #00f3ff;"></i> Malzeme Dashboard
+          </li>
         ` : ''}
 
         ${(isAllowed('saha-siparisleri') && (profile?.role as any) !== 'TAMİR' && (profile?.role as any) !== 'TAMIR') ? `
@@ -991,7 +1072,10 @@ const Sidebar = () => {
             <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Parametre Denetimi
           </li>
         ` : ''}
-        ${((state.userProfile?.email || profile?.email || '').toLowerCase().includes('fatih.zebek')) ? `
+        ${((state.userProfile?.email || profile?.email || '').toLowerCase().includes('fatih.zebek') || profile?.role === 'ADMIN') ? `
+          <li class="nav-item ${state.currentPage === 'notification-center' ? 'active' : ''}" ${navDragAttr('notification-center')} onclick="window.navigate('notification-center')">
+            <i class="fa-solid fa-bullhorn" style="color: #fbbf24;"></i> Bildirim Merkezi
+          </li>
           <li class="nav-item ${state.currentPage === 'users' ? 'active' : ''}" ${navDragAttr('users')} onclick="window.navigate('users')">
             <i class="fa-solid fa-user-gear" style="color: #f43f5e;"></i> Kullanıcı Yetki
           </li>
@@ -1321,16 +1405,22 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     (window as any).currentUser = state.userProfile;
     (window as any).currentUserTeam = state.userProfile.team || formatTeamName(state.userProfile.displayName || user.email || '');
     
-    // Redirect Material Manager to Material Analytics instead of Dashboard
+    // Redirect Material Manager to Material Dashboard instead of Dashboard
     const isMaterialManager = state.userProfile.role === 'MALZEME_YONETIMI' || state.userProfile.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
     if (isMaterialManager && state.currentPage === 'dashboard') {
-      state.currentPage = 'material-analytics';
+      state.currentPage = 'material-dashboard';
     }
 
     // Redirect TAMİR to workshop instead of Dashboard
     const isTamirRole = state.userProfile.role === 'TAMİR';
     if (isTamirRole && state.currentPage === 'dashboard') {
       state.currentPage = 'workshop';
+    }
+
+    // Redirect DEMIRER_ISG to isg-management instead of Dashboard
+    const isIsgRole = (state.userProfile.role as any) === 'DEMIRER_ISG' || (state.userProfile.role as any) === 'ISG';
+    if (isIsgRole && state.currentPage === 'dashboard') {
+      state.currentPage = 'isg-management';
     }
 
     // --- GLOBAL TICKET NOTIFICATION LISTENER ---
@@ -1349,6 +1439,32 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           }
         });
       });
+    }
+
+    // --- GLOBAL ISG NOTIFICATION LISTENER (ADMIN and DEMIRER_ISG) ---
+    if (!(window as any)._globalIsgUnsubscribe) {
+      const userRole = state.userProfile.role?.toUpperCase();
+      const userEmail = (state.userProfile.email || '').toLowerCase();
+      const isAuthorizedForIsg = userRole === 'ADMIN' || 
+                                userRole === 'DEMIRER_ISG' || 
+                                userRole === 'ISG' ||
+                                userEmail.includes('fatih.zebek');
+      if (isAuthorizedForIsg) {
+        import('./services/IsgService').then(({ isgService }) => {
+          (window as any)._globalIsgUnsubscribe = isgService.subscribeToIsgAlerts((stats) => {
+            const isgNavBadge = document.getElementById('isg-sidebar-badge');
+            if (isgNavBadge) {
+              if (stats.total > 0) {
+                isgNavBadge.style.display = 'inline-block';
+                isgNavBadge.textContent = String(stats.total);
+                isgNavBadge.title = `${stats.kkdPending} Bekleyen KKD Talebi, ${stats.nearMissOpen} Açık/İncelenen Ramak Kala`;
+              } else {
+                isgNavBadge.style.display = 'none';
+              }
+            }
+          });
+        }).catch(err => console.error('[IsgAlerts] Error importing IsgService:', err));
+      }
     }
 
     // --- SÜRÜM NOTLARI & GÜNCELLEME KONTROLÜ ---
@@ -1553,6 +1669,25 @@ const render = async (options: { skipShell?: boolean } = {}) => {
             if (periodicArrow) periodicArrow.classList.remove('rotate-180');
           }
         }
+
+        const isgSub = document.getElementById('isg-submenu');
+        const isgArrow = document.querySelector('.nav-item[onclick*="toggleSubmenu(\'isg\')"]')?.querySelector('.submenu-arrow');
+        if (isgSub) {
+          if (state.currentPage === 'isg-management') {
+            isgSub.classList.remove('hidden');
+            if (isgArrow) isgArrow.classList.add('rotate-180');
+            const parentLi = isgSub.previousElementSibling;
+            if (parentLi) parentLi.classList.add('active');
+
+            const activeTabKey = (window as any)._isgActiveTab || 'KKD';
+            isgSub.querySelectorAll('.sub-item').forEach(el => el.classList.remove('active'));
+            const currentSub = isgSub.querySelector(`.sub-item[onclick*="'${activeTabKey}'"]`);
+            if (currentSub) currentSub.classList.add('active');
+          } else {
+            isgSub.classList.add('hidden');
+            if (isgArrow) isgArrow.classList.remove('rotate-180');
+          }
+        }
       };
       
       try {
@@ -1602,6 +1737,9 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     import('./pages/TsiLibrary').then(m => m.destroyTsiLibrary?.()).catch(() => {});
 
     (window as any).currentWarehouseTab = state.warehouseTab;
+    // Clean up any orphaned modals attached directly to document.body
+    document.querySelectorAll(':scope > #new-demand-modal, :scope > #approve-demand-modal, :scope > #reject-demand-modal').forEach(el => el.remove());
+
     const content = await getContent();
     clearTimeout(loaderTimeout);
     targetContent.innerHTML = content;
@@ -1734,6 +1872,7 @@ const preloadModulesInBackground = () => {
     import('./pages/LeaveManagement').then(m => pageModulesCache['leave-management'] = m).catch(() => {});
     import('./pages/AssetCustody').then(m => pageModulesCache['asset-custody'] = m).catch(() => {});
     import('./pages/MaterialManagement').then(m => pageModulesCache['material-analytics'] = m).catch(() => {});
+    import('./pages/MaterialDashboard').then(m => pageModulesCache['material-dashboard'] = m).catch(() => {});
     import('./pages/WorkshopDashboard').then(m => pageModulesCache['workshop'] = m).catch(() => {});
     import('./pages/FieldScraps').then(m => pageModulesCache['field-scraps'] = m).catch(() => {});
     import('./pages/Analytics').then(m => pageModulesCache['analytics'] = m).catch(() => {});
@@ -1797,6 +1936,21 @@ const getContent = async () => {
       const { TasksPage } = await import('./pages/Tasks');
       return await TasksPage();
     }
+    case 'notification-center': {
+      const email = (state.userProfile?.email || '').toLowerCase();
+      const isAdmin = state.userProfile?.role === 'ADMIN' || email.includes('fatih.zebek');
+      if (!isAdmin) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Bildirim & Duyuru Merkezi yalnızca Sistem Yöneticilerine (Admin) özeldir.</p>
+        </div>`;
+      }
+      const { NotificationCenterPage, initNotificationCenterEvents } = await import('./pages/NotificationCenter');
+      setTimeout(() => {
+        initNotificationCenterEvents();
+      }, 50);
+      return await NotificationCenterPage();
+    }
     case 'users': {
       const email = (state.userProfile?.email || '').toLowerCase();
       if (!email.includes('fatih.zebek')) {
@@ -1859,6 +2013,10 @@ const getContent = async () => {
       const { WorkshopTasksPage } = await import('./pages/WorkshopTasks');
       return await WorkshopTasksPage();
     }
+    case 'workshop-ai-agent': {
+      const { WorkshopTasksPage } = await import('./pages/WorkshopTasks');
+      return await WorkshopTasksPage();
+    }
     case 'workshop-stock': {
       const { WorkshopStockPage } = await import('./pages/WorkshopStock');
       return await WorkshopStockPage();
@@ -1911,6 +2069,18 @@ const getContent = async () => {
     case 'MALZEME_YONETIMI': {
       const { MaterialManagementPage } = await import('./pages/MaterialManagement');
       return await MaterialManagementPage(state.userProfile);
+    }
+    case 'material-dashboard': {
+      const email = (state.userProfile?.email || '').toLowerCase();
+      const role = state.userProfile?.role;
+      if (role !== 'ADMIN' && role !== 'MALZEME_YONETIMI' && !email.includes('hursit.akter') && !email.includes('fatih.zebek')) {
+        return `<div style="padding: 3rem; text-align: center; color: #f43f5e; font-family: 'Rajdhani', sans-serif;">
+          <h2><i class="fa-solid fa-lock"></i> Bu Sayfaya Erişim Yetkiniz Bulunmamaktadır</h2>
+          <p style="color: #94A3B8;">Malzeme Dashboard sayfasına erişim izni yalnızca Malzeme Yönetimi ve Yöneticilere aittir.</p>
+        </div>`;
+      }
+      const { MaterialDashboardPage } = await import('./pages/MaterialDashboard');
+      return await MaterialDashboardPage();
     }
     case 'material-analytics': {
       const email = (state.userProfile?.email || '').toLowerCase();
@@ -2064,6 +2234,10 @@ const getContent = async () => {
     case 'tickets-page': {
       const { TicketsPage } = await import('./pages/Tickets');
       return await TicketsPage();
+    }
+    case 'isg-management': {
+      const { IsgManagementPage } = await import('./pages/IsgManagement');
+      return await IsgManagementPage();
     }
     case 'image-pool': {
       const { ImagePoolPage } = await import('./pages/ImagePool');
@@ -2222,6 +2396,11 @@ const getContent = async () => {
       (window as any).toggleSubmenu(id);
     }
   }
+};
+
+(window as any).switchIsgTabAndNavigate = (tab: string) => {
+  (window as any)._isgActiveTab = tab;
+  (window as any).navigate('isg-management');
 };
 
 (window as any).selectMaintSiteAndNavigate = (siteId: string) => {

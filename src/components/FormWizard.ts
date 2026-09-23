@@ -14,6 +14,16 @@ export const NewTaskForm = async () => {
   currentWarehouseDefects = [];
   selectedDefectItem = null;
 
+  const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+  const userRole = (currentUser?.role || '').toUpperCase();
+  const userEmail = (currentUser?.email || '').toLowerCase().trim();
+  const userName = (currentUser?.displayName || currentUser?.name || '').toLowerCase().trim();
+  const canCreatePoolTask = userRole === 'ADMIN' || 
+                            userEmail === 'furkan.yildirim@demirerholding.com' || 
+                            userEmail.includes('furkan.yildirim') || 
+                            userName.includes('furkan yıldırım') || 
+                            userName.includes('furkan yildirim');
+
   const allowedTeams = dataService.getAllowedTeams();
   const isSingleTeam = allowedTeams.length === 1;
   const initialTeamValue = isSingleTeam ? allowedTeams[0] : '';
@@ -453,6 +463,12 @@ export const NewTaskForm = async () => {
                 ${!isSingleTeam ? `
                   <div class="custom-dropdown-option ${!initialTeamValue ? 'active' : ''}" data-value="" style="padding: 10px 16px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.03);">
                     Atanacak Ekip Seçiniz...
+                  </div>
+                ` : ''}
+                ${canCreatePoolTask ? `
+                  <div class="custom-dropdown-option" data-value="HAVUZ" style="padding: 10px 16px; font-size: 0.85rem; color: #fbbf24; cursor: pointer; border-bottom: 1px solid rgba(245, 158, 11, 0.25); background: rgba(245, 158, 11, 0.08); display: flex; align-items: center; gap: 8px; font-weight: 700;">
+                    <i class="fa-solid fa-users-viewfinder" style="font-size: 0.85rem; color: #fbbf24;"></i>
+                    <span>🌐 Bölge Ortak Görevi (Ekip Seçilmeyecek)</span>
                   </div>
                 ` : ''}
                 ${allowedTeams.map(team => `
@@ -1029,7 +1045,7 @@ const resetTelemetryCards = () => {
     return;
   }
 
-  const sites = dataService.getSites();
+  const sites = dataService.getAllSites();
   let found = false;
 
   for (const site of sites) {
@@ -1133,9 +1149,10 @@ const resetTelemetryCards = () => {
       return;
     }
 
+    const isPool = team === 'HAVUZ' || team === 'Atanmadı';
     const allowed = dataService.getAllowedTeams();
-    if (!team || !allowed.includes(team)) {
-      alert("Lütfen görev için yetkili olduğunuz bir ekip seçiniz.");
+    if (!isPool && (!team || !allowed.includes(team))) {
+      alert("Lütfen görev için yetkili olduğunuz bir ekip seçiniz veya Bölge Havuzu'nu belirleyin.");
       btn.disabled = false;
       btn.innerHTML = originalText;
       return;
@@ -1202,7 +1219,9 @@ const resetTelemetryCards = () => {
       turbinNo: turbine,
       statuKodu: faultCode,
       yoneticiNotu: note,
-      assignedTeam: team,
+      assignedTeam: isPool ? 'HAVUZ' : team,
+      isPoolTask: isPool,
+      customStatus: isPool ? 'Açık Görev' : undefined,
       taskLocationType: isWarehouse ? 'WAREHOUSE' : 'TURBINE',
       warehouseId: isWarehouse ? siteId : undefined,
       warehouseName: isWarehouse ? turbine : undefined,
@@ -1216,9 +1235,9 @@ const resetTelemetryCards = () => {
     });
 
     // Başarılı
-    btn.style.background = 'var(--accent-green)';
-    btn.style.borderColor = 'var(--accent-green)';
-    btn.innerHTML = '<i class="fa-solid fa-check-double"></i> BAŞARIYLA ATANDI';
+    btn.style.background = isPool ? '#f59e0b' : 'var(--accent-green)';
+    btn.style.borderColor = isPool ? '#f59e0b' : 'var(--accent-green)';
+    btn.innerHTML = isPool ? '<i class="fa-solid fa-users-viewfinder"></i> BÖLGE ORTAK GÖREVİNE EKLENDİ' : '<i class="fa-solid fa-check-double"></i> BAŞARIYLA ATANDI';
     
     (document.getElementById('new-task-form') as HTMLFormElement).reset();
     (window as any).handleTaskTypeChange('');

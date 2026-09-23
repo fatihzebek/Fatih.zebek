@@ -9,7 +9,7 @@ import type { ServiceReport } from '../services/ServiceReportService';
 import { personnelService } from '../services/PersonnelService';
 import { warehouseService } from '../services/WarehouseService';
 import { ImageCompressor } from '../utils/imageCompressor';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 const cleanSablonName = (sablonName: string) => {
@@ -100,6 +100,11 @@ const checkCreateTaskPermission = (currentUser: any): boolean => {
 };
 
 let activeSiteFilter = 'TÜMÜ';
+const storedFilter = localStorage.getItem('tasksActiveSiteFilter');
+if (storedFilter) {
+  activeSiteFilter = storedFilter;
+  localStorage.removeItem('tasksActiveSiteFilter');
+}
 
 const renderTasksTable = (tasks: Task[], userRole: string) => {
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
@@ -116,26 +121,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
     `;
   }
 
-  // Group tasks by site ID for consistent sidebar
-  const grouped = tasks.reduce((acc, task) => {
-    let sId = task.siteId || 'Bilinmiyor';
-    
-    // Normalize siteId to ID if it's a name
-    if (sId !== 'Bilinmiyor' && isNaN(Number(sId))) {
-      const siteObj = dataService.getAllSites().find(s => s.name === sId || s.name.includes(sId));
-      if (siteObj) sId = siteObj.id;
-    }
-
-    if (!acc[sId]) acc[sId] = [];
-    acc[sId].push(task);
-    return acc;
-  }, {} as Record<string, Task[]>);
+  // Group tasks by site
+  const grouped: Record<string, Task[]> = {};
+  tasks.forEach(t => {
+    const site = t.siteId || 'Bilinmiyor';
+    if (!grouped[site]) grouped[site] = [];
+    grouped[site].push(t);
+  });
 
   const siteNames = Object.keys(grouped).sort((a, b) => {
-    const siteA = dataService.getAllSites().find(s => s.id === a);
-    const siteB = dataService.getAllSites().find(s => s.id === b);
-    const nameA = siteA ? siteA.name : a;
-    const nameB = siteB ? siteB.name : b;
+    const nameA = dataService.getAllSites().find(s => s.id === a)?.name || a;
+    const nameB = dataService.getAllSites().find(s => s.id === b)?.name || b;
     const indexA = DataService.customOrder.findIndex(o => o.toLowerCase() === nameA.toLowerCase());
     const indexB = DataService.customOrder.findIndex(o => o.toLowerCase() === nameB.toLowerCase());
     if (indexA === -1 && indexB === -1) return nameA.localeCompare(nameB);
@@ -144,10 +140,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
     return indexA - indexB;
   });
   
+  const poolTasksList = tasks.filter(t => 
+    t.status !== 'Tamamlandı' &&
+    Boolean(t.isPoolTask === true || t.personnel === 'HAVUZ' || t.status === 'Havuzda' || t.status === 'Açık Görev')
+  );
+
   // Filter tasks based on active selection
   const filteredTasks = activeSiteFilter === 'TÜMÜ' 
     ? tasks 
-    : grouped[activeSiteFilter] || [];
+    : activeSiteFilter === 'BOLGE_GOREVI'
+      ? poolTasksList
+      : grouped[activeSiteFilter] || [];
 
   return `
     <div class="tasks-page-container">
@@ -164,6 +167,14 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                  <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${tasks.length}</span>
                </div>
 
+               <div class="task-filter-item ${activeSiteFilter === 'BOLGE_GOREVI' ? 'active' : ''}" 
+                    onclick="window.handleSiteFilter('BOLGE_GOREVI')"
+                    style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 700; ${activeSiteFilter === 'BOLGE_GOREVI' ? 'background: rgba(245, 158, 11, 0.2) !important; border-color: rgba(245, 158, 11, 0.6) !important; color: #fbbf24 !important;' : 'color: #fbbf24;'}">
+                 <i class="fa-solid fa-users-viewfinder" style="font-size: 0.75rem; color: #fbbf24;"></i>
+                 <span>BÖLGE GÖREVLERİ</span>
+                 <span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.18); padding: 2px 6px; border-radius: 6px; color: #fbbf24; font-weight: 800;">${poolTasksList.length}</span>
+               </div>
+
                ${siteNames.map(id => {
                   const site = dataService.getAllSites().find(s => s.id === id);
                   const displayName = site ? site.name : id;
@@ -177,12 +188,6 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                   </div>
                `}).join('')}
              </div>
-
-             ${hasCreateTaskPerm ? `
-               <button onclick="window.navigate('new-task')" class="cyber-btn" style="background: linear-gradient(135deg, rgba(20, 241, 149, 0.2), rgba(0, 243, 255, 0.15)); border: 1px solid rgba(20, 241, 149, 0.5); color: #14f195; font-weight: 700; font-size: 0.8rem; padding: 7px 14px; border-radius: 8px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; transition: all 0.2s; white-space: nowrap; margin-left: auto;">
-                 <i class="fa-solid fa-plus-circle" style="font-size: 0.9rem;"></i> Yeni İş Emri Aç
-               </button>
-             ` : ''}
           </div>
         </div>
       </div>
@@ -272,28 +277,37 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             background: linear-gradient(90deg, rgba(20, 241, 149, 0.02), rgba(0, 243, 255, 0.02)) !important;
           }
           .tasks-table-panel th {
-            padding: 14px 18px !important;
+            padding: 10px 10px !important;
             font-weight: 800;
             color: var(--text-muted);
             border-bottom: 1px solid var(--glass-border) !important;
             vertical-align: middle !important;
             text-transform: uppercase;
             font-size: 0.68rem;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.2px;
             font-family: 'Rajdhani', sans-serif;
           }
           .tasks-table-panel th i {
-            margin-right: 8px;
-            font-size: 0.75rem;
+            margin-right: 6px;
+            font-size: 0.72rem;
             color: #00f3ff;
             opacity: 0.8;
             text-shadow: 0 0 8px rgba(0,243,255,0.4);
           }
           .tasks-table-panel td {
-            padding: 14px 18px !important;
+            padding: 10px 10px !important;
             vertical-align: middle !important;
             border-bottom: 1px solid var(--glass-border) !important;
             transition: all 0.3s ease;
+          }
+          .tasks-table-scroll-container {
+            overflow-x: auto;
+            width: 100%;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .tasks-table-scroll-container::-webkit-scrollbar {
+            display: none;
           }
           .tasks-table-panel tr:last-child td {
             border-bottom: none !important;
@@ -344,14 +358,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            padding: 4px 12px !important;
-            border-radius: 8px !important;
-            font-size: 0.68rem !important;
-            font-weight: 800 !important;
+            padding: 0 10px !important;
+            border-radius: 4px !important;
+            font-size: 0.62rem !important;
+            font-weight: 700 !important;
             text-transform: uppercase;
             white-space: nowrap !important;
             letter-spacing: 0.5px;
-            height: 26px;
+            height: 24px !important;
+            min-height: 24px !important;
+            max-height: 24px !important;
+            line-height: 24px !important;
             box-sizing: border-box;
             transition: all 0.3s ease;
           }
@@ -464,12 +481,14 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
           
           .action-btn-main {
-            height: 28px !important;
-            min-height: 28px !important;
-            padding: 0 12px !important;
-            font-size: 0.65rem !important;
-            font-weight: 800 !important;
-            border-radius: 6px !important;
+            height: 24px !important;
+            min-height: 24px !important;
+            max-height: 24px !important;
+            line-height: 24px !important;
+            padding: 0 10px !important;
+            font-size: 0.62rem !important;
+            font-weight: 700 !important;
+            border-radius: 4px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -546,15 +565,17 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
 
           .action-btn-delete {
-            width: 28px !important;
-            height: 28px !important;
-            min-width: 28px !important;
-            min-height: 28px !important;
+            width: 24px !important;
+            height: 24px !important;
+            min-width: 24px !important;
+            min-height: 24px !important;
+            max-height: 24px !important;
+            line-height: 24px !important;
             padding: 0 !important;
             background: rgba(255, 82, 82, 0.06) !important;
             color: #ff6b6b !important;
             border: 1px solid rgba(255, 82, 82, 0.12) !important;
-            border-radius: 6px !important;
+            border-radius: 4px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -572,10 +593,13 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
 
           .no-permission-badge {
-            font-size: 0.65rem !important;
+            font-size: 0.62rem !important;
             color: rgba(255,255,255,0.3) !important;
             font-weight: 700 !important;
-            height: 28px;
+            height: 24px !important;
+            min-height: 24px !important;
+            max-height: 24px !important;
+            line-height: 24px !important;
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
@@ -604,12 +628,13 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
 
           /* Team badge */
           .team-badge {
-            display: inline-flex; align-items: center; gap: 6px;
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
             background: rgba(0, 243, 255, 0.04);
             border: 1px solid rgba(0, 243, 255, 0.1);
             padding: 4px 10px; border-radius: 6px;
             font-weight: 700; font-size: 0.72rem;
             color: rgba(0, 243, 255, 0.85);
+            white-space: nowrap;
             transition: all 0.25s ease;
           }
           .team-badge:hover {
@@ -630,7 +655,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             </div>
             <div>
               <h2 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 800; letter-spacing: 0.3px;">
-                ${activeSiteFilter === 'TÜMÜ' ? 'Tüm İş Emirleri' : (dataService.getAllSites().find(s => s.id === activeSiteFilter)?.name || activeSiteFilter)}
+                ${activeSiteFilter === 'TÜMÜ' ? 'Tüm İş Emirleri' : (activeSiteFilter === 'BOLGE_GOREVI' ? '🌐 Bölge Ortak Görevleri' : (dataService.getAllSites().find(s => s.id === activeSiteFilter)?.name || activeSiteFilter))}
               </h2>
               <p style="margin: 2px 0 0 0; font-size: 0.7rem; color: var(--text-muted); opacity: 0.8; font-weight: 600; letter-spacing: 0.5px;">AKTİF GÖREVLER & İŞ EMİRLERİ</p>
             </div>
@@ -642,16 +667,16 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
         </div>
 
         <div class="glass-panel tasks-table-panel">
-          <div style="overflow-x: auto; width: 100%;">
-            <table style="table-layout: auto; width: 100%; min-width: 960px; border-collapse: collapse;">
+          <div class="tasks-table-scroll-container">
+            <table style="table-layout: auto; width: 100%; border-collapse: collapse;">
               <thead>
                 <tr>
-                  <th style="width: 110px; min-width: 110px; text-align: left;">TARİH</th>
-                  <th style="width: 120px; min-width: 120px; text-align: left;">SAHA / TÜRBİN</th>
-                  <th style="width: 100px; min-width: 100px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">EKİP</th>
-                  <th style="min-width: 260px; text-align: left;">GÖREV TÜRÜ</th>
-                  <th style="width: 190px; min-width: 190px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">DURUM</th>
-                  <th style="width: 180px; min-width: 180px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">AKSİYON</th>
+                  <th style="width: 95px; min-width: 90px; text-align: left;">TARİH</th>
+                  <th style="width: 175px; min-width: 165px; text-align: left; white-space: nowrap;">SAHA / TÜRBİN</th>
+                  <th style="width: 95px; min-width: 90px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">EKİP</th>
+                  <th style="min-width: 200px; text-align: left;">GÖREV TÜRÜ</th>
+                  <th style="width: 155px; min-width: 145px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">DURUM</th>
+                  <th style="width: 125px; min-width: 115px; text-align: center; padding-left: 0 !important; padding-right: 0 !important;">AKSİYON</th>
                 </tr>
               </thead>
               <tbody>
@@ -659,7 +684,8 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                   const isReturned = (task as any).isReturnedReport;
                   const isHoldWeather = task.status === 'HOLD_WEATHER';
                   const isFault = (task.rawFaultCode && task.rawFaultCode !== '---');
-                  const statusClass = isReturned ? 'returned-badge' : (task.status === 'Görev Teslim Edildi' ? 'delivered' : isHoldWeather ? 'hold-weather-badge' : (task.status === 'Tamamlandı' ? 'completed' : 'created'));
+                  const isPool = Boolean(task.isPoolTask || task.personnel === 'Atanmadı' || task.personnel === 'HAVUZ' || task.status === 'Havuzda' || task.status === 'Açık Görev');
+                  const statusClass = isReturned ? 'returned-badge' : (task.status === 'Görev Teslim Edildi' ? 'delivered' : isHoldWeather ? 'hold-weather-badge' : (task.status === 'Tamamlandı' ? 'completed' : (isPool ? 'hold-weather-badge' : 'created')));
                   const isTransferable = task.status !== 'Tamamlandı' && hasTransferTaskPerm;
                   
                   let displayDate = '...';
@@ -703,27 +729,36 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </div>
                     </td>
                     <td>
-                        <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%;">
-                          <span style="font-weight: 700; color: var(--text-main); font-size: 0.72rem; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;" title="${siteNameTitle}">
-                            ${siteNameTitle}
+                        <div class="site-turbine-cell" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; white-space: nowrap;">
+                          <span class="site-name-text" style="font-weight: 700; color: var(--text-main); font-size: 0.8rem; white-space: nowrap;">
+                            ${task.taskLocationType === 'WAREHOUSE' ? siteNameTitle.replace(/\s*Depo\s*$/i, '') : siteNameTitle}
                           </span>
-                          <div style="display: flex; align-items: center; gap: 6px;">
-                            ${task.taskLocationType === 'WAREHOUSE' || task.turbineId?.toLowerCase().includes('depo') ? `
-                              <span class="turbine-id-badge" style="margin: 0; font-size: 0.65rem; padding: 2px 6px; flex-shrink: 0; line-height: 1; background: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 4px; font-weight: 800;">
-                                <i class="fa-solid fa-warehouse"></i> ${task.turbineId}
+                          <div class="turbine-info-col" style="display: inline-flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 2px; width: 52px; flex-shrink: 0; margin-left: auto;">
+                            ${task.taskLocationType === 'WAREHOUSE' ? `
+                              <span class="turbine-id-badge" style="background: rgba(0, 243, 255, 0.08); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); font-size: 0.65rem; padding: 1px 6px; text-align: center; width: 100%; box-sizing: border-box;">
+                                <i class="fa-solid fa-warehouse"></i> Depo
                               </span>
                             ` : `
-                              <span class="turbine-id-badge" style="margin: 0; font-size: 0.68rem; padding: 1px 6px; flex-shrink: 0; line-height: 1;">${task.turbineId}</span>
-                              ${serial ? `<span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; font-weight: 600;">${serial}</span>` : ''}
+                              <span class="turbine-id-badge" style="margin: 0; font-size: 0.68rem; padding: 1px 6px; flex-shrink: 0; line-height: 1; text-align: center; min-width: 40px; box-sizing: border-box;">${task.turbineId}</span>
+                              ${serial ? `<span style="font-size: 0.6rem; color: var(--text-muted); font-family: monospace; font-weight: 600; line-height: 1; opacity: 0.85; text-align: center; width: 100%;">${serial}</span>` : ''}
                             `}
                           </div>
                         </div>
                     </td>
                     <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
-                      <span class="team-badge">
-                        <i class="fa-solid fa-user-group"></i>
-                        ${formatTeamName(task.personnel)}
-                      </span>
+                      <div style="display: flex; justify-content: center; align-items: center; width: 100%;">
+                        ${isPool ? `
+                          <span class="team-badge" title="Bölge Ortak Görevi (Ekip Atanmamış)" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); color: #fbbf24; font-weight: 800; font-size: 0.7rem; padding: 4px 10px; white-space: nowrap; justify-content: center; margin: 0 auto;">
+                            <i class="fa-solid fa-users-viewfinder" style="color: #fbbf24; font-size: 0.65rem;"></i>
+                            Bölge Görevi
+                          </span>
+                        ` : `
+                          <span class="team-badge" style="justify-content: center; margin: 0 auto;">
+                            <i class="fa-solid fa-user-group"></i>
+                            ${formatTeamName(task.personnel)}
+                          </span>
+                        `}
+                      </div>
                     </td>
                     <td>
                         <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : (task.taskLocationType === 'WAREHOUSE' ? 'maintenance' : 'maintenance'))}">
@@ -732,54 +767,47 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                               <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
                               <span style="font-weight: 900; font-size: 0.76rem; color: #ff6b6b; letter-spacing: 0.3px; flex-shrink: 0;">${task.rawFaultCode}</span>
                               <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                              <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
-                            </div>
-                          ` : isReturned ? `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                              <i class="fa-solid fa-rotate-left" style="color: #b37feb; font-size: 0.82rem; text-shadow: 0 0 8px rgba(179,127,235,0.4); flex-shrink: 0;"></i>
-                              <span style="font-weight: 800; font-size: 0.76rem; color: #b37feb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
-                            </div>
-                          ` : task.taskLocationType === 'WAREHOUSE' || task.secilenSablon?.toLowerCase().includes('depo') ? `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                              <i class="fa-solid fa-screwdriver-wrench" style="color: #10B981; font-size: 0.82rem; text-shadow: 0 0 8px rgba(16,185,129,0.3); flex-shrink: 0;"></i>
-                              <span style="font-weight: 800; font-size: 0.76rem; color: #10B981; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Depo / Tesis İşi'}</span>
-                              ${task.repairedMaterial?.description ? `
-                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                                <span style="font-weight: 700; font-size: 0.74rem; color: #FFF; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><i class="fa-solid fa-cube"></i> ${task.repairedMaterial.description} (${task.repairedMaterial.quantity || 1} Ad.)</span>
-                              ` : (task.yoneticiNotu ? `
-                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
-                              ` : '')}
+                              <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.faultCode.replace(task.rawFaultCode + ' - ', '')}">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
                             </div>
                           ` : `
                             <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                              <i class="fa-solid ${task.secilenSablon.includes('Planlı') ? 'fa-calendar-days' : 'fa-gears'}" style="color: #0891b2; font-size: 0.82rem; text-shadow: 0 0 8px rgba(8,145,178,0.3); flex-shrink: 0;"></i>
-                              <span style="font-weight: 800; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${cleanSablonName(task.secilenSablon) || 'Genel Görev'}</span>
-                              ${task.yoneticiNotu && task.secilenSablon.includes('Planlı') ? `
+                              <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-wrench'}" style="color: ${isReturned ? '#b37feb' : '#00f3ff'}; font-size: 0.82rem; text-shadow: 0 0 8px ${isReturned ? 'rgba(179,127,235,0.4)' : 'rgba(0,243,255,0.4)'}; flex-shrink: 0;"></i>
+                              <span style="font-weight: 700; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;">${cleanSablonName(task.secilenSablon || task.faultCode)}</span>
+                              ${task.repairedMaterial?.description ? `
                                 <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
-                              ` : ''}
+                                <span style="font-weight: 700; font-size: 0.74rem; color: #fff; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;"><i class="fa-solid fa-cube"></i> ${task.repairedMaterial.description} (${task.repairedMaterial.quantity || 1} Ad.)</span>
+                              ` : (task.yoneticiNotu && (!task.yoneticiNotu.startsWith('Sistemden atanan') || task.secilenSablon?.includes('Planlı')) ? `
+                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
+                              ` : '')}
                             </div>
                           `}
                         </div>
                     </td>
-                    <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
+                    <td style="text-align: center; padding: 10px 8px !important;">
                       <span class="status-badge ${statusClass}">
                         ${isReturned 
                           ? '<span class="status-dot purple"></span> DÜZELTME BEKLİYOR' 
                           : isHoldWeather 
                             ? '<span class="status-dot orange"></span> YILDIRIM ENGELLİ' 
-                            : (task.status === 'Görev Teslim Edildi' 
-                              ? '<span class="status-dot green"></span> GÖREV TESLİM EDİLDİ' 
-                              : (task.status === 'Tamamlandı' 
-                                ? '<span class="status-dot gray"></span> TAMAMLANDI' 
-                                : `<span class="status-dot orange"></span> ${task.status.toUpperCase()}`))}
+                            : isPool
+                              ? '<span class="status-dot orange" style="background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.8);"></span> AÇIK GÖREV'
+                              : (task.status === 'Görev Teslim Edildi' 
+                                ? '<span class="status-dot green"></span> GÖREV TESLİM EDİLDİ' 
+                                : (task.status === 'Tamamlandı' 
+                                  ? '<span class="status-dot gray"></span> TAMAMLANDI' 
+                                  : `<span class="status-dot orange"></span> ${task.status.toUpperCase()}`))}
                       </span>
                     </td>
-                    <td style="text-align: center; padding-left: 0 !important; padding-right: 0 !important;">
+                    <td style="text-align: center; padding: 10px 8px !important;">
                        <div class="action-btn-container" style="justify-content: center !important;">
                          ${task.status === 'Tamamlandı' ? `
                            <button class="action-btn-main detail-btn" onclick="alert('Bu görev tamamlanmıştır.')"><i class="fa-solid fa-eye" style="margin-right: 5px; font-size: 0.65rem;"></i> DETAY</button>
+                         ` : isPool ? `
+                           <button class="action-btn-main claim-task-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706) !important; color: #000 !important; font-weight: 800 !important; border: none !important; box-shadow: 0 0 14px rgba(245, 158, 11, 0.35) !important;" onclick="window.handleClaimTaskInTasks('${task.id}', '${siteNameTitle}', '${task.turbineId}')">
+                             <i class="fa-solid fa-hand-holding-hand" style="margin-right: 5px; font-size: 0.75rem;"></i>
+                             GÖREVİ ÜSTLEN
+                           </button>
                          ` : hasCompleteTaskPerm ? `
                            <button class="action-btn-main ${isReturned ? 'edit-returned' : 'fill-form'}" onclick="${isReturned ? `window.editReturnedReport('${(task as any).originalReportNo}')` : `window.handleStartTask('${task.id}')`}">
                              <i class="fa-solid ${isReturned ? 'fa-pen' : 'fa-file-pen'}" style="margin-right: 5px; font-size: 0.65rem;"></i>
@@ -830,6 +858,68 @@ export const TasksPage = async () => {
     const container = document.getElementById('tasks-realtime-container');
     if (container && lastTasks.length > 0) {
       container.innerHTML = renderTasksTable(lastTasks, userRole);
+    }
+  };
+
+  (window as any).handleClaimTaskInTasks = async (taskId: string, siteName: string, turbineId: string) => {
+    const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
+    let userTeam = (window as any).currentUserTeam || currentUser?.team || '';
+    if (userTeam && !userTeam.toLowerCase().startsWith('team')) {
+      userTeam = formatTeamName(userTeam);
+    }
+
+    const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN' || !userTeam || userTeam === 'Admin';
+    if (isAdmin) {
+      const selected = prompt(`Bu görevi hangi ekip adına üstlenmek istiyorsunuz? (Örn: Team 15):`, userTeam || 'Team 15');
+      if (!selected) return;
+      userTeam = selected.trim();
+    } else {
+      const ok = confirm(`"${siteName} - ${turbineId}" türbinindeki havuz görevini "${userTeam}" adına üstlenmek ve işleme almak istiyor musunuz?`);
+      if (!ok) return;
+    }
+
+    try {
+      const userEmail = currentUser?.email || auth?.currentUser?.email || (window as any).currentUser?.email || 'Bilinmiyor';
+      await taskService.claimTask(taskId, userTeam, userEmail);
+      try {
+        const { notificationService } = await import('../services/NotificationService');
+        notificationService.playNotificationSound('celebration');
+      } catch (_) {}
+
+      if ((window as any).showToast) {
+        (window as any).showToast('GÖREV ÜSTLENİLDİ', `Görev ${userTeam} adına başarıyla üstlenildi.`, 'success');
+      } else {
+        alert(`Görev ${userTeam} adına başarıyla üstlenildi.`);
+      }
+
+      const startNow = confirm(`Görev ${userTeam} adına üstlenildi! Hemen formu doldurmaya başlamak istiyor musunuz?`);
+      if (startNow && (window as any).handleStartTask) {
+        (window as any).handleStartTask(taskId);
+      }
+    } catch (err: any) {
+      console.error('Görev üstlenme hatası:', err);
+      alert('Görev üstlenilirken hata oluştu: ' + (err.message || ''));
+    }
+  };
+
+  (window as any).handleReleaseTaskToPool = async (taskId: string) => {
+    const ok = confirm('Bu görevi kendi ekibinizden çıkarıp tekrar Bölge Ortak Havuzuna bırakmak istediğinize emin misiniz?');
+    if (!ok) return;
+    try {
+      await taskService.releaseTaskToPool(taskId);
+      try {
+        const { notificationService } = await import('../services/NotificationService');
+        notificationService.playNotificationSound('info');
+      } catch (_) {}
+
+      if ((window as any).showToast) {
+        (window as any).showToast('HAVUZA BIRAKILDI', 'Görev başarıyla tekrar bölge havuzuna bırakıldı.', 'info');
+      } else {
+        alert('Görev tekrar bölge havuzuna bırakıldı.');
+      }
+    } catch (err: any) {
+      console.error('Havuza bırakma hatası:', err);
+      alert('Hata: ' + (err.message || ''));
     }
   };
 
@@ -1060,6 +1150,10 @@ export const TasksPage = async () => {
         const siteObj = dataService.getAllSites().find(s => s.name.toLowerCase() === tSiteId.toLowerCase() || s.name.toLowerCase().includes(tSiteId.toLowerCase()));
         if (siteObj) tSiteId = siteObj.id;
       }
+      if ((!tSiteId || tSiteId === 'Bilinmiyor') && t.turbinSeriNo) {
+        const turbInfo = dataService.findTurbineBySerial(t.turbinSeriNo);
+        if (turbInfo) tSiteId = turbInfo.siteId;
+      }
       if (allowedSites.includes(tSiteId)) return true;
 
       if (!userTeam && managedTeams.length === 0) return true;
@@ -1101,6 +1195,10 @@ export const TasksPage = async () => {
         if (sId && isNaN(Number(sId))) {
           const siteObj = dataService.getAllSites().find(s => s.name === sId || s.name.includes(sId));
           if (siteObj) sId = siteObj.id;
+        }
+        if ((!sId || sId === 'Bilinmiyor') && t.turbinSeriNo) {
+          const turbInfo = dataService.findTurbineBySerial(t.turbinSeriNo);
+          if (turbInfo) sId = turbInfo.siteId;
         }
         return { ...t, siteId: sId };
       });

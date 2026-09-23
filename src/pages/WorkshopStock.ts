@@ -17,6 +17,16 @@ const formatDateOnly = (ts: any) => {
   return date.toLocaleDateString('tr-TR');
 };
 
+const formatDateForInput = (ts: any): string => {
+  if (!ts) return '';
+  const date = ts.toDate ? ts.toDate() : new Date(ts);
+  if (isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
 export const generateMtaSerialNo = (sapNo: string, allRepairs: RepairRecord[]): string => {
   const cleanSap = (sapNo || 'CARD').trim();
   const prefix = `MTA-${cleanSap}-`;
@@ -32,6 +42,28 @@ export const generateMtaSerialNo = (sapNo: string, allRepairs: RepairRecord[]): 
   });
   const nextSeq = String(maxSeq + 1).padStart(3, '0');
   return `MTA-${cleanSap}-${nextSeq}`;
+};
+
+export const isMissingSerial = (serial?: string | null): boolean => {
+  if (!serial) return true;
+  const s = serial.trim().toLowerCase();
+  return (
+    s === '' ||
+    s === '-' ||
+    s === 'yok' ||
+    s === 'yoktur' ||
+    s === 'seri yok' ||
+    s === 'seri no yok' ||
+    s === 'seri numarası yok' ||
+    s === 'seri numarasız' ||
+    s === 'tanımsız' ||
+    s === 'none' ||
+    s === 'null' ||
+    s === 'n/a' ||
+    s === 'na' ||
+    s.includes('seri yok') ||
+    s.includes('seri no yok')
+  );
 };
 
 export const WorkshopStockPage = async () => {
@@ -107,7 +139,8 @@ export const WorkshopStockPage = async () => {
     rep._normFault = normalizeKey(`${rep.faultCode || ''} ${rep.faultDesc || ''}`);
     rep._normWh = normalizeKey(sourceWh);
     rep._normShelf = normalizeKey(rep._formattedShelf !== '-' ? `${rep.shelfNo || ''} ${rep._formattedShelf}` : '');
-    rep._fullSearchStr = `${rep._normSap} ${rep._normSerial} ${rep._normDesc} ${rep._normFault} ${rep._normWh} ${rep._normShelf}`;
+    const normMcf = normalizeKey(`${rep.mctNo || ''} ${rep.dispatchNo || ''}`);
+    rep._fullSearchStr = `${rep._normSap} ${rep._normSerial} ${rep._normDesc} ${rep._normFault} ${rep._normWh} ${rep._normShelf} ${normMcf}`;
   });
 
   // Pre-calculate past completed dispatches once in O(N) map
@@ -288,7 +321,7 @@ export const WorkshopStockPage = async () => {
       }
       if (tab === 'REPAIRED' && rep.status !== 'REPAIRED') return false;
       if (tab === 'NO_SERIAL') {
-        const hasNoSerial = !rep.serialNo || rep.serialNo.trim() === '' || rep.serialNo === '-' || rep.serialNo.toLowerCase() === 'yok' || rep.serialNo.toLowerCase() === 'tanımsız';
+        const hasNoSerial = isMissingSerial(rep.serialNo);
         if (!hasNoSerial) return false;
       }
 
@@ -333,7 +366,7 @@ export const WorkshopStockPage = async () => {
   const waitingStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && (!r.assignedTo || r.assignedTo.trim() === '' || r.assignedTo === '-') && !r.repairStage).length;
   const activeWorkOrderCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && ((!!r.assignedTo && r.assignedTo.trim() !== '' && r.assignedTo !== '-') || !!r.repairStage)).length;
   const repairedReadyCount = targetRepairsForSummaries.filter(r => r.status === 'REPAIRED').length;
-  const noSerialStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && (!r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız')).length;
+  const noSerialStockCount = targetRepairsForSummaries.filter(r => r.status === 'UNDER_REPAIR' && isMissingSerial(r.serialNo)).length;
 
   // Global window functions
   (window as any).setWorkshopStockTab = (tab: string) => {
@@ -504,7 +537,123 @@ export const WorkshopStockPage = async () => {
     }
   };
 
-  // Assign auto serial to an existing serial-less repair item
+  // =================== STOCK SERIAL ASSIGNMENT MODAL & ACTIONS ===================
+  (window as any).openAssignSerialModalInStock = (repairId: string, sapNo: string, description: string, currentSerial: string) => {
+    const existing = document.getElementById('stock-assign-serial-modal');
+    if (existing) existing.remove();
+
+    const cleanSerial = isMissingSerial(currentSerial) ? '' : currentSerial.trim();
+
+    const modal = document.createElement('div');
+    modal.id = 'stock-assign-serial-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+      z-index: 10002; display: flex; align-items: center; justify-content: center;
+    `;
+
+    modal.innerHTML = `
+      <div class="glass-panel fade-in-up" style="width: 100%; max-width: 500px; padding: 1.75rem; border-radius: 16px; border: 1px solid rgba(236, 72, 153, 0.4); box-shadow: 0 20px 40px rgba(0,0,0,0.7); max-height: 90vh; overflow-y: auto;">
+        
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.85rem;">
+          <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.3rem; color:#f472b6; font-weight:800; letter-spacing:1px; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> SERİ NUMARASI EKLE & ATA
+          </h3>
+          <button onclick="document.getElementById('stock-assign-serial-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- Info Box -->
+        <div style="margin-bottom:1.25rem; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); padding:0.85rem; border-radius:10px;">
+          <div style="font-weight:800; color:#FFF; font-size:0.92rem; line-height:1.3;">${description}</div>
+          <div style="display:flex; gap:12px; margin-top:6px; font-size:0.8rem; color:#94A3B8;">
+            <span><i class="fa-solid fa-barcode" style="color:#00f3ff;"></i> SAP: <strong style="color:#00f3ff; font-family:monospace;">${sapNo}</strong></span>
+            ${cleanSerial ? `<span><i class="fa-solid fa-hashtag" style="color:#10B981;"></i> Mevcut Seri: <strong style="color:#FFF; font-family:monospace;">${cleanSerial}</strong></span>` : '<span style="color:#f472b6;"><i class="fa-solid fa-triangle-exclamation"></i> Seri No Yok</span>'}
+          </div>
+        </div>
+
+        <!-- Input & Auto-Generate Button -->
+        <div style="margin-bottom:1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem; flex-wrap: wrap; gap: 6px;">
+            <label style="color:#94A3B8; font-size:0.8rem; font-weight:700;">SERİ NUMARASI</label>
+            <button type="button" onclick="window.autoGenerateSerialInStockModal('${sapNo}')" style="background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.35); padding: 3px 9px; border-radius: 5px; font-size: 0.74rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s;" onmouseover="this.style.background='#14F195'; this.style.color='#0A0E17';" onmouseout="this.style.background='rgba(20, 241, 149, 0.15)'; this.style.color='#14F195';" title="Sıradaki benzersiz MTA seri numarasını otomatik üret">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Otomatik MTA Seri No Üret
+            </button>
+          </div>
+          <input 
+            type="text" 
+            id="stock-assign-serial-input" 
+            class="cyber-input" 
+            placeholder="Kart üzerindeki seri no'yu yazın veya otomatik üretin..." 
+            value="${cleanSerial}" 
+            style="width: 100%; height: 42px; background: rgba(0,0,0,0.45); border: 1px solid #334155; border-radius: 8px; color: #FFF; font-weight: 700; font-family: monospace; padding: 0 0.85rem; font-size: 0.92rem; outline: none; box-sizing: border-box;" 
+          />
+          <span style="color:#64748B; font-size:0.72rem; margin-top:5px; display:block;">
+            * Kart üzerinde fiziksel bir seri no varsa manuel yazabilirsiniz veya "Otomatik" butonuyla benzersiz MTA kodu üretebilirsiniz.
+          </span>
+        </div>
+
+        <!-- Buttons -->
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1px solid rgba(255,255,255,0.08); padding-top:1.2rem;">
+          <button onclick="document.getElementById('stock-assign-serial-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.6rem 1.1rem; font-size:0.83rem; border-radius:6px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);">İptal</button>
+          <button onclick="window.submitAssignSerialInStock('${repairId}')" class="btn-cyber" style="background:linear-gradient(135deg, #EC4899 0%, #be185d 100%); color:#FFF; font-weight:800; padding:0.6rem 1.3rem; font-size:0.83rem; border-radius:6px; cursor:pointer; border:none; box-shadow:0 0 15px rgba(236,72,153,0.35); display:inline-flex; align-items:center; gap:6px;">
+            <i class="fa-solid fa-floppy-disk"></i> Seri Numarasını Kaydet
+          </button>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    const input = document.getElementById('stock-assign-serial-input') as HTMLInputElement;
+    if (input) setTimeout(() => input.focus(), 100);
+  };
+
+  (window as any).autoGenerateSerialInStockModal = async (sapNo: string) => {
+    const input = document.getElementById('stock-assign-serial-input') as HTMLInputElement;
+    if (!sapNo) {
+      alert("SAP numarası bulunamadı.");
+      return;
+    }
+    try {
+      const allRepairsList = await repairService.getRepairs(true);
+      const generated = generateMtaSerialNo(sapNo, allRepairsList);
+      if (input) {
+        input.value = generated;
+        input.style.borderColor = '#14F195';
+        (window as any).showToast?.('Bilgi', `"${generated}" seri numarası üretildi.`, 'info');
+      }
+    } catch (err: any) {
+      alert("Seri no üretme hatası: " + err.message);
+    }
+  };
+
+  (window as any).submitAssignSerialInStock = async (repairId: string) => {
+    const input = document.getElementById('stock-assign-serial-input') as HTMLInputElement;
+    const newSerial = (input?.value || '').trim();
+    if (!newSerial) {
+      alert("Lütfen geçerli bir seri numarası yazınız veya otomatik üretiniz.");
+      return;
+    }
+    try {
+      (window as any).showToast?.('İşlem', 'Seri numarası kaydediliyor...', 'info');
+      await repairService.updateRepair(repairId, {
+        serialNo: newSerial
+      });
+      repairService.invalidateCache();
+      const modal = document.getElementById('stock-assign-serial-modal');
+      if (modal) modal.remove();
+      (window as any).showToast?.('Başarılı', `Seri numarası "${newSerial}" olarak kaydedildi.`, 'success');
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-stock');
+      }
+    } catch (err: any) {
+      alert("Seri no kaydetme hatası: " + err.message);
+    }
+  };
+
+  // Assign auto serial to an existing serial-less repair item (kept for quick 1-click fallback)
   (window as any).assignAutoSerialToCard = async (repairId: string, sapNo: string) => {
     try {
       const allRepairsList: RepairRecord[] = await repairService.getRepairs(true);
@@ -529,9 +678,7 @@ export const WorkshopStockPage = async () => {
   // Batch assign auto serials to all serial-less cards in workshop
   (window as any).batchAssignAutoSerialsToAll = async () => {
     const allRepairsList: RepairRecord[] = await repairService.getRepairs(true);
-    const noSerialCards = allRepairsList.filter(r => 
-      !r.serialNo || r.serialNo.trim() === '' || r.serialNo === '-' || r.serialNo.toLowerCase() === 'yok' || r.serialNo.toLowerCase() === 'tanımsız'
-    );
+    const noSerialCards = allRepairsList.filter(r => isMissingSerial(r.serialNo));
 
     if (noSerialCards.length === 0) {
       alert("Seri numarası eksik kart bulunamadı.");
@@ -1066,6 +1213,24 @@ export const WorkshopStockPage = async () => {
             </div>
           </div>
 
+          <!-- MÇF / MÇT No & Atölyeye Geliş Tarihi -->
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 10px;">
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                <i class="fa-solid fa-truck-ramp-box" style="color: #fb923c; margin-right: 4px;"></i> MÇF / MÇT No (Sevk Formu)
+              </label>
+              <input type="text" id="manual-entry-mcf" class="cyber-input" placeholder="Örn: 145 veya MÇF-2025-01" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #fb923c; font-family: monospace; font-weight: 700; font-size: 0.88rem; box-sizing: border-box;" />
+            </div>
+            <div>
+              <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+                <i class="fa-regular fa-calendar-days" style="color: #14F195; margin-right: 4px;"></i> Atölyeye Geliş Tarihi
+              </label>
+              <input type="date" id="manual-entry-arrival-date" class="cyber-input" value="${new Date().toISOString().split('T')[0]}" 
+                style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #14F195; font-weight: 700; font-size: 0.85rem; box-sizing: border-box;" />
+            </div>
+          </div>
+
           <!-- Locked Status Display Badge -->
           <div>
             <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
@@ -1143,6 +1308,8 @@ export const WorkshopStockPage = async () => {
     const faultCodeEl = document.getElementById('manual-entry-fault-code') as HTMLInputElement;
     const faultDescEl = document.getElementById('manual-entry-fault-desc') as HTMLInputElement;
     const noteEl = document.getElementById('manual-entry-note') as HTMLTextAreaElement;
+    const mcfEl = document.getElementById('manual-entry-mcf') as HTMLInputElement;
+    const arrivalDateEl = document.getElementById('manual-entry-arrival-date') as HTMLInputElement;
     const submitBtn = document.getElementById('btn-submit-manual-entry') as HTMLButtonElement;
 
     const sapNo = (sapEl?.value || '').trim();
@@ -1155,6 +1322,8 @@ export const WorkshopStockPage = async () => {
     const faultCode = (faultCodeEl?.value || '').trim();
     const faultDesc = (faultDescEl?.value || '').trim();
     const note = (noteEl?.value || '').trim();
+    const mcfNo = (mcfEl?.value || '').trim();
+    const arrivalDateVal = arrivalDateEl?.value ? new Date(arrivalDateEl.value + 'T12:00:00') : new Date();
 
     if (!sapNo) {
       alert("Lütfen bir SAP Numarası giriniz.");
@@ -1168,13 +1337,13 @@ export const WorkshopStockPage = async () => {
       return;
     }
 
-    if (!serialNo) {
+    if (!serialNo || isMissingSerial(serialNo)) {
       const wantAuto = confirm("Seri numarası girmediniz. Bu kart için otomatik benzersiz bir MTA seri numarası üretilip kaydedilsin mi?");
       if (wantAuto) {
         serialNo = generateMtaSerialNo(sapNo, rawRepairs);
         if (serialEl) serialEl.value = serialNo;
       } else {
-        serialNo = 'Seri No Yok';
+        serialNo = '';
       }
     }
 
@@ -1195,11 +1364,13 @@ export const WorkshopStockPage = async () => {
         workshopId: 'MTA',
         sentBy: username,
         receivedBy: username,
-        sentAt: new Date(),
-        receivedAt: new Date(),
+        sentAt: arrivalDateVal,
+        receivedAt: arrivalDateVal,
         status: 'UNDER_REPAIR', // Kesin kural: Her zaman UNDER_REPAIR
         shelfNo: formattedShelf !== '-' ? formattedShelf : undefined,
         boxNo: formattedShelf !== '-' ? formattedShelf : undefined,
+        mctNo: mcfNo || undefined,
+        dispatchNo: mcfNo || undefined,
         faultCode: faultCode || undefined,
         faultDesc: faultDesc || undefined,
         preRepairNote: note || undefined,
@@ -1237,6 +1408,105 @@ export const WorkshopStockPage = async () => {
     }).catch((err) => {
       alert("Raf konumu güncellenemedi: " + err);
     });
+  };
+
+  // EDIT MCF AND ARRIVAL DATE MODAL
+  (window as any).openEditMcfAndDateModal = (repairId: string, sapNo: string, currentMcf: string = '', currentDateStr: string = '') => {
+    const rep = allRepairs.find(r => r.id === repairId);
+    const existingMcf = currentMcf || rep?.mctNo || rep?.dispatchNo || '';
+    const existingDate = currentDateStr || (rep ? formatDateForInput(rep.sentAt || rep.receivedAt) : '');
+
+    const modal = document.createElement('div');
+    modal.id = 'edit-mcf-date-modal';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+      background: rgba(0,8,20,0.85); backdrop-filter: blur(10px); 
+      z-index: 10005; display: flex; align-items: center; justify-content: center; padding: 1rem; box-sizing: border-box;
+    `;
+
+    modal.innerHTML = `
+      <div class="glass-panel fade-in-up" style="width: 100%; max-width: 440px; padding: 1.75rem; border-radius: 16px; border: 1px solid rgba(251, 146, 60, 0.3); background: #0A0E17; box-shadow: 0 20px 40px rgba(0,0,0,0.7);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.75rem;">
+          <h3 style="margin:0; font-family:'Rajdhani', sans-serif; font-size:1.25rem; color:#fb923c; font-weight:800; display:flex; align-items:center; gap:8px;">
+            <i class="fa-solid fa-file-pen"></i> MÇF NO & GELİŞ TARİHİ DÜZENLE
+          </h3>
+          <button onclick="document.getElementById('edit-mcf-date-modal').remove()" style="background:transparent; border:none; color:#94A3B8; cursor:pointer; font-size:1.2rem;"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div style="font-size:0.82rem; color:#CBD5E1; margin-bottom:1rem; background:rgba(255,255,255,0.03); padding:0.65rem 0.85rem; border-radius:8px; border:1px solid rgba(255,255,255,0.06);">
+          SAP: <strong style="color:#00f3ff; font-family:monospace;">${sapNo}</strong>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:1rem; margin-bottom:1.5rem;">
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              <i class="fa-solid fa-truck-ramp-box" style="color: #fb923c; margin-right: 4px;"></i> MÇF / MÇT No (Sevk Formu)
+            </label>
+            <input type="text" id="edit-modal-mcf-input" class="cyber-input" value="${existingMcf === '-' ? '' : existingMcf}" placeholder="Örn: 145 veya MÇF-2025-01" 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #fb923c; font-family: monospace; font-weight: 700; font-size: 0.9rem; box-sizing: border-box;" />
+          </div>
+
+          <div>
+            <label style="display:block; color:#94A3B8; font-size:0.78rem; margin-bottom:0.35rem; font-weight:800; text-transform:uppercase;">
+              <i class="fa-regular fa-calendar-days" style="color: #14F195; margin-right: 4px;"></i> Atölyeye Geliş Tarihi
+            </label>
+            <input type="date" id="edit-modal-date-input" class="cyber-input" value="${existingDate}" 
+              style="width: 100%; padding: 0.75rem; background: rgba(0,0,0,0.45); border: 1px solid #1E293B; border-radius: 8px; color: #14F195; font-weight: 700; font-size: 0.88rem; box-sizing: border-box;" />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+          <button onclick="document.getElementById('edit-mcf-date-modal').remove()" class="btn-cyber" style="background:rgba(255,255,255,0.05); color:#FFF; font-weight:700; padding:0.6rem 1.1rem; font-size:0.82rem; border-radius:6px; cursor:pointer;">İptal</button>
+          <button id="btn-save-mcf-date" onclick="window.saveEditedMcfAndDate('${repairId}')" class="btn-cyber" style="background:linear-gradient(135deg, #fb923c 0%, #ea580c 100%); color:#FFF; font-weight:900; padding:0.6rem 1.3rem; font-size:0.82rem; border-radius:6px; cursor:pointer; border:none; box-shadow:0 0 12px rgba(251,146,60,0.3);">
+            <i class="fa-solid fa-check"></i> Kaydet
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  };
+
+  (window as any).saveEditedMcfAndDate = async (repairId: string) => {
+    const mcfInput = document.getElementById('edit-modal-mcf-input') as HTMLInputElement;
+    const dateInput = document.getElementById('edit-modal-date-input') as HTMLInputElement;
+    const saveBtn = document.getElementById('btn-save-mcf-date') as HTMLButtonElement;
+
+    const newMcf = (mcfInput?.value || '').trim();
+    const newDateStr = dateInput?.value || '';
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...';
+    }
+
+    try {
+      const updatePayload: any = {
+        mctNo: newMcf || undefined,
+        dispatchNo: newMcf || undefined
+      };
+      if (newDateStr) {
+        const parsedDate = new Date(newDateStr + 'T12:00:00');
+        updatePayload.sentAt = parsedDate;
+        updatePayload.receivedAt = parsedDate;
+      }
+
+      await repairService.updateRepair(repairId, updatePayload);
+      (window as any).showToast?.('Başarılı', 'MÇF No ve Geliş Tarihi başarıyla güncellendi.', 'success');
+      document.getElementById('edit-mcf-date-modal')?.remove();
+      document.getElementById('card-history-modal')?.remove();
+
+      if ((window as any).navigate) {
+        (window as any).navigate('workshop-stock');
+      }
+    } catch(err: any) {
+      alert("Güncelleme hatası: " + (err?.message || err));
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fa-solid fa-check"></i> Kaydet';
+      }
+    }
   };
 
   // 4. DETAILED CARD TIMELINE & HISTORY MODAL
@@ -1283,7 +1553,7 @@ export const WorkshopStockPage = async () => {
                 ${rep.revisionNo ? `<span><i class="fa-solid fa-code-branch" style="color: #34d399;"></i> Rev: <strong style="color: #FFF;">${rep.revisionNo}</strong></span>` : ''}
                 ${rep.countNo ? `<span><i class="fa-solid fa-list-ol" style="color: #f472b6;"></i> Sayım No: <strong style="color: #FFF;">${rep.countNo}</strong></span>` : ''}
                 ${rep.rmrstNo ? `<span><i class="fa-solid fa-file-lines" style="color: #38bdf8;"></i> RMRST: <strong style="color: #FFF;">${rep.rmrstNo}</strong></span>` : ''}
-                ${rep.mctNo || rep.dispatchNo ? `<span><i class="fa-solid fa-truck-ramp-box" style="color: #fb923c;"></i> MÇT: <strong style="color: #FFF;">${rep.mctNo || rep.dispatchNo}</strong></span>` : ''}
+                ${rep.mctNo || rep.dispatchNo ? `<span><i class="fa-solid fa-truck-ramp-box" style="color: #fb923c;"></i> MÇF / MÇT: <strong style="color: #FFF;">${rep.mctNo || rep.dispatchNo}</strong></span>` : ''}
                 <span><i class="fa-solid fa-rotate-right" style="color: #f472b6;"></i> Toplam Geliş: <strong style="color: #FFF;">${historyItems.length} Kez</strong></span>
               </div>
             </div>
@@ -1304,7 +1574,12 @@ export const WorkshopStockPage = async () => {
             <span style="font-size: 0.75rem; color: #94A3B8; display: block; text-transform: uppercase;">Söküldüğü Saha / Depo</span>
             <span style="font-weight: 700; color: #FFF; font-size: 0.9rem;">${sourceWhName}</span>
             ${rep.sentBy ? `<div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Sevk Eden: ${rep.sentBy}</div>` : ''}
-            <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Geliş Tarihi: ${formatDateOnly(rep.sentAt || rep.receivedAt)}</div>
+            <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <span>Geliş Tarihi: <strong style="color: #CBD5E1;">${formatDateOnly(rep.sentAt || rep.receivedAt)}</strong></span>
+              <button type="button" onclick="window.openEditMcfAndDateModal('${rep.id}', '${rep.sapNo}', '${(rep.mctNo || rep.dispatchNo || '').replace(/'/g, "\\'")}', '${formatDateForInput(rep.sentAt || rep.receivedAt)}')" style="background: rgba(251, 146, 60, 0.15); color: #fb923c; border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 5px; padding: 2px 7px; font-size: 0.7rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="MÇF No ve Geliş Tarihini Düzenle">
+                <i class="fa-solid fa-pen-to-square"></i> MÇF / Tarih Düzenle
+              </button>
+            </div>
           </div>
           <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 0.85rem; border-radius: 8px;">
             <span style="font-size: 0.75rem; color: #94A3B8; display: block; text-transform: uppercase;">Arıza Kodu & Detayı</span>
@@ -2050,8 +2325,13 @@ export const WorkshopStockPage = async () => {
 
           <!-- SERİ NO -->
           <td style="padding: 0.85rem 0.75rem; color: #E2E8F0; font-family: monospace; font-weight: 700; font-size: 0.85rem; white-space: nowrap;">
-            ${item.serialNo && item.serialNo !== '-' && item.serialNo.toLowerCase() !== 'yok' && item.serialNo.toLowerCase() !== 'tanımsız' 
-              ? item.serialNo 
+            ${!isMissingSerial(item.serialNo) 
+              ? `<div style="display: inline-flex; align-items: center; gap: 6px;">
+                  <span>${item.serialNo}</span>
+                  <button onclick="window.openAssignSerialModalInStock('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${(item.serialNo || '').replace(/'/g, "\\'")}')" style="background: transparent; border: none; color: #94A3B8; cursor: pointer; padding: 2px 4px; font-size: 0.74rem; transition: color 0.2s;" onmouseover="this.style.color='#14F195'" onmouseout="this.style.color='#94A3B8'" title="Seri Numarasını Düzenle">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                </div>` 
               : `<span style="background: rgba(236, 72, 153, 0.12); color: #f472b6; border: 1px solid rgba(236, 72, 153, 0.35); padding: 3px 8px; border-radius: 4px; font-size: 0.73rem; font-weight: 800; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">
                   <i class="fa-solid fa-triangle-exclamation" style="font-size: 0.7rem;"></i> Seri No Yok
                 </span>`
@@ -2098,9 +2378,9 @@ export const WorkshopStockPage = async () => {
                 <i class="fa-solid fa-user" style="font-size: 0.68rem; color: #F59E0B;"></i> ${item.sentBy}
               </div>
             ` : ''}
-            ${item.dispatchNo ? `
-              <div style="font-size: 0.7rem; color: #14F195; font-family: monospace; font-weight: 700; margin-top: 1px;">
-                <i class="fa-solid fa-file-invoice" style="font-size: 0.68rem;"></i> ${item.dispatchNo}
+            ${(item.dispatchNo || item.mctNo) ? `
+              <div style="font-size: 0.7rem; color: #fb923c; font-family: monospace; font-weight: 700; margin-top: 1px;">
+                <i class="fa-solid fa-truck-ramp-box" style="font-size: 0.68rem;"></i> MÇF: ${item.dispatchNo || item.mctNo}
               </div>
             ` : ''}
             <div style="font-size: 0.7rem; color: #64748B; margin-top: 2px;">
@@ -2129,8 +2409,8 @@ export const WorkshopStockPage = async () => {
           <!-- AKSİYONLAR -->
           <td style="padding: 0.85rem 0.75rem; text-align: right; white-space: nowrap;">
             <div style="display: inline-flex; align-items: center; gap: 6px;">
-              ${(!item.serialNo || item.serialNo === '-' || item.serialNo.toLowerCase() === 'yok' || item.serialNo.toLowerCase() === 'tanımsız') ? `
-                <button onclick="window.assignAutoSerialToCard('${item.id}', '${item.sapNo}')" style="background: linear-gradient(135deg, #EC4899 0%, #be185d 100%); color: #FFF; border: none; padding: 5px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 28px; box-sizing: border-box; transition: all 0.2s; box-shadow: 0 0 10px rgba(236,72,153,0.3);" onmouseover="this.style.filter='brightness(1.15)';" onmouseout="this.style.filter='none';" title="Otomatik Benzersiz Seri No Üret & Ata">
+              ${isMissingSerial(item.serialNo) ? `
+                <button onclick="window.openAssignSerialModalInStock('${item.id}', '${item.sapNo}', '${cleanNameEscaped}', '${(item.serialNo || '').replace(/'/g, "\\'")}')" style="background: linear-gradient(135deg, #EC4899 0%, #be185d 100%); color: #FFF; border: none; padding: 5px 9px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 28px; box-sizing: border-box; transition: all 0.2s; box-shadow: 0 0 10px rgba(236,72,153,0.3);" onmouseover="this.style.filter='brightness(1.15)';" onmouseout="this.style.filter='none';" title="Seri Numarası Ata veya Manuel Gir">
                   <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 0.72rem;"></i> Seri No Ata
                 </button>
               ` : ''}

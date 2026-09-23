@@ -12,6 +12,7 @@ export interface TaskCreateData {
   statuKodu?: string;
   yoneticiNotu: string;
   assignedTeam: string;
+  isPoolTask?: boolean;
   resolvedDeficiencyId?: string;
   taskLocationType?: 'TURBINE' | 'WAREHOUSE';
   warehouseId?: string;
@@ -48,6 +49,9 @@ export interface Task {
   createdAt: any;
   secilenSablon: string;
   yoneticiNotu?: string;
+  isPoolTask?: boolean;
+  claimedBy?: string;
+  claimedAt?: any;
   ohsData?: any;
   resolvedDeficiencyId?: string;
   taskLocationType?: 'TURBINE' | 'WAREHOUSE';
@@ -78,7 +82,7 @@ class TaskService {
   private collectionName = 'tasks';
   private tasksCache: Task[] | null = null;
 
-  async createNewTask(data: TaskCreateData & { customStatus?: string, createdBy?: string }) {
+  async createNewTask(data: TaskCreateData & { customStatus?: string, createdBy?: string, isPoolTask?: boolean }) {
     try {
       // 1. Akıllı Arıza Kodu Eşleştirme
       let statuAciklamasi = '';
@@ -87,15 +91,33 @@ class TaskService {
         statuAciklamasi = codeInfo ? codeInfo.Aciklama : 'Tanımlanmamış Hata Kodu';
       }
 
+      // 1.1. Otomatik Türbin / Saha Çözümleme (Eğer sadece seri no girildiyse)
+      let resolvedSiteId = data.siteId || '';
+      let resolvedSahaBilgisi = data.sahaBilgisi || '';
+      let resolvedTurbinNo = data.turbinNo || '';
+      if ((!resolvedSiteId || !resolvedSahaBilgisi) && data.turbinSeriNo) {
+        const turbInfo = dataService.findTurbineBySerial(data.turbinSeriNo);
+        if (turbInfo) {
+          if (!resolvedSiteId) resolvedSiteId = turbInfo.siteId;
+          if (!resolvedSahaBilgisi) resolvedSahaBilgisi = turbInfo.siteName;
+          if (!resolvedTurbinNo) resolvedTurbinNo = `T-${turbInfo.turbineNo}`;
+        }
+      }
+
+      // 1.2. Bölgesel Havuz Görevi Kontrolü
+      const isPool = Boolean(data.isPoolTask || data.assignedTeam === 'HAVUZ' || data.assignedTeam === 'Atanmadı' || !data.assignedTeam);
+      const assignedTeam = isPool ? 'Atanmadı' : data.assignedTeam;
+      const initialStatus = isPool ? (data.customStatus || 'Açık Görev') : (data.customStatus || 'Görev Oluşturuldu');
+
       // 2. Data Architect'in şemasına göre objeyi oluştur
-      const taskLocationType = data.taskLocationType || (data.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
+      const taskLocationType = data.taskLocationType || (resolvedTurbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
       const taskDoc = {
         taskInfo: {
           secilenSablon: data.secilenSablon,
-          sahaBilgisi: data.sahaBilgisi,
-          siteId: data.siteId,
+          sahaBilgisi: resolvedSahaBilgisi,
+          siteId: resolvedSiteId,
           turbinSeriNo: data.turbinSeriNo,
-          turbinNo: data.turbinNo,
+          turbinNo: resolvedTurbinNo,
           taskLocationType: taskLocationType,
           warehouseId: data.warehouseId || '',
           warehouseName: data.warehouseName || '',
@@ -109,7 +131,8 @@ class TaskService {
           statuAciklamasi: statuAciklamasi
         },
         assignment: {
-          assignedTeam: data.assignedTeam,
+          assignedTeam: assignedTeam,
+          isPoolTask: isPool,
           yoneticiNotu: data.yoneticiNotu,
           resolvedDeficiencyId: data.resolvedDeficiencyId || '',
           createdBy: (() => {
@@ -124,10 +147,12 @@ class TaskService {
           })()
         },
         workflow: {
-          durum: data.customStatus || 'Görev Oluşturuldu',
+          durum: initialStatus,
           olusturulmaTarihi: serverTimestamp(),
           guncellenmeTarihi: serverTimestamp(),
-          tamamlanmaTarihi: null
+          tamamlanmaTarihi: null,
+          claimedBy: null,
+          claimedAt: null
         },
         formVerileri: {},
         metadata: {
@@ -170,6 +195,9 @@ class TaskService {
 
         const taskLocType = data.taskInfo?.taskLocationType || (data.taskInfo?.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
 
+        const rawAssignedTeam = data.assignment?.assignedTeam || 'Atanmadı';
+        const isPoolTask = Boolean(data.assignment?.isPoolTask === true || rawAssignedTeam === 'HAVUZ' || data.workflow?.durum === 'Havuzda' || data.workflow?.durum === 'Açık Görev');
+
         return {
           id: doc.id,
           siteId: data.taskInfo?.sahaBilgisi || 'Bilinmiyor',
@@ -183,13 +211,16 @@ class TaskService {
           revisionNo: data.taskInfo?.revisionNo || data.taskInfo?.tamirFormNo || data.revisionNo || data.tamirFormNo || '',
           matFormNo: data.taskInfo?.matFormNo || data.matFormNo || data.maintenanceData?.matFormNo || '',
           repairedMaterial: data.repairedMaterial || null,
-          personnel: data.assignment?.assignedTeam || 'Atanmadı',
+          personnel: rawAssignedTeam,
+          isPoolTask: isPoolTask,
+          claimedBy: data.workflow?.claimedBy || '',
+          claimedAt: data.workflow?.claimedAt || null,
           faultCode: `${rawCode || '---'} - ${desc}`,
           rawFaultCode: rawCode,
           status: data.workflow?.durum || 'Aktif',
           createdAt: data.workflow?.olusturulmaTarihi,
           secilenSablon: data.taskInfo?.secilenSablon || '',
-          yoneticiNotu: data.assignment?.yoneticiNotu || '',
+          yoneticiNotu: data.assignment?.yoneticiNotu || (data as any).yoneticiNotu || (data as any).note || (data as any).description || '',
           resolvedDeficiencyId: data.assignment?.resolvedDeficiencyId || '',
           ohsData: data.ohsData || null,
           maintenanceData: data.maintenanceData || null,
@@ -207,6 +238,45 @@ class TaskService {
       return [];
     }
   }
+
+  async claimTask(taskId: string, teamName: string, claimedByEmail?: string) {
+    try {
+      const taskRef = doc(db, this.collectionName, taskId);
+      await updateDoc(taskRef, {
+        'assignment.assignedTeam': teamName,
+        'assignment.isPoolTask': false,
+        'workflow.durum': 'İşlemde',
+        'workflow.claimedBy': claimedByEmail || auth?.currentUser?.email || (window as any).currentUser?.email || 'Bilinmiyor',
+        'workflow.claimedAt': serverTimestamp(),
+        'workflow.guncellenmeTarihi': serverTimestamp()
+      });
+      this.tasksCache = null; // Invalidate cache
+      return { success: true };
+    } catch (error) {
+      console.error("Görev üstlenme hatası:", error);
+      throw error;
+    }
+  }
+
+  async releaseTaskToPool(taskId: string) {
+    try {
+      const taskRef = doc(db, this.collectionName, taskId);
+      await updateDoc(taskRef, {
+        'assignment.assignedTeam': 'HAVUZ',
+        'assignment.isPoolTask': true,
+        'workflow.durum': 'Açık Görev',
+        'workflow.claimedBy': null,
+        'workflow.claimedAt': null,
+        'workflow.guncellenmeTarihi': serverTimestamp()
+      });
+      this.tasksCache = null; // Invalidate cache
+      return { success: true };
+    } catch (error) {
+      console.error("Görevi havuza geri bırakma hatası:", error);
+      throw error;
+    }
+  }
+
   async updateTaskStatus(taskId: string, newStatus: string) {
     try {
       const taskRef = doc(db, this.collectionName, taskId);
@@ -251,6 +321,8 @@ class TaskService {
         if (!desc) desc = 'Genel Görev';
 
         const taskLocType = data.taskInfo?.taskLocationType || (data.taskInfo?.turbinNo?.toLowerCase().includes('depo') ? 'WAREHOUSE' : 'TURBINE');
+        const rawAssignedTeam = data.assignment?.assignedTeam || 'Atanmadı';
+        const isPoolTask = Boolean(data.assignment?.isPoolTask === true || rawAssignedTeam === 'HAVUZ' || data.workflow?.durum === 'Havuzda' || data.workflow?.durum === 'Açık Görev');
 
         return {
           id: doc.id,
@@ -265,13 +337,16 @@ class TaskService {
           revisionNo: data.taskInfo?.revisionNo || data.taskInfo?.tamirFormNo || data.revisionNo || data.tamirFormNo || '',
           matFormNo: data.taskInfo?.matFormNo || data.matFormNo || data.maintenanceData?.matFormNo || '',
           repairedMaterial: data.repairedMaterial || null,
-          personnel: data.assignment?.assignedTeam || 'Atanmadı',
+          personnel: rawAssignedTeam,
+          isPoolTask: isPoolTask,
+          claimedBy: data.workflow?.claimedBy || '',
+          claimedAt: data.workflow?.claimedAt || null,
           faultCode: `${rawCode || '---'} - ${desc}`,
           rawFaultCode: rawCode,
           status: data.workflow?.durum || 'Aktif',
           createdAt: data.workflow?.olusturulmaTarihi,
           secilenSablon: data.taskInfo?.secilenSablon || '',
-          yoneticiNotu: data.assignment?.yoneticiNotu || '',
+          yoneticiNotu: data.assignment?.yoneticiNotu || (data as any).yoneticiNotu || (data as any).note || (data as any).description || '',
           resolvedDeficiencyId: data.assignment?.resolvedDeficiencyId || '',
           ohsData: data.ohsData || null,
           maintenanceData: data.maintenanceData || null,

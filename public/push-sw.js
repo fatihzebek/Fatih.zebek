@@ -6,7 +6,9 @@ self.addEventListener('push', (event) => {
         body: payload.body || 'Yeni arıza bildirimi.',
         icon: '/icons/icon-192.png',
         badge: '/dh-favicon.svg',
-        vibrate: [200, 100, 200],
+        vibrate: [400, 200, 400, 200, 600],
+        requireInteraction: true,
+        tag: payload.tag || 'dh-scada-notification',
         data: {
           url: payload.url || '/'
         }
@@ -18,7 +20,8 @@ self.addEventListener('push', (event) => {
         body: text,
         icon: '/icons/icon-192.png',
         badge: '/dh-favicon.svg',
-        vibrate: [200, 100, 200]
+        vibrate: [400, 200, 400, 200, 600],
+        requireInteraction: true
       });
     }
   }

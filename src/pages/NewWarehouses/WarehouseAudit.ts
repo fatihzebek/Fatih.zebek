@@ -26,7 +26,7 @@ export const renderManualAuditTable = () => {
    
    const auditInventoryItems = warehouseState.currentWarehouse.id === 'MTA'
       ? warehouseState.inventoryItems
-      : warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT');
+      : warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT' && item.condition !== 'SCRAP' && item.status !== 'HURDAYA_AYRILDI');
 
    // 1. Sort the items
    const sortedItems = [...auditInventoryItems].sort((a, b) => {
@@ -136,6 +136,7 @@ export const updateManualSummaryBar = () => {
   Object.keys(warehouseState.draftData).forEach((itemId) => {
     const item = warehouseState.inventoryItems.find(i => i.id === itemId);
     if (!item) return;
+    if (warehouseState.currentWarehouse.id !== 'MTA' && (item.condition === 'DEFECT' || item.condition === 'SCRAP' || item.status === 'HURDAYA_AYRILDI')) return;
 
     const draftItem = warehouseState.draftData[itemId];
     if (draftItem && draftItem.qty !== '') {
@@ -292,7 +293,7 @@ export const saveManualAudit = async (btn: HTMLButtonElement) => {
 
   const auditInventoryItems = warehouseState.currentWarehouse.id === 'MTA'
     ? warehouseState.inventoryItems
-    : warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT');
+    : warehouseState.inventoryItems.filter(item => item.condition !== 'DEFECT' && item.condition !== 'SCRAP' && item.status !== 'HURDAYA_AYRILDI');
 
   const sortedItems = [...auditInventoryItems].sort((a, b) => {
      const locA = String(a.shelfNo || '').trim().toUpperCase();

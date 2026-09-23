@@ -64,6 +64,7 @@ export interface MaterialDemandItem {
 }
 
 export type MaterialDemandStatus = 
+  | 'DRAFT'               // 📝 Taslak (Personel kendisi için kaydetti, henüz onaya göndermedi)
   | 'PENDING_REVIEW'      // 🟡 Saha Sorumlusu / Yönetici Ön Kontrolü Bekliyor
   | 'REJECTED'            // 🔴 Ön Kontrolde Reddedildi (Gerekçeli)
   | 'APPROVED_FOR_ORDER'  // 🔵 Ön Kontrolden Geçti / Malzeme Yönetimi Sipariş Havuzunda
@@ -235,6 +236,7 @@ class MaterialDemandService {
     requesterName: string;
     requesterEmail: string;
     requesterTeam?: string;
+    status?: MaterialDemandStatus;
   }): Promise<string> {
     const demandNo = await this.generateDemandNumber(data.siteId);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -262,7 +264,7 @@ class MaterialDemandService {
       requesterName: data.requesterName,
       requesterEmail: data.requesterEmail,
       requesterTeam: data.requesterTeam || '',
-      status: 'PENDING_REVIEW',
+      status: data.status || 'PENDING_REVIEW',
       createdAt: serverTimestamp(),
       updatedAt: new Date().toISOString()
     });
@@ -282,6 +284,7 @@ class MaterialDemandService {
       demandCategory?: 'TURBINE' | 'CONSUMABLE';
       generalNote?: string;
       items: MaterialDemandItem[];
+      status?: MaterialDemandStatus;
     }
   ): Promise<void> {
     const docRef = doc(db, this.collectionName, demandId);
@@ -316,14 +319,25 @@ class MaterialDemandService {
     if (data.turbineId !== undefined) docData.turbineId = data.turbineId;
     if (data.urgency) docData.urgency = data.urgency;
     if (data.demandCategory) docData.demandCategory = data.demandCategory;
+    if (data.status) docData.status = data.status;
 
-    if (existing.status === 'REJECTED') {
+    if (existing.status === 'REJECTED' && !data.status) {
       docData.status = 'PENDING_REVIEW';
       docData.reviewNote = '';
     }
 
     await updateDoc(docRef, sanitizeForFirestore(docData));
   }
+
+  // Submit a draft demand for approval
+  async submitDraftDemand(demandId: string): Promise<void> {
+    const docRef = doc(db, this.collectionName, demandId);
+    await updateDoc(docRef, {
+      status: 'PENDING_REVIEW',
+      updatedAt: new Date().toISOString()
+    });
+  }
+
 
   // Review demand (Saha Sorumlusu / Yönetici Onayı veya Reddi + Miktar Düzeltme)
   async reviewDemand(

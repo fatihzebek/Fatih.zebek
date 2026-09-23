@@ -10,6 +10,7 @@ import { formatDisplayName, formatTeamName } from '../utils/formatters';
 import { getGreetingPrefixHTML, getUserBadgeHTML } from './Dashboard/DashboardHeader';
 import { DashboardAgenda } from './Dashboard/DashboardAgenda';
 import { DashboardFeed } from './Dashboard/DashboardFeed';
+import { notificationService, type Announcement } from '../services/NotificationService';
 
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '').replace(/\s*[Tt]alimat[ıi]\s*/g, '').trim().toUpperCase();
@@ -24,6 +25,7 @@ let cachedDashboardData: {
   transfers?: any[];
   reports?: any[];
   repairs?: any[];
+  announcements?: Announcement[];
 } = {};
 
 export const DashboardPage = async () => {
@@ -38,7 +40,7 @@ export const DashboardPage = async () => {
   const isCacheEmpty = !cachedDashboardData.tasks;
   if (isCacheEmpty) {
     try {
-      const [freshTasks, freshLeaves, freshReminders, freshTransfers, freshReports, freshRepairs] = await Promise.all([
+      const [freshTasks, freshLeaves, freshReminders, freshTransfers, freshReports, freshRepairs, freshAnnouncements] = await Promise.all([
         taskService.getTasks(),
         (async () => {
           let freshLeaves: any[] = [];
@@ -72,7 +74,8 @@ export const DashboardPage = async () => {
           } catch (e) {
             return [];
           }
-        })()
+        })(),
+        notificationService.getAnnouncements()
       ]);
 
       cachedDashboardData = {
@@ -81,7 +84,8 @@ export const DashboardPage = async () => {
         reminders: freshReminders,
         transfers: freshTransfers,
         reports: freshReports,
-        repairs: freshRepairs
+        repairs: freshRepairs,
+        announcements: freshAnnouncements
       };
     } catch (err) {
       console.error("Failed initial dashboard data load:", err);
@@ -95,6 +99,7 @@ export const DashboardPage = async () => {
   let transfers: any[] = cachedDashboardData.transfers || [];
   let reports: any[] = cachedDashboardData.reports || [];
   let repairs: any[] = cachedDashboardData.repairs || [];
+  let announcements: Announcement[] = cachedDashboardData.announcements || [];
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayTime = new Date(todayStr).getTime();
@@ -229,6 +234,35 @@ export const DashboardPage = async () => {
     if (orderA !== orderB) return orderA - orderB;
     return a.reminderDate.localeCompare(b.reminderDate);
   });
+
+  // Regional pool tasks relevant to the user's sites (strictly active, non-completed pool tasks only)
+  const poolTasks = (cachedDashboardData.tasks || tasks || []).filter(t => 
+    t.status !== 'Tamamlandı' &&
+    Boolean(t.isPoolTask === true || t.personnel === 'HAVUZ' || t.status === 'Havuzda' || t.status === 'Açık Görev')
+  );
+
+  const myAllowedSites = (currentUser?.allowedSites || []).map((s: string) => s.toLowerCase().trim());
+  const relevantPoolTasks = poolTasks.filter(t => {
+    if (currentUser?.role === 'ADMIN' || myAllowedSites.length === 0) return true;
+    let sId = (t.siteId || '').toLowerCase().trim();
+    if (myAllowedSites.includes(sId)) return true;
+    const siteObj = dataService.getAllSites().find(s => s.id.toLowerCase() === sId || s.name.toLowerCase() === sId);
+    if (siteObj && myAllowedSites.includes(siteObj.id.toLowerCase())) return true;
+    return false;
+  });
+
+  (window as any).handleActivatePushNotifications = async () => {
+    const perm = await notificationService.requestPermission();
+    if (perm === 'granted') {
+      const el = document.getElementById('pwa-notification-prompt');
+      if (el) el.remove();
+    }
+  };
+
+  (window as any).handleNavigateToPoolTasks = () => {
+    localStorage.setItem('tasksActiveSiteFilter', 'BOLGE_GOREVI');
+    (window as any).navigate('tasks');
+  };
 
   (window as any).updateDashboardUserBadge = () => {
     const badge = document.querySelector('.user-profile-badge');
@@ -648,6 +682,83 @@ export const DashboardPage = async () => {
         </div>
       </div>
 
+      <!-- PWA PUSH NOTIFICATION PROMPT -->
+      ${('Notification' in window && Notification.permission !== 'granted') ? `
+        <div id="pwa-notification-prompt" class="glass-panel" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.05)); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 12px 18px; margin-bottom: 1.2rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="width: 38px; height: 38px; background: rgba(245, 158, 11, 0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);">
+              <i class="fa-solid fa-bell" style="font-size: 1.1rem;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 800; font-size: 0.85rem; color: #fff;">Saha Görev Bildirimlerini Aktif Edin</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">Bölgenize düşen yeni görevlerden ve önemli duyurulardan anında sesli haberdar olun.</div>
+            </div>
+          </div>
+          <button onclick="window.handleActivatePushNotifications()" class="cyber-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #000; font-weight: 800; font-size: 0.75rem; padding: 8px 18px; border-radius: 8px; border: none; cursor: pointer; box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);">
+            <i class="fa-solid fa-bell"></i> BİLDİRİMLERİ AÇ
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- REGIONAL POOL TASKS ALERT CARD -->
+      ${relevantPoolTasks.length > 0 ? `
+        <div class="glass-panel" onclick="window.handleNavigateToPoolTasks()" style="cursor: pointer; background: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(234, 88, 12, 0.08)); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 14px; padding: 14px 20px; margin-bottom: 1.2rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); transition: all 0.25s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 44px; height: 44px; background: rgba(245, 158, 11, 0.25); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.45); flex-shrink: 0;">
+              <i class="fa-solid fa-users-viewfinder" style="font-size: 1.3rem;"></i>
+            </div>
+            <div>
+              <div style="font-weight: 900; font-size: 0.95rem; color: #fbbf24; letter-spacing: 0.4px; display: flex; align-items: center; gap: 8px;">
+                <span>⚡ BÖLGENİZDE AÇIK GÖREV VAR</span>
+                <span style="background: #fbbf24; color: #000; font-size: 0.7rem; padding: 2px 7px; border-radius: 10px; font-weight: 900;">${relevantPoolTasks.length} ADET</span>
+              </div>
+              <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 3px;">
+                ${relevantPoolTasks.slice(0, 3).map(t => `${t.siteName || t.siteId} - ${t.turbineId}`).join(', ')}${relevantPoolTasks.length > 3 ? ' ve diğerleri...' : ''} henüz üstlenilmedi. Görevleri görmek ve üstlenmek için tıklayınız.
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.78rem; color: #fbbf24; background: rgba(245, 158, 11, 0.15); padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3); flex-shrink: 0;">
+            <span>GÖREVLERİ GÖR</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- COMPANY & FIELD ANNOUNCEMENTS -->
+      ${announcements.length > 0 ? `
+        <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #64ffda; background: rgba(100, 255, 218, 0.03); box-shadow: 0 0 20px rgba(100, 255, 218, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
+          <h3 style="font-size: 0.85rem; color: #64ffda; margin: 0; display: flex; align-items: center; gap: 6px; font-weight: 800; font-family: 'Rajdhani', sans-serif; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-bullhorn" style="color: #64ffda;"></i> ŞİRKET & SAHA DUYURULARI
+          </h3>
+          <div style="display: flex; flex-direction: column; gap: 0.6rem; max-height: 240px; overflow-y: auto;">
+            ${announcements.map(a => {
+              const isCelebration = a.category === 'celebration';
+              const isUrgent = a.category === 'urgent';
+              const borderCol = isCelebration ? '#fbbf24' : (isUrgent ? '#ff5252' : '#64ffda');
+              const bgCol = isCelebration ? 'rgba(245, 158, 11, 0.08)' : (isUrgent ? 'rgba(255, 82, 82, 0.08)' : 'rgba(100, 255, 218, 0.04)');
+              const iconClass = isCelebration ? 'fa-cake-candles' : (isUrgent ? 'fa-triangle-exclamation' : 'fa-circle-info');
+              const dateStr = new Date(a.createdAt).toLocaleDateString('tr-TR');
+
+              return `
+                <div style="display: flex; align-items: flex-start; justify-content: space-between; padding: 0.85rem 1.1rem; background: ${bgCol}; border: 1px solid ${borderCol}44; border-radius: 10px; gap: 12px;">
+                  <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <i class="fa-solid ${iconClass}" style="color: ${borderCol}; font-size: 1.1rem; margin-top: 2px;"></i>
+                    <div>
+                      <div style="font-weight: 800; font-size: 0.88rem; color: #fff;">${a.title}</div>
+                      <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 3px; line-height: 1.4;">${a.message}</div>
+                      <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 4px;">
+                        <span><i class="fa-regular fa-clock"></i> ${dateStr}</span>
+                        ${a.createdByName ? `<span style="margin-left: 10px;"><i class="fa-regular fa-user"></i> ${a.createdByName}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       ${pendingLeaves.length > 0 ? `
       <!-- PENDING LEAVES ALERT PANEL -->
       <div class="glass-panel" style="padding: 1.25rem; margin-bottom: 1.5rem; border-top: 3px solid #fbbf24; background: rgba(251, 191, 36, 0.03); box-shadow: 0 0 20px rgba(251, 191, 36, 0.05); display: flex; flex-direction: column; gap: 0.75rem;">
@@ -964,15 +1075,18 @@ export const DashboardPage = async () => {
 
     <style>
       .dashboard-container { 
-        padding: 1.25rem; 
+        padding: 1rem 1.75rem 1.5rem 1.75rem !important; 
+        width: 100%;
+        max-width: 100%; 
+        box-sizing: border-box; 
+        margin: 0;
         display: flex; 
         flex-direction: column; 
-        gap: 1.5rem; 
+        gap: 1.25rem; 
         position: relative; 
         z-index: 1; 
-        max-width: 100%;
-        box-sizing: border-box;
-        overflow-x: hidden;
+        overflow: visible;
+        min-height: calc(100vh - 65px);
       }
       .dash-header { display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 2; }
       .welcome-text h1 { 
@@ -1123,7 +1237,7 @@ export const DashboardPage = async () => {
       .plan-status-pill.safe { background: var(--accent-green); color: #000; }
 
       /* Main Grid */
-      .dash-agenda-row { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 1.25rem; max-width: 100%; box-sizing: border-box; }
+      .dash-agenda-row { display: grid; grid-template-columns: minmax(280px, 320px) minmax(0, 1fr); gap: 1.25rem; max-width: 100%; box-sizing: border-box; flex: 1; }
       @media (max-width: 1280px) { .dash-agenda-row { grid-template-columns: 1fr; } }
       .dash-agenda-right { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 320px); gap: 1.25rem; max-width: 100%; box-sizing: border-box; }
       @media (max-width: 1024px) { .dash-agenda-right { grid-template-columns: 1fr; } }
@@ -1134,6 +1248,7 @@ export const DashboardPage = async () => {
         flex-direction: column; 
         border-top: 3px solid #00f3ff !important;
         box-shadow: 0 16px 45px rgba(0, 0, 0, 0.45), 0 0 20px rgba(0, 243, 255, 0.08) !important;
+        min-height: 380px;
       }
       .empty-feed {
         display: flex;

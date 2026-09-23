@@ -113,9 +113,11 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
   return `
     <style>
       .saha-siparis-container {
-        padding: 1.25rem 1.5rem;
-        max-width: 1600px;
-        margin: 0 auto;
+        padding: 1rem 1.75rem;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        margin: 0;
         font-family: 'Rajdhani', sans-serif;
         color: #f1f5f9;
       }
@@ -179,61 +181,133 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         line-height: 1;
       }
 
-      /* Site Selector Horizontal Bar / Grid */
-      .site-chip-container {
+      /* Layout with Left Sidebar */
+      .saha-siparis-layout {
         display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding-bottom: 6px;
-        margin-bottom: 1.25rem;
-        scrollbar-width: thin;
+        gap: 20px;
+        align-items: flex-start;
       }
-      .site-chip-container::-webkit-scrollbar {
-        height: 5px;
+      @media (max-width: 960px) {
+        .saha-siparis-layout {
+          flex-direction: column;
+        }
+        .sites-sidebar {
+          width: 100% !important;
+          max-height: 280px !important;
+        }
       }
-      .site-chip-container::-webkit-scrollbar-thumb {
-        background: rgba(0, 243, 255, 0.3);
-        border-radius: 4px;
+      .sites-sidebar {
+        width: 270px;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(10, 15, 25, 0.65);
+        flex-shrink: 0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
       }
-      .site-chip {
+      .sidebar-header {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(15, 23, 42, 0.6);
+      }
+      .search-wrapper {
+        position: relative;
+      }
+      .search-wrapper i {
+        position: absolute;
+        left: 11px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #64748b;
+        font-size: 0.82rem;
+      }
+      .search-wrapper input {
+        width: 100%;
+        padding: 8px 12px 8px 32px;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: #fff;
+        font-size: 0.82rem;
+        outline: none;
+        box-sizing: border-box;
+        transition: border-color 0.2s;
+      }
+      .search-wrapper input:focus {
+        border-color: #00f3ff;
+      }
+      .sites-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        max-height: calc(100vh - 230px);
+      }
+      .site-menu-item {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 7px 13px;
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 9px;
-        font-size: 0.82rem;
-        font-weight: 700;
-        color: #94a3b8;
-        cursor: pointer;
-        white-space: nowrap;
-        user-select: none;
-        transition: all 0.2s ease;
-      }
-      .site-chip:hover {
-        background: rgba(0, 243, 255, 0.08);
-        border-color: rgba(0, 243, 255, 0.3);
-        color: #fff;
-        transform: translateY(-1px);
-      }
-      .site-chip.active {
-        background: linear-gradient(135deg, rgba(0, 243, 255, 0.2), rgba(14, 165, 233, 0.1));
-        border-color: #00f3ff;
-        color: #00f3ff;
-        box-shadow: 0 0 14px rgba(0, 243, 255, 0.25);
-      }
-      .site-chip .count-badge {
-        padding: 1px 6px;
+        gap: 10px;
+        padding: 9px 12px;
         border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: #94a3b8;
+        position: relative;
+        margin-bottom: 4px;
+        user-select: none;
+      }
+      .site-menu-item i {
+        font-size: 0.95rem;
+        opacity: 0.65;
+        color: #64748b;
+        width: 16px;
+        text-align: center;
+      }
+      .site-menu-item .s-name {
+        font-weight: 600;
+        font-size: 0.85rem;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .site-menu-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+      }
+      .site-menu-item.active {
+        background: linear-gradient(135deg, rgba(0, 243, 255, 0.14), rgba(0, 243, 255, 0.03)) !important;
+        border-left: 3px solid #00f3ff !important;
+        color: #00f3ff !important;
+        font-weight: 700;
+        box-shadow: inset 0 0 10px rgba(0, 243, 255, 0.04);
+      }
+      .site-menu-item.active i {
+        opacity: 1;
+        color: #00f3ff;
+      }
+      .alert-badge {
         font-size: 0.68rem;
         font-weight: 800;
-        background: rgba(255, 255, 255, 0.1);
-        color: #cbd5e1;
+        padding: 2px 7px;
+        border-radius: 10px;
+        color: #fff;
+        font-family: monospace;
       }
-      .site-chip.active .count-badge {
-        background: #00f3ff;
-        color: #000;
+      .alert-badge.overdue {
+        background: #ef4444;
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+      }
+      .alert-badge.warning {
+        background: #f59e0b;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+      }
+      .saha-main-content {
+        flex: 1;
+        min-width: 0;
       }
 
       /* Toolbar Search & Status */
@@ -425,12 +499,15 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         font-size: 0.82rem;
       }
       .demand-items-table th {
-        background: rgba(0, 0, 0, 0.35);
-        padding: 7px 10px;
+        background: #0c152c !important;
+        padding: 8px 10px;
         color: #94a3b8;
         font-weight: 700;
         text-align: left;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 10 !important;
       }
       .demand-items-table td {
         padding: 7px 10px;
@@ -494,28 +571,20 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
       /* ═══════════════════════════════════════════════════════ */
       .order-modal-overlay {
         position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        right: 0 !important;
-        bottom: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        background: rgba(5, 12, 28, 0.8) !important;
+        inset: 0 !important;
+        background: rgba(5, 12, 28, 0.88) !important;
         backdrop-filter: blur(10px) !important;
         -webkit-backdrop-filter: blur(10px) !important;
-        display: flex !important;
+        display: none !important;
         align-items: center !important;
         justify-content: center !important;
-        z-index: 25000 !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transition: opacity 0.2s ease !important;
-        padding: 20px !important;
+        z-index: 99999 !important;
+        padding: 16px !important;
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        overflow-y: auto !important;
       }
       .order-modal-overlay.open {
-        opacity: 1 !important;
+        display: flex !important;
         pointer-events: auto !important;
       }
 
@@ -525,7 +594,9 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         border-radius: 14px !important;
         width: 100% !important;
         max-width: 980px !important;
-        max-height: 90vh !important;
+        height: min(84vh, 760px) !important;
+        max-height: 84vh !important;
+        min-height: 0 !important;
         display: flex !important;
         flex-direction: column !important;
         overflow: hidden !important;
@@ -533,10 +604,17 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         transform: scale(0.97) !important;
         transition: transform 0.2s ease !important;
         box-sizing: border-box !important;
+        margin: auto !important;
       }
       .order-modal.order-modal-pro {
         max-width: 1240px !important;
-        width: 94vw !important;
+        width: 100% !important;
+        height: min(86vh, 820px) !important;
+        max-height: 86vh !important;
+      }
+      #reject-demand-modal .order-modal {
+        height: auto !important;
+        max-height: 85vh !important;
       }
       .order-modal-overlay.open .order-modal {
         transform: scale(1) !important;
@@ -550,21 +628,70 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         justify-content: space-between !important;
         align-items: center !important;
         flex-shrink: 0 !important;
+        height: 52px !important;
+        box-sizing: border-box !important;
+      }
+      .order-modal form {
+        display: flex !important;
+        flex-direction: column !important;
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        height: calc(100% - 52px) !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
       }
       .order-modal-body {
         padding: 1.1rem 1.25rem !important;
         overflow-y: auto !important;
-        flex: 1 !important;
+        flex: 1 1 0% !important;
+        min-height: 0 !important;
+        box-sizing: border-box !important;
       }
       .order-modal-footer {
         padding: 0.75rem 1.25rem !important;
         background: #070d1f !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
         display: flex !important;
         justify-content: flex-end !important;
+        align-items: center !important;
         gap: 8px !important;
         flex-shrink: 0 !important;
+        height: 56px !important;
+        min-height: 56px !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.5) !important;
       }
+
+      .status-pill.draft {
+        background: rgba(245, 158, 11, 0.15) !important;
+        color: #fbbf24 !important;
+        border: 1px solid rgba(245, 158, 11, 0.4) !important;
+      }
+      .demand-card.status-draft {
+        border-left: 4px solid #fbbf24 !important;
+      }
+
+      /* Custom scrollbars for modal body and table containers */
+      .order-modal-body::-webkit-scrollbar,
+      .demand-items-scroll-box::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .order-modal-body::-webkit-scrollbar-track,
+      .demand-items-scroll-box::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.7);
+        border-radius: 4px;
+      }
+      .order-modal-body::-webkit-scrollbar-thumb,
+      .demand-items-scroll-box::-webkit-scrollbar-thumb {
+        background: rgba(0, 243, 255, 0.35);
+        border-radius: 4px;
+      }
+      .order-modal-body::-webkit-scrollbar-thumb:hover,
+      .demand-items-scroll-box::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 243, 255, 0.7);
+      }
+
     </style>
 
     <div class="saha-siparis-container">
@@ -587,68 +714,84 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
         </div>
       </div>
 
-      <!-- Top 4 Summary Cards -->
-      <div class="saha-stats-grid">
-        <div class="saha-stat-card pending" onclick="window.filterDemandStatus('PENDING_REVIEW')">
-          <div class="saha-stat-title"><i class="fa-solid fa-clock" style="color: #fbbf24;"></i> Ön Kontrol Bekleyen</div>
-          <div class="saha-stat-value" style="color: #fbbf24;" id="stat-demands-pending">0</div>
-        </div>
-
-        <div class="saha-stat-card approved" onclick="window.filterDemandStatus('APPROVED_FOR_ORDER')">
-          <div class="saha-stat-title"><i class="fa-solid fa-check" style="color: #38bdf8;"></i> Sipariş Bekleyen (Ön Onaylı)</div>
-          <div class="saha-stat-value" style="color: #38bdf8;" id="stat-demands-approved">0</div>
-        </div>
-
-        <div class="saha-stat-card ordered" onclick="window.filterDemandStatus('ORDERED')">
-          <div class="saha-stat-title"><i class="fa-solid fa-truck-fast" style="color: #34d399;"></i> Siparişi Açılan (Yolda)</div>
-          <div class="saha-stat-value" style="color: #34d399;" id="stat-demands-ordered">0</div>
-        </div>
-
-        <div class="saha-stat-card rejected" onclick="window.filterDemandStatus('REJECTED')">
-          <div class="saha-stat-title"><i class="fa-solid fa-circle-xmark" style="color: #f87171;"></i> Reddedilen Talepler</div>
-          <div class="saha-stat-value" style="color: #f87171;" id="stat-demands-rejected">0</div>
-        </div>
-      </div>
-
-      <!-- Sahalar List Filter Bar -->
-      <div style="margin-bottom: 0.5rem; font-size: 0.76rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-        <i class="fa-solid fa-map-location-dot" style="color: #00f3ff;"></i> Sahalar / Santraller
-      </div>
-      <div class="site-chip-container" id="demand-site-chips-container">
-        <div class="site-chip active" data-site="ALL" onclick="window.selectDemandSite('ALL')">
-          <span>TÜM SAHALAR</span>
-          <span class="count-badge" id="badge-site-all">0</span>
-        </div>
-        ${sites.map(s => `
-          <div class="site-chip" data-site="${s.id}" onclick="window.selectDemandSite('${s.id}')">
-            <span>${s.name}</span>
-            <span class="count-badge" id="badge-site-${s.id}">0</span>
+      <!-- Layout with Left Sidebar & Main Content -->
+      <div class="saha-siparis-layout">
+        
+        <!-- SOL SIDEBAR: SAHALAR (Bakım Planlama Tarzı) -->
+        <div class="sites-sidebar glass-panel">
+          <div class="sidebar-header">
+            <div class="search-wrapper">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="maint-site-search" placeholder="Saha ara..." oninput="window.handleDemandSiteSidebarSearch(this.value)">
+            </div>
           </div>
-        `).join('')}
-      </div>
-
-      <!-- Search and Status Bar -->
-      <div class="saha-toolbar">
-        <div style="display: flex; align-items: center; gap: 8px; flex: 1; max-width: 450px;">
-          <i class="fa-solid fa-magnifying-glass" style="color: #00f3ff;"></i>
-          <input type="text" id="demand-search-input" class="cyber-input" placeholder="Talep no, malzeme tanımı, SAP no veya personel ara..." oninput="window.handleDemandSearch(this.value)" style="height: 36px; font-size: 0.85rem;">
+          <div class="sites-list custom-scrollbar" id="demand-sites-sidebar-list">
+            <div class="site-menu-item active" data-site="ALL" onclick="window.selectDemandSite('ALL')">
+              <i class="fa-solid fa-globe" style="color: #00f3ff; text-shadow: 0 0 8px rgba(0,243,255,0.4);"></i>
+              <span class="s-name" style="font-weight: 700;">TÜM SAHALAR</span>
+              <span id="badge-site-all" class="alert-badge overdue" style="display: none;">0</span>
+            </div>
+            ${sites.map(s => `
+              <div class="site-menu-item" data-site="${s.id}" onclick="window.selectDemandSite('${s.id}')">
+                <i class="fa-solid fa-charging-station"></i>
+                <span class="s-name">${s.name}</span>
+                <span id="badge-site-${s.id}" class="alert-badge warning" style="display: none;">0</span>
+              </div>
+            `).join('')}
+          </div>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-          <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn active" data-status="ALL" onclick="window.filterDemandStatus('ALL')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px;">Tümü</button>
-          <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="PENDING_REVIEW" onclick="window.filterDemandStatus('PENDING_REVIEW')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #fbbf24;"><i class="fa-solid fa-clock"></i> Ön Kontrolde</button>
-          <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="APPROVED_FOR_ORDER" onclick="window.filterDemandStatus('APPROVED_FOR_ORDER')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #38bdf8;"><i class="fa-solid fa-check"></i> Ön Onaylı</button>
-          <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="ORDERED" onclick="window.filterDemandStatus('ORDERED')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #34d399;"><i class="fa-solid fa-truck-fast"></i> Siparişi Açılan</button>
-          <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="REJECTED" onclick="window.filterDemandStatus('REJECTED')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #f87171;"><i class="fa-solid fa-circle-xmark"></i> Reddedilen</button>
-        </div>
-      </div>
+        <!-- SAĞ ANA BÖLÜM: İSTATİSTİKLER, ARAÇ ÇUBUĞU VE TALEP LİSTESİ -->
+        <div class="saha-main-content">
+          <!-- Top 4 Summary Cards -->
+          <div class="saha-stats-grid">
+            <div class="saha-stat-card pending" onclick="window.filterDemandStatus('PENDING_REVIEW')">
+              <div class="saha-stat-title"><i class="fa-solid fa-clock" style="color: #fbbf24;"></i> Ön Kontrol Bekleyen</div>
+              <div class="saha-stat-value" style="color: #fbbf24;" id="stat-demands-pending">0</div>
+            </div>
 
-      <!-- Demands List Container -->
-      <div id="demands-list-container">
-        <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-          <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: #00f3ff; margin-bottom: 10px;"></i>
-          <div>Talepler yükleniyor...</div>
+            <div class="saha-stat-card approved" onclick="window.filterDemandStatus('APPROVED_FOR_ORDER')">
+              <div class="saha-stat-title"><i class="fa-solid fa-check" style="color: #38bdf8;"></i> Sipariş Bekleyen (Ön Onaylı)</div>
+              <div class="saha-stat-value" style="color: #38bdf8;" id="stat-demands-approved">0</div>
+            </div>
+
+            <div class="saha-stat-card ordered" onclick="window.filterDemandStatus('ORDERED')">
+              <div class="saha-stat-title"><i class="fa-solid fa-truck-fast" style="color: #34d399;"></i> Siparişi Açılan (Yolda)</div>
+              <div class="saha-stat-value" style="color: #34d399;" id="stat-demands-ordered">0</div>
+            </div>
+
+            <div class="saha-stat-card rejected" onclick="window.filterDemandStatus('REJECTED')">
+              <div class="saha-stat-title"><i class="fa-solid fa-circle-xmark" style="color: #f87171;"></i> Reddedilen Talepler</div>
+              <div class="saha-stat-value" style="color: #f87171;" id="stat-demands-rejected">0</div>
+            </div>
+          </div>
+
+          <!-- Search and Status Bar -->
+          <div class="saha-toolbar">
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; max-width: 450px;">
+              <i class="fa-solid fa-magnifying-glass" style="color: #00f3ff;"></i>
+              <input type="text" id="demand-search-input" class="cyber-input" placeholder="Talep no, malzeme tanımı, SAP no veya personel ara..." oninput="window.handleDemandSearch(this.value)" style="height: 36px; font-size: 0.85rem;">
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn active" data-status="ALL" onclick="window.filterDemandStatus('ALL')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px;">Tümü</button>
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="DRAFT" onclick="window.filterDemandStatus('DRAFT')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #fbbf24;"><i class="fa-solid fa-file-pen"></i> Taslaklar (<span id="stat-demands-draft-badge">0</span>)</button>
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="PENDING_REVIEW" onclick="window.filterDemandStatus('PENDING_REVIEW')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #fbbf24;"><i class="fa-solid fa-clock"></i> Ön Kontrolde</button>
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="APPROVED_FOR_ORDER" onclick="window.filterDemandStatus('APPROVED_FOR_ORDER')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #38bdf8;"><i class="fa-solid fa-check"></i> Ön Onaylı</button>
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="ORDERED" onclick="window.filterDemandStatus('ORDERED')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #34d399;"><i class="fa-solid fa-truck-fast"></i> Siparişi Açılan</button>
+              <button type="button" class="cyber-btn cyber-btn-secondary demand-status-btn" data-status="REJECTED" onclick="window.filterDemandStatus('REJECTED')" style="height: 32px; font-size: 0.76rem; padding: 2px 12px; color: #f87171;"><i class="fa-solid fa-circle-xmark"></i> Reddedilen</button>
+            </div>
+          </div>
+
+          <!-- Demands List Container -->
+          <div id="demands-list-container">
+            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+              <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: #00f3ff; margin-bottom: 10px;"></i>
+              <div>Talepler yükleniyor...</div>
+            </div>
+          </div>
         </div>
+
       </div>
 
     </div>
@@ -656,7 +799,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- MODAL: YENİ MALZEME TALEBİ OLUŞTUR                       -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div class="order-modal-overlay" id="new-demand-modal">
+    <div class="order-modal-overlay" id="new-demand-modal" style="display: none;">
       <div class="order-modal">
         <div class="order-modal-header">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -685,7 +828,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
 
               <div>
                 <label class="cyber-label"><i class="fa-solid fa-wind" style="color: #00f3ff;"></i> Saha / Santral <span style="color: #ef4444;">*</span></label>
-                <select id="new-demand-site" class="cyber-select" required onchange="window.updateDemandTurbineOptions(this.value)">
+                <select id="new-demand-site" class="cyber-select" required onchange="window.updateDemandTurbineOptions(this.value); window.refreshAllDemandRowsStockAndDupHints?.();">
                   <option value="">-- Saha Seçiniz --</option>
                   ${sites.map(s => `<option value="${s.id}" data-name="${s.name}">${s.name}</option>`).join('')}
                 </select>
@@ -718,7 +861,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
               </button>
             </div>
 
-            <div style="overflow-x: auto; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 1rem;">
+            <div class="demand-items-scroll-box" style="overflow-x: auto; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 1rem;">
               <table class="demand-items-table">
                 <thead>
                   <tr id="new-demand-table-header">
@@ -745,6 +888,9 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
 
           <div class="order-modal-footer">
             <button type="button" onclick="window.closeNewDemandModal()" class="cyber-btn cyber-btn-secondary">İPTAL</button>
+            <button type="button" id="btn-save-draft" onclick="window.handleSaveDemandAsDraft()" class="cyber-btn" style="font-weight: 700; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.45); color: #fbbf24;">
+              <i class="fa-solid fa-floppy-disk"></i> TASLAK KAYDET
+            </button>
             <button type="submit" id="btn-submit-demand" class="cyber-btn cyber-btn-cyan" style="font-weight: 800;">
               <i class="fa-solid fa-paper-plane"></i> TALEBİ OLUŞTUR VE ONAYA GÖNDER
             </button>
@@ -756,7 +902,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- MODAL: ÖN KONTROL ONAY & KALEM BAZLI DEĞERLENDİRME MODALI -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div class="order-modal-overlay" id="approve-demand-modal">
+    <div class="order-modal-overlay" id="approve-demand-modal" style="display: none;">
       <div class="order-modal order-modal-pro" style="max-height: 90vh;">
         <div class="order-modal-header" style="border-color: rgba(52, 211, 153, 0.3); padding: 0.85rem 1.35rem;">
           <div style="display: flex; align-items: center; gap: 10px;">
@@ -781,7 +927,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
               <i class="fa-solid fa-boxes-stacked"></i> Kalem Bazlı Yönetici Kararları & Özel Talimatlar
             </div>
 
-            <div style="overflow-x: auto; background: rgba(0, 0, 0, 0.35); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 1rem;">
+            <div class="demand-items-scroll-box" style="overflow-x: auto; max-height: 420px; overflow-y: auto; background: rgba(0, 0, 0, 0.35); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 1rem;">
               <table class="demand-items-table" style="width: 100%; border-collapse: separate; border-spacing: 0;">
                 <thead>
                   <tr style="background: rgba(15, 23, 42, 0.95);">
@@ -817,7 +963,7 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- MODAL: TALEP REDDETME GEREKÇESİ                          -->
     <!-- ═══════════════════════════════════════════════════════ -->
-    <div class="order-modal-overlay" id="reject-demand-modal">
+    <div class="order-modal-overlay" id="reject-demand-modal" style="display: none;">
       <div class="order-modal" style="max-width: 520px;">
         <div class="order-modal-header" style="border-color: rgba(239, 68, 68, 0.3);">
           <div style="display: flex; align-items: center; gap: 8px;">
@@ -853,29 +999,63 @@ export const SahaSiparisleriPage = async (userProfile: any) => {
 // Global Init & Subscription
 let demandsUnsubscribe: (() => void) | null = null;
 
+const cleanupOrphanedModals = () => {
+  ['new-demand-modal', 'approve-demand-modal', 'reject-demand-modal'].forEach(id => {
+    const directInBody = document.body.querySelectorAll(`:scope > #${id}`);
+    directInBody.forEach(el => el.remove());
+  });
+};
+
 (window as any).initSahaSiparisleriPage = () => {
+  // Clean up any legacy orphaned modals attached directly to document.body
+  cleanupOrphanedModals();
+
   if (demandsUnsubscribe) {
     demandsUnsubscribe();
   }
 
   loadSahaSapCatalog().catch(() => {});
 
-  demandsUnsubscribe = materialDemandService.subscribeDemands((demands) => {
+  const sub = materialDemandService.subscribeDemands((demands) => {
     allDemandsList = demands;
     (window as any).applyDemandFilters();
   });
+
+  demandsUnsubscribe = () => {
+    sub();
+    ['new-demand-modal', 'approve-demand-modal', 'reject-demand-modal'].forEach(id => {
+      document.getElementById(id)?.remove();
+    });
+  };
 };
 
 (window as any).selectDemandSite = (siteId: string) => {
   selectedDemandSiteFilter = siteId;
-  document.querySelectorAll('#demand-site-chips-container .site-chip').forEach((chip: any) => {
-    if (chip.dataset.site === siteId) {
-      chip.classList.add('active');
+  document.querySelectorAll('#demand-sites-sidebar-list .site-menu-item').forEach((item: any) => {
+    if (item.dataset.site === siteId) {
+      item.classList.add('active');
     } else {
-      chip.classList.remove('active');
+      item.classList.remove('active');
     }
   });
   (window as any).applyDemandFilters();
+};
+
+(window as any).handleDemandSiteSidebarSearch = (val: string) => {
+  const q = (val || '').toLowerCase().trim();
+  document.querySelectorAll('#demand-sites-sidebar-list .site-menu-item').forEach((item: any) => {
+    const site = item.dataset.site || '';
+    if (site === 'ALL') {
+      item.style.display = 'flex';
+      return;
+    }
+    const siteName = (item.querySelector('.s-name')?.textContent || '').toLowerCase();
+    if (!q || siteName.includes(q)) {
+      item.style.display = 'flex';
+    } else {
+      item.style.display = 'none';
+    }
+  });
 };
 
 (window as any).filterDemandStatus = (status: string) => {
@@ -907,6 +1087,10 @@ let demandsUnsubscribe: (() => void) | null = null;
 
   // Filter demands that this user is permitted to see
   const userPermittedDemands = allDemandsList.filter(d => {
+    if (d.status === 'DRAFT') {
+      if (isSuperAdminUser(currentUser) || isMaterialManagerUser(currentUser)) return true;
+      return d.requesterId === currentUser?.uid || d.siteId === currentUser?.siteId;
+    }
     if (isSuperAdminUser(currentUser) || isMaterialManagerUser(currentUser)) return true;
     if (isFurkanUser(currentUser)) {
       return FURKAN_DEMAND_SITES.includes(d.siteId);
@@ -922,26 +1106,34 @@ let demandsUnsubscribe: (() => void) | null = null;
   const statApproved = document.getElementById('stat-demands-approved');
   const statOrdered = document.getElementById('stat-demands-ordered');
   const statRejected = document.getElementById('stat-demands-rejected');
+  const badgeDraft = document.getElementById('stat-demands-draft-badge');
 
+  const countDraft = userPermittedDemands.filter(d => d.status === 'DRAFT').length;
   const countPending = userPermittedDemands.filter(d => d.status === 'PENDING_REVIEW').length;
   const countApproved = userPermittedDemands.filter(d => d.status === 'APPROVED_FOR_ORDER').length;
   const countOrdered = userPermittedDemands.filter(d => d.status === 'ORDERED').length;
   const countRejected = userPermittedDemands.filter(d => d.status === 'REJECTED').length;
 
+  if (badgeDraft) badgeDraft.innerText = String(countDraft);
   if (statPending) statPending.innerText = String(countPending);
   if (statApproved) statApproved.innerText = String(countApproved);
   if (statOrdered) statOrdered.innerText = String(countOrdered);
   if (statRejected) statRejected.innerText = String(countRejected);
 
-  // Update site chip counts
+  // Update site sidebar counts
   const badgeAll = document.getElementById('badge-site-all');
-  if (badgeAll) badgeAll.innerText = String(userPermittedDemands.length);
+  if (badgeAll) {
+    badgeAll.innerText = String(userPermittedDemands.length);
+    badgeAll.style.display = userPermittedDemands.length > 0 ? 'inline-block' : 'none';
+  }
 
   visibleSites.forEach((s: any) => {
     const badge = document.getElementById(`badge-site-${s.id}`);
     if (badge) {
       const siteCount = userPermittedDemands.filter(d => d.siteId === s.id).length;
       badge.innerText = String(siteCount);
+      badge.style.display = siteCount > 0 ? 'inline-block' : 'none';
+      badge.className = `alert-badge ${siteCount >= 2 ? 'overdue' : 'warning'}`;
     }
   });
 
@@ -981,6 +1173,7 @@ let demandsUnsubscribe: (() => void) | null = null;
   const currentUser = getCurrentUserForDemands();
 
   const statusMap: Record<MaterialDemandStatus, { label: string; class: string; icon: string }> = {
+    'DRAFT': { label: 'Taslak', class: 'draft', icon: 'fa-file-lines' },
     'PENDING_REVIEW': { label: 'Ön Kontrol Bekliyor', class: 'pending', icon: 'fa-clock' },
     'APPROVED_FOR_ORDER': { label: 'Ön Onaylı (Sipariş Bekliyor)', class: 'approved', icon: 'fa-check' },
     'ORDERED': { label: 'Siparişi Açıldı (Yolda)', class: 'ordered', icon: 'fa-truck-fast' },
@@ -1010,16 +1203,38 @@ let demandsUnsubscribe: (() => void) | null = null;
 
     const displayDemandNo = demand.demandNo || (demand.title.includes('_') ? demand.title.split('_')[0] : demand.title);
 
+    const approvedCount = (demand.items || []).filter(i => i.itemDecision === 'APPROVE_PURCHASE').length;
+    const rejectedCount = (demand.items || []).filter(i => i.itemDecision === 'REJECT').length;
+    const transferCount = (demand.items || []).filter(i => i.itemDecision === 'TRANSFER').length;
+    const localStockCount = (demand.items || []).filter(i => i.itemDecision === 'USE_LOCAL_STOCK').length;
+
+    let decisionSummaryBadges = '';
+    if (approvedCount > 0 || rejectedCount > 0 || transferCount > 0 || localStockCount > 0) {
+      decisionSummaryBadges = `
+        <div style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+          ${approvedCount > 0 ? `<span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); font-size: 0.72rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;"><i class="fa-solid fa-circle-check"></i> ${approvedCount} Onay</span>` : ''}
+          ${rejectedCount > 0 ? `<span style="background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 0.72rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;"><i class="fa-solid fa-circle-xmark"></i> ${rejectedCount} Ret</span>` : ''}
+          ${transferCount > 0 ? `<span style="background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-size: 0.72rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;"><i class="fa-solid fa-truck-ramp-box"></i> ${transferCount} Transfer</span>` : ''}
+          ${localStockCount > 0 ? `<span style="background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); font-size: 0.72rem; font-weight: 800; padding: 2px 7px; border-radius: 5px;"><i class="fa-solid fa-box-archive"></i> ${localStockCount} Sahada</span>` : ''}
+        </div>
+      `;
+    }
+
     return `
       <div class="demand-card status-${st.class}" style="padding: 14px 16px; margin-bottom: 0.85rem; border-radius: 12px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
         
         <!-- 1. ÜST BİLGİ & DURUM ÇUBUĞU (FERAH & DÜZENLİ) -->
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); padding-bottom: 8px; flex-wrap: wrap;">
           
-          <!-- Sol Bilgi Grubu: Kod, Saha, Türbin, Talep Eden, Tarih -->
+          <!-- Sol Bilgi Grubu: Kod, Kalem Sayısı, Saha, Türbin, Talep Eden, Tarih -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-family: monospace; font-size: 0.92rem; font-weight: 800; color: #00f3ff; background: rgba(0, 243, 255, 0.08); padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.25);">
-              ${displayDemandNo}
+            <span onclick="window.toggleDemandDetails('${demand.id}')" role="button" tabindex="0" title="Sipariş Listesini Aç / Kapat" style="cursor: pointer; font-family: monospace; font-size: 0.92rem; font-weight: 800; color: #00f3ff; background: rgba(0, 243, 255, 0.12); padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(0, 243, 255, 0.35); display: inline-flex; align-items: center; gap: 6px; user-select: none; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 243, 255, 0.22)'; this.style.borderColor='#00f3ff'" onmouseout="this.style.background='rgba(0, 243, 255, 0.12)'; this.style.borderColor='rgba(0, 243, 255, 0.35)'">
+              <i class="fa-solid fa-layer-group" style="font-size: 0.8rem; color: #00f3ff;"></i>
+              <span>${displayDemandNo}</span>
+              <i class="fa-solid fa-chevron-down" id="code-chevron-${demand.id}" style="font-size: 0.72rem; color: #38bdf8; transition: transform 0.2s;"></i>
+            </span>
+            <span onclick="window.toggleDemandDetails('${demand.id}')" role="button" tabindex="0" title="Sipariş / Malzeme Listesini Aç / Kapat" style="cursor: pointer; background: rgba(0, 243, 255, 0.08); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.22); border-radius: 6px; padding: 2px 8px; font-size: 0.76rem; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; user-select: none; transition: all 0.2s;" onmouseover="this.style.background='rgba(0, 243, 255, 0.18)'" onmouseout="this.style.background='rgba(0, 243, 255, 0.08)'">
+              <i class="fa-solid fa-boxes-stacked"></i> ${(demand.items || []).length} Kalem
             </span>
             <span style="color: #fff; font-size: 0.88rem; font-weight: 800;">
               <i class="fa-solid fa-location-dot" style="color: #38bdf8;"></i> ${demand.siteName} ${demand.turbineId ? `<span style="color: #38bdf8; font-weight: 700;">(${demand.turbineId})</span>` : ''}
@@ -1047,28 +1262,17 @@ let demandsUnsubscribe: (() => void) | null = null;
 
         </div>
 
-        <!-- 2. ORTA HIZLI ÖZET (Tek bakışta malzeme içeriği) -->
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; background: rgba(0, 0, 0, 0.2); padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.04);">
-          <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #cbd5e1; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-            <span style="background: rgba(0, 243, 255, 0.1); color: #00f3ff; border: 1px solid rgba(0, 243, 255, 0.25); border-radius: 5px; padding: 1px 7px; font-size: 0.74rem; font-weight: 800; flex-shrink: 0;">
-              <i class="fa-solid fa-boxes-stacked"></i> ${(demand.items || []).length} Kalem
-            </span>
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e2e8f0; font-size: 0.84rem;">
-              ${(demand.items || []).map(i => `<strong style="color: #fff;">${i.description}</strong> (${i.quantity} ${i.unit || 'Adet'})${i.sapNo ? ` <span style="color: #38bdf8; font-family: monospace; font-size: 0.78rem;">[SAP: ${i.sapNo}]</span>` : ''}`).join(' <span style="color: #64748b;">•</span> ')}
-            </span>
-          </div>
-        </div>
-
-        <!-- 3. ALT AKSİYON & İŞLEM ÇUBUĞU (Düzenli & Hizalı) -->
+        <!-- 2. ALT AKSİYON & İŞLEM ÇUBUĞU (Düzenli & Hizalı) -->
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
           
-          <!-- Sol Bilgi: Varsa Sipariş Numarası ve Sevkiyat Süresi -->
+          <!-- Sol Bilgi: Varsa Sipariş Numarası, Karar Rozetleri ve Sevkiyat Süresi -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             ${demand.orderNo ? `
               <span style="background: rgba(52, 211, 153, 0.12); padding: 3px 8px; border-radius: 5px; border: 1px solid rgba(52, 211, 153, 0.3); color: #34d399; font-size: 0.76rem; font-weight: 800;">
                 <i class="fa-solid fa-file-invoice"></i> Sipariş No: <strong style="color: #fff; font-family: monospace; letter-spacing: 0.5px;">${demand.orderNo}</strong>
               </span>
             ` : ''}
+            ${decisionSummaryBadges}
             ${elapsedDaysText ? `
               <span class="days-waiting-pill" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 5px;">
                 ${elapsedDaysText}
@@ -1078,7 +1282,16 @@ let demandsUnsubscribe: (() => void) | null = null;
 
           <!-- Sağ İşlem Butonları -->
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            ${(canUserEditDemand(currentUser, demand) && (demand.status === 'PENDING_REVIEW' || demand.status === 'APPROVED_FOR_ORDER')) ? `
+            ${demand.status === 'DRAFT' ? `
+              <button type="button" onclick="window.openEditDemandModal('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 11px; height: 28px; font-weight: 700; border-color: rgba(245, 158, 11, 0.4); color: #fbbf24; background: rgba(245, 158, 11, 0.08);" title="Taslağa Malzeme Ekle veya Düzenle">
+                <i class="fa-solid fa-file-pen"></i> Düzenle / Kalem Ekle
+              </button>
+              <button type="button" onclick="window.handleSubmitDraftToApproval('${demand.id}')" class="cyber-btn cyber-btn-cyan" style="font-size: 0.76rem; padding: 4px 14px; height: 28px; font-weight: 800;" title="Taslağı Tamamla ve Ön Kontrole Gönder">
+                <i class="fa-solid fa-paper-plane"></i> ONAYA GÖNDER
+              </button>
+            ` : ''}
+
+            ${(demand.status !== 'DRAFT' && canUserEditDemand(currentUser, demand) && (demand.status === 'PENDING_REVIEW' || demand.status === 'APPROVED_FOR_ORDER')) ? `
               <button type="button" onclick="window.openEditDemandModal('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.74rem; padding: 4px 11px; height: 28px; font-weight: 700; border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; background: rgba(56, 189, 248, 0.08);" title="Talebe Yeni Kalem Ekle veya Düzenle">
                 <i class="fa-solid fa-pen-to-square"></i> Düzenle
               </button>
@@ -1094,8 +1307,8 @@ let demandsUnsubscribe: (() => void) | null = null;
               <i class="fa-solid fa-chevron-down"></i> Detay Göster
             </button>
 
-            ${(canUserEditDemand(currentUser, demand)) ? `
-              <button type="button" onclick="window.handleDeleteDemand('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.72rem; padding: 3px 8px; height: 28px; border-color: rgba(239, 68, 68, 0.3); color: #f87171;" title="Talebi Sil">
+            ${(isSuperAdminUser(currentUser) || isMaterialManagerUser(currentUser)) ? `
+              <button type="button" onclick="window.handleDeleteDemand('${demand.id}')" class="cyber-btn cyber-btn-secondary" style="font-size: 0.72rem; padding: 3px 8px; height: 28px; border-color: rgba(239, 68, 68, 0.3); color: #f87171;" title="${demand.status === 'DRAFT' ? 'Taslağı Sil' : 'Talebi Sil'}">
                 <i class="fa-solid fa-trash"></i>
               </button>
             ` : ''}
@@ -1138,45 +1351,81 @@ let demandsUnsubscribe: (() => void) | null = null;
             <table class="demand-items-table" style="width: 100%; border-collapse: collapse;">
               <thead>
                 <tr style="background: rgba(15, 23, 42, 0.8);">
-                  ${!isConsumable ? '<th style="width: 120px; color: #00f3ff; padding: 8px 10px;">SAP NO</th>' : ''}
+                  ${!isConsumable ? '<th style="width: 110px; color: #00f3ff; padding: 8px 10px;">SAP NO</th>' : ''}
                   <th style="color: #fff; padding: 8px 10px;">MALZEME TANIMI</th>
-                  <th style="width: 110px; text-align: center; color: #34d399; padding: 8px 10px;">ONAY MİKTARI</th>
+                  <th style="width: 95px; text-align: center; color: #94a3b8; padding: 8px 10px;">İSTENEN</th>
+                  <th style="width: 175px; color: #38bdf8; padding: 8px 10px;">YÖNETİCİ KARARI</th>
+                  <th style="width: 120px; text-align: center; color: #34d399; padding: 8px 10px;">ONAY MİKTARI</th>
                   ${(demand.status === 'ORDERED' || demand.status === 'DELIVERED' || demand.orderNo) ? `
                     <th style="width: 230px; text-align: center; color: #38bdf8; padding: 8px 10px;">TESLİMAT / GELEN DURUMU</th>
                   ` : ''}
-                  <th style="width: 160px; color: #38bdf8; padding: 8px 10px;">YÖNETİCİ KARARI</th>
-                  <th style="padding: 8px 10px;">YÖNETİCİ TALİMATI / GEREKÇE</th>
+                  <th style="padding: 8px 10px; color: #cbd5e1;">YÖNETİCİ TALİMATI / GEREKÇE</th>
                 </tr>
               </thead>
               <tbody>
                 ${(demand.items || []).map(i => {
-                  const decision = i.itemDecision || (demand.status === 'APPROVED_FOR_ORDER' || demand.status === 'ORDERED' || demand.status === 'DELIVERED' ? 'APPROVE_PURCHASE' : (demand.status === 'REJECTED' ? 'REJECT' : 'PENDING'));
+                  let decision = i.itemDecision;
+                  if (!decision) {
+                    if (demand.status === 'DRAFT') {
+                      decision = 'DRAFT' as any;
+                    } else if (demand.status === 'PENDING_REVIEW') {
+                      decision = 'PENDING' as any;
+                    } else if (demand.status === 'APPROVED_FOR_ORDER' || demand.status === 'ORDERED' || demand.status === 'DELIVERED') {
+                      decision = 'APPROVE_PURCHASE';
+                    } else if (demand.status === 'REJECTED') {
+                      decision = 'REJECT';
+                    } else {
+                      decision = 'PENDING' as any;
+                    }
+                  }
                   
                   let decisionBadge = '<span style="color: #94a3b8; font-size: 0.74rem;">Beklemede</span>';
+                  let rowAccentStyle = 'border-left: 3px solid transparent;';
+                  let rowBgStyle = '';
+
                   if (decision === 'APPROVE_PURCHASE') {
                     decisionBadge = `
-                      <span style="background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
-                        <i class="fa-solid fa-cart-shopping"></i> Satınalma (${i.approvedQuantity !== undefined ? i.approvedQuantity : i.quantity} ${i.unit || 'Adet'})
+                      <span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 900; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-circle-check"></i> Onaylandı (Satınalma)
                       </span>
                     `;
+                    rowAccentStyle = 'border-left: 3px solid #10b981;';
                   } else if (decision === 'TRANSFER') {
                     decisionBadge = `
-                      <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
+                      <span style="background: rgba(56, 189, 248, 0.18); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 900; display: inline-flex; align-items: center; gap: 5px;">
                         <i class="fa-solid fa-truck-ramp-box"></i> Transfer Edilsin
                       </span>
                     `;
+                    rowAccentStyle = 'border-left: 3px solid #38bdf8;';
                   } else if (decision === 'USE_LOCAL_STOCK') {
                     decisionBadge = `
-                      <span style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
-                        <i class="fa-solid fa-box-archive"></i> Sahadaki Stoktan Kullan
+                      <span style="background: rgba(245, 158, 11, 0.18); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 900; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-box-archive"></i> Sahadaki Stoktan
                       </span>
                     `;
+                    rowAccentStyle = 'border-left: 3px solid #f59e0b;';
                   } else if (decision === 'REJECT') {
                     decisionBadge = `
-                      <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-weight: 800;">
-                        <i class="fa-solid fa-ban"></i> Reddedildi
+                      <span style="background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 900; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-circle-xmark"></i> Reddedildi
                       </span>
                     `;
+                    rowAccentStyle = 'border-left: 3px solid #ef4444;';
+                    rowBgStyle = 'background: rgba(239, 68, 68, 0.05);';
+                  } else if (decision === 'DRAFT') {
+                    decisionBadge = `
+                      <span style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-file-pen"></i> Taslak Kalem
+                      </span>
+                    `;
+                    rowAccentStyle = 'border-left: 3px solid #64748b;';
+                  } else {
+                    decisionBadge = `
+                      <span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 700; display: inline-flex; align-items: center; gap: 5px;">
+                        <i class="fa-solid fa-hourglass-half fa-spin"></i> Ön Kontrol Bekliyor
+                      </span>
+                    `;
+                    rowAccentStyle = 'border-left: 3px solid rgba(251, 191, 36, 0.6);';
                   }
 
                   const hasApprovedDiff = (i.approvedQuantity !== undefined && i.approvedQuantity !== i.quantity && decision === 'APPROVE_PURCHASE');
@@ -1227,29 +1476,47 @@ let demandsUnsubscribe: (() => void) | null = null;
                     }
                   }
 
+                  let approvedQtyCellContent = '';
+                  if (decision === 'APPROVE_PURCHASE') {
+                    approvedQtyCellContent = hasApprovedDiff ? `
+                      <div style="color: #34d399; font-weight: 900; font-size: 0.92rem;">${i.approvedQuantity} ${i.unit || 'Adet'}</div>
+                      <div style="color: #94a3b8; font-size: 0.7rem; text-decoration: line-through;">Talep: ${i.quantity} ${i.unit || 'Adet'}</div>
+                    ` : `
+                      <strong style="color: #34d399; font-size: 0.92rem;">${i.approvedQuantity !== undefined ? i.approvedQuantity : i.quantity} ${i.unit || 'Adet'}</strong>
+                    `;
+                  } else if (decision === 'REJECT') {
+                    approvedQtyCellContent = `<span style="color: #ef4444; font-weight: 800; font-size: 0.8rem;">0 ${i.unit || 'Adet'} (Red)</span>`;
+                  } else if (decision === 'TRANSFER') {
+                    approvedQtyCellContent = `<span style="color: #38bdf8; font-weight: 800; font-size: 0.8rem;">${i.quantity} ${i.unit || 'Adet'} (Transfer)</span>`;
+                  } else if (decision === 'USE_LOCAL_STOCK') {
+                    approvedQtyCellContent = `<span style="color: #fbbf24; font-weight: 800; font-size: 0.8rem;">${i.quantity} ${i.unit || 'Adet'} (Sahada)</span>`;
+                  } else {
+                    approvedQtyCellContent = `<span style="color: #94a3b8; font-size: 0.78rem; font-style: italic;">Beklemede</span>`;
+                  }
+
                   return `
-                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                  <tr style="border-bottom: 1px solid rgba(255,255,255,0.04); ${rowBgStyle} ${rowAccentStyle}">
                     ${!isConsumable ? `<td style="padding: 8px 10px;"><span style="font-family: monospace; color: #00f3ff; font-weight: 800;">${i.sapNo || '-'}</span></td>` : ''}
                     <td style="padding: 8px 10px;">
                       <div style="font-weight: 700; color: #fff; font-size: 0.88rem;">${i.description}</div>
                     </td>
                     <td style="text-align: center; padding: 8px 10px;">
-                      ${hasApprovedDiff ? `
-                        <div style="color: #34d399; font-weight: 900; font-size: 0.85rem;">${i.approvedQuantity} ${i.unit || 'Adet'}</div>
-                        <div style="color: #94a3b8; font-size: 0.7rem; text-decoration: line-through;">Talep: ${i.quantity} ${i.unit || 'Adet'}</div>
-                      ` : `
-                        <strong style="color: #34d399;">${i.quantity} ${i.unit || 'Adet'}</strong>
-                      `}
+                      <strong style="color: #e2e8f0; font-size: 0.88rem;">${i.quantity} ${i.unit || 'Adet'}</strong>
+                    </td>
+                    <td style="padding: 8px 10px;">${decisionBadge}</td>
+                    <td style="text-align: center; padding: 8px 10px;">
+                      ${approvedQtyCellContent}
                     </td>
                     ${deliveryStatusCell}
-                    <td style="padding: 8px 10px;">${decisionBadge}</td>
                     <td style="padding: 8px 10px;">
                       ${i.managerItemNote ? `
-                        <div style="color: #38bdf8; font-size: 0.76rem; font-weight: 700; background: rgba(56, 189, 248, 0.08); padding: 2px 8px; border-radius: 4px; border-left: 3px solid #38bdf8; margin-bottom: 2px;">
-                          <i class="fa-solid fa-comment-pen"></i> ${i.managerItemNote}
+                        <div style="color: #fff; font-size: 0.78rem; font-weight: 700; background: ${decision === 'REJECT' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(56, 189, 248, 0.12)'}; border: 1px solid ${decision === 'REJECT' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(56, 189, 248, 0.3)'}; padding: 3px 8px; border-radius: 4px; border-left: 3px solid ${decision === 'REJECT' ? '#f87171' : '#38bdf8'}; margin-bottom: 3px;">
+                          <i class="fa-solid ${decision === 'REJECT' ? 'fa-circle-xmark' : 'fa-clipboard-check'}" style="color: ${decision === 'REJECT' ? '#f87171' : '#38bdf8'}; margin-right: 4px;"></i>
+                          ${i.managerItemNote}
                         </div>
                       ` : ''}
-                      ${i.reason ? `<div style="color: #94a3b8; font-size: 0.72rem; font-style: italic;">Talep: ${i.reason}</div>` : ''}
+                      ${i.reason ? `<div style="color: #94a3b8; font-size: 0.72rem;"><i class="fa-regular fa-comment-dots" style="color: #64748b;"></i> <strong>Personel Notu:</strong> ${i.reason}</div>` : ''}
+                      ${(!i.managerItemNote && !i.reason) ? '<span style="color: #64748b; font-size: 0.74rem;">-</span>' : ''}
                     </td>
                   </tr>
                   `;
@@ -1277,18 +1544,26 @@ let demandsUnsubscribe: (() => void) | null = null;
 (window as any).toggleDemandDetails = (demandId: string) => {
   const detailEl = document.getElementById(`demand-detail-${demandId}`);
   const btnEl = document.getElementById(`btn-toggle-detail-${demandId}`);
-  if (detailEl && btnEl) {
+  const codeChevronEl = document.getElementById(`code-chevron-${demandId}`);
+  if (detailEl) {
     const isCurrentlyOpen = detailEl.style.display !== 'none';
     detailEl.style.display = isCurrentlyOpen ? 'none' : 'block';
-    btnEl.innerHTML = isCurrentlyOpen
-      ? '<i class="fa-solid fa-chevron-down"></i> Detay Göster'
-      : '<i class="fa-solid fa-chevron-up"></i> Detayı Gizle';
-    if (isCurrentlyOpen) {
-      btnEl.style.color = '#00f3ff';
-      btnEl.style.borderColor = 'rgba(0, 243, 255, 0.3)';
-    } else {
-      btnEl.style.color = '#38bdf8';
-      btnEl.style.borderColor = 'rgba(56, 189, 248, 0.6)';
+    if (btnEl) {
+      btnEl.innerHTML = isCurrentlyOpen
+        ? '<i class="fa-solid fa-chevron-down"></i> Detay Göster'
+        : '<i class="fa-solid fa-chevron-up"></i> Detayı Gizle';
+      if (isCurrentlyOpen) {
+        btnEl.style.color = '#00f3ff';
+        btnEl.style.borderColor = 'rgba(0, 243, 255, 0.3)';
+      } else {
+        btnEl.style.color = '#38bdf8';
+        btnEl.style.borderColor = 'rgba(56, 189, 248, 0.6)';
+      }
+    }
+    if (codeChevronEl) {
+      codeChevronEl.className = isCurrentlyOpen
+        ? 'fa-solid fa-chevron-down'
+        : 'fa-solid fa-chevron-up';
     }
   }
 };
@@ -1299,9 +1574,14 @@ let demandsUnsubscribe: (() => void) | null = null;
   const icon = document.getElementById('demand-modal-icon');
   const title = document.getElementById('demand-modal-title');
   const submitBtn = document.getElementById('btn-submit-demand');
+  const draftBtn = document.getElementById('btn-save-draft');
   if (icon) icon.className = 'fa-solid fa-plus-circle';
   if (title) title.innerText = 'Yeni Saha Malzeme Talebi Oluştur';
   if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> TALEBİ OLUŞTUR VE ONAYA GÖNDER';
+  if (draftBtn) {
+    draftBtn.style.display = 'inline-flex';
+    draftBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> TASLAK KAYDET';
+  }
 
   const form = document.getElementById('create-demand-form') as HTMLFormElement;
   if (form) form.reset();
@@ -1313,7 +1593,11 @@ let demandsUnsubscribe: (() => void) | null = null;
   (window as any).handleDemandCategoryChange('TURBINE');
   (window as any).addNewDemandItemRow();
   const modal = document.getElementById('new-demand-modal');
-  if (modal) modal.classList.add('open');
+  if (modal) {
+    document.body.style.overflow = 'hidden';
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
 };
 
 (window as any).openEditDemandModal = (demandId: string) => {
@@ -1324,12 +1608,28 @@ let demandsUnsubscribe: (() => void) | null = null;
   }
 
   activeEditingDemandId = demandId;
+  const isDraft = demand.status === 'DRAFT';
   const icon = document.getElementById('demand-modal-icon');
   const title = document.getElementById('demand-modal-title');
   const submitBtn = document.getElementById('btn-submit-demand');
-  if (icon) icon.className = 'fa-solid fa-pen-to-square';
-  if (title) title.innerText = `Talebe Kalem Ekle & Düzenle (${demand.title})`;
-  if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> GÜNCELLE & DEĞİŞİKLİKLERİ KAYDET';
+  const draftBtn = document.getElementById('btn-save-draft');
+
+  if (isDraft) {
+    if (icon) icon.className = 'fa-solid fa-file-pen';
+    if (title) title.innerText = `Taslağı Düzenle & Kalem Ekle (${demand.title})`;
+    if (draftBtn) {
+      draftBtn.style.display = 'inline-flex';
+      draftBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> TASLAĞI GÜNCELLE';
+    }
+    if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> TALEBİ ONAYA GÖNDER';
+  } else {
+    if (icon) icon.className = 'fa-solid fa-pen-to-square';
+    if (title) title.innerText = `Talebe Kalem Ekle & Düzenle (${demand.title})`;
+    if (draftBtn) {
+      draftBtn.style.display = 'none';
+    }
+    if (submitBtn) submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> GÜNCELLE & DEĞİŞİKLİKLERİ KAYDET';
+  }
 
   const catSelect = document.getElementById('new-demand-category') as HTMLSelectElement;
   if (catSelect) {
@@ -1368,7 +1668,8 @@ let demandsUnsubscribe: (() => void) | null = null;
           <div class="demand-row-stock-hint" style="font-size: 0.7rem; color: #38bdf8; margin-top: 2px; display: none;"></div>
         </td>
         <td>
-          <input type="text" value="${item.description}" class="demand-row-desc mini-input" placeholder="${isConsumable ? 'Örn: Sentetik Boya, Mikrofiber Bez, Pas Sökücü Sprey vb...' : 'SAP No girildiğinde otomatik dolar veya tanım yazınız...'}" required style="width: 100% !important; color: #fff !important; font-weight: 600;">
+          <input type="text" value="${item.description}" class="demand-row-desc mini-input" oninput="window.handleDemandDescChange(this)" onchange="window.handleDemandDescChange(this)" placeholder="${isConsumable ? 'Örn: Sentetik Boya, Mikrofiber Bez, Pas Sökücü Sprey vb...' : 'SAP No girildiğinde otomatik dolar veya tanım yazınız...'}" required style="width: 100% !important; color: #fff !important; font-weight: 600;">
+          <div class="demand-row-desc-hint" style="font-size: 0.7rem; color: #fbbf24; margin-top: 2px; display: none;"></div>
         </td>
         <td style="text-align: center;">
           <input type="number" min="1" value="${item.quantity}" class="demand-row-qty mini-input" required style="width: 65px !important; text-align: center; font-weight: 900; color: #34d399 !important;">
@@ -1399,13 +1700,21 @@ let demandsUnsubscribe: (() => void) | null = null;
   }
 
   const modal = document.getElementById('new-demand-modal');
-  if (modal) modal.classList.add('open');
+  if (modal) {
+    document.body.style.overflow = 'hidden';
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
 };
 
 (window as any).closeNewDemandModal = () => {
   activeEditingDemandId = '';
+  document.body.style.overflow = '';
   const modal = document.getElementById('new-demand-modal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('open');
+  }
 };
 
 (window as any).handleDemandCategoryChange = (category: string) => {
@@ -1462,7 +1771,8 @@ let demandsUnsubscribe: (() => void) | null = null;
       <div class="demand-row-stock-hint" style="font-size: 0.7rem; color: #38bdf8; margin-top: 2px; display: none;"></div>
     </td>
     <td>
-      <input type="text" class="demand-row-desc mini-input" placeholder="${isConsumable ? 'Örn: Sentetik Boya, Mikrofiber Bez, Pas Sökücü Sprey vb...' : 'SAP No girildiğinde otomatik dolar veya tanım yazınız...'}" required style="width: 100% !important; color: #fff !important; font-weight: 600;">
+      <input type="text" class="demand-row-desc mini-input" oninput="window.handleDemandDescChange(this)" onchange="window.handleDemandDescChange(this)" placeholder="${isConsumable ? 'Örn: Sentetik Boya, Mikrofiber Bez, Pas Sökücü Sprey vb...' : 'SAP No girildiğinde otomatik dolar veya tanım yazınız...'}" required style="width: 100% !important; color: #fff !important; font-weight: 600;">
+      <div class="demand-row-desc-hint" style="font-size: 0.7rem; color: #fbbf24; margin-top: 2px; display: none;"></div>
     </td>
     <td style="text-align: center;">
       <input type="number" min="1" value="1" class="demand-row-qty mini-input" required style="width: 65px !important; text-align: center; font-weight: 900; color: #34d399 !important;">
@@ -1491,7 +1801,29 @@ let demandsUnsubscribe: (() => void) | null = null;
   tbody.appendChild(tr);
 };
 
-// SAP Lookup for Demand Rows with instant auto-fill & live stock check
+// Helper: Find existing open/active demands for a given site and material (SAP or Description)
+const findActiveDuplicateDemands = (siteId: string, sapNo: string, description: string, excludeDemandId?: string) => {
+  const cleanSap = (sapNo || '').trim().toLowerCase();
+  const cleanDesc = (description || '').trim().toLowerCase();
+  if (!siteId || (!cleanSap && !cleanDesc)) return [];
+
+  return allDemandsList.filter(d => {
+    if (excludeDemandId && d.id === excludeDemandId) return false;
+    if (d.siteId !== siteId) return false;
+    const isActive = d.status === 'PENDING_REVIEW' || d.status === 'APPROVED_FOR_ORDER' || d.status === 'ORDERED';
+    if (!isActive) return false;
+
+    return (d.items || []).some(item => {
+      const itemSap = (item.sapNo || '').trim().toLowerCase();
+      const itemDesc = (item.description || '').trim().toLowerCase();
+      if (cleanSap && itemSap && cleanSap === itemSap) return true;
+      if (!cleanSap && cleanDesc && itemDesc && (cleanDesc === itemDesc || (cleanDesc.length >= 4 && itemDesc.includes(cleanDesc)))) return true;
+      return false;
+    });
+  });
+};
+
+// SAP Lookup for Demand Rows with instant auto-fill & live stock check & active duplicate check
 (window as any).handleDemandSapInput = async (inputEl: HTMLInputElement) => {
   const row = inputEl.closest('tr');
   if (!row) return;
@@ -1512,12 +1844,14 @@ let demandsUnsubscribe: (() => void) | null = null;
     descInput.style.fontWeight = '700';
   }
 
-  // Live stock check
+  // Live stock check & active duplicate demand check
   const siteSelect = document.getElementById('new-demand-site') as HTMLSelectElement;
   const siteId = siteSelect?.value || '';
 
   try {
     const stock = await materialDemandService.getStockSummaryForSap(sap, siteId);
+    const duplicates = siteId ? findActiveDuplicateDemands(siteId, sap, match?.description || descInput?.value || '', activeEditingDemandId) : [];
+
     if (stockHint) {
       stockHint.style.display = 'block';
       const siteText = stock.siteQty > 0 
@@ -1526,11 +1860,77 @@ let demandsUnsubscribe: (() => void) | null = null;
       const centralText = stock.centralQty > 0 
         ? `<span style="color: #38bdf8; font-weight: 700; margin-left: 6px;">🏢 Merkez: ${stock.centralQty} Adet</span>` 
         : '';
-      stockHint.innerHTML = `${siteText}${centralText}`;
+      
+      let dupHtml = '';
+      if (duplicates.length > 0) {
+        const dup = duplicates[0];
+        const dupNo = dup.demandNo || (dup.title.includes('_') ? dup.title.split('_')[0] : dup.title);
+        const dupStatusLabel = dup.status === 'PENDING_REVIEW' ? 'Ön Kontrol Bekliyor' : (dup.status === 'APPROVED_FOR_ORDER' ? 'Sipariş Bekliyor (Ön Onaylı)' : 'Siparişi Açılmış (Yolda)');
+        const matchedItem = dup.items?.find(i => (i.sapNo || '').trim().toLowerCase() === sap.toLowerCase());
+        const dupQtyText = matchedItem ? `${matchedItem.quantity} ${matchedItem.unit || 'Adet'}` : '';
+
+        dupHtml = `
+          <div style="margin-top: 4px; padding: 4px 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 5px; color: #fbbf24; font-size: 0.72rem; font-weight: 700;">
+            <i class="fa-solid fa-triangle-exclamation"></i> <strong>AÇIK TALEP UYARISI:</strong> Bu sahada bu malzeme için açık bir talep zaten var!
+            <div style="color: #e2e8f0; font-size: 0.7rem; margin-top: 2px;">
+              Talep No: <strong style="color: #00f3ff; font-family: monospace;">${dupNo}</strong> ${dupQtyText ? `(${dupQtyText})` : ''} • Durum: <span style="color: #fbbf24;">${dupStatusLabel}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      stockHint.innerHTML = `${siteText}${centralText}${dupHtml}`;
     }
   } catch (e) {
     // ignore
   }
+};
+
+// Description change handler for consumable items (duplicate checking)
+(window as any).handleDemandDescChange = (inputEl: HTMLInputElement) => {
+  const row = inputEl.closest('tr');
+  if (!row) return;
+  const desc = inputEl.value.trim();
+  const descHint = row.querySelector('.demand-row-desc-hint') as HTMLElement;
+  const sapInput = row.querySelector('.demand-row-sap') as HTMLInputElement;
+  const sap = sapInput ? sapInput.value.trim() : '';
+  const siteSelect = document.getElementById('new-demand-site') as HTMLSelectElement;
+  const siteId = siteSelect?.value || '';
+
+  if (!descHint) return;
+  if (!desc || sap || !siteId || desc.length < 3) {
+    descHint.style.display = 'none';
+    return;
+  }
+
+  const duplicates = findActiveDuplicateDemands(siteId, '', desc, activeEditingDemandId);
+  if (duplicates.length > 0) {
+    const dup = duplicates[0];
+    const dupNo = dup.demandNo || (dup.title.includes('_') ? dup.title.split('_')[0] : dup.title);
+    const dupStatusLabel = dup.status === 'PENDING_REVIEW' ? 'Ön Kontrol Bekliyor' : (dup.status === 'APPROVED_FOR_ORDER' ? 'Sipariş Bekliyor (Ön Onaylı)' : 'Siparişi Açılmış (Yolda)');
+    descHint.style.display = 'block';
+    descHint.innerHTML = `
+      <div style="margin-top: 3px; padding: 3px 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 5px; color: #fbbf24; font-size: 0.71rem; font-weight: 700;">
+        <i class="fa-solid fa-triangle-exclamation"></i> Bu sahada açık talep var: <strong style="color: #00f3ff; font-family: monospace;">${dupNo}</strong> (${dupStatusLabel})
+      </div>
+    `;
+  } else {
+    descHint.style.display = 'none';
+  }
+};
+
+// Refresh all rows hints on site dropdown change
+(window as any).refreshAllDemandRowsStockAndDupHints = () => {
+  document.querySelectorAll('#new-demand-items-tbody tr').forEach((tr: any) => {
+    const sapInput = tr.querySelector('.demand-row-sap') as HTMLInputElement;
+    if (sapInput && sapInput.value.trim()) {
+      (window as any).handleDemandSapInput(sapInput);
+    }
+    const descInput = tr.querySelector('.demand-row-desc') as HTMLInputElement;
+    if (descInput && descInput.value.trim()) {
+      (window as any).handleDemandDescChange(descInput);
+    }
+  });
 };
 
 // Submit New Demand
@@ -1577,6 +1977,41 @@ let demandsUnsubscribe: (() => void) | null = null;
     });
   }
 
+  // 1. Same form duplicate rows check
+  const sapSeen: Record<string, boolean> = {};
+  for (const item of items) {
+    if (item.sapNo) {
+      const lower = item.sapNo.toLowerCase();
+      if (sapSeen[lower]) {
+        alert(`"${item.description}" [SAP: ${item.sapNo}] malzemesini formda mükerrer olarak 2 defa eklediniz.\n\nLütfen mükerrer satırı silip tek bir satırda talep miktarını güncelleyiniz.`);
+        return;
+      }
+      sapSeen[lower] = true;
+    }
+  }
+
+  // 2. Existing active open demands check for this site
+  const duplicateWarnings: string[] = [];
+  for (const item of items) {
+    const duplicates = findActiveDuplicateDemands(siteId, item.sapNo || '', item.description, activeEditingDemandId);
+    if (duplicates.length > 0) {
+      const dup = duplicates[0];
+      const dupNo = dup.demandNo || (dup.title.includes('_') ? dup.title.split('_')[0] : dup.title);
+      const dupStatusLabel = dup.status === 'PENDING_REVIEW' ? 'Ön Kontrol Bekliyor' : (dup.status === 'APPROVED_FOR_ORDER' ? 'Sipariş Bekliyor (Ön Onaylı)' : 'Siparişi Açılmış (Yolda)');
+      const matchedItem = dup.items?.find(i => (item.sapNo && (i.sapNo || '').trim().toLowerCase() === item.sapNo.trim().toLowerCase()) || (i.description || '').trim().toLowerCase() === item.description.trim().toLowerCase());
+      const dupQty = matchedItem ? `${matchedItem.quantity} ${matchedItem.unit || 'Adet'}` : '';
+
+      duplicateWarnings.push(`• ${item.description} ${item.sapNo ? `[SAP: ${item.sapNo}]` : ''} -> Açık Talep: ${dupNo} ${dupQty ? `(${dupQty})` : ''} - [${dupStatusLabel}]`);
+    }
+  }
+
+  if (duplicateWarnings.length > 0) {
+    const proceed = confirm(`⚠️ DİKKAT: MÜKERRER TALEP UYARISI!\n\n"${siteName}" sahasında aşağıdaki malzemeler için halihazırda İŞLEMDE / AÇIK TALEPLER bulunmaktadır:\n\n${duplicateWarnings.join('\n')}\n\nYine de bu malzemeler için yeni bir ek talep oluşturup onaya göndermek istiyor musunuz?`);
+    if (!proceed) {
+      return;
+    }
+  }
+
   const currentUser = (window as any).currentUser || authService.getCurrentUser();
   const btn = document.getElementById('btn-submit-demand') as HTMLButtonElement;
   const origHtml = btn ? btn.innerHTML : '';
@@ -1587,6 +2022,9 @@ let demandsUnsubscribe: (() => void) | null = null;
 
   try {
     if (activeEditingDemandId) {
+      const existingDemand = allDemandsList.find(d => d.id === activeEditingDemandId);
+      const isDraftTransition = existingDemand?.status === 'DRAFT';
+
       await materialDemandService.updateDemand(activeEditingDemandId, {
         demandCategory: category,
         siteId,
@@ -1594,9 +2032,12 @@ let demandsUnsubscribe: (() => void) | null = null;
         turbineId,
         urgency,
         generalNote,
-        items
+        items,
+        ...(isDraftTransition ? { status: 'PENDING_REVIEW' as MaterialDemandStatus } : {})
       });
-      alert("Talep ve malzeme kalemleri başarıyla güncellendi!");
+      alert(isDraftTransition 
+        ? "Taslak talep tamamlandı ve ön kontrol onay havuzuna gönderildi!" 
+        : "Talep ve malzeme kalemleri başarıyla güncellendi!");
       activeEditingDemandId = '';
       (window as any).closeNewDemandModal();
     } else {
@@ -1611,7 +2052,8 @@ let demandsUnsubscribe: (() => void) | null = null;
         requesterId: currentUser?.uid || '',
         requesterName: currentUser?.displayName || currentUser?.email || 'Saha Personeli',
         requesterEmail: currentUser?.email || '',
-        requesterTeam: currentUser?.team || ''
+        requesterTeam: currentUser?.team || '',
+        status: 'PENDING_REVIEW'
       });
 
       alert("Saha malzeme talebi başarıyla oluşturuldu ve ön kontrole iletildi!");
@@ -1625,6 +2067,124 @@ let demandsUnsubscribe: (() => void) | null = null;
       btn.innerHTML = origHtml;
       btn.disabled = false;
     }
+  }
+};
+
+// Save As Draft
+(window as any).handleSaveDemandAsDraft = async () => {
+  const category = (document.getElementById('new-demand-category') as HTMLSelectElement)?.value as any || 'TURBINE';
+  const siteSelect = document.getElementById('new-demand-site') as HTMLSelectElement;
+  const siteId = siteSelect?.value;
+  const siteName = siteSelect?.options[siteSelect.selectedIndex]?.dataset.name || siteId;
+  const turbineId = (document.getElementById('new-demand-turbine') as HTMLSelectElement)?.value || '';
+  const urgency = (document.getElementById('new-demand-urgency') as HTMLSelectElement)?.value as any || 'NORMAL';
+  const generalNote = (document.getElementById('new-demand-general-note') as HTMLTextAreaElement)?.value?.trim() || '';
+
+  if (!siteId) {
+    alert("Taslak kaydetmek için lütfen en azından Saha / Santral seçiniz!");
+    return;
+  }
+
+  const rows = document.querySelectorAll('#new-demand-items-tbody tr');
+  const items: MaterialDemandItem[] = [];
+  for (const row of Array.from(rows) as HTMLElement[]) {
+    const sapNo = (row.querySelector('.demand-row-sap') as HTMLInputElement)?.value?.trim() || '';
+    const description = (row.querySelector('.demand-row-desc') as HTMLInputElement)?.value?.trim() || '';
+    const qty = Number((row.querySelector('.demand-row-qty') as HTMLInputElement)?.value) || 1;
+    const unit = (row.querySelector('.demand-row-unit') as HTMLSelectElement)?.value || 'Adet';
+    const reason = (row.querySelector('.demand-row-reason') as HTMLInputElement)?.value?.trim() || '';
+
+    if (description) {
+      if (sapNo) {
+        const lower = sapNo.toLowerCase();
+        if (items.some(i => i.sapNo && i.sapNo.toLowerCase() === lower)) {
+          alert(`"${description}" [SAP: ${sapNo}] malzemesini listeye 2 defa eklediniz.\nLütfen mükerrer satırı silip tek satırda talep miktarını artırınız.`);
+          return;
+        }
+      }
+      items.push({
+        sapNo: category === 'TURBINE' ? sapNo : '',
+        description,
+        quantity: Math.max(1, qty),
+        unit,
+        reason
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    alert("Taslak kaydetmek için lütfen en az bir satıra malzeme tanımı giriniz!");
+    return;
+  }
+
+  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const draftBtn = document.getElementById('btn-save-draft') as HTMLButtonElement;
+  const origHtml = draftBtn ? draftBtn.innerHTML : '';
+  if (draftBtn) {
+    draftBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> KAYDEDİLİYOR...';
+    draftBtn.disabled = true;
+  }
+
+  try {
+    if (activeEditingDemandId) {
+      await materialDemandService.updateDemand(activeEditingDemandId, {
+        demandCategory: category,
+        siteId,
+        siteName,
+        turbineId,
+        urgency,
+        generalNote,
+        items,
+        status: 'DRAFT'
+      });
+      alert("Malzeme talebi taslak olarak güncellendi!");
+    } else {
+      await materialDemandService.createDemand({
+        demandCategory: category,
+        siteId,
+        siteName,
+        turbineId,
+        urgency,
+        generalNote,
+        items,
+        requesterId: currentUser?.uid || '',
+        requesterName: currentUser?.displayName || currentUser?.email || 'Saha Personeli',
+        requesterEmail: currentUser?.email || '',
+        requesterTeam: currentUser?.team || '',
+        status: 'DRAFT'
+      });
+      alert("Malzeme talebi TASLAK olarak kaydedildi! Aklınıza yeni malzemeler geldikçe 'Taslaklar' sekmesinden ekleyebilir ve dilediğiniz zaman onaya gönderebilirsiniz.");
+    }
+    activeEditingDemandId = '';
+    (window as any).closeNewDemandModal();
+  } catch (err) {
+    console.error("Draft save error:", err);
+    alert("Taslak kaydedilirken hata oluştu: " + err);
+  } finally {
+    if (draftBtn) {
+      draftBtn.innerHTML = origHtml;
+      draftBtn.disabled = false;
+    }
+  }
+};
+
+// Submit Draft to Approval
+(window as any).handleSubmitDraftToApproval = async (demandId: string) => {
+  const demand = allDemandsList.find(d => d.id === demandId);
+  if (!demand) {
+    alert("Talep bulunamadı!");
+    return;
+  }
+
+  const confirmed = confirm(`"${demand.title}" numaralı taslak malzeme talebini ön kontrole / onaya göndermek istediğinizden emin misiniz?\n\nToplam ${demand.items?.length || 0} kalem malzeme talep edilecektir.`);
+  if (!confirmed) return;
+
+  try {
+    await materialDemandService.submitDraftDemand(demandId);
+    alert("Taslak talep başarıyla onay havuzuna gönderildi! Yöneticiler ön kontrol yapabilecektir.");
+  } catch (err) {
+    console.error("Submit draft error:", err);
+    alert("Onaya gönderilirken hata oluştu: " + err);
   }
 };
 
@@ -1748,6 +2308,7 @@ let demandsUnsubscribe: (() => void) | null = null;
   const modal = document.getElementById('approve-demand-modal');
   if (modal) {
     document.body.style.overflow = 'hidden';
+    modal.style.display = 'flex';
     modal.classList.add('open');
   }
 };
@@ -1757,7 +2318,10 @@ let demandsUnsubscribe: (() => void) | null = null;
   activeApproveDemandObj = null;
   document.body.style.overflow = '';
   const modal = document.getElementById('approve-demand-modal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('open');
+  }
 };
 
 (window as any).handleConfirmApproveDemand = async (e: Event) => {
@@ -1820,13 +2384,21 @@ let demandsUnsubscribe: (() => void) | null = null;
   const reasonInput = document.getElementById('reject-demand-reason-input') as HTMLTextAreaElement;
   if (reasonInput) reasonInput.value = '';
   const modal = document.getElementById('reject-demand-modal');
-  if (modal) modal.classList.add('open');
+  if (modal) {
+    document.body.style.overflow = 'hidden';
+    modal.style.display = 'flex';
+    modal.classList.add('open');
+  }
 };
 
 (window as any).closeRejectDemandModal = () => {
   activeRejectDemandId = '';
+  document.body.style.overflow = '';
   const modal = document.getElementById('reject-demand-modal');
-  if (modal) modal.classList.remove('open');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('open');
+  }
 };
 
 (window as any).handleConfirmRejectDemand = async (e: Event) => {
@@ -1870,6 +2442,13 @@ let demandsUnsubscribe: (() => void) | null = null;
 
 // Delete Demand (Universal Delete for Admin/Manager across all statuses)
 (window as any).handleDeleteDemand = async (demandId: string) => {
+  const currentUser = (window as any).currentUser || authService.getCurrentUser();
+  const canDelete = isSuperAdminUser(currentUser) || isMaterialManagerUser(currentUser);
+  if (!canDelete) {
+    alert("Talep silme yetkiniz bulunmamaktadır. Yalnızca Sistem Yöneticisi ve Malzeme Yönetimi talepleri silebilir.");
+    return;
+  }
+
   const demand = allDemandsList.find(d => d.id === demandId);
   const title = demand?.title || 'bu talebi';
   if (!confirm(`"${title}" talebini ve tüm kalemlerini kalıcı olarak silmek istediğinizden emin misiniz?`)) return;

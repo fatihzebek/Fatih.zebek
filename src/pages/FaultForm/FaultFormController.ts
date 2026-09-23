@@ -431,8 +431,53 @@ export class FaultFormController {
 
         // Inline tabular personnel auto-complete is used instead of old overlays.
 
+        w.syncChecklistDOMValues = () => {
+            const listContainer = document.getElementById('audit-items-list');
+            if (!listContainer || !w.smartAuditItems) return;
+            
+            const itemDivs = listContainer.getElementsByClassName('audit-item');
+            for (let idx = 0; idx < itemDivs.length; idx++) {
+                const itemDiv = itemDivs[idx] as HTMLElement;
+                const item = w.smartAuditItems[idx];
+                if (!item) continue;
+                
+                // Harvest comment textarea if present
+                const textarea = itemDiv.querySelector('textarea') as HTMLTextAreaElement;
+                if (textarea && textarea.value !== undefined) {
+                    item.comment = textarea.value;
+                }
+                
+                // Harvest all adv measurement inputs/selects with data-val-index
+                const advInputs = itemDiv.querySelectorAll('[data-val-index]');
+                if (advInputs.length > 0) {
+                    if (!item.measurementValues) item.measurementValues = [];
+                    advInputs.forEach((el: Element) => {
+                        const valIdxStr = el.getAttribute('data-val-index');
+                        if (valIdxStr !== null) {
+                            const vIdx = parseInt(valIdxStr, 10);
+                            if (!isNaN(vIdx)) {
+                                if (el instanceof HTMLInputElement) {
+                                    if (el.type === 'checkbox') {
+                                        item.measurementValues[vIdx] = el.checked ? 'true' : 'false';
+                                    } else {
+                                        item.measurementValues[vIdx] = el.value;
+                                    }
+                                } else if (el instanceof HTMLSelectElement) {
+                                    item.measurementValues[vIdx] = el.value;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        };
+
         w.toggleAuditItem = (index: number, status: string) => {
             if (w.smartAuditItems && w.smartAuditItems[index]) {
+                // First harvest all active inputs so uncommitted typing is captured
+                if (typeof w.syncChecklistDOMValues === 'function') {
+                    w.syncChecklistDOMValues();
+                }
                 w.smartAuditItems[index].status = status;
                 if (typeof w.recordAuditClick === 'function') {
                     w.recordAuditClick(index, status);
@@ -494,27 +539,55 @@ export class FaultFormController {
             }
         };
 
-        w.updateAdvMeasurement = (index: number, valIndex: number, value: any) => {
+        let _advSaveTimeout: any = null;
+        w.updateAdvMeasurement = (index: number, valIndex: number, value: any, targetEl?: HTMLElement) => {
             if (w.smartAuditItems && w.smartAuditItems[index]) {
                 const item = w.smartAuditItems[index];
                 if (!item.measurementValues) item.measurementValues = [];
                 item.measurementValues[valIndex] = value;
-                // DO NOT re-render the whole UI to avoid losing focus, just let it be. 
-                // The colors will update visually if we want, but since they are typed fast, 
-                // we should re-render to get the colors/msg updated! But wait, if we re-render, 
-                // the input loses focus. Let's just re-render and refocus.
-                // Or wait, the user is typing, we can just save it. The oninput triggers this.
-                // We shouldn't re-render everything on every keystroke. 
-                // Let's re-render using a small debounce or not at all, because we already have oninput="window.updateAdvMeasurement...".
-                // Actually, to get the color feedback, we MUST re-render.
                 
-                // Let's do a fast re-render and restore focus!
-                const activeId = document.activeElement ? document.activeElement.id : null;
-                w.renderSmartAuditUI();
-                
-                // Focus restoration is tricky with dynamic inputs, so let's let the user deal with it, 
-                // OR we can change `oninput` to `onchange` in FaultFormUI.ts so it only fires when they leave the field!
-                // Yes, onchange is better for measurements!
+                // In-place styling & feedback update without wiping the DOM
+                if (targetEl) {
+                    const isSignature = targetEl.getAttribute('placeholder')?.includes('İmza') || 
+                                       targetEl.getAttribute('placeholder')?.includes('bizzat');
+                    if (isSignature) {
+                        if (value && String(value).trim().length > 0) {
+                            targetEl.style.borderColor = 'var(--accent-green)';
+                        } else {
+                            targetEl.style.borderColor = 'rgba(255,255,255,0.2)';
+                        }
+                    } else if (targetEl instanceof HTMLInputElement && targetEl.type === 'number') {
+                        const numVal = parseFloat(value);
+                        if (!isNaN(numVal) && item.measurementConfig) {
+                            const minLimit = item.measurementConfig.minLimit;
+                            const maxLimit = item.measurementConfig.maxLimit;
+                            if (minLimit !== undefined && numVal < minLimit) {
+                                targetEl.style.borderColor = 'var(--accent-red)';
+                            } else if (maxLimit !== undefined && numVal > maxLimit) {
+                                targetEl.style.borderColor = 'var(--accent-red)';
+                            } else {
+                                targetEl.style.borderColor = 'var(--accent-green)';
+                            }
+                        }
+                    }
+
+                    // If a checkbox in final_checkout_control or safety equipment was toggled, 
+                    // or crane model select was changed, we need UI re-evaluation:
+                    if (targetEl.tagName === 'SELECT' || targetEl.getAttribute('type') === 'checkbox') {
+                        if (typeof w.syncChecklistDOMValues === 'function') {
+                            w.syncChecklistDOMValues();
+                        }
+                        w.renderSmartAuditUI();
+                    }
+                }
+
+                // Debounced draft auto-save (600ms) to ensure persistence to localStorage & Firestore
+                if (typeof w.saveMaintenanceDraft === 'function') {
+                    if (_advSaveTimeout) clearTimeout(_advSaveTimeout);
+                    _advSaveTimeout = setTimeout(() => {
+                        w.saveMaintenanceDraft(true);
+                    }, 600);
+                }
             }
         };
 
@@ -881,6 +954,11 @@ export class FaultFormController {
             const container = document.getElementById('smart-audit-container');
             if (!container) return;
             
+            // Sync values from DOM before re-rendering so active typing is not lost
+            if (typeof w.syncChecklistDOMValues === 'function') {
+                w.syncChecklistDOMValues();
+            }
+
             const isTemplateEditor = localStorage.getItem('currentEditingTemplateId') !== null;
             const templateData = isTemplateEditor ? w.currentEditingTemplate : null;
             
@@ -1898,6 +1976,10 @@ export class FaultFormController {
             const currentTask = w.currentTaskContext;
             if (!currentTask?.id) return;
             
+            if (typeof w.syncChecklistDOMValues === 'function') {
+                w.syncChecklistDOMValues();
+            }
+            
             if (w.isEditMode) {
                 if (isSilent) return;
                 return w.submitFaultForm(false);
@@ -2064,6 +2146,10 @@ export class FaultFormController {
                         (document.getElementById('save-draft-btn') as HTMLButtonElement);
             if (!btn) return;
             const orgHtml = btn.innerHTML;
+
+            if (typeof w.syncChecklistDOMValues === 'function') {
+                w.syncChecklistDOMValues();
+            }
 
             // 1. FIRST VALIDATION: Strict personnel check!
             const validTechs = getValidPersonnelList();
@@ -3038,18 +3124,41 @@ export class FaultFormController {
                     
                     if (localSerialized !== dbSerialized) {
                         console.log("Real-time sync: Checklist updated from database.");
+                        if (typeof w.syncChecklistDOMValues === 'function') {
+                            w.syncChecklistDOMValues();
+                        }
                         const oldItems = w.smartAuditItems || [];
-                        w.smartAuditItems = JSON.parse(dbSerialized);
+                        const incomingItems = JSON.parse(dbSerialized);
+                        
+                        // Merge smartAuditItems safely: DO NOT overwrite local non-empty measurementValues with remote empty/undefined!
+                        const mergedItems = incomingItems.map((dbItem: any, idx: number) => {
+                            const localItem = oldItems[idx];
+                            if (!localItem) return dbItem;
+                            
+                            const res = { ...dbItem };
+                            if (Array.isArray(localItem.measurementValues) && localItem.measurementValues.length > 0) {
+                                if (!Array.isArray(dbItem.measurementValues) || dbItem.measurementValues.length === 0) {
+                                    res.measurementValues = [...localItem.measurementValues];
+                                } else {
+                                    res.measurementValues = localItem.measurementValues.map((lVal: any, vIdx: number) => {
+                                        const rVal = dbItem.measurementValues[vIdx];
+                                        return (lVal !== undefined && lVal !== null && String(lVal).trim() !== '' && (!rVal || String(rVal).trim() === '')) ? lVal : (rVal !== undefined ? rVal : lVal);
+                                    });
+                                }
+                            }
+                            return res;
+                        });
+                        w.smartAuditItems = mergedItems;
                         
                         // Instead of full innerHTML re-render (which would steal input focus), update DOM nodes in place!
                         const listContainer = document.getElementById('audit-items-list');
                         if (listContainer) {
                             w.smartAuditItems.forEach((newItem: any, idx: number) => {
                                 const oldItem = oldItems[idx];
-                                if (!oldItem || oldItem.status !== newItem.status || oldItem.comment !== newItem.comment) {
-                                    const itemDivs = listContainer.getElementsByClassName('audit-item');
-                                    const itemDiv = itemDivs[idx] as HTMLElement;
-                                    if (itemDiv) {
+                                const itemDivs = listContainer.getElementsByClassName('audit-item');
+                                const itemDiv = itemDivs[idx] as HTMLElement;
+                                if (itemDiv) {
+                                    if (!oldItem || oldItem.status !== newItem.status || oldItem.comment !== newItem.comment) {
                                         // Update select element value
                                         const select = itemDiv.querySelector('select') as HTMLSelectElement;
                                         if (select && select.value !== newItem.status) {
@@ -3080,6 +3189,35 @@ export class FaultFormController {
                                                 w.renderSmartAuditUI();
                                             }
                                         }
+                                    }
+
+                                    // Safely update measurement inputs from newItem if present and element not focused
+                                    if (Array.isArray(newItem.measurementValues)) {
+                                        const advInputs = itemDiv.querySelectorAll('[data-val-index]');
+                                        advInputs.forEach((el: Element) => {
+                                            if (el === document.activeElement) return; // Never disturb active input
+                                            const valIdxStr = el.getAttribute('data-val-index');
+                                            if (valIdxStr !== null) {
+                                                const vIdx = parseInt(valIdxStr, 10);
+                                                const remoteVal = newItem.measurementValues[vIdx];
+                                                if (remoteVal !== undefined && remoteVal !== null) {
+                                                    if (el instanceof HTMLInputElement) {
+                                                        if (el.type === 'checkbox') {
+                                                            el.checked = remoteVal === 'true';
+                                                        } else if (el.value !== String(remoteVal)) {
+                                                            el.value = String(remoteVal);
+                                                            if (el.placeholder?.includes('İmza') || el.placeholder?.includes('bizzat')) {
+                                                                el.style.borderColor = remoteVal ? 'var(--accent-green)' : 'rgba(255,255,255,0.2)';
+                                                            }
+                                                        }
+                                                    } else if (el instanceof HTMLSelectElement) {
+                                                        if (el.value !== String(remoteVal)) {
+                                                            el.value = String(remoteVal);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        });
                                     }
                                 }
                             });

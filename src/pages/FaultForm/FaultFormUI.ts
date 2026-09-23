@@ -600,8 +600,10 @@ export const FaultFormUI = {
                     <label style="font-size: 0.6rem; color: #8892b0;">${labelText}${unit}</label>
                     <div style="position: relative; display: flex; align-items: center;">
                         <input type="number" step="any" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${borderColor}; background: ${bgColor}; color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
+                            data-adv-index="${index}" data-val-index="${i}"
                             value="${val}" 
-                            onchange="window.updateAdvMeasurement(${index}, ${i}, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, ${i}, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, ${i}, this.value, this)">
                     </div>
                     ${val !== '' ? `<div style="font-size: 0.55rem; color: ${msgColor}; font-weight: 700;">${msg}</div>` : ''}
                 </div>
@@ -622,9 +624,11 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                         <label style="font-size: 0.6rem; color: var(--accent-green);">Ölçümü Yapan Personel (Ad Soyad)</label>
                         <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${sigVal ? 'var(--accent-green)' : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px; transition: all 0.3s ease;" 
+                            data-adv-index="${index}" data-val-index="${count}"
                             value="${sigVal}" 
                             placeholder="İmza yerine geçer..."
-                            onchange="window.updateAdvMeasurement(${index}, ${count}, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, ${count}, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, ${count}, this.value, this)">
                     </div>
                 </div>
                 `;
@@ -639,13 +643,13 @@ export const FaultFormUI = {
             html += `
             <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <label style="font-size: 0.6rem; color: #8892b0;">Seçim Yapınız</label>
-                <select class="cyber-select" style="width: 100%; height: 28px; background: rgba(0,0,0,0.2); border: 1px solid ${borderColor}; color: #fff; border-radius: 4px; padding: 0 0.4rem;" onchange="window.updateAdvMeasurement(${index}, 0, this.value)">
+                <select class="cyber-select" data-adv-index="${index}" data-val-index="0" style="width: 100%; height: 28px; background: rgba(0,0,0,0.2); border: 1px solid ${borderColor}; color: #fff; border-radius: 4px; padding: 0 0.4rem;" onchange="window.updateAdvMeasurement(${index}, 0, this.value, this)">
                     <option value="">Seçiniz...</option>
                     ${opts.map((opt: string) => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('')}
                 </select>
                 ${val !== '' && isCritical ? `
                 <div style="font-size: 0.55rem; color: var(--accent-red); font-weight: 700; margin-top: 0.1rem;">Kritik Seçim! Lütfen açıklama veya adet giriniz:</div>
-                <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; border: 1px solid rgba(255,51,102,0.3); background: rgba(255,51,102,0.05); color: #fff; border-radius: 4px; padding: 0 0.4rem; margin-top: 0.1rem;" placeholder="Açıklama / Adet / Sayı..." value="${vals[1] || ''}" onchange="window.updateAdvMeasurement(${index}, 1, this.value)">
+                <input type="text" class="cyber-input" data-adv-index="${index}" data-val-index="1" style="width: 100%; height: 28px !important; border: 1px solid rgba(255,51,102,0.3); background: rgba(255,51,102,0.05); color: #fff; border-radius: 4px; padding: 0 0.4rem; margin-top: 0.1rem;" placeholder="Açıklama / Adet / Sayı..." value="${vals[1] || ''}" oninput="window.updateAdvMeasurement(${index}, 1, this.value, this)" onchange="window.updateAdvMeasurement(${index}, 1, this.value, this)">
                 ` : ''}
             </div>
             `;
@@ -683,9 +687,11 @@ export const FaultFormUI = {
                     <label style="font-size: 0.6rem; color: #8892b0;">${vItem.label}</label>
                     <div style="position: relative; display: flex; align-items: center;">
                         <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${borderColor}; background: ${bgColor}; color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
+                            data-adv-index="${index}" data-val-index="${i}"
                             value="${val}" 
                             placeholder="Versiyon girin..."
-                            onchange="window.updateAdvMeasurement(${index}, ${i}, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, ${i}, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, ${i}, this.value, this)">
                     </div>
                     ${val !== '' ? `<div style="font-size: 0.55rem; color: ${msgColor}; font-weight: 700; line-height: 1.1;">${msg}</div>` : ''}
                 </div>
@@ -703,9 +709,11 @@ export const FaultFormUI = {
             <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <label style="font-size: 0.6rem; color: #8892b0;">İletişim Kurulan Kişi</label>
                 <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
+                    data-adv-index="${index}" data-val-index="0"
                     value="${valName}" 
                     placeholder="İsim Soyisim..."
-                    onchange="window.updateAdvMeasurement(${index}, 0, this.value)">
+                    oninput="window.updateAdvMeasurement(${index}, 0, this.value, this)"
+                    onchange="window.updateAdvMeasurement(${index}, 0, this.value, this)">
             </div>
             `;
             
@@ -713,8 +721,10 @@ export const FaultFormUI = {
             <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <label style="font-size: 0.6rem; color: #8892b0;">Trafo Açma Saati</label>
                 <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
+                    data-adv-index="${index}" data-val-index="1"
                     value="${valOpen}" 
-                    onchange="window.updateAdvMeasurement(${index}, 1, this.value)">
+                    oninput="window.updateAdvMeasurement(${index}, 1, this.value, this)"
+                    onchange="window.updateAdvMeasurement(${index}, 1, this.value, this)">
             </div>
             `;
             
@@ -722,8 +732,10 @@ export const FaultFormUI = {
             <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                 <label style="font-size: 0.6rem; color: #8892b0;">Trafo Kapatma Saati</label>
                 <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
+                    data-adv-index="${index}" data-val-index="2"
                     value="${valClose}" 
-                    onchange="window.updateAdvMeasurement(${index}, 2, this.value)">
+                    oninput="window.updateAdvMeasurement(${index}, 2, this.value, this)"
+                    onchange="window.updateAdvMeasurement(${index}, 2, this.value, this)">
             </div>
             `;
             
@@ -742,9 +754,11 @@ export const FaultFormUI = {
                 <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                     <label style="font-size: 0.6rem; color: var(--accent-green);">İşlemi Yapan Personel (Ad Soyad)</label>
                     <input type="text" class="cyber-input" style="width: 100%; height: 32px !important; min-height: 32px !important; font-size: 0.8rem; border: 1px solid ${valSignature ? 'var(--accent-green)' : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.6rem; border-radius: 4px; transition: all 0.3s ease;" 
+                        data-adv-index="${index}" data-val-index="0"
                         value="${valSignature}" 
                         placeholder="İmza yerine geçer..."
-                        onchange="window.updateAdvMeasurement(${index}, 0, this.value)">
+                        oninput="window.updateAdvMeasurement(${index}, 0, this.value, this)"
+                        onchange="window.updateAdvMeasurement(${index}, 0, this.value, this)">
                 </div>
             </div>
             `;
@@ -805,8 +819,8 @@ export const FaultFormUI = {
                 
                 <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                     <label style="font-size: 0.7rem; color: #d8b4fe;">Elektrikli Vinç Tipi</label>
-                    <select class="cyber-select" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${valModelId ? 'var(--accent-purple)' : 'rgba(255,255,255,0.2)'}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
-                        onchange="window.updateAdvMeasurement(${index}, 0, this.value); window.updateAdvMeasurement(${index}, 1, '');">
+                    <select class="cyber-select" data-adv-index="${index}" data-val-index="0" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${valModelId ? 'var(--accent-purple)' : 'rgba(255,255,255,0.2)'}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
+                        onchange="window.updateAdvMeasurement(${index}, 0, this.value, this); window.updateAdvMeasurement(${index}, 1, '', this);">
                         <option value="">-- Vinç Tipi Seçiniz --</option>
                         ${CRANE_MODELS.map(m => `<option value="${m.id}" ${valModelId === m.id ? 'selected' : ''}>${m.name} (Asgari: ${m.min}mm)</option>`).join('')}
                     </select>
@@ -815,9 +829,11 @@ export const FaultFormUI = {
                 <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                     <label style="font-size: 0.7rem; color: #d8b4fe;">Ölçülen Halat Çapı (mm)</label>
                     <input type="number" step="any" class="cyber-input" style="width: 100%; height: 36px !important; font-size: 0.9rem; border: 1px solid ${diaColor}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.6rem; border-radius: 4px;" 
+                        data-adv-index="${index}" data-val-index="1"
                         value="${valDiameter}" 
                         ${!valModelId ? 'disabled placeholder="Önce vinç tipi seçiniz"' : 'placeholder="Kumpas ile ölçülen değer"'}
-                        onchange="window.updateAdvMeasurement(${index}, 1, this.value)">
+                        oninput="window.updateAdvMeasurement(${index}, 1, this.value, this)"
+                        onchange="window.updateAdvMeasurement(${index}, 1, this.value, this)">
                     ${diaMsg ? `<div style="font-size: 0.6rem; color: ${diaColor}; font-weight: bold;">${diaMsg}</div>` : ''}
                 </div>
 
@@ -827,19 +843,28 @@ export const FaultFormUI = {
                         <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                             <label style="font-size: 0.55rem; color: #a78bfa;">30mm (Max: 4)</label>
                             <input type="number" min="0" class="cyber-input" style="width: 100%; height: 28px !important; font-size: 0.75rem; border: 1px solid ${b30.color}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
-                                value="${valBreak30}" onchange="window.updateAdvMeasurement(${index}, 2, this.value)">
+                                data-adv-index="${index}" data-val-index="2"
+                                value="${valBreak30}" 
+                                oninput="window.updateAdvMeasurement(${index}, 2, this.value, this)"
+                                onchange="window.updateAdvMeasurement(${index}, 2, this.value, this)">
                             ${b30.msg ? `<div style="font-size: 0.5rem; color: ${b30.color};">${b30.msg}</div>` : ''}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                             <label style="font-size: 0.55rem; color: #a78bfa;">60mm (Max: 6)</label>
                             <input type="number" min="0" class="cyber-input" style="width: 100%; height: 28px !important; font-size: 0.75rem; border: 1px solid ${b60.color}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
-                                value="${valBreak60}" onchange="window.updateAdvMeasurement(${index}, 3, this.value)">
+                                data-adv-index="${index}" data-val-index="3"
+                                value="${valBreak60}" 
+                                oninput="window.updateAdvMeasurement(${index}, 3, this.value, this)"
+                                onchange="window.updateAdvMeasurement(${index}, 3, this.value, this)">
                             ${b60.msg ? `<div style="font-size: 0.5rem; color: ${b60.color};">${b60.msg}</div>` : ''}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                             <label style="font-size: 0.55rem; color: #a78bfa;">300mm (Max: 16)</label>
                             <input type="number" min="0" class="cyber-input" style="width: 100%; height: 28px !important; font-size: 0.75rem; border: 1px solid ${b300.color}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px;" 
-                                value="${valBreak300}" onchange="window.updateAdvMeasurement(${index}, 4, this.value)">
+                                data-adv-index="${index}" data-val-index="4"
+                                value="${valBreak300}" 
+                                oninput="window.updateAdvMeasurement(${index}, 4, this.value, this)"
+                                onchange="window.updateAdvMeasurement(${index}, 4, this.value, this)">
                             ${b300.msg ? `<div style="font-size: 0.5rem; color: ${b300.color};">${b300.msg}</div>` : ''}
                         </div>
                     </div>
@@ -855,9 +880,11 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                         <label style="font-size: 0.6rem; color: var(--accent-purple);">İşlemi Yapan Personel (Ad Soyad)</label>
                         <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${valSignature ? 'var(--accent-purple)' : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px; transition: all 0.3s ease;" 
+                            data-adv-index="${index}" data-val-index="5"
                             value="${valSignature}" 
                             placeholder="İmza yerine geçer..."
-                            onchange="window.updateAdvMeasurement(${index}, 5, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, 5, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, 5, this.value, this)">
                     </div>
                 </div>
             </div>
@@ -904,14 +931,16 @@ export const FaultFormUI = {
                 <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                     <label style="font-size: 0.7rem; color: var(--accent-amber);">${isFirstAid ? 'Son Kullanma Tarihi' : 'Muayene Plaketi - Sonraki Bakım Tarihi'}</label>
                     <input type="month" class="cyber-input" style="width: 100%; height: 36px !important; font-size: 0.9rem; border: 1px solid ${dateColor}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.6rem; border-radius: 4px;" 
+                        data-adv-index="${index}" data-val-index="0"
                         value="${valDate}" 
-                        onblur="window.updateAdvMeasurement(${index}, 0, this.value)">
+                        oninput="window.updateAdvMeasurement(${index}, 0, this.value, this)"
+                        onchange="window.updateAdvMeasurement(${index}, 0, this.value, this)">
                     ${dateMsg ? `<div style="font-size: 0.6rem; color: ${dateColor}; font-weight: bold;">${dateMsg}</div>` : ''}
                 </div>
                 
                 <div style="display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.5rem;">
-                    <input type="checkbox" id="saf-chk-${index}" ${valCheck ? 'checked' : ''} style="width: 16px; height: 16px; margin-top: 0.1rem; cursor: pointer;"
-                        onchange="window.updateAdvMeasurement(${index}, 1, this.checked ? 'true' : 'false')">
+                    <input type="checkbox" id="saf-chk-${index}" data-adv-index="${index}" data-val-index="1" ${valCheck ? 'checked' : ''} style="width: 16px; height: 16px; margin-top: 0.1rem; cursor: pointer;"
+                        onchange="window.updateAdvMeasurement(${index}, 1, this.checked ? 'true' : 'false', this)">
                     <label for="saf-chk-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                         ${isFirstAid 
                             ? 'İlk yardım çantası içeriği eksiksizdir ve iç folyosunda herhangi bir hasar yoktur.' 
@@ -924,9 +953,11 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                         <label style="font-size: 0.6rem; color: var(--accent-amber);">İşlemi Yapan Personel (Ad Soyad)</label>
                         <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${valSignature ? 'var(--accent-amber)' : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px; transition: all 0.3s ease;" 
+                            data-adv-index="${index}" data-val-index="2"
                             value="${valSignature}" 
                             placeholder="Kontrolleri bizzat yaptım..."
-                            onchange="window.updateAdvMeasurement(${index}, 2, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, 2, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, 2, this.value, this)">
                     </div>
                 </div>
             </div>
@@ -975,8 +1006,8 @@ export const FaultFormUI = {
             <div style="display: flex; flex-direction: column; gap: 1rem; background: ${boxBg}; border: 1px solid ${boxBorder}; padding: 1rem; border-radius: 6px; transition: all 0.3s ease;">
                 
                 <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
-                    <input type="checkbox" id="bear-chk-${index}" ${valCheck ? 'checked' : ''} style="width: 16px; height: 16px; margin-top: 0.1rem; cursor: pointer;"
-                        onchange="window.updateAdvMeasurement(${index}, 0, this.checked ? 'true' : 'false')">
+                    <input type="checkbox" id="bear-chk-${index}" data-adv-index="${index}" data-val-index="0" ${valCheck ? 'checked' : ''} style="width: 16px; height: 16px; margin-top: 0.1rem; cursor: pointer;"
+                        onchange="window.updateAdvMeasurement(${index}, 0, this.checked ? 'true' : 'false', this)">
                     <label for="bear-chk-${index}" style="font-size: 0.7rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                         <strong>Talimat Onayı:</strong> Rotor kilitlendi. Yağlama kanalından kablo bağı yardımıyla kullanılmış gres numunesi alındı, beyaz temizlik bezi üzerine yayıldı. Kuvvetli ışık ve mıknatıs ile testleri yapıldı.
                     </label>
@@ -985,8 +1016,8 @@ export const FaultFormUI = {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem;">
                     <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                         <label style="font-size: 0.75rem; font-weight: bold; color: ${fStyle.color !== 'rgba(255,255,255,0.2)' ? fStyle.color : '#fff'};">ÖN Rulman Gres Hasar Sınıfı</label>
-                        <select class="cyber-select" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${fStyle.color}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
-                            onchange="window.updateAdvMeasurement(${index}, 1, this.value)">
+                        <select class="cyber-select" data-adv-index="${index}" data-val-index="1" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${fStyle.color}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
+                            onchange="window.updateAdvMeasurement(${index}, 1, this.value, this)">
                             ${getOptions(valClassFront)}
                         </select>
                         ${fStyle.msg ? `<div style="font-size: 0.65rem; color: ${fStyle.color}; font-weight: bold; margin-top: 0.2rem;">${fStyle.msg}</div>` : ''}
@@ -994,8 +1025,8 @@ export const FaultFormUI = {
 
                     <div style="display: flex; flex-direction: column; gap: 0.3rem;">
                         <label style="font-size: 0.75rem; font-weight: bold; color: ${rStyle.color !== 'rgba(255,255,255,0.2)' ? rStyle.color : '#fff'};">ARKA Rulman Gres Hasar Sınıfı</label>
-                        <select class="cyber-select" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${rStyle.color}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
-                            onchange="window.updateAdvMeasurement(${index}, 2, this.value)">
+                        <select class="cyber-select" data-adv-index="${index}" data-val-index="2" style="width: 100%; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid ${rStyle.color}; color: #fff; padding: 0 0.5rem; border-radius: 4px;"
+                            onchange="window.updateAdvMeasurement(${index}, 2, this.value, this)">
                             ${getOptions(valClassRear)}
                         </select>
                         ${rStyle.msg ? `<div style="font-size: 0.65rem; color: ${rStyle.color}; font-weight: bold; margin-top: 0.2rem;">${rStyle.msg}</div>` : ''}
@@ -1006,9 +1037,11 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                         <label style="font-size: 0.6rem; color: ${boxBorder !== 'rgba(255, 255, 255, 0.1)' ? fStyle.color : '#fb7185'};">İşlemi Yapan Personel (Ad Soyad)</label>
                         <input type="text" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; font-size: 0.75rem; border: 1px solid ${valSignature ? (boxBorder !== 'rgba(255, 255, 255, 0.1)' ? fStyle.color : '#fb7185') : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.4rem; border-radius: 4px; transition: all 0.3s ease;" 
+                            data-adv-index="${index}" data-val-index="3"
                             value="${valSignature}" 
                             placeholder="Gres testini bizzat yaptım..."
-                            onchange="window.updateAdvMeasurement(${index}, 3, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, 3, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, 3, this.value, this)">
                     </div>
                 </div>
             </div>
@@ -1034,40 +1067,40 @@ export const FaultFormUI = {
 
                 <div style="display: flex; flex-direction: column; gap: 0.6rem;">
                     <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <input type="checkbox" id="chk1-${index}" ${chk1 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
-                            onchange="window.updateAdvMeasurement(${index}, 0, this.checked ? 'true' : 'false')">
+                        <input type="checkbox" id="chk1-${index}" data-adv-index="${index}" data-val-index="0" ${chk1 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
+                            onchange="window.updateAdvMeasurement(${index}, 0, this.checked ? 'true' : 'false', this)">
                         <label for="chk1-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                             Türbin içinde, kulede veya çevresinde hiçbir el aleti, malzeme, <strong>atık bez</strong> veya çöp bırakılmamıştır.
                         </label>
                     </div>
 
                     <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <input type="checkbox" id="chk2-${index}" ${chk2 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
-                            onchange="window.updateAdvMeasurement(${index}, 1, this.checked ? 'true' : 'false')">
+                        <input type="checkbox" id="chk2-${index}" data-adv-index="${index}" data-val-index="1" ${chk2 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
+                            onchange="window.updateAdvMeasurement(${index}, 1, this.checked ? 'true' : 'false', this)">
                         <label for="chk2-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                             Tespit edilen tüm hasarlar, arızalar ve eksiklikler servis raporuna eksiksiz olarak işlenmiştir.
                         </label>
                     </div>
 
                     <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <input type="checkbox" id="chk3-${index}" ${chk3 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
-                            onchange="window.updateAdvMeasurement(${index}, 2, this.checked ? 'true' : 'false')">
+                        <input type="checkbox" id="chk3-${index}" data-adv-index="${index}" data-val-index="2" ${chk3 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
+                            onchange="window.updateAdvMeasurement(${index}, 2, this.checked ? 'true' : 'false', this)">
                         <label for="chk3-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                             Makine dairesinde ve kule tabanındaki tüm elektrik panoları/kapakları güvenli bir şekilde kapatılmıştır.
                         </label>
                     </div>
 
                     <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <input type="checkbox" id="chk4-${index}" ${chk4 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
-                            onchange="window.updateAdvMeasurement(${index}, 3, this.checked ? 'true' : 'false')">
+                        <input type="checkbox" id="chk4-${index}" data-adv-index="${index}" data-val-index="3" ${chk4 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
+                            onchange="window.updateAdvMeasurement(${index}, 3, this.checked ? 'true' : 'false', this)">
                         <label for="chk4-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                             Türbin çalıştırılıp dinleme testi yapılmış olup olağandışı bir ses veya titreşim olmadan tamamlanmıştır.
                         </label>
                     </div>
 
                     <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.3rem 0;">
-                        <input type="checkbox" id="chk5-${index}" ${chk5 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
-                            onchange="window.updateAdvMeasurement(${index}, 4, this.checked ? 'true' : 'false')">
+                        <input type="checkbox" id="chk5-${index}" data-adv-index="${index}" data-val-index="4" ${chk5 ? 'checked' : ''} style="width: 18px; height: 18px; margin-top: 0.1rem; cursor: pointer;"
+                            onchange="window.updateAdvMeasurement(${index}, 4, this.checked ? 'true' : 'false', this)">
                         <label for="chk5-${index}" style="font-size: 0.75rem; color: #e2e8f0; cursor: pointer; user-select: none; line-height: 1.4;">
                             Türbin devreye alınmıştır ve türbin defterine ilgili bakım talimatı ve açıklamalar yazılmıştır.
                         </label>
@@ -1078,10 +1111,12 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column; gap: 0.2rem;">
                         <label style="font-size: 0.6rem; color: ${borderColor};">Bakım Sorumlusu (Ad Soyad)</label>
                         <input type="text" class="cyber-input" style="width: 100%; height: 32px !important; min-height: 32px !important; font-size: 0.8rem; border: 1px solid ${valSignature ? borderColor : 'rgba(255,255,255,0.2)'}; background: rgba(0,0,0,0.4); color: #fff; padding: 0 0.6rem; border-radius: 4px; transition: all 0.3s ease;" 
+                            data-adv-index="${index}" data-val-index="5"
                             value="${valSignature}" 
                             placeholder="Tüm kontrolleri bizzat yaptım..."
                             ${!allChecked ? 'disabled title="Tüm kutucukları işaretlemeden imza atılamaz!"' : ''}
-                            onchange="window.updateAdvMeasurement(${index}, 5, this.value)">
+                            oninput="window.updateAdvMeasurement(${index}, 5, this.value, this)"
+                            onchange="window.updateAdvMeasurement(${index}, 5, this.value, this)">
                         ${!allChecked ? '<div style="font-size: 0.6rem; color: var(--accent-red); margin-top: 0.2rem;">* İmza atabilmek için tüm kontrolleri işaretlemelisiniz.</div>' : ''}
                     </div>
                 </div>
