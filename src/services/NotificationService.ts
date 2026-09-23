@@ -11,6 +11,7 @@ import {
   limit, 
   onSnapshot 
 } from 'firebase/firestore';
+import { formatDisplayName } from '../utils/formatters';
 
 export interface AppNotification {
   id: string;
@@ -119,15 +120,17 @@ class NotificationService {
       if (endpoint) {
         const subId = btoa(endpoint).replace(/=/g, '').substring(0, 50);
         const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
-        const email = currentUser?.email || 'Bilinmeyen Kullanıcı';
-        const team = (window as any).currentUserTeam || currentUser?.team || '';
+        const email = currentUser?.email || (window as any).auth?.currentUser?.email || 'Bilinmeyen Kullanıcı';
+        const rawName = currentUser?.displayName || currentUser?.name || email;
+        const displayName = formatDisplayName(rawName);
+        const team = (window as any).currentUserTeam || currentUser?.team || (email.toLowerCase().includes('tm') ? formatDisplayName(email) : '');
         const allowedSites = currentUser?.allowedSites || [];
         
         await setDoc(doc(db, 'push_subscriptions', subId), {
           endpoint: subJson.endpoint,
           keys: subJson.keys,
           user: email,
-          displayName: currentUser?.displayName || currentUser?.name || '',
+          displayName: displayName || rawName,
           team: team,
           allowedSites: allowedSites,
           role: currentUser?.role || 'user',

@@ -201,6 +201,20 @@ function fixTurbineIds(turbines, plantId) {
       else if (num === 20) num = 19;
     }
 
+    // Mare Manastır: E-82 türbinleri (826427 - 826432) SCADA'da T1-T6 gelir, sistemde T50 - T55 olarak eşlenir
+    if (plantId === "mare") {
+      const serial = String(t.serial_no || "").trim();
+      if (serial === "826427") num = 50;
+      else if (serial === "826428") num = 51;
+      else if (serial === "826429") num = 52;
+      else if (serial === "826430") num = 53;
+      else if (serial === "826431") num = 54;
+      else if (serial === "826432") num = 55;
+      else if (num >= 1 && num <= 6 && (t.type === "E-82" || t.controlType === "CS82" || (t.name && t.name.includes("E-82")))) {
+        num = num + 49;
+      }
+    }
+
     // İki haneli format: T7 → T07
     const newId = "T" + String(num).padStart(2, "0");
 
@@ -216,6 +230,11 @@ function fixTurbineIds(turbines, plantId) {
   // Datça: numarası 40'tan büyük türbin kayıtlarını at
   if (plantId === "datca") {
     result = result.filter(t => (t._num || 0) <= 40);
+  }
+
+  // Çamseki: Demirer Holding sadece T01 - T11 arası türbinlerin servisini yapar; T12 ve yukarısını filtrele
+  if (plantId === "camseki") {
+    result = result.filter(t => (t._num || 0) <= 11);
   }
 
   // Numaraya göre sırala ve geçici _num alanını kaldır
@@ -314,28 +333,52 @@ const PLANT_TO_SITE = {
 const TEAM_SITE_MAPPING = {
   'team01': ['2678', '0752'],
   'team1': ['2678', '0752'],
+  'tm01': ['2678', '0752'],
+  'tm1': ['2678', '0752'],
   'team02': ['2678', '0752'],
   'team2': ['2678', '0752'],
+  'tm02': ['2678', '0752'],
+  'tm2': ['2678', '0752'],
   'team12': ['2678', '0752'],
+  'tm12': ['2678', '0752'],
   'team03': ['2688', '3439', '3243'],
   'team3': ['2688', '3439', '3243'],
+  'tm03': ['2688', '3439', '3243'],
+  'tm3': ['2688', '3439', '3243'],
   'team04': ['2688', '3439', '3243'],
   'team4': ['2688', '3439', '3243'],
+  'tm04': ['2688', '3439', '3243'],
+  'tm4': ['2688', '3439', '3243'],
   'team13': ['2688', '3439', '3243'],
+  'tm13': ['2688', '3439', '3243'],
   'team15': ['2688', '3439', '3243'],
+  'tm15': ['2688', '3439', '3243'],
   'team06': ['2990', '3793'],
   'team6': ['2990', '3793'],
+  'tm06': ['2990', '3793'],
+  'tm6': ['2990', '3793'],
   'team08': ['2990', '3793'],
   'team8': ['2990', '3793'],
+  'tm08': ['2990', '3793'],
+  'tm8': ['2990', '3793'],
   'team09': ['2990', '3793'],
   'team9': ['2990', '3793'],
+  'tm09': ['2990', '3793'],
+  'tm9': ['2990', '3793'],
   'team14': ['2990', '3793'],
+  'tm14': ['2990', '3793'],
   'team05': ['3213'],
   'team5': ['3213'],
+  'tm05': ['3213'],
+  'tm5': ['3213'],
   'team10': ['3213'],
+  'tm10': ['3213'],
   'team07': ['3245', '3892'],
   'team7': ['3245', '3892'],
-  'team11': ['3245', '3892']
+  'tm07': ['3245', '3892'],
+  'tm7': ['3245', '3892'],
+  'team11': ['3245', '3892'],
+  'tm11': ['3245', '3892']
 };
 
 /**

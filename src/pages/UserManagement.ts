@@ -2254,7 +2254,7 @@ const granularOptions = {
           'tickets-page': ['createTicket', 'replyTicket']
         };
       } else if (role === 'TECHNICIAN') {
-        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'visual-bom', 'tickets-page', 'tsi-library', 'isg-management', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
+        defaultTabs = ['dashboard', 'new-task', 'tasks', 'siparis', 'turbines', 'bearing-analysis', 'tickets-page', 'tsi-library', 'isg-management', 'kkd-kontrol', 'olcu-aletleri', 'tork-aletleri'];
         defaultSubs = {
           'tasks': ['createTask', 'completeTask'],
           'siparis': ['createOrder'],

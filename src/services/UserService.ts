@@ -52,8 +52,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       dashboard: true,
       tasks: true,
       inventory: true,
-      turbines: true,
-      "visual-bom": true
+      turbines: true
     },
     allowedSites: ["2688", "3243", "3439"],
     allowedWarehouses: ["2688", "3439", "3243", "team_Team_13"],
@@ -68,8 +67,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       dashboard: true,
       tasks: true,
       inventory: true,
-      turbines: true,
-      "visual-bom": true
+      turbines: true
     },
     allowedSites: ["2688", "3243", "3439"],
     allowedWarehouses: ["2688", "3243", "3439", "team_Team_15"],
@@ -84,8 +82,7 @@ const MOCK_PROFILES: Record<string, UserProfile> = {
       dashboard: true,
       tasks: true,
       inventory: true,
-      turbines: true,
-      "visual-bom": true
+      turbines: true
     },
     allowedSites: ["2688", "3243", "3439"],
     allowedWarehouses: ["2688", "3243", "3439", "team_Team_04"],

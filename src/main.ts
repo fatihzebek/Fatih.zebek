@@ -481,9 +481,9 @@ const Sidebar = () => {
     }
 
     // STRICT SECURITY: Restricted & Price-Sensitive Modules are NEVER accessible to field service teams/technicians!
-    const RESTRICTED_FOR_SERVICE = ['material-pricing', 'material-analytics', 'parameter-audit', 'scada-reset-logs'];
+    const RESTRICTED_FOR_SERVICE = ['material-pricing', 'material-analytics', 'parameter-audit', 'scada-reset-logs', 'visual-bom'];
     if (RESTRICTED_FOR_SERVICE.includes(tab)) {
-      if (userRole === 'TECHNICIAN' || userRole === 'USER' || (email && email.includes('tm'))) {
+      if (userRole === 'TECHNICIAN' || userRole === 'USER' || (email && email.includes('tm')) || !!profile?.team) {
         return false;
       }
     }
@@ -1208,6 +1208,124 @@ const Topbar = () => {
   `
 }
 
+const updateGlobalNotificationBanner = () => {
+  const bannerContainer = document.getElementById('global-notification-banner');
+  if (!bannerContainer) return;
+
+  // Don't show if Notification API is not supported in this browser
+  if (!('Notification' in window)) {
+    bannerContainer.innerHTML = '';
+    return;
+  }
+
+  // If permission is already granted, keep banner hidden
+  if (Notification.permission === 'granted') {
+    bannerContainer.innerHTML = '';
+    return;
+  }
+
+  // If dismissed during this session
+  if (sessionStorage.getItem('dismiss_push_banner')) {
+    bannerContainer.innerHTML = '';
+    return;
+  }
+
+  bannerContainer.innerHTML = `
+    <div class="cyber-notification-banner" style="
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.22), rgba(234, 88, 12, 0.26));
+      border-bottom: 1px solid rgba(245, 158, 11, 0.5);
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: 'Rajdhani', sans-serif;
+      box-shadow: 0 4px 20px rgba(245, 158, 11, 0.2);
+      animation: fadeIn 0.3s ease;
+      position: sticky;
+      top: 0;
+      z-index: 99;
+      backdrop-filter: blur(10px);
+    ">
+      <div style="display: flex; align-items: center; gap: 14px; flex: 1; min-width: 280px;">
+        <div style="
+          width: 38px; height: 38px; border-radius: 10px;
+          background: rgba(245, 158, 11, 0.3);
+          display: flex; align-items: center; justify-content: center;
+          color: #fbbf24; font-size: 1.15rem; flex-shrink: 0;
+          border: 1px solid rgba(245, 158, 11, 0.5);
+        ">
+          <i class="fa-solid fa-bell-slash fa-shake"></i>
+        </div>
+        <div>
+          <div style="font-weight: 800; font-size: 0.95rem; color: #fff; letter-spacing: 0.5px;">
+            🔔 SAHA ARIZA & GÖREV BİLDİRİMLERİNİZ KAPALI!
+          </div>
+          <div style="font-size: 0.8rem; color: #fde68a; font-family: 'Inter', sans-serif; margin-top: 2px;">
+            Telefon veya tablet kilitliyken bile anlık SCADA türbin arızası ve acil görev bildirimlerini almak için lütfen bildirimleri açın.
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <button onclick="window.requestPushPermissionFromBanner()" class="btn-cyber" style="
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+          color: #000;
+          font-weight: 800;
+          font-size: 0.82rem;
+          padding: 8px 20px;
+          border-radius: 8px;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+          letter-spacing: 0.5px;
+        ">
+          <i class="fa-solid fa-bell"></i> BİLDİRİMLERİ AÇ & AKTİFLEŞTİR
+        </button>
+        <button onclick="window.dismissPushBanner()" style="
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #94a3b8;
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: all 0.2s;
+        " title="Şimdilik Kapat">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+  `;
+};
+
+(window as any).requestPushPermissionFromBanner = async () => {
+  try {
+    const { notificationService } = await import('./services/NotificationService');
+    const perm = await notificationService.requestPermission();
+    if (perm === 'granted') {
+      updateGlobalNotificationBanner();
+      (window as any).showToast?.('BİLDİRİMLER AKTİF', 'Bildirim izni başarıyla verildi. Cihazınız sisteme kaydedildi.', 'success');
+    } else if (perm === 'denied') {
+      alert('Bildirim izni tarayıcı ayarlarından engellenmiş görünüyor. Lütfen adres çubuğundaki kilit simgesine tıklayarak bildirim iznini "İzin Ver" olarak değiştiriniz.');
+    }
+  } catch (err) {
+    console.error("Banner push permission request error:", err);
+  }
+};
+
+(window as any).dismissPushBanner = () => {
+  sessionStorage.setItem('dismiss_push_banner', 'true');
+  updateGlobalNotificationBanner();
+};
+
 const render = async (options: { skipShell?: boolean } = {}) => {
   const app = document.querySelector<HTMLDivElement>('#app');
   if (!app) return;
@@ -1504,6 +1622,7 @@ const render = async (options: { skipShell?: boolean } = {}) => {
           ${sidebarHtml}
           <main class="main-content">
             ${topbarHtml}
+            <div id="global-notification-banner"></div>
             <div id="page-content">
                <div id="page-inner-content"></div>
             </div>
@@ -1695,6 +1814,12 @@ const render = async (options: { skipShell?: boolean } = {}) => {
       } catch (err) {
         console.error("Failed to update sidebar active state dynamically", err);
       }
+    }
+
+    try {
+      updateGlobalNotificationBanner();
+    } catch (err) {
+      console.error("Failed to update notification banner", err);
     }
 
     const targetContent = document.getElementById('page-inner-content') || document.getElementById('page-content');
