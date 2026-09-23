@@ -70,12 +70,15 @@ export const TurbinesPage = () => {
     (window as any).globalTurbinesTasksSubscribed = true;
     taskService.subscribeTasks((allTasks) => {
       (window as any).latestTurbineTasks = allTasks;
-      // If sites map is initialized and visible, update it
+      // If sites map is initialized and visible, update markers only (do not recreate map)
       if ((window as any).sitesMapInstance && document.getElementById('sites-map')) {
-        (window as any).initSitesMap();
+        (window as any).updateSitesMapMarkers?.();
       }
     });
   }
+
+  // Throttle marker updates so telemetry packets do not spam DOM
+  let lastOverviewMapUpdate = 0;
 
   // Start SCADA live subscription across all plants for overview map synchronization
   if (ENABLE_SCADA_INTEGRATION && !(window as any).globalScadaLiveSubscribed) {
@@ -111,9 +114,14 @@ export const TurbinesPage = () => {
         allData[plantId] = plantTurbines;
       });
       (window as any).allPlantsScadaData = allData;
-      // If sites map is initialized and visible, re-render markers
-      if ((window as any).sitesMapInstance && document.getElementById('sites-map')) {
-        (window as any).initSitesMap();
+
+      // Update markers only (maximum once every 10 seconds to eliminate jitter/re-renders)
+      const now = Date.now();
+      if (now - lastOverviewMapUpdate > 10000) {
+        lastOverviewMapUpdate = now;
+        if ((window as any).sitesMapInstance && document.getElementById('sites-map')) {
+          (window as any).updateSitesMapMarkers?.();
+        }
       }
     });
   }
@@ -289,14 +297,11 @@ export const TurbinesPage = () => {
           if (totalTurbinesEl) totalTurbinesEl.textContent = definedCount.toString();
         }
 
-        // Grid ve haritayı güncelle
+        // Grid'i güncelle
         if (statusChanged || !(window as any).scadaRenderedOnce) {
           (window as any).scadaRenderedOnce = true;
           if (typeof (window as any).triggerTurbineGridRender === 'function') {
             (window as any).triggerTurbineGridRender();
-          }
-          if ((window as any).sitesMapInstance && typeof (window as any).initSitesMap === 'function') {
-            (window as any).initSitesMap();
           }
         }
       }, (err) => {
@@ -1599,23 +1604,8 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
 
     const result = await taskService.createNewTask(taskData);
     if (result.success) {
-      // 1. İlgili sahadaki ekiplere ve yöneticilere sesli bildirim & duyuru gönder
-      try {
-        await notificationService.createAnnouncement({
-          title: `🛠️ Görev Üstlenildi: ${siteName} — ${tNo}`,
-          message: `${siteName} ${tNo} türbinindeki "${faultTitle}" arıza görevini ${teamName} ekibi üstlendi ve müdahaleye başladı.`,
-          category: 'task',
-          targetAudience: 'SITE',
-          targetValue: siteId,
-          createdBy: userEmail,
-          createdByName: teamName
-        });
-      } catch (notifErr) {
-        console.warn('Bildirim oluşturulamadı:', notifErr);
-      }
-
       if ((window as any).showToast) {
-        (window as any).showToast('GÖREV ÜSTLENİLDİ', `SCADA arıza görevi ${teamName} adına başarıyla başlatıldı. Sorumlu ekiplere ve yöneticilere bildirim iletildi.`, 'success');
+        (window as any).showToast('GÖREV ÜSTLENİLDİ', `SCADA arıza görevi ${teamName} adına başarıyla başlatıldı.`, 'success');
       } else {
         alert(`SCADA arıza görevi ${teamName} adına başarıyla başlatıldı.`);
       }
@@ -2222,14 +2212,8 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
 };
 
 (window as any).initSitesMap = () => {
-  if ((window as any).sitesMapInstance) {
-    try {
-      (window as any).sitesMapInstance.remove();
-    } catch (e) {
-      console.error("Error removing old map instance:", e);
-    }
-    (window as any).sitesMapInstance = null;
-  }
+  const mapEl = document.getElementById('sites-map');
+  if (!mapEl) return;
 
   const L = (window as any).L;
   if (!L) {
@@ -2237,20 +2221,44 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
     return;
   }
 
+  let map = (window as any).sitesMapInstance;
+  const isMapAttached = map && (mapEl as any)._leaflet_id;
+
+  // Haritayı SADECE henüz oluşturulmamışsa veya element değişmişse başlat
+  if (!isMapAttached) {
+    if (map) {
+      try { map.remove(); } catch (e) {}
+    }
+
+    map = L.map('sites-map', {
+      zoomControl: true,
+      attributionControl: false
+    }).setView([39.0, 35.0], 6);
+
+    (window as any).sitesMapInstance = map;
+    (window as any).sitesMapBoundsFitted = false;
+
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 16
+    }).addTo(map);
+
+    (window as any).sitesMarkerLayerGroup = L.layerGroup().addTo(map);
+  }
+
+  // İşaretçileri güncelle
+  (window as any).updateSitesMapMarkers();
+};
+
+(window as any).updateSitesMapMarkers = () => {
+  const map = (window as any).sitesMapInstance;
+  const markerGroup = (window as any).sitesMarkerLayerGroup;
   const mapEl = document.getElementById('sites-map');
-  if (!mapEl) return;
+  if (!map || !markerGroup || !mapEl) return;
 
-  // Create map instance centered on Turkey
-  const map = L.map('sites-map', {
-    zoomControl: true,
-    attributionControl: false
-  }).setView([39.0, 35.0], 6);
+  const L = (window as any).L;
+  if (!L) return;
 
-  (window as any).sitesMapInstance = map;
-
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 16
-  }).addTo(map);
+  markerGroup.clearLayers();
 
   const bounds: any[] = [];
   const allSites = dataService.getSites() || [];
@@ -2341,9 +2349,6 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
       if (totalFaults > 0) markerColor = '#ff4d4d';
       else if (maintCount > 0) markerColor = '#ccff00';
 
-      // Closely clustered sites: offset label position to prevent overlapping
-      // Germiyan ('0752') is just north of Mare ('2678') -> Germiyan label to left, Mare to right
-      // Sayalar ('2990') is near Kuyucak ('3793') -> Sayalar label to left, Kuyucak to right
       const isLeftLabel = site.id === '0752' || site.id === '2990';
 
       const markerIcon = L.divIcon({
@@ -2358,7 +2363,7 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
         iconAnchor: isLeftLabel ? [133, 12] : [7, 12]
       });
 
-      const marker = L.marker(center, { icon: markerIcon }).addTo(map);
+      const marker = L.marker(center, { icon: markerIcon }).addTo(markerGroup);
 
       const popupContent = `
         <div class="cyber-map-popup" style="color:#fff; font-family:'Rajdhani',sans-serif; min-width:180px; padding: 5px;">
@@ -2382,7 +2387,9 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
     }
   });
 
-  if (bounds.length > 0) {
+  // Fit bounds SADECE harita ilk açıldığında çağrılır; kullanıcı gezerken harita sıfırlanmaz
+  if (!(window as any).sitesMapBoundsFitted && bounds.length > 0) {
+    (window as any).sitesMapBoundsFitted = true;
     map.fitBounds(bounds, { padding: [50, 50] });
   }
 

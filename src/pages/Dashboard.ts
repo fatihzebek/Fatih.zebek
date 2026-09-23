@@ -92,14 +92,18 @@ export const DashboardPage = async () => {
     }
   }
 
-  // Use cached arrays if available for instant 0ms HTML generation
   let tasks: any[] = cachedDashboardData.tasks || [];
   let pendingLeaves: any[] = cachedDashboardData.pendingLeaves || [];
   let reminders: any[] = cachedDashboardData.reminders || [];
   let transfers: any[] = cachedDashboardData.transfers || [];
   let reports: any[] = cachedDashboardData.reports || [];
   let repairs: any[] = cachedDashboardData.repairs || [];
-  let announcements: Announcement[] = cachedDashboardData.announcements || [];
+  let announcements: Announcement[] = (cachedDashboardData.announcements || []).filter(a => 
+    a.category !== 'task' && 
+    a.category !== 'urgent' && 
+    !a.title?.startsWith('🛠️ Görev Üstlenildi') &&
+    !a.title?.startsWith('⚠️ SCADA Arıza')
+  );
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todayTime = new Date(todayStr).getTime();

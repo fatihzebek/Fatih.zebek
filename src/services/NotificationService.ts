@@ -39,13 +39,34 @@ class NotificationService {
   private notifications: AppNotification[] = [];
   private listeners: ((notifications: AppNotification[]) => void)[] = [];
 
+  private globalUnsubscribe: (() => void) | null = null;
+
   constructor() {
     // If permission is already granted, subscribe to push
-    if ('Notification' in window && Notification.permission === 'granted') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       setTimeout(() => {
         this.subscribeUserToPush();
       }, 3000);
     }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth-state-changed', () => {
+        this.startGlobalListener();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          this.subscribeUserToPush();
+        }
+      });
+      setTimeout(() => {
+        this.startGlobalListener();
+      }, 2000);
+    }
+  }
+
+  startGlobalListener() {
+    if (this.globalUnsubscribe) return;
+    this.globalUnsubscribe = this.subscribeAnnouncements((_items) => {
+      // Global snapshot handler keeps active tab listening for real-time announcements
+    });
   }
 
   isPermissionGranted(): boolean {

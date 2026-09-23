@@ -9,6 +9,33 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
+const webpush = require("web-push");
+
+// Load status code mappings for SCADA fault notifications
+let statusCodesMap = {};
+let faultCodesList = [];
+try {
+  statusCodesMap = require("./status_codes_map.json");
+} catch (e) {
+  console.warn("[SCADA] status_codes_map.json yüklenemedi:", e.message);
+}
+try {
+  faultCodesList = require("./fault_codes.json");
+} catch (e) {
+  console.warn("[SCADA] fault_codes.json yüklenemedi:", e.message);
+}
+
+// VAPID Configuration for Web Push
+const VAPID_PUBLIC_KEY = "BBRUMqEX4JSbeW-4hrlYVPkR0kyAprwYoZMPIqQZkso8mhF7IlsENJfhv9VeNwReKqPzNsJyjFT2-rH_h79_f0U";
+const VAPID_PRIVATE_KEY = "8ybSNqDupGv2mDe_oUJCU-0BoPzQ7aSHzagVrmNGK2A";
+const VAPID_SUBJECT = "mailto:fatih.zebek@demirerholding.com";
+
+try {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch (vapidErr) {
+  console.error("[webpush] setVapidDetails hatası:", vapidErr);
+}
+
 /**
  * Firebase Cloud Function: sendEmail
  * 
@@ -266,6 +293,207 @@ function mergeGridMeterEks(existingMeters, incomingMeters) {
   });
 }
 
+// --- Santral ID -> Saha ID & Adı Eşleme Tablosu ---
+const PLANT_TO_SITE = {
+  "germiyan":  { siteId: "0752", name: "Alize Germiyan" },
+  "mare":      { siteId: "2678", name: "Mare Manastır" },
+  "intepe":    { siteId: "2688", name: "Anemon İntepe" },
+  "sayalar":   { siteId: "2990", name: "Doğal Sayalar" },
+  "datca":     { siteId: "3213", name: "Dares Datça" },
+  "camseki":   { siteId: "3243", name: "Alize Çamseki" },
+  "keltepe":   { siteId: "3245", name: "Alize Keltepe" },
+  "sarikaya":  { siteId: "3439", name: "Alize Sarıkaya" },
+  "kuyucak":   { siteId: "3793", name: "Alize Kuyucak" },
+  "cataltepe": { siteId: "3892", name: "Alize Çataltepe" },
+  "cakil":     { siteId: "cakil", name: "Çakıl RES" },
+  "kozbeyli":  { siteId: "kozbeyli", name: "Kozbeyli RES" },
+  "samurlu":   { siteId: "samurlu", name: "Samurlu RES" }
+};
+
+// --- Saha Ekip Eşleşmeleri ---
+const TEAM_SITE_MAPPING = {
+  'team01': ['2678', '0752'],
+  'team1': ['2678', '0752'],
+  'team02': ['2678', '0752'],
+  'team2': ['2678', '0752'],
+  'team12': ['2678', '0752'],
+  'team03': ['2688', '3439', '3243'],
+  'team3': ['2688', '3439', '3243'],
+  'team04': ['2688', '3439', '3243'],
+  'team4': ['2688', '3439', '3243'],
+  'team13': ['2688', '3439', '3243'],
+  'team15': ['2688', '3439', '3243'],
+  'team06': ['2990', '3793'],
+  'team6': ['2990', '3793'],
+  'team08': ['2990', '3793'],
+  'team8': ['2990', '3793'],
+  'team09': ['2990', '3793'],
+  'team9': ['2990', '3793'],
+  'team14': ['2990', '3793'],
+  'team05': ['3213'],
+  'team5': ['3213'],
+  'team10': ['3213'],
+  'team07': ['3245', '3892'],
+  'team7': ['3245', '3892'],
+  'team11': ['3245', '3892']
+};
+
+/**
+ * SCADA Arıza Kodu ve Açıklamasını Çözümler
+ */
+function resolveFaultInfo(rawInput, fallbackText) {
+  if (!rawInput) {
+    return {
+      code: "ARIZA",
+      description: fallbackText || "SCADA Arızası"
+    };
+  }
+
+  let cleaned = String(rawInput).replace(/^enercon\s*/i, '').trim();
+  const arrayParts = cleaned.split(/[,:]/).map(s => s.trim()).filter(Boolean);
+  let hyphenCode = cleaned.replace(':', '-');
+  let colonCode = cleaned.replace('-', ':');
+
+  if (arrayParts.length >= 2) {
+    hyphenCode = `${arrayParts[0]}-${arrayParts[1]}`;
+    colonCode = `${arrayParts[0]}:${arrayParts[1]}`;
+  }
+
+  // 1. status_codes_map.json (3.300+ resmi Enercon SCADA tanımı)
+  const mapEntry = statusCodesMap[colonCode] || statusCodesMap[hyphenCode];
+  if (mapEntry && mapEntry.description) {
+    const descParts = [mapEntry.category, mapEntry.description, mapEntry.type].filter(Boolean);
+    return {
+      code: hyphenCode,
+      description: descParts.join(" - ")
+    };
+  }
+
+  // 2. fault_codes.json yedek sözlük
+  if (Array.isArray(faultCodesList)) {
+    const fc = faultCodesList.find(c => {
+      const cLower = (c.KOD || "").trim().toLowerCase();
+      return cLower === hyphenCode.toLowerCase() || cLower === colonCode.toLowerCase();
+    });
+    if (fc && fc.Aciklama) {
+      const parts = fc.Aciklama.split('-').map(s => s.trim()).filter(Boolean);
+      const desc = parts.length >= 2 ? parts[1].replace(/\s+(T\d+|Fault|Warning|Information \/ Warnings)\s*$/i, '').trim() : parts[0];
+      return {
+        code: hyphenCode,
+        description: desc
+      };
+    }
+  }
+
+  return {
+    code: hyphenCode,
+    description: fallbackText || "SCADA Arızası"
+  };
+}
+
+/**
+ * Türbinin arıza durumunu analiz eder (Frontend ile %100 uyumlu)
+ */
+function checkTurbineFault(t) {
+  if (!t) return { isFault: false, mainCode: '', isMaint: false, statusText: '' };
+  const rawStatus = t.enercon_status || (t.status_code ? String(t.status_code) : '');
+  const stParts = (rawStatus || '').split(/[,:]/).map(s => s.trim()).filter(Boolean);
+  const mainCode = stParts.length >= 2 ? `${stParts[0]}-${stParts[1]}` : (rawStatus || '');
+  const isNorm = ['0-0', '0:0', '0-1', '0:1', '0-2', '0:2', '0-4', '0:4', '0-5', '0:5', '0', '1', 'OK'].includes(mainCode) || stParts[0] === '0';
+  const isMaintCode = ['8-0', '8:0', '0-8', '0:8', '8-1', '8:1', '8-2', '8:2', '8-3', '8:3', '8-4', '8:4', '8-5', '8:5', '8-6', '8:6', '8-7', '8:7', '8-8', '8:8'].includes(mainCode) || stParts[0] === '8' || (t.status_text || '').toLowerCase().includes('maintenance');
+  const isFaultCode = !isNorm && !isMaintCode && (Number(t.status_code) > 0 || (stParts.length >= 2 && stParts[0] !== '0' && stParts[0] !== ''));
+  return {
+    isFault: !!isFaultCode,
+    mainCode: mainCode,
+    isMaint: !!isMaintCode,
+    statusText: t.status_text || ''
+  };
+}
+
+/**
+ * Bir abonenin belirtilen santral için bildirim almaya yetkili olup olmadığını kontrol eder
+ */
+function isSubscriberEligibleForSite(sub, siteId) {
+  const email = (sub.user || '').toLowerCase().trim();
+  const role = (sub.role || '').toUpperCase().trim();
+
+  // 1. Adminler, Fatih ZEBEK ve Furkan YILDIRIM tüm santrallerden bildirim alır
+  if (
+    role === 'ADMIN' ||
+    email.includes('fatih.zebek') ||
+    email.includes('furkan.yildirim')
+  ) {
+    return true;
+  }
+
+  // 2. Özel izin verilen sahalar kontrolü
+  const allowedSites = Array.isArray(sub.allowedSites) ? sub.allowedSites : [];
+  if (allowedSites.includes(siteId) || allowedSites.includes('all')) {
+    return true;
+  }
+
+  // 3. Saha ekip eşleşmesi kontrolü (Saha teknisyenleri yalnız kendi sahalarını alır)
+  const rawTeam = (sub.team || sub.displayName || email || '').replace(/\s+/g, '').toLowerCase();
+  for (const [tKey, sites] of Object.entries(TEAM_SITE_MAPPING)) {
+    if (rawTeam.includes(tKey) && sites.includes(siteId)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Sahaya atanmış abonelere ve tüm santrallerden sorumlu yöneticilere Web Push gönderir
+ */
+async function sendWebPushToSite(siteId, title, body, url, tag) {
+  try {
+    const subsSnap = await db.collection("push_subscriptions").get();
+    if (subsSnap.empty) return;
+
+    const payload = JSON.stringify({
+      title: title,
+      body: body,
+      url: url || `/turbines?site=${siteId}`,
+      tag: tag || `scada-fault-${siteId}-${Date.now()}`,
+      vibrate: [400, 200, 400, 200, 600],
+      requireInteraction: true
+    });
+
+    const promises = [];
+    subsSnap.forEach((docSnap) => {
+      const sub = docSnap.data();
+      if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) return;
+
+      if (isSubscriberEligibleForSite(sub, siteId)) {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.keys.p256dh,
+            auth: sub.keys.auth
+          }
+        };
+
+        const p = webpush.sendNotification(pushSubscription, payload)
+          .catch(async (err) => {
+            console.warn(`[webpush] Gönderim uyarısı (${sub.user || docSnap.id}):`, err.statusCode || err.message);
+            if (err.statusCode === 404 || err.statusCode === 410) {
+              try {
+                await docSnap.ref.delete();
+              } catch (_) {}
+            }
+          });
+        promises.push(p);
+      }
+    });
+
+    await Promise.allSettled(promises);
+    console.log(`[webpush] ${promises.length} aboneye bildirim iletildi (${siteId}).`);
+  } catch (err) {
+    console.error("[webpush] Gönderim hatası:", err);
+  }
+}
+
 exports.scadaTelemetry = onRequest(
   {
     region: "europe-west1",
@@ -310,44 +538,133 @@ exports.scadaTelemetry = onRequest(
         body.turbines = fixTurbineIds(body.turbines, plantId);
       }
 
-      // --- 5. Firestore referansları ---
+      // --- 5. Firestore referansları ve Mevcut Veriyi Oku ---
       const liveRef = db.collection("scada_live").doc(plantId);
       const now = admin.firestore.FieldValue.serverTimestamp();
       const ekTam = body.ek_tam === true;
+
+      let existing = null;
+      try {
+        const liveDoc = await liveRef.get();
+        if (liveDoc.exists) {
+          existing = liveDoc.data();
+        }
+      } catch (err) {
+        console.warn(`[scadaTelemetry] liveDoc okuma uyarısı (${plantId}):`, err.message);
+      }
 
       // --- 6. ek_tam birleştirme mantığı ---
       let finalData = { ...body };
       delete finalData.ek_tam; // Firestore'da ayrıca saklamaya gerek yok
 
-      if (!ekTam) {
-        // Kısmi paket: mevcut ek değerleri ile birleştir
-        try {
-          const liveDoc = await liveRef.get();
-          if (liveDoc.exists) {
-            const existing = liveDoc.data();
+      if (!ekTam && existing) {
+        finalData.ek_genel = mergeEk(existing.ek_genel, finalData.ek_genel);
+        finalData.turbines = mergeTurbineEks(existing.turbines, finalData.turbines);
+        finalData.grid_meters = mergeGridMeterEks(existing.grid_meters, finalData.grid_meters);
+      }
 
-            // ek_genel birleştir
-            finalData.ek_genel = mergeEk(existing.ek_genel, finalData.ek_genel);
-
-            // Türbin ek'lerini birleştir
-            finalData.turbines = mergeTurbineEks(existing.turbines, finalData.turbines);
-
-            // Grid meter ek'lerini birleştir
-            finalData.grid_meters = mergeGridMeterEks(existing.grid_meters, finalData.grid_meters);
-          }
-        } catch (mergeErr) {
-          console.error(`[scadaTelemetry] ek birleştirme hatası (${plantId}):`, mergeErr);
-          // Birleştirme başarısız olsa da gelen veriyi yaz
+      // --- 7. OTOMATİK SCADA ARIZA BİLDİRİMİ TESPİTİ ---
+      const plantInfo = PLANT_TO_SITE[plantId] || { siteId: plantId, name: plantId.toUpperCase() };
+      const prevTurbineMap = new Map();
+      if (existing && Array.isArray(existing.turbines)) {
+        for (const pt of existing.turbines) {
+          const key = pt.serial_no || pt.id;
+          if (key) prevTurbineMap.set(key, pt);
         }
       }
 
-      // --- 7. Canlı durumu güncelle (scada_live/{plant_id}) ---
+      const faultAnnouncements = [];
+      const COOLDOWN_MS = 5 * 60 * 1000; // Aynı arıza kodu için 5 dakika cooldown
+
+      if (existing && Array.isArray(finalData.turbines)) {
+        for (const t of finalData.turbines) {
+          const key = t.serial_no || t.id;
+          const prev = prevTurbineMap.get(key);
+          const prevInfo = checkTurbineFault(prev);
+          const newInfo = checkTurbineFault(t);
+
+          // Arızaya geçiş koşulu:
+          // 1. Önceden arıza yokken şimdi arızaya geçti
+          // VEYA
+          // 2. Önceden de arızadaydı ama arıza kodu DEĞİŞTİ (yeni bir arıza)
+          const isTransition = newInfo.isFault && (
+            !prevInfo.isFault || (prevInfo.isFault && prevInfo.mainCode !== newInfo.mainCode)
+          );
+
+          // Cooldown kontrolü: aynı kodla son 5 dk içinde bildirim gitmiş mi?
+          const lastAlert = prev?.last_fault_alert;
+          const isThrottled = isTransition && lastAlert && 
+            lastAlert.code === newInfo.mainCode && 
+            (Date.now() - (lastAlert.sent_at || 0)) < COOLDOWN_MS;
+
+          if (isTransition && !isThrottled) {
+            const turbineLabel = t.id || t.name || key;
+            const faultInfo = resolveFaultInfo(t.enercon_status || t.status_code, t.status_text);
+            
+            // Damgala: bu türbin için bildirim zamanını ve kodunu kaydet
+            t.last_fault_alert = {
+              code: newInfo.mainCode,
+              sent_at: Date.now()
+            };
+
+            const announcementDoc = {
+              title: `⚠️ SCADA Arıza: ${plantInfo.name} - ${turbineLabel}`,
+              message: `${faultInfo.code} — ${faultInfo.description}`,
+              category: 'urgent',
+              targetAudience: 'SITE',
+              targetValue: plantInfo.siteId,
+              createdBy: 'scada_system',
+              createdByName: 'SCADA Otomatik Bildirim Sistemi',
+              createdAt: Date.now(),
+              active: true,
+              metadata: {
+                plantId: plantId,
+                siteId: plantInfo.siteId,
+                siteName: plantInfo.name,
+                turbineId: turbineLabel,
+                serialNo: t.serial_no || '',
+                faultCode: faultInfo.code,
+                faultDesc: faultInfo.description,
+                timestamp: Date.now()
+              }
+            };
+
+            faultAnnouncements.push({
+              announcement: announcementDoc,
+              turbineLabel,
+              faultInfo
+            });
+          } else if (prev?.last_fault_alert && newInfo.isFault) {
+            // Arıza devam ediyorsa son alert bilgisini muhafaza et
+            t.last_fault_alert = prev.last_fault_alert;
+          }
+        }
+      }
+
+      // --- 8. Arıza bildirimlerini yalnız cihazlara Web Push olarak ilet (Duyuru panosuna yazılmaz) ---
+      for (const item of faultAnnouncements) {
+        try {
+          // Web Push ile cep telefonlarına / kilitli ekranlara doğrudan bildirim ve titreşim ilet
+          await sendWebPushToSite(
+            plantInfo.siteId,
+            `⚠️ SCADA Arıza: ${plantInfo.name} - ${item.turbineLabel}`,
+            `${item.faultInfo.code} — ${item.faultInfo.description}`,
+            `/turbines?site=${plantInfo.siteId}`,
+            `scada-${plantId}-${item.turbineLabel}`
+          );
+          console.log(`[scadaTelemetry] Cihazlara Web Push bildirimi iletildi: ${plantInfo.name} - ${item.turbineLabel}`);
+        } catch (alertErr) {
+          console.error(`[scadaTelemetry] Web Push bildirim hatası:`, alertErr);
+        }
+      }
+
+      // --- 9. Canlı durumu güncelle (scada_live/{plant_id}) ---
       finalData.received_at = now;
       finalData.ek_tam_last = ekTam ? (body.timestamp || new Date().toISOString()) : (finalData.ek_tam_last || null);
 
       await liveRef.set(finalData, { merge: false });
 
-      // --- 8. Tam paketleri geçmişe kaydet (10 dakikada bir) ---
+      // --- 10. Tam paketleri geçmişe kaydet (10 dakikada bir) ---
       if (ekTam) {
         const ts = body.timestamp || new Date().toISOString();
         // Zaman damgasını Firestore-uyumlu ID'ye çevir (: ve + karakterleri sorun çıkarabilir)
