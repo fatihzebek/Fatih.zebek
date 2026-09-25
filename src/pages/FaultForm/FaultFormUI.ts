@@ -1,6 +1,19 @@
 import { formatTeamName } from '../../utils/formatters';
 import { statusService } from '../../services/StatusService';
 
+export function isInvalidPersonnelName(name: any): boolean {
+    if (!name || typeof name !== 'string') return true;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === '-- Personel Yok --' || trimmed === 'Atanmadı' || trimmed === 'HAVUZ' || trimmed === '---' || trimmed === '-') {
+        return true;
+    }
+    // Filter out team labels like "Team09", "Team 09", "Team9", "Ekip 01", "Team" etc.
+    if (/^(Team|Ekip)(\s*\d+)?$/i.test(trimmed)) {
+        return true;
+    }
+    return false;
+}
+
 export const FaultFormUI = {
     renderLoadingState: () => `
         <div style="padding: 4rem; text-align: center; color: var(--accent-cyan); border: 1px dashed rgba(0, 242, 254, 0.1); border-radius: 12px; background: rgba(0,0,0,0.2);">
@@ -484,21 +497,24 @@ export const FaultFormUI = {
     `,
     renderWorkSessionRow: (ws: any, isLast: boolean) => {
         const isSessionLocked = ws.locked === true || !isLast;
-        const teamList = (window as any).teamPersonnel ? [...(window as any).teamPersonnel].filter(p => p && p.trim() !== '' && p !== '-- Personel Yok --') : [];
+        const teamList = (window as any).teamPersonnel ? [...(window as any).teamPersonnel].filter((p: string) => !isInvalidPersonnelName(p)) : [];
         let rowPersonnel = isSessionLocked 
-            ? (Array.isArray(ws.personnel) && ws.personnel.length > 0 ? ws.personnel.filter((p: string) => p && p.trim() !== '' && p !== '-- Personel Yok --') : []) 
+            ? (Array.isArray(ws.personnel) && ws.personnel.length > 0 ? ws.personnel.filter((p: string) => !isInvalidPersonnelName(p)) : []) 
             : teamList;
         
         const hasValidPersonnel = rowPersonnel.length > 0;
         const displayNames = hasValidPersonnel 
             ? rowPersonnel.join(', ') 
-            : '<span style="color: #ef4444; font-weight: 700; display: flex; align-items: center; gap: 4px; font-size: 0.72rem;"><i class="fa-solid fa-triangle-exclamation"></i> -- Personel Yok (İsim Yazınız) --</span>';
+            : '<span style="color: #ef4444; font-weight: 700; display: flex; align-items: center; gap: 4px; font-size: 0.72rem;"><i class="fa-solid fa-triangle-exclamation"></i> -- Personel Seçilmedi (Zorunlu) --</span>';
         const disabledAttr = isSessionLocked ? 'disabled' : '';
 
+        const hasStartTime = ws.startTime && ws.startTime.trim() !== '' && ws.startTime !== '--:--';
+        const hasEndTime = ws.endTime && ws.endTime.trim() !== '' && ws.endTime !== '--:--';
+
         return `
-        <div class="session-card" style="display: flex; gap: 0.5rem; align-items: center; background: rgba(255, 255, 255, 0.015); border: 1px solid ${hasValidPersonnel ? 'rgba(255, 255, 255, 0.05)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 6px; padding: 0.35rem 0.5rem; min-height: 38px; box-sizing: border-box; width: 100%; min-width: 850px;">
+        <div class="session-card" style="display: flex; gap: 0.5rem; align-items: center; background: rgba(255, 255, 255, 0.015); border: 1px solid ${hasValidPersonnel && hasStartTime && hasEndTime ? 'rgba(255, 255, 255, 0.05)' : 'rgba(239, 68, 68, 0.35)'}; border-radius: 6px; padding: 0.35rem 0.5rem; min-height: 38px; box-sizing: border-box; width: 100%; min-width: 850px;">
             <!-- Personel (Kilitli/Otomatik) -->
-            <div style="flex: 1.5; min-width: 130px; font-size: 0.75rem; color: #fff; background: ${hasValidPersonnel ? 'rgba(0,0,0,0.2)' : 'rgba(239,68,68,0.06)'}; border: 1px solid ${hasValidPersonnel ? 'rgba(255,255,255,0.08)' : 'rgba(239,68,68,0.4)'}; border-radius: 4px; min-height: 28px; height: auto; display: flex; align-items: center; padding: 4px 6px; box-sizing: border-box; word-break: break-word; line-height: 1.25;" title="${hasValidPersonnel ? displayNames : 'Lütfen önce personel ismi ekleyiniz'}">
+            <div style="flex: 1.5; min-width: 130px; font-size: 0.75rem; color: #fff; background: ${hasValidPersonnel ? 'rgba(0,0,0,0.2)' : 'rgba(239,68,68,0.08)'}; border: 1px solid ${hasValidPersonnel ? 'rgba(255,255,255,0.08)' : 'rgba(239,68,68,0.5)'}; border-radius: 4px; min-height: 28px; height: auto; display: flex; align-items: center; padding: 4px 6px; box-sizing: border-box; word-break: break-word; line-height: 1.25;" title="${hasValidPersonnel ? displayNames : 'Lütfen yukarıdaki alandan personel ekleyiniz'}">
                 ${displayNames}
             </div>
 
@@ -523,15 +539,17 @@ export const FaultFormUI = {
 
             <!-- Başlangıç Saati -->
             <div style="flex: 0.8; min-width: 85px;">
-                <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; text-align: center; padding: 0 4px !important; font-size: 0.7rem; border-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); color: #fff;" 
+                <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; text-align: center; padding: 0 4px !important; font-size: 0.7rem; border-color: ${hasStartTime ? 'rgba(255,255,255,0.08)' : 'rgba(255, 171, 0, 0.6)'}; background: ${hasStartTime ? 'rgba(0,0,0,0.2)' : 'rgba(255, 171, 0, 0.05)'}; color: #fff;" 
                     value="${ws.startTime || ''}" 
+                    title="${hasStartTime ? 'Başlangıç Saati' : '⚠️ Başlangıç saati girilmesi zorunludur'}"
                     onchange="window.updateSessionField('${ws.id}', 'startTime', this.value)" ${disabledAttr}>
             </div>
 
             <!-- Bitiş Saati -->
             <div style="flex: 0.8; min-width: 85px;">
-                <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; text-align: center; padding: 0 4px !important; font-size: 0.7rem; border-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); color: #fff;" 
+                <input type="time" class="cyber-input" style="width: 100%; height: 28px !important; min-height: 28px !important; text-align: center; padding: 0 4px !important; font-size: 0.7rem; border-color: ${hasEndTime ? 'rgba(255,255,255,0.08)' : 'rgba(255, 171, 0, 0.6)'}; background: ${hasEndTime ? 'rgba(0,0,0,0.2)' : 'rgba(255, 171, 0, 0.05)'}; color: #fff;" 
                     value="${ws.endTime || ''}" 
+                    title="${hasEndTime ? 'Bitiş Saati' : '⚠️ Bitiş saati girilmesi zorunludur'}"
                     onchange="window.updateSessionField('${ws.id}', 'endTime', this.value)" ${disabledAttr}>
             </div>
 

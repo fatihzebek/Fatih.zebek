@@ -140,19 +140,7 @@ function showUpdateOverlay() {
   document.body.appendChild(overlay);
 }
 
-if ('serviceWorker' in navigator) {
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return;
-    refreshing = true;
-    console.log("New service worker activated. Reloading page to apply updates...");
-    showUpdateOverlay();
-    setTimeout(() => {
-      window.location.reload();
-    }, 2500);
-  });
-}
-
+// Service Worker background update check (without loop reload on PWA launch)
 async function checkSystemVersion() {
   try {
     const res = await fetch(`/version.json?t=${Date.now()}`);
@@ -162,24 +150,15 @@ async function checkSystemVersion() {
     const localVersion = localStorage.getItem('app_version');
     
     if (localVersion && localVersion !== serverVersion) {
-      console.log(`[VersionCheck] New version detected! Local: ${localVersion}, Server: ${serverVersion}. Purging caches...`);
+      console.log(`[VersionCheck] New version detected! Local: ${localVersion}, Server: ${serverVersion}. Updating...`);
       localStorage.setItem('app_version', serverVersion);
       
-      // Force Service Worker unregistration and clear cache to fetch new assets immediately
+      // Update service worker registration cleanly in background
       if ('serviceWorker' in navigator) {
         try {
           const registrations = await navigator.serviceWorker.getRegistrations();
           for (let registration of registrations) {
-            await registration.unregister();
-          }
-        } catch(e) {}
-      }
-      
-      if ('caches' in window) {
-        try {
-          const keys = await caches.keys();
-          for (let key of keys) {
-            await caches.delete(key);
+            registration.update();
           }
         } catch(e) {}
       }
@@ -188,7 +167,7 @@ async function checkSystemVersion() {
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-    } else if (!localVersion) {
+    } else if (!localVersion && serverVersion) {
       localStorage.setItem('app_version', serverVersion);
     }
   } catch (e) {
@@ -1523,6 +1502,15 @@ const render = async (options: { skipShell?: boolean } = {}) => {
     (window as any).currentUser = state.userProfile;
     (window as any).currentUserTeam = state.userProfile.team || formatTeamName(state.userProfile.displayName || user.email || '');
     
+    // Direct URL routing from Push Notifications or Deep Links
+    const searchParams = new URLSearchParams(window.location.search);
+    const currentPath = window.location.pathname;
+    if (currentPath.includes('/turbines') || searchParams.has('site') || searchParams.get('page') === 'turbines') {
+      state.currentPage = 'turbines';
+    } else if (currentPath.includes('/notifications') || searchParams.get('page') === 'notifications') {
+      state.currentPage = 'notification-center';
+    }
+
     // Redirect Material Manager to Material Dashboard instead of Dashboard
     const isMaterialManager = state.userProfile.role === 'MALZEME_YONETIMI' || state.userProfile.email?.toLowerCase() === 'hursit.akter@demirerholding.com';
     if (isMaterialManager && state.currentPage === 'dashboard') {

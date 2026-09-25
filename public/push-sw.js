@@ -35,12 +35,18 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 1. If an existing window/PWA is already open, focus it and navigate to the target turbine URL
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
-        if (client.url === urlToOpen && 'focus' in client) {
-          return client.focus();
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client && client.url !== urlToOpen) {
+            return client.navigate(urlToOpen);
+          }
+          return;
         }
       }
+      // 2. Otherwise open a new window with the direct deep link
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }

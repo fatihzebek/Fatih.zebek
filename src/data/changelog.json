@@ -1,9 +1,23 @@
 [
   {
+    "version": "v1.8.0",
+    "date": "25 Eylül 2026",
+    "title": "Resmi Enercon T-Zamanı Kod Sınıflandırması, 5 Dk Kalıcı Arıza Otomasyonu & SCADA Havuz İş Emri",
+    "badge": "En Son Sürüm",
+    "changes": [
+      "⚡ 3.103 Resmi Enercon Durum Kodu & T-Zamanı Entegrasyonu: CS40 (E-40), CS48 (E-44, E-48) ve CS82 (E-70, E-82, E-92) resmi durum sözlükleri birleştirilerek IEC 61400-26 standartlarına uygun sınıflandırma sağlandı.",
+      "🌬️ Akıllı Rüzgar Yetersizliği & Bekleme Durumu (T1): 2-1 Lack of wind ve tüm 2:x bekleme durumları arıza kapsamından çıkarıldı; açık mavi (#38bdf8) renk, 'BEKLEMEDE' rozeti ve santral toplamlarında aktif/emre amade kapasiteye dahil edildi.",
+      "⏱️ 5 Dakika Kalıcı Arıza Otomasyonu: Anlık dalgalanmalar ve dur-kalklar filtrelenerek, kesintisiz 5 dakika süren gerçek arızalarda sistem tarafından otomatik olarak 'Türbin Arıza Formu' iş emri açılması sağlandı.",
+      "🤝 Bölgesel Havuz & Eksiksiz Raporlama: 5. dakikada açılan iş emri doğrudan HAVUZ ('Açık Görev') sekmesine düşer; saha teknisyenleri görevi üstlenerek müdahale ve raporlama sürecini unutulmadan tamamlayabilir.",
+      "🔔 SCADA Havuz Web Push Bildirimi: 5 dakika dolup görev açıldığında ilgili sahanın tüm personeline eşzamanlı olarak '📋 SCADA Görevi Havuzda' Web Push bildirimi ve Bildirim Merkezi duyurusu iletilir.",
+      "🛡️ Mükerrer Görev Kalkanı: Aynı türbinde zaten henüz tamamlanmamış açık/işlemde bir iş emri varsa sistem ikinci bir mükerrer görev açmaz.",
+      "📱 Mobil SCADA Kapasite Çubuğu İyileştirmesi: Mobil cihazlarda santral üst özetindeki SCADA güç ve kapasite çubuğu görünürlüğü netleştirildi."
+    ]
+  },
+  {
     "version": "v1.7.0",
     "date": "7 Eylül 2026",
     "title": "Komponent Hızlı Sayfalama & Stok Sayım Modalı, SCADA Reset Kararlılığı & Arayüz Sadeleştirmesi",
-    "badge": "En Son Sürüm",
     "changes": [
       "🗄️ Komponent Yönetimi Hızlı Sayfalama (30 Kalem / Sayfa): 327 kalemlik elektronik komponent listesi 30'ar satırlık sayfalara bölünerek açılış gecikmesi tamamen giderildi, sayfa geçişleri ve filtrelemeler anlık hale getirildi.",
       "📋 Çekmece Hızlı Filtresi & İnteraktif Komponent Stok Sayım Modalı: Doğal sayısal sıralamalı (1, 2, 3.. 10) çekmece filtreleme ve doğrudan çekmece bazında sayım yapıp stokları güncelleyen interaktif sayım modalı eklendi.",

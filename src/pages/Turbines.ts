@@ -29,6 +29,20 @@ const SITE_ID_TO_PLANT_ID: Record<string, string> = {
   '3892': 'cataltepe',
 };
 
+// Saha ID → Toplam Kurulu Güç (MW) tablosu (Ses/Güç Barı ve Kapasite Oranı için)
+const SITE_INSTALLED_CAPACITY_MW: Record<string, number> = {
+  '0752': 10.7, // Alize Germiyan (7 Türbin)
+  '2678': 56.2, // Mare Manastır (55 Türbin)
+  '2688': 55.7, // Anemon İntepe (49 Türbin)
+  '2990': 57.2, // Doğal Sayalar (48 Türbin)
+  '3213': 29.4, // Dares Datça (36 Türbin)
+  '3243': 20.8, // Alize Çamseki (11 Türbin)
+  '3245': 29.9, // Alize Keltepe (27 Türbin)
+  '3439': 30.0, // Alize Sarıkaya (15 Türbin)
+  '3793': 50.0, // Alize Kuyucak (23 Türbin)
+  '3892': 27.8, // Alize Çataltepe (13 Türbin)
+};
+
 const cleanSablonName = (sablonName: string) => {
   return (sablonName || '')
     .replace(/\s*[Tt]alimatı\s*/g, '')
@@ -93,11 +107,9 @@ export const TurbinesPage = () => {
         const plantTurbines: Record<string, any> = {};
         turbinesArr.forEach((td: any) => {
           const serial = td.serial_no || '';
+          const classified = statusService.classifyStatus(td.enercon_status || td.status_text, td.status_code);
           const stParts = (td.enercon_status || '').split(/[,:]/).map((s: string) => s.trim()).filter(Boolean);
-          const mainCode = stParts.length >= 2 ? `${stParts[0]}-${stParts[1]}` : (td.enercon_status || '');
-          const isNorm = ['0-0', '0:0', '0-1', '0:1', '0-2', '0:2', '0-4', '0:4', '0-5', '0:5', '0', '1', 'OK'].includes(mainCode) || stParts[0] === '0';
-          const isMaintCode = ['8-0', '8:0', '0-8', '0:8', '8-1', '8:1', '8-2', '8:2', '8-3', '8:3', '8-4', '8:4', '8-5', '8:5', '8-6', '8:6', '8-7', '8:7', '8-8', '8:8'].includes(mainCode) || stParts[0] === '8' || (td.status_text || '').toLowerCase().includes('maintenance');
-          const isFaultCode = !isNorm && !isMaintCode && (td.status_code > 0 || (stParts.length >= 2 && stParts[0] !== '0' && stParts[0] !== ''));
+          const mainCode = classified.code || (stParts.length >= 2 ? `${stParts[0]}-${stParts[1]}` : (td.enercon_status || ''));
 
           plantTurbines[serial] = {
             serial,
@@ -105,8 +117,11 @@ export const TurbinesPage = () => {
             enerconStatus: mainCode,
             statusCode: td.status_code,
             statusText: td.status_text,
-            isFault: isFaultCode,
-            isMaintenance: isMaintCode,
+            classified,
+            isFault: classified.isFault,
+            isMaintenance: classified.isMaintenance,
+            isLackOfWind: classified.isLackOfWind,
+            isGridWait: classified.isGridWait,
             power: td.active_power_kw,
             windSpeed: td.wind_speed_ms,
           };
@@ -128,6 +143,17 @@ export const TurbinesPage = () => {
 
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
+
+  // Deep Link: Push bildiriminden veya URL'den gelindiğinde ilgili santrali otomatik seç
+  setTimeout(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const siteId = urlParams.get('site');
+    if (siteId && (window as any).selectSite) {
+      (window as any).selectSite(siteId);
+    } else if ((window as any).initSitesMap) {
+      (window as any).initSitesMap();
+    }
+  }, 60);
 
   return `
     <div class="fade-in-up content-area">
@@ -160,8 +186,8 @@ export const TurbinesPage = () => {
 
       </div>
     </div>
-  `
-}
+  `;
+};
 
 // Global exposure for interactions
 (window as any).selectSite = async (siteId: string) => {
@@ -225,31 +251,32 @@ export const TurbinesPage = () => {
         const newScadaData: any = {};
         turbinesArr.forEach((td: any) => {
           const serial = td.serial_no || '';
-            const stParts = (td.enercon_status || '').split(/[,:]/).map((s: string) => s.trim()).filter(Boolean);
-            const mainCode = stParts.length >= 2 ? `${stParts[0]}-${stParts[1]}` : (td.enercon_status || '');
-            const isNorm = ['0-0', '0:0', '0-1', '0:1', '0-2', '0:2', '0-4', '0:4', '0-5', '0:5', '0', '1', 'OK'].includes(mainCode) || stParts[0] === '0';
-            const isMaintCode = ['8-0', '8:0', '0-8', '0:8', '8-1', '8:1', '8-2', '8:2', '8-3', '8:3', '8-4', '8:4', '8-5', '8:5', '8-6', '8:6', '8-7', '8:7', '8-8', '8:8'].includes(mainCode) || stParts[0] === '8' || (td.status_text || '').toLowerCase().includes('maintenance');
-            const isFaultCode = !isNorm && !isMaintCode && (td.status_code > 0 || (stParts.length >= 2 && stParts[0] !== '0' && stParts[0] !== ''));
+          const classified = statusService.classifyStatus(td.enercon_status || td.status_text, td.status_code);
+          const stParts = (td.enercon_status || '').split(/[,:]/).map((s: string) => s.trim()).filter(Boolean);
+          const mainCode = classified.code || (stParts.length >= 2 ? `${stParts[0]}-${stParts[1]}` : (td.enercon_status || ''));
 
-            newScadaData[serial] = {
-              power: td.active_power_kw,
-              windSpeed: td.wind_speed_ms,
-              rotorSpeed: td.rotor_speed_rpm,
-              reactivePower: td.reactive_power_kvar,
-              cosPhi: td.cos_phi,
-              capacityKw: td.capacity_kw,
-              operatingHours: td.operating_hours,
-              energyCounterKwh: td.energy_counter_kwh,
-              statusCode: td.status_code,
-              statusText: td.status_text,
-              enerconStatus: mainCode,
-              dataQualityOk: td.data_quality_ok,
-              scadaActive: td.scada_active,
-              dataAgeS: td.data_age_s,
-              status: mainCode || 'OK',
-              isFault: isFaultCode,
-              isMaintenance: isMaintCode,
-            };
+          newScadaData[serial] = {
+            power: td.active_power_kw,
+            windSpeed: td.wind_speed_ms,
+            rotorSpeed: td.rotor_speed_rpm,
+            reactivePower: td.reactive_power_kvar,
+            cosPhi: td.cos_phi,
+            capacityKw: td.capacity_kw,
+            operatingHours: td.operating_hours,
+            energyCounterKwh: td.energy_counter_kwh,
+            statusCode: td.status_code,
+            statusText: td.status_text,
+            enerconStatus: mainCode,
+            dataQualityOk: td.data_quality_ok,
+            scadaActive: td.scada_active,
+            dataAgeS: td.data_age_s,
+            status: mainCode || 'OK',
+            classified,
+            isFault: classified.isFault,
+            isMaintenance: classified.isMaintenance,
+            isLackOfWind: classified.isLackOfWind,
+            isGridWait: classified.isGridWait,
+          };
 
           const prevStatus = (window as any).scadaStatusCache?.[serial];
           if (newScadaData[serial].status !== prevStatus) {
@@ -271,9 +298,18 @@ export const TurbinesPage = () => {
         if (summaryBar && plantTotals) {
           summaryBar.style.display = 'flex';
           const totalPowerEl = document.getElementById('scada-total-power');
+          const powerCapEl = document.getElementById('scada-power-cap');
+          const powerVuBar = document.getElementById('scada-power-vu-bar');
+          const powerBlock = document.getElementById('scada-power-block');
+          const powerIcon = document.getElementById('scada-power-icon');
           const avgWindEl = document.getElementById('scada-avg-wind');
           const activeTurbinesEl = document.getElementById('scada-active-turbines');
           const totalTurbinesEl = document.getElementById('scada-total-turbines');
+
+          const installedCapMw = SITE_INSTALLED_CAPACITY_MW[siteId] || 50.0;
+          const currentPowerMw = plantTotals.total_power_mw !== undefined ? plantTotals.total_power_mw : 0;
+          const powerPct = installedCapMw > 0 ? Math.min(100, Math.max(0, (currentPowerMw / installedCapMw) * 100)) : 0;
+
           // Programda servis verilen türbinleri baz al (RTU vb. hariç)
           const siteTurbines = dataService.getTurbinesBySite(siteId).filter(t => t.label !== 'RTU' && t.label !== 'FCU' && t.label !== 'SAI');
           const definedCount = siteTurbines.length > 0 ? siteTurbines.length : (plantTotals.total_turbines || 0);
@@ -281,7 +317,7 @@ export const TurbinesPage = () => {
           let activeCount = 0;
           siteTurbines.forEach(t => {
             const tScada = newScadaData[t.id];
-            if (tScada && tScada.statusCode <= 0 && !tScada.isFault) {
+            if (tScada && !tScada.isFault && !tScada.isMaintenance) {
               activeCount++;
             } else if (!tScada) {
               activeCount++;
@@ -292,6 +328,39 @@ export const TurbinesPage = () => {
           }
 
           if (totalPowerEl) totalPowerEl.textContent = plantTotals.total_power_mw !== undefined ? plantTotals.total_power_mw.toFixed(1) : '--';
+          if (powerCapEl) powerCapEl.textContent = `/ ${installedCapMw.toFixed(1)} MW`;
+
+          if (powerVuBar) {
+            // Canlı üretim varsa en az %10 taban doluluk vererek mobilde ve masaüstünde neon ışığını çok net göster
+            const displayWidth = currentPowerMw > 0 ? Math.max(powerPct, 10) : 0;
+            powerVuBar.style.width = `${displayWidth.toFixed(1)}%`;
+
+            // Kapasite seviyesine göre neon ışık ve ikon rengi
+            if (powerPct >= 85) {
+              powerVuBar.style.boxShadow = '0 0 12px rgba(255, 23, 68, 0.9), 0 0 20px rgba(255, 23, 68, 0.4)';
+              if (powerIcon) {
+                powerIcon.style.color = '#ff1744';
+                powerIcon.style.filter = 'drop-shadow(0 0 6px rgba(255,23,68,0.8))';
+              }
+            } else if (powerPct >= 65) {
+              powerVuBar.style.boxShadow = '0 0 10px rgba(255, 214, 0, 0.8), 0 0 18px rgba(255, 145, 0, 0.4)';
+              if (powerIcon) {
+                powerIcon.style.color = '#ffd600';
+                powerIcon.style.filter = 'drop-shadow(0 0 6px rgba(255,214,0,0.8))';
+              }
+            } else {
+              powerVuBar.style.boxShadow = '0 0 8px rgba(0, 230, 118, 0.7), 0 0 16px rgba(0, 230, 118, 0.3)';
+              if (powerIcon) {
+                powerIcon.style.color = '#00e676';
+                powerIcon.style.filter = 'drop-shadow(0 0 6px rgba(0,230,118,0.6))';
+              }
+            }
+          }
+
+          if (powerBlock) {
+            powerBlock.title = `Anlık Güç: ${currentPowerMw.toFixed(1)} MW / Kurulu Güç: ${installedCapMw.toFixed(1)} MW (%${powerPct.toFixed(1)} Kapasite)`;
+          }
+
           if (avgWindEl) avgWindEl.textContent = plantTotals.avg_wind_speed_ms !== undefined ? plantTotals.avg_wind_speed_ms.toString() : '--';
           if (activeTurbinesEl) activeTurbinesEl.textContent = activeCount.toString();
           if (totalTurbinesEl) totalTurbinesEl.textContent = definedCount.toString();
@@ -313,6 +382,8 @@ export const TurbinesPage = () => {
   (window as any).activeSiteIdForMap = siteId;
   (window as any).activeSiteNameForMap = site.name;
   (window as any).activeSiteViewMode = 'grid';
+
+  const siteCap = SITE_INSTALLED_CAPACITY_MW[siteId] || 50.0;
 
   container.innerHTML = `
     <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; max-width: 1600px; margin-left: auto; margin-right: auto; animation: fadeIn 0.4s ease-out;">
@@ -339,19 +410,34 @@ export const TurbinesPage = () => {
         </button>
       </div>
 
-      <!-- SCADA Canlı Santral Özeti (Çerçevesiz, Ortalanmış) -->
-      <div id="scada-plant-summary" style="display: none; align-items: center; justify-content: center; gap: 1.25rem; flex: 1; animation: fadeIn 0.4s ease-out;">
-        <div style="display: flex; align-items: center; gap: 6px;">
+      <!-- SCADA Canlı Santral Özeti (Çerçevesiz, Ortalanmış, Mobil Uyumlu) -->
+      <div id="scada-plant-summary" style="display: none; align-items: center; justify-content: center; gap: clamp(0.4rem, 1.5vw, 1.25rem); flex: 1; flex-wrap: wrap; animation: fadeIn 0.4s ease-out;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
           <span id="scada-live-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e67688; animation: pulse 2s infinite;"></span>
           <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; color: #00e676; font-weight: 700; letter-spacing: 0.5px;">CANLI</span>
         </div>
-        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15);"></div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <i class="fa-solid fa-bolt" style="color: var(--accent-cyan); font-size: 0.9rem;"></i>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: var(--accent-cyan); font-weight: 800;" id="scada-total-power">--</span>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">MW</span>
+        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); flex-shrink: 0;"></div>
+
+        <!-- Akıcı Neon Ses/Güç Kapasite Barı (VU Meter) -->
+        <div id="scada-power-block" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 125px; flex-shrink: 0; cursor: default;" title="Anlık Güç: -- MW / Kurulu Güç: ${siteCap.toFixed(1)} MW">
+          <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <i class="fa-solid fa-bolt" id="scada-power-icon" style="color: #00e676; font-size: 0.85rem; transition: color 0.4s, filter 0.4s; filter: drop-shadow(0 0 6px rgba(0,230,118,0.6));"></i>
+              <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #ffffff; font-weight: 800; line-height: 1; letter-spacing: 0.5px;" id="scada-total-power">--</span>
+              <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">MW</span>
+            </div>
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.72rem; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 0.3px;" id="scada-power-cap">/ ${siteCap.toFixed(1)} MW</span>
+          </div>
+
+          <!-- Akıcı Kesintisiz Neon Bar (Yeşil -> Sarı -> Kırmızı Peak) -->
+          <div style="position: relative; width: 100%; height: 7px; background: rgba(0, 0, 0, 0.6); border-radius: 999px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.12);">
+            <div id="scada-power-vu-bar" style="width: 0%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #00e676 0%, #76ff03 40%, #ffd600 70%, #ff9100 85%, #ff1744 100%); background-size: 100% 100%; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s ease; box-shadow: 0 0 8px rgba(0,230,118,0.7); position: relative;">
+              <div id="scada-power-vu-glow" style="position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: #ffffff; border-radius: 999px; box-shadow: 0 0 6px #ffffff, 0 0 10px #00e676;"></div>
+            </div>
+          </div>
         </div>
-        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15);"></div>
+
+        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); flex-shrink: 0;"></div>
         <div style="display: flex; align-items: center; gap: 6px;">
           <i class="fa-solid fa-wind" style="color: #b0bec5; font-size: 0.9rem;"></i>
           <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #e0e0e0; font-weight: 800;" id="scada-avg-wind">--</span>
@@ -474,63 +560,72 @@ export const TurbinesPage = () => {
         const scadaWind = scada && scada.windSpeed !== undefined ? scada.windSpeed : null;
         const scadaStatus = scada && scada.status ? scada.status : 'OK';
         
-        const normalScadaStates = ['OK', '0:0', '0:1', '0:2', '0:4', '0:5', '0', '1', 'Run', 'Turbine operational', 'Turbine in operation', 'Turbine starting'];
-        const maintenanceScadaStates = ['8:0', '0:8', '8:1', '8:2', '8:3', '8:4', '8:5', '8:6', '8:7', '8:8'];
-        
-        const isNormalState = normalScadaStates.includes(scadaStatus);
-        const isMaintenanceState = maintenanceScadaStates.includes(scadaStatus);
-        const isStartingState = ['0:1', '0:2', '0:4', 'Turbine starting', 'Turbine operational'].includes(scadaStatus);
-        
         const isScadaEnabled = ENABLE_SCADA_INTEGRATION;
-        const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
-        
-        // SCADA Bakım durumu tespiti (Enercon 8:x, 0:8, Maintenance)
-        const enerconRaw = scada ? (scada.enerconStatus || scada.status || '') : '';
-        const enerconParts = enerconRaw.split(/[,:]/);
-        const isEnerconMaintenance = !!(scada && (
-          maintenanceScadaStates.includes(scadaStatus) ||
-          (enerconParts.length >= 2 && (enerconParts[0] === '8' || (enerconParts[0] === '0' && enerconParts[1] === '8'))) ||
-          (scada.statusText || '').toLowerCase().includes('maintenance') ||
-          (scada.statusText || '').toLowerCase().includes('bakım') ||
-          scada.isMaintenance === true
-        ));
-        const isScadaMaintenance = isScadaEnabled && isEnerconMaintenance;
+        const scadaClassified = scada?.classified || (scada ? statusService.classifyStatus(scada.enerconStatus || scada.statusText || scadaStatus, scada.statusCode) : null);
+
+        const hasScadaFault = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isFault : scada.isFault === true);
+        const hasScadaMaintenance = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isMaintenance : scada.isMaintenance === true);
+        const isLackOfWind = isScadaEnabled && scada && scadaClassified?.isLackOfWind === true;
+        const isGridWait = isScadaEnabled && scada && scadaClassified?.isGridWait === true;
 
         // Kural: SCADA verisi olan sahalarda türbin sahada fiziksel olarak durmadığı / arızaya geçmediği / bakıma alınmadığı sürece ONLINE kalır.
         // Türbin sahada arızaya geçtiğinde veya bakıma alındığında ise atanmış açık görevin bilgisi gösterilir.
         // SCADA olmayan sahalarda sistemdeki açık görev baz alınır (fallback).
         const hasScadaData = isScadaEnabled && scada !== null;
         const isFaultActive = hasScadaData ? hasScadaFault : isFaulty;
-        const isMaintenanceActive = hasScadaData ? isScadaMaintenance : isMaintenance;
+        const isMaintenanceActive = hasScadaData ? hasScadaMaintenance : isMaintenance;
 
         let status = 'online';
+        let badgeText = 'ONLINE';
+        let color = 'var(--accent-cyan)';
+
         if (isFaultActive) {
           status = hasScadaData ? 'scada_fault' : 'fault';
+          badgeText = 'ARIZA';
+          color = '#e74c3c';
         } else if (isMaintenanceActive) {
           status = 'maintenance';
+          badgeText = 'BAKIM';
+          color = '#ccff00';
+        } else if (hasScadaData && isGridWait) {
+          status = 'grid_wait';
+          badgeText = 'ŞEBEKE';
+          color = '#f59e0b';
+        } else if (hasScadaData && isLackOfWind) {
+          status = 'standby';
+          badgeText = 'BEKLEMEDE';
+          color = '#38bdf8';
         }
 
-        const color = status === 'fault' || status === 'scada_fault' ? '#e74c3c' : (status === 'maintenance' ? '#ccff00' : 'var(--accent-cyan)');
-        
-        let displayStatusLabel = 'ONLINE';
+        let displayStatusLabel = badgeText;
         if (status === 'fault') {
           displayStatusLabel = `${(turbineFault as any).faultCode || (turbineFault as any).statuKodu || 'ARIZA BİLDİRİMİ'}`;
         } else if (status === 'maintenance') {
           if (turbineMaintenance) {
-            displayStatusLabel = cleanSablonName((turbineMaintenance as any).secilenSablon).toUpperCase();
+            displayStatusLabel = cleanSablonName((turbineMaintenance as any).secilenSablon).toUpperCase().replace(/enercon/gi, 'dh_servis');
           } else {
-            let statusText = scadaStatus;
-            if (scadaStatus === '8:0' || enerconRaw.startsWith('8,0')) statusText = 'BAKIM (Maintenance)';
-            else if (scadaStatus === '0:8' || enerconRaw.startsWith('0,8')) statusText = 'BAKIMDA ÇALIŞMA (Op. during maintenance)';
-            else {
-              statusText = scada?.statusText || `BAKIM (${scadaStatus})`;
+            const rawMaint = scada?.enerconStatus || scadaStatus;
+            const has80 = rawMaint.includes('8:0') || rawMaint.includes('8-0') || rawMaint.startsWith('8,0');
+            const has08 = rawMaint.includes('0:8') || rawMaint.includes('0-8') || rawMaint.startsWith('0,8');
+            
+            if (has80) {
+              displayStatusLabel = 'dh_servis 8:0';
+            } else if (has08) {
+              displayStatusLabel = 'dh_servis 0:8';
+            } else {
+              displayStatusLabel = (scada?.statusText || `dh_servis (${scadaStatus})`).replace(/enercon/gi, 'dh_servis');
             }
-            displayStatusLabel = statusText;
           }
         } else if (status === 'scada_fault') {
           const rawFault = scada?.enerconStatus || scada?.statusText || scadaStatus || '';
-          const faultInfo = statusService.resolveFaultInfo(rawFault);
-          displayStatusLabel = `<div style="line-height: 1.15;"><span style="font-weight: 800; font-size: 0.72rem; color: #ff5252;">${faultInfo.code}</span><div style="font-size: 0.6rem; color: #ff8a80; font-weight: 600; white-space: normal; line-height: 1.1; margin-top: 1px;">${faultInfo.description}</div></div>`;
+          const faultInfo = scadaClassified || statusService.classifyStatus(rawFault, scada?.statusCode);
+          const cleanDesc = (faultInfo.description || '').replace(/enercon\s*/gi, '').trim();
+          const hasValidDesc = cleanDesc && cleanDesc !== 'SCADA Arızası' && cleanDesc !== 'SCADA Arıza Bildirimi' && cleanDesc !== faultInfo.code;
+          displayStatusLabel = `<div style="line-height: 1.15;"><span style="font-weight: 800; font-size: 0.72rem; color: #ff5252;">${faultInfo.code}</span>${hasValidDesc ? `<div style="font-size: 0.6rem; color: #ff8a80; font-weight: 600; white-space: normal; line-height: 1.1; margin-top: 1px;">${cleanDesc}</div>` : ''}</div>`;
+        } else if (status === 'standby' || status === 'grid_wait') {
+          const codeStr = scadaClassified?.code || scadaStatus;
+          const descStr = scadaClassified?.description ? scadaClassified.description.replace(/enercon\s*/gi, '').trim() : '';
+          displayStatusLabel = `<div style="line-height: 1.15;"><span style="font-weight: 800; font-size: 0.72rem; color: ${color};">${codeStr}</span>${descStr ? `<div style="font-size: 0.6rem; color: ${color}; opacity: 0.9; font-weight: 600; white-space: normal; line-height: 1.1; margin-top: 1px;">${descStr}</div>` : ''}</div>`;
         }
 
         const isPaused = status !== 'online';
@@ -580,7 +675,7 @@ export const TurbinesPage = () => {
                data-site-id="${siteId}"
                data-site-name="${site.name.replace(/'/g, "\\'")}"
                style="border-color: ${color}44; padding: 0.65rem 0.75rem; min-height: 105px; cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden; display: flex; align-items: center; gap: 0.75rem;">
-            ${(status === 'fault' || status === 'scada_fault') ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #e74c3c; box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);"></div>` : (status === 'maintenance' ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ccff00; box-shadow: 0 0 10px rgba(204, 255, 0, 0.5);"></div>` : '')}
+            ${(status === 'fault' || status === 'scada_fault') ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #e74c3c; box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);"></div>` : (status === 'maintenance' ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ccff00; box-shadow: 0 0 10px rgba(204, 255, 0, 0.5);"></div>` : (status === 'grid_wait' ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);"></div>` : (status === 'standby' ? `<div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);"></div>` : '')))}
             
             <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 68px;">
               <div style="pointer-events: none; display: flex; justify-content: center; align-items: center; margin-bottom: -6px;">
@@ -608,7 +703,7 @@ export const TurbinesPage = () => {
             <div style="flex: 1; min-width: 0; pointer-events: none;">
               <div style="font-family: 'Rajdhani', sans-serif; font-size: 1rem; color: #fff; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px;">
                 <span>${labelText}</span>
-                <span style="font-size: 0.65rem; color: ${color}; font-weight: 800; opacity: 0.8;">${(status === 'scada_fault' || status === 'fault') ? 'ARIZA' : (status === 'maintenance' ? 'BAKIM' : status.toUpperCase())}</span>
+                <span style="font-size: 0.65rem; color: ${color}; font-weight: 800; opacity: 0.85;">${badgeText}</span>
               </div>
               <div style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">
                 ${t.id}
@@ -664,10 +759,31 @@ export const TurbinesPage = () => {
         (window as any).renderSiteTurbinesMap();
       }
 
-      // Auto-open from QR Scanner
+      // Auto-open from Push Notification Deep Link or QR Scanner
       setTimeout(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetTurbine = urlParams.get('turbine');
         const autoOpenId = localStorage.getItem('autoOpenTurbineId');
-        if (autoOpenId) {
+
+        if (targetTurbine) {
+          const normTarget = targetTurbine.replace(/^T-?0?/, 'T').toUpperCase();
+          const allCards = Array.from(document.querySelectorAll('.turbine-card')) as HTMLElement[];
+          const match = allCards.find(card => {
+            const lbl = (card.dataset.label || '').replace(/^T-?0?/, 'T').toUpperCase();
+            const id = (card.dataset.id || '').toUpperCase();
+            return lbl === normTarget || id === normTarget || (card.dataset.label || '').toUpperCase() === targetTurbine.toUpperCase();
+          });
+
+          if (match) {
+            match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            match.style.outline = '3px solid #f59e0b';
+            match.style.boxShadow = '0 0 25px rgba(245, 158, 11, 0.6)';
+            const { id, label, siteId: sid, siteName: sname } = match.dataset;
+            if (id && label && sid && sname) {
+              (window as any).showTurbineDetails(id, label, sid, sname);
+            }
+          }
+        } else if (autoOpenId) {
           const tNode = document.querySelector(`.turbine-card[data-id="${autoOpenId}"]`) as HTMLElement;
           if (tNode) {
             const { id, label, siteId: sid, siteName: sname } = tNode.dataset;
@@ -677,7 +793,7 @@ export const TurbinesPage = () => {
           }
           localStorage.removeItem('autoOpenTurbineId');
         }
-      }, 100);
+      }, 150);
 
     });
   } catch (error) {
@@ -1021,19 +1137,21 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
       let scadaClaimHtml = '';
       if (hasScadaFault && !hasActiveTask) {
         const rawFault = scadaInfo.enerconStatus || scadaInfo.statusText || scadaInfo.status || '';
-        const faultInfo = statusService.resolveFaultInfo(rawFault);
+        const faultInfo = scadaInfo.classified || statusService.classifyStatus(rawFault, scadaInfo.statusCode);
+        const codeText = faultInfo.code || rawFault;
+        const descText = (faultInfo.description || '').replace(/enercon\s*/gi, '').trim() || 'Arıza detayı bulunamadı';
         scadaClaimHtml = `
           <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 12px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
             <div style="display: inline-flex; align-items: center; gap: 6px; color: #ff5252; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem;">
               <i class="fa-solid fa-triangle-exclamation"></i> AKTİF SCADA ARIZASI BİLDİRİLDİ
             </div>
             <div style="font-size: 1.4rem; font-weight: 900; color: #ff5252; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; margin-bottom: 2px;">
-              ${faultInfo.code}
+              ${codeText}
             </div>
             <div style="font-size: 0.85rem; color: #ff8a80; font-weight: 600; margin-bottom: 1rem; line-height: 1.3;">
-              ${faultInfo.description}
+              ${descText}
             </div>
-            <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${faultInfo.code.replace(/'/g, "\\'")}', '${faultInfo.description.replace(/'/g, "\\'")}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.45rem 1.1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);">
+            <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${codeText.replace(/'/g, "\\'")}', '${descText.replace(/'/g, "\\'")}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.45rem 1.1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);">
               <i class="fa-solid fa-hand-holding-hand"></i> GÖREVİ ÜSTLEN & MÜDAHALE ET
             </button>
           </div>
@@ -1338,19 +1456,21 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
           let scadaClaimHtml = '';
           if (hasScadaFault && !hasActiveTask) {
             const rawFault = scadaInfo.enerconStatus || scadaInfo.statusText || scadaInfo.status || '';
-            const faultInfo = statusService.resolveFaultInfo(rawFault);
+            const faultInfo = scadaInfo.classified || statusService.classifyStatus(rawFault, scadaInfo.statusCode);
+            const codeText = faultInfo.code || rawFault;
+            const descText = (faultInfo.description || '').replace(/enercon\s*/gi, '').trim() || 'Arıza detayı bulunamadı';
             scadaClaimHtml = `
               <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 12px; padding: 1.25rem; text-align: center; margin-bottom: 1.25rem;">
                 <div style="display: inline-flex; align-items: center; gap: 6px; color: #ff5252; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.4rem;">
                   <i class="fa-solid fa-triangle-exclamation"></i> AKTİF SCADA ARIZASI BİLDİRİLDİ
                 </div>
                 <div style="font-size: 1.4rem; font-weight: 900; color: #ff5252; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; margin-bottom: 2px;">
-                  ${faultInfo.code}
+                  ${codeText}
                 </div>
                 <div style="font-size: 0.85rem; color: #ff8a80; font-weight: 600; margin-bottom: 1rem; line-height: 1.3;">
-                  ${faultInfo.description}
+                  ${descText}
                 </div>
-                <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${faultInfo.code.replace(/'/g, "\\'")}', '${faultInfo.description.replace(/'/g, "\\'")}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.45rem 1.1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);">
+                <button onclick="window.claimScadaFault('${turbineId}', '${turbineLabel}', '${siteId}', '${siteName.replace(/'/g, "\\'")}', '${codeText.replace(/'/g, "\\'")}', '${descText.replace(/'/g, "\\'")}')" class="cyber-button" style="background: var(--accent-orange); color: black; font-weight: 800; border: none; border-radius: 6px; padding: 0.45rem 1.1rem; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.25);">
                   <i class="fa-solid fa-hand-holding-hand"></i> GÖREVİ ÜSTLEN & MÜDAHALE ET
                 </button>
               </div>
@@ -1608,6 +1728,25 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
         (window as any).showToast('GÖREV ÜSTLENİLDİ', `SCADA arıza görevi ${teamName} adına başarıyla başlatıldı.`, 'success');
       } else {
         alert(`SCADA arıza görevi ${teamName} adına başarıyla başlatıldı.`);
+      }
+
+      // Ekip arkadaşlarına ve ilgili ekibe "Görev Üstlenildi" Web Push ve uygulama içi bildirimi ilet
+      try {
+        const claimerName = currentUser?.displayName || (window as any).currentUser?.displayName || (window as any).appState?.userProfile?.displayName || userEmail;
+        const claimTitle = `🤝 Görev Üstlenildi: ${siteName} - ${tNo}`;
+        const claimMessage = `${claimerName} (${teamName}), ${tNo} türbinindeki "${faultTitle}" arızasına müdahaleyi üstlendi ve görevi başlattı.`;
+
+        notificationService.createAnnouncement({
+          title: claimTitle,
+          message: claimMessage,
+          category: 'task',
+          targetAudience: 'TEAM',
+          targetValue: teamName,
+          createdBy: userEmail,
+          createdByName: claimerName
+        }).catch(err => console.warn('[claimScadaFault] Bildirim gönderim uyarısı:', err));
+      } catch (notifErr) {
+        console.warn('[claimScadaFault] Bildirim hatası:', notifErr);
       }
 
       // Modaldaki görünümü anında güncelle
@@ -2323,15 +2462,9 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
             }
           }
           const isScadaEnabled = ENABLE_SCADA_INTEGRATION;
-          const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
-          const scadaRaw = scada ? (scada.enerconStatus || scada.status || '') : '';
-          const isScadaMaint = isScadaEnabled && scada && (
-            ['8:0', '0:8', '8:1', '8:2', '8:3', '8:4', '8:5', '8:6', '8:7', '8:8'].includes(scada.status) ||
-            scadaRaw.startsWith('8,') || scadaRaw.startsWith('0,8') ||
-            (scada.statusText || '').toLowerCase().includes('maintenance') ||
-            (scada.statusText || '').toLowerCase().includes('bakım') ||
-            scada.isMaintenance === true
-          );
+          const scadaClassified = scada?.classified || (scada ? statusService.classifyStatus(scada.enerconStatus || scada.statusText || scada.status, scada.statusCode) : null);
+          const hasScadaFault = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isFault : scada.isFault === true);
+          const isScadaMaint = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isMaintenance : scada.isMaintenance === true);
 
           const hasScada = isScadaEnabled && scada !== null;
           if (hasScada ? hasScadaFault : isFaulty) {
@@ -2520,15 +2653,9 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
     }
     const scadaStatus = scada && scada.status ? scada.status : 'OK';
     const isScadaEnabled = ENABLE_SCADA_INTEGRATION;
-    const hasScadaFault = isScadaEnabled && scada && scada.isFault === true;
-    const scadaRawMarker = scada ? (scada.enerconStatus || scada.status || '') : '';
-    const isScadaMaintenance = isScadaEnabled && scada && (
-      ['8:0', '0:8', '8:1', '8:2', '8:3', '8:4', '8:5', '8:6', '8:7', '8:8'].includes(scadaStatus) ||
-      scadaRawMarker.startsWith('8,') || scadaRawMarker.startsWith('0,8') ||
-      (scada.statusText || '').toLowerCase().includes('maintenance') ||
-      (scada.statusText || '').toLowerCase().includes('bakım') ||
-      scada.isMaintenance === true
-    );
+    const scadaClassified = scada?.classified || (scada ? statusService.classifyStatus(scada.enerconStatus || scada.statusText || scadaStatus, scada.statusCode) : null);
+    const hasScadaFault = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isFault : scada.isFault === true);
+    const isScadaMaintenance = isScadaEnabled && scada && (scadaClassified ? scadaClassified.isMaintenance : scada.isMaintenance === true);
 
     const hasScada = isScadaEnabled && scada !== null;
     let status = 'online';
@@ -2536,9 +2663,13 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
       status = hasScada ? 'scada_fault' : 'fault';
     } else if (hasScada ? isScadaMaintenance : isMaint) {
       status = 'maintenance';
+    } else if (hasScada && scadaClassified?.isGridWait) {
+      status = 'grid_wait';
+    } else if (hasScada && scadaClassified?.isLackOfWind) {
+      status = 'standby';
     }
 
-    const markerColor = status === 'fault' || status === 'scada_fault' ? '#ff4d4d' : (status === 'maintenance' ? '#ccff00' : '#00f2ff');
+    const markerColor = (status === 'fault' || status === 'scada_fault') ? '#ff4d4d' : (status === 'maintenance' ? '#ccff00' : (status === 'grid_wait' ? '#f59e0b' : (status === 'standby' ? '#38bdf8' : '#00f2ff')));
 
     const markerIcon = L.divIcon({
       className: 'custom-leaflet-marker-with-label',
@@ -2560,8 +2691,12 @@ const showSecurityModal = (turbineLabel: string, onConfirm: (password: string) =
     } else if (isMaint) {
       displayStatusLabel = cleanSablonName((turbineMaint as any).secilenSablon).toUpperCase();
     } else if (status === 'scada_fault') {
-      let statusText = scada.statusText || scadaStatus;
-      displayStatusLabel = statusText;
+      const faultDesc = scadaClassified?.description || scada?.statusText || scadaStatus;
+      displayStatusLabel = `ARIZA: ${scadaClassified?.code || scadaStatus} - ${faultDesc}`;
+    } else if (status === 'standby') {
+      displayStatusLabel = `BEKLEMEDE: ${scadaClassified?.code || scadaStatus} - ${scadaClassified?.description || 'Rüzgar Yetersiz'}`;
+    } else if (status === 'grid_wait') {
+      displayStatusLabel = `ŞEBEKE: ${scadaClassified?.code || scadaStatus} - ${scadaClassified?.description || 'Şebeke Beklemesi'}`;
     }
 
     const popupContent = `

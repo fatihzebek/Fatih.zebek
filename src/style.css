@@ -3461,10 +3461,31 @@ body.light-mode .btn-cyber-mini.active {
    ------------------------------------------------------------------ */
 @media (max-width: 768px) {
 
-  /* === 9. TOPBAR KOMPAKTLAŞTIRMA === */
+  /* === 9. TOPBAR KOMPAKTLAŞTIRMA & GÜVENLİ ALAN (IOS NOTCH / DYNAMIC ISLAND KORUMASI) === */
   .topbar {
-    padding: 0 0.75rem !important;
-    gap: 0.25rem !important;
+    padding-top: max(env(safe-area-inset-top), 24px) !important;
+    padding-left: max(env(safe-area-inset-left), 0.75rem) !important;
+    padding-right: max(env(safe-area-inset-right), 0.75rem) !important;
+    padding-bottom: 8px !important;
+    height: calc(52px + max(env(safe-area-inset-top), 24px)) !important;
+    gap: 0.5rem !important;
+    box-sizing: border-box !important;
+    z-index: 1000 !important;
+  }
+
+  .sidebar {
+    padding-top: max(env(safe-area-inset-top), 24px) !important;
+    padding-bottom: max(env(safe-area-inset-bottom), 16px) !important;
+    box-sizing: border-box !important;
+  }
+
+  .menu-toggle {
+    display: flex !important;
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 1.15rem !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
   }
 
   /* "YENİLİKLER" yazısını gizle, sadece ikon kalsın */

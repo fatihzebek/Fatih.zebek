@@ -308,7 +308,95 @@ class NotificationService {
       return true;
     }
 
-    // 3. Site-specific filtering
+    // Helper: extract team number from any text (e.g. "Team 03", "tm03", "team3")
+    const extractTeamNum = (val?: string): number | null => {
+      if (!val) return null;
+      const m = String(val).toLowerCase().match(/(?:team|ekip|tm)[\s_-]*0*(\d+)/i);
+      return m ? parseInt(m[1], 10) : null;
+    };
+
+    // 3. Ekip bazlı bildirim (TEAM)
+    if (a.targetAudience === 'TEAM') {
+      const targetTeamNum = extractTeamNum(a.targetValue);
+      const userTeamNum = extractTeamNum(
+        (window as any).currentUserTeam ||
+        currentUser.team ||
+        currentUser.displayName ||
+        currentUser.name ||
+        email
+      );
+      return targetTeamNum !== null && userTeamNum !== null && targetTeamNum === userTeamNum;
+    }
+
+    // 4. Bölge bazlı bildirim (REGION)
+    if (a.targetAudience === 'REGION') {
+      const targetRegionLower = (a.targetValue || '').toLowerCase();
+      const regionSitesMap: Record<string, string[]> = {
+        'çanakkale': ['2688', '3439', '3243'],
+        'canakkale': ['2688', '3439', '3243'],
+        'intepe': ['2688', '3439', '3243'],
+        'balıkesir': ['2990', '3793'],
+        'balikesir': ['2990', '3793'],
+        'şarköy': ['2990', '3793'],
+        'sarkoy': ['2990', '3793'],
+        'sayalar': ['2990', '3793'],
+        'izmir': ['2678', '0752'],
+        'çeşme': ['2678', '0752'],
+        'cesme': ['2678', '0752'],
+        'germiyan': ['2678', '0752'],
+        'mare': ['2678', '0752'],
+        'muğla': ['3213', '3245', '3892'],
+        'mugla': ['3213', '3245', '3892'],
+        'datça': ['3213'],
+        'datca': ['3213']
+      };
+      let regionSites: string[] = [];
+      for (const [key, sites] of Object.entries(regionSitesMap)) {
+        if (targetRegionLower.includes(key)) {
+          regionSites = sites;
+          break;
+        }
+      }
+      const allowedSites = currentUser.allowedSites || [];
+      if (regionSites.some(s => allowedSites.includes(s) || allowedSites.includes('all'))) {
+        return true;
+      }
+      const userTeamNum = extractTeamNum(
+        (window as any).currentUserTeam ||
+        currentUser.team ||
+        currentUser.displayName ||
+        email
+      );
+      const teamToSites: Record<number, string[]> = {
+        1:  ['2678', '0752'],
+        2:  ['2678', '0752'],
+        12: ['2678', '0752'],
+        3:  ['2688', '3439', '3243'],
+        4:  ['2688', '3439', '3243'],
+        13: ['2688', '3439', '3243'],
+        15: ['2688', '3439', '3243'],
+        6:  ['2990', '3793'],
+        8:  ['2990', '3793'],
+        9:  ['2990', '3793'],
+        14: ['2990', '3793'],
+        5:  ['3213'],
+        10: ['3213'],
+        7:  ['3245', '3892'],
+        11: ['3245', '3892']
+      };
+      if (userTeamNum !== null && teamToSites[userTeamNum]) {
+        return teamToSites[userTeamNum].some(s => regionSites.includes(s));
+      }
+      return false;
+    }
+
+    // 5. Kişiye özel test bildirimi (SELF)
+    if (a.targetAudience === 'SELF') {
+      const targetUser = (a.targetValue || '').toLowerCase().trim();
+      return targetUser ? email === targetUser || email.includes(targetUser) : email.includes('fatih.zebek');
+    }
+
+    // 6. Site-specific filtering
     const siteId = a.targetValue;
     if (!siteId) return true;
 
@@ -319,7 +407,7 @@ class NotificationService {
     }
 
     // Check team mapping
-    const rawTeam = (currentUser.team || currentUser.displayName || email || '').replace(/\s+/g, '').toLowerCase();
+    const rawTeam = ((window as any).currentUserTeam || currentUser.team || currentUser.displayName || email || '').replace(/\s+/g, '').toLowerCase();
     const teamMapping: Record<string, string[]> = {
       'team01': ['2678', '0752'],
       'team1': ['2678', '0752'],
@@ -372,7 +460,8 @@ class NotificationService {
       createdBy: data.createdBy,
       createdByName: data.createdByName || '',
       createdAt: Date.now(),
-      active: true
+      active: true,
+      pushSent: true
     };
 
     const docRef = await addDoc(collection(db, 'announcements'), announcementData);
@@ -380,6 +469,34 @@ class NotificationService {
     // Play local audio chime and show in-app notification
     this.playNotificationSound(data.category);
     this.notify(data.title, data.message, data.category === 'urgent' ? 'warning' : 'success');
+
+    // Broadcast Web Push to all targeted mobile devices via Cloud Functions
+    try {
+      const payload = JSON.stringify({
+        title: data.title,
+        message: data.message,
+        category: data.category,
+        targetAudience: data.targetAudience,
+        targetValue: data.targetValue || ''
+      });
+      const cloudRunUrl = 'https://broadcastnotification-v6qynmdk4q-ew.a.run.app';
+      const cloudFuncUrl = 'https://europe-west1-dh-servis-rapor.cloudfunctions.net/broadcastNotification';
+
+      fetch(cloudRunUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      }).catch(() => {
+        // Fallback to Google Cloud Functions domain if direct Cloud Run has network or CORS issue
+        return fetch(cloudFuncUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload
+        });
+      }).catch(err => console.warn('[NotificationService] Cloud Function push trigger warning:', err));
+    } catch (e) {
+      console.warn('[NotificationService] Broadcast push dispatch error:', e);
+    }
 
     return docRef.id;
   }

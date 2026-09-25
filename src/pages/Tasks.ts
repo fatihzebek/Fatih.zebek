@@ -884,6 +884,18 @@ export const TasksPage = async () => {
       try {
         const { notificationService } = await import('../services/NotificationService');
         notificationService.playNotificationSound('celebration');
+
+        // Ekip arkadaşlarına ve ilgili ekibe "Görev Üstlenildi" bildirimi gönder
+        const claimerName = currentUser?.displayName || currentUser?.name || userEmail;
+        notificationService.createAnnouncement({
+          title: `🤝 Görev Üstlenildi: ${siteName} - ${turbineId}`,
+          message: `${claimerName} (${userTeam}), ${siteName} sahasındaki ${turbineId} havuz görevini üstlendi ve başlattı.`,
+          category: 'task',
+          targetAudience: 'TEAM',
+          targetValue: userTeam,
+          createdBy: userEmail,
+          createdByName: claimerName
+        }).catch(() => {});
       } catch (_) {}
 
       if ((window as any).showToast) {

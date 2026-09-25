@@ -267,8 +267,8 @@ export const NotificationCenterPage = async () => {
           </div>
           <div style="display: flex; align-items: center; gap: 10px;">
             <input type="text" id="subscriber-search-input" placeholder="Ekip veya kullanıcı ara..." style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #fff; font-size: 0.75rem; padding: 6px 12px; border-radius: 8px; width: 180px; outline: none;">
-            <button id="btn-refresh-subscribers" class="btn-cyber-outline" style="padding: 6px 14px; font-size: 0.74rem; border-radius: 8px; border-color: rgba(0, 243, 255, 0.35); color: #00f3ff; display: flex; align-items: center; gap: 6px;">
-              <i class="fa-solid fa-rotate-right"></i> Yenile
+            <button id="btn-refresh-subscribers" onclick="window.refreshPushSubscribers && window.refreshPushSubscribers()" class="btn-cyber-outline" style="padding: 6px 14px; font-size: 0.74rem; border-radius: 8px; border-color: rgba(0, 243, 255, 0.35); color: #00f3ff; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <i class="fa-solid fa-rotate-right"></i> <span>Yenile</span>
             </button>
           </div>
         </div>
@@ -430,6 +430,8 @@ export const initNotificationCenterEvents = () => {
         targetValue = (document.getElementById('notif-target-team') as HTMLSelectElement)?.value || '';
       } else if (targetAudience === 'REGION') {
         targetValue = (document.getElementById('notif-target-region') as HTMLSelectElement)?.value || '';
+      } else if ((targetAudience as any) === 'SELF') {
+        targetValue = currentUser?.email || 'fatih.zebek@demirerholding.com';
       }
 
       if (!title || !message) {
@@ -540,20 +542,40 @@ export const initNotificationCenterEvents = () => {
 
   const renderSubscribers = async () => {
     const tableContainer = document.getElementById('subscribers-table-container');
+    const refreshBtn = document.getElementById('btn-refresh-subscribers');
+    if (refreshBtn) {
+      refreshBtn.innerHTML = '<i class="fa-solid fa-rotate-right fa-spin"></i> <span>Yenileniyor...</span>';
+      (refreshBtn as HTMLButtonElement).disabled = true;
+    }
     if (!tableContainer) return;
 
     try {
-      const [subsSnap, usersSnap] = await Promise.all([
-        getDocs(collection(db, 'push_subscriptions')),
-        getDocs(collection(db, 'users'))
-      ]);
+      let subsSnap: any;
+      let usersSnap: any;
+      try {
+        const { getDocsFromServer } = await import('firebase/firestore');
+        [subsSnap, usersSnap] = await Promise.all([
+          getDocsFromServer(collection(db, 'push_subscriptions')),
+          getDocsFromServer(collection(db, 'users'))
+        ]);
+      } catch (serverErr) {
+        [subsSnap, usersSnap] = await Promise.all([
+          getDocs(collection(db, 'push_subscriptions')),
+          getDocs(collection(db, 'users'))
+        ]);
+      }
 
       // Map push subscriptions by email / user
       const subMap: Record<string, { count: number; latest: number; latestFormatted: string; role: string; team: string; platforms: string[] }> = {};
-      subsSnap.forEach(d => {
+      subsSnap.forEach((d: any) => {
         const data = d.data();
         const userEmail = (data.user || '').toLowerCase().trim();
         const updatedAt = data.updatedAt || 0;
+        
+        // 45 günden eski atıl/hayalet abonelikleri sayıma dahil etme (Safari token yenileme temizliği)
+        const isRecent = !updatedAt || (Date.now() - updatedAt) < (45 * 24 * 60 * 60 * 1000);
+        if (!isRecent) return;
+
         const endpoint = data.endpoint || '';
         let platform = 'Web Tarayıcı';
         if (endpoint.includes('apple')) platform = 'Apple iOS / Safari';
@@ -596,7 +618,7 @@ export const initNotificationCenterEvents = () => {
       }
 
       // 2. All registered users from Firestore
-      usersSnap.forEach(d => {
+      usersSnap.forEach((d: any) => {
         const u = d.data();
         const email = (u.email || '').toLowerCase().trim();
         if (email && !email.includes('fallback')) {
@@ -642,8 +664,15 @@ export const initNotificationCenterEvents = () => {
       if (tableContainer) {
         tableContainer.innerHTML = `<div style="color: #ff5252; font-size: 0.8rem; text-align: center; padding: 1.5rem;">Cihaz listesi yüklenemedi: ${err.message}</div>`;
       }
+    } finally {
+      if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i> <span>Yenile</span>';
+        (refreshBtn as HTMLButtonElement).disabled = false;
+      }
     }
   };
+
+  (window as any).refreshPushSubscribers = renderSubscribers;
 
   const renderSubscribersTable = () => {
     const summaryBar = document.getElementById('subscribers-summary-bar');
