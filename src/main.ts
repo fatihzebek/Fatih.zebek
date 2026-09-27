@@ -1264,6 +1264,23 @@ const updateGlobalNotificationBanner = () => {
         ">
           <i class="fa-solid fa-bell"></i> BİLDİRİMLERİ AÇ & AKTİFLEŞTİR
         </button>
+        <button onclick="window.showNotificationHelpModal()" class="btn-cyber-outline" style="
+          background: rgba(245, 158, 11, 0.12);
+          border: 1px solid rgba(245, 158, 11, 0.45);
+          color: #fbbf24;
+          font-weight: 800;
+          font-size: 0.8rem;
+          padding: 8px 14px;
+          border-radius: 8px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          letter-spacing: 0.5px;
+          transition: all 0.2s;
+        " title="Kurulum Adımlarını Gör">
+          <i class="fa-solid fa-circle-question"></i> NASIL AÇILIR?
+        </button>
         <button onclick="window.dismissPushBanner()" style="
           background: rgba(255, 255, 255, 0.08);
           border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1293,7 +1310,7 @@ const updateGlobalNotificationBanner = () => {
       updateGlobalNotificationBanner();
       (window as any).showToast?.('BİLDİRİMLER AKTİF', 'Bildirim izni başarıyla verildi. Cihazınız sisteme kaydedildi.', 'success');
     } else if (perm === 'denied') {
-      alert('Bildirim izni tarayıcı ayarlarından engellenmiş görünüyor. Lütfen adres çubuğundaki kilit simgesine tıklayarak bildirim iznini "İzin Ver" olarak değiştiriniz.');
+      (window as any).showNotificationHelpModal?.('denied');
     }
   } catch (err) {
     console.error("Banner push permission request error:", err);
@@ -1303,6 +1320,160 @@ const updateGlobalNotificationBanner = () => {
 (window as any).dismissPushBanner = () => {
   sessionStorage.setItem('dismiss_push_banner', 'true');
   updateGlobalNotificationBanner();
+};
+
+(window as any).showNotificationHelpModal = (status?: string) => {
+  const existing = document.getElementById('notification-help-modal');
+  if (existing) existing.remove();
+
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const defaultTab = isIos ? 'ios' : 'android';
+
+  const modal = document.createElement('div');
+  modal.id = 'notification-help-modal';
+  modal.style.cssText = `
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center; padding: 1rem;
+    animation: fadeIn 0.2s ease;
+  `;
+
+  modal.innerHTML = `
+    <div class="glass-panel" style="
+      background: #0f172a; border: 1px solid rgba(0, 243, 255, 0.3);
+      box-shadow: 0 0 40px rgba(0, 243, 255, 0.15); border-radius: 16px;
+      max-width: 580px; width: 100%; max-height: 90vh; overflow-y: auto;
+      font-family: 'Rajdhani', sans-serif; color: #fff; padding: 1.5rem;
+    ">
+      <!-- Header -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.8rem; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.5); display: flex; align-items: center; justify-content: center; color: #fbbf24; font-size: 1.2rem;">
+            <i class="fa-solid fa-bell"></i>
+          </div>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; letter-spacing: 0.5px; color: #fff;">
+              BİLDİRİM AÇMA & KURULUM REHBERİ
+            </h3>
+            <p style="margin: 2px 0 0 0; font-size: 0.78rem; color: #94a3b8; font-family: 'Inter', sans-serif;">
+              Telefon kilitliyken bile anlık türbin arıza ve görev bildirimlerini alabilmek için adımları takip edin.
+            </p>
+          </div>
+        </div>
+        <button onclick="document.getElementById('notification-help-modal')?.remove()" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; padding: 4px;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      ${status === 'denied' ? `
+        <div style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; padding: 10px 14px; margin-bottom: 1rem; font-family: 'Inter', sans-serif; font-size: 0.82rem; color: #fca5a5; display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-triangle-exclamation" style="font-size: 1rem; color: #ef4444;"></i>
+          <span><strong>Bildirim İzni Engellenmiş!</strong> Tarayıcınızda bildirim kapalı olduğu için aşağıdaki adımları uygulayarak açmanız gerekmektedir.</span>
+        </div>
+      ` : ''}
+
+      <!-- Tabs -->
+      <div style="display: flex; gap: 6px; margin-bottom: 1.2rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 8px;">
+        <button id="notif-tab-ios" onclick="window._switchNotifHelpTab('ios')" class="btn-cyber" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; font-weight: 700; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
+          <i class="fa-brands fa-apple"></i> iPhone / iPad (iOS)
+        </button>
+        <button id="notif-tab-android" onclick="window._switchNotifHelpTab('android')" class="btn-cyber-outline" style="flex: 1; padding: 8px 12px; font-size: 0.85rem; font-weight: 700; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
+          <i class="fa-brands fa-android"></i> Android (Chrome)
+        </button>
+      </div>
+
+      <!-- iOS Content -->
+      <div id="notif-content-ios" style="display: block; font-family: 'Inter', sans-serif;">
+        <div style="background: rgba(0, 243, 255, 0.05); border: 1px solid rgba(0, 243, 255, 0.2); border-radius: 10px; padding: 12px; margin-bottom: 1rem;">
+          <strong style="color: #00f3ff; font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 4px;">
+            ⚠️ APPLE (iOS) KURALI:
+          </strong>
+          <span style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.4;">
+            iPhone ve iPad'lerde Safari sekmesi içindeyken bildirim alınamaz. Bildirimlerin kilit ekranında çalması için uygulamanın <strong>"Ana Ekrana Ekle"</strong> yapılması zorunludur!
+          </span>
+        </div>
+
+        <ol style="margin: 0; padding-left: 1.2rem; font-size: 0.84rem; color: #e2e8f0; line-height: 1.6;">
+          <li style="margin-bottom: 8px;">
+            Safari'de sayfanın en altındaki <strong>"Paylaş"</strong> butonuna dokunun <span style="display: inline-block; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px;"><i class="fa-solid fa-arrow-up-from-bracket"></i></span>.
+          </li>
+          <li style="margin-bottom: 8px;">
+            Açılan menüyü aşağı kaydırıp <strong>"Ana Ekrana Ekle"</strong> (Add to Home Screen) seçeneğine dokunun ve sağ üstteki <strong>"Ekle"</strong> butonuna basın.
+          </li>
+          <li style="margin-bottom: 8px;">
+            Safari'yi kapatın. Telefon ana ekranınıza eklenen <strong style="color: #00f3ff;">"DH Servis"</strong> uygulama simgesine dokunarak açın.
+          </li>
+          <li style="margin-bottom: 8px;">
+            Uygulama açılınca üstteki sarı şeritte yer alan <strong>"BİLDİRİMLERİ AÇ & AKTİFLEŞTİR"</strong> butonuna basın ve gelen sistem sorusuna <strong>"İzin Ver"</strong> deyin.
+          </li>
+        </ol>
+
+        <div style="margin-top: 1rem; padding: 10px; background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; border-radius: 4px; font-size: 0.78rem; color: #fde68a;">
+          <strong>Daha önce "İzin Verme" dediyseniz:</strong><br/>
+          iPhone <strong>Ayarlar</strong> &rarr; <strong>Bildirimler</strong> &rarr; <strong>DH Servis</strong> uygulamasını bulun &rarr; <strong>"Bildirimlere İzin Ver"</strong> seçeneğini açın.
+        </div>
+      </div>
+
+      <!-- Android Content -->
+      <div id="notif-content-android" style="display: none; font-family: 'Inter', sans-serif;">
+        <ol style="margin: 0; padding-left: 1.2rem; font-size: 0.84rem; color: #e2e8f0; line-height: 1.6;">
+          <li style="margin-bottom: 8px;">
+            Üstteki sarı bildirim şeridindeki <strong>"BİLDİRİMLERİ AÇ & AKTİFLEŞTİR"</strong> butonuna basın ve tarayıcının sorduğu soruya <strong>"İzin Ver"</strong> deyin.
+          </li>
+          <li style="margin-bottom: 8px;">
+            <strong style="color: #fbbf24;">Buton tepki vermiyorsa veya engellendiyse:</strong><br/>
+            Chrome'da sol üst köşedeki adres çubuğunun hemen solundaki <strong>Kilit / Ayar simgesine</strong> <i class="fa-solid fa-sliders"></i> dokunun. <strong>"İzinler" &rarr; "Bildirimler" &rarr; "İzin Ver"</strong> yapın ve sayfayı yenileyin.
+          </li>
+          <li style="margin-bottom: 8px;">
+            <strong style="color: #00f3ff;">Pil Tasarrufu Kısıtlaması (Xiaomi / Huawei / Samsung):</strong><br/>
+            Telefon kilitliyken bildirimlerin uyumaması için: Telefon <strong>Ayarlar</strong> &rarr; <strong>Uygulamalar</strong> &rarr; <strong>Chrome (veya DH Servis)</strong> &rarr; <strong>Pil Tasarrufu</strong> menüsünden <strong>"Kısıtlama Yok"</strong> seçeneğini işaretleyin.
+          </li>
+        </ol>
+      </div>
+
+      <!-- Common Info Footer -->
+      <div style="margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 8px; font-family: 'Inter', sans-serif;">
+        <div style="font-size: 0.78rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-user-check" style="color: #00f3ff;"></i>
+          <span>Ekip bildirimlerinin size yönlendirilmesi için kendi kurumsal hesabınızla (örn: <code>dh-tm03@...</code>) giriş yapmış olmalısınız.</span>
+        </div>
+        <div style="font-size: 0.78rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-flask" style="color: #14f195;"></i>
+          <span>Kurulumu tamamladıktan sonra <strong>Bildirim Merkezi</strong>'ne giderek <strong>"Test Bildirimi Gönder"</strong> ile test edebilirsiniz.</span>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <div style="margin-top: 1.2rem; display: flex; justify-content: flex-end;">
+        <button onclick="document.getElementById('notification-help-modal')?.remove()" class="btn-cyber" style="padding: 8px 24px; font-size: 0.85rem; font-weight: 800; border-radius: 8px; cursor: pointer;">
+          ANLADIM, KAPAT
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  (window as any)._switchNotifHelpTab = (tab: 'ios' | 'android') => {
+    const tabIos = document.getElementById('notif-tab-ios');
+    const tabAndroid = document.getElementById('notif-tab-android');
+    const contentIos = document.getElementById('notif-content-ios');
+    const contentAndroid = document.getElementById('notif-content-android');
+
+    if (tab === 'ios') {
+      if (tabIos) { tabIos.className = 'btn-cyber'; tabIos.style.background = ''; }
+      if (tabAndroid) { tabAndroid.className = 'btn-cyber-outline'; tabAndroid.style.background = 'transparent'; }
+      if (contentIos) contentIos.style.display = 'block';
+      if (contentAndroid) contentAndroid.style.display = 'none';
+    } else {
+      if (tabAndroid) { tabAndroid.className = 'btn-cyber'; tabAndroid.style.background = ''; }
+      if (tabIos) { tabIos.className = 'btn-cyber-outline'; tabIos.style.background = 'transparent'; }
+      if (contentAndroid) contentAndroid.style.display = 'block';
+      if (contentIos) contentIos.style.display = 'none';
+    }
+  };
+
+  (window as any)._switchNotifHelpTab(defaultTab);
 };
 
 const render = async (options: { skipShell?: boolean } = {}) => {

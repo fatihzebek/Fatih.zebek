@@ -106,6 +106,41 @@ if (storedFilter) {
   localStorage.removeItem('tasksActiveSiteFilter');
 }
 
+let tasksCurrentPage = 1;
+const tasksPerPage = 15;
+
+(window as any).changeTasksPage = (page: number) => {
+  tasksCurrentPage = page;
+  (window as any)._resetTasksFingerprint?.();
+  const container = document.getElementById('tasks-realtime-container');
+  const tasks = (window as any).lastTasksForNavigation || [];
+  const role = (window as any).currentUserRole || 'GUEST';
+  if (container && tasks.length > 0) {
+    container.innerHTML = renderTasksTable(tasks, role);
+    const tableContainer = document.querySelector('.tasks-table-container');
+    if (tableContainer) {
+      tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+};
+
+(window as any).toggleTasksSidebar = () => {
+  const sidebar = document.getElementById('tasks-site-sidebar');
+  const toggleBtn = document.getElementById('tasks-sidebar-toggle-btn');
+  if (sidebar && toggleBtn) {
+    const isCollapsed = sidebar.style.display === 'none';
+    if (isCollapsed) {
+      sidebar.style.display = 'flex';
+      toggleBtn.style.display = 'none';
+      (window as any).tasksSidebarCollapsed = false;
+    } else {
+      sidebar.style.display = 'none';
+      toggleBtn.style.display = 'inline-flex';
+      (window as any).tasksSidebarCollapsed = true;
+    }
+  }
+};
+
 const renderTasksTable = (tasks: Task[], userRole: string) => {
   const currentUser = (window as any).currentUser || (window as any).appState?.userProfile;
   const hasDeleteTaskPerm = checkDeleteTaskPermission(currentUser);
@@ -152,111 +187,125 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
       ? poolTasksList
       : grouped[activeSiteFilter] || [];
 
+  const totalTasks = filteredTasks.length;
+  const totalPages = Math.ceil(totalTasks / tasksPerPage) || 1;
+  if (tasksCurrentPage > totalPages) tasksCurrentPage = totalPages;
+  if (tasksCurrentPage < 1) tasksCurrentPage = 1;
+
+  const startIndex = (tasksCurrentPage - 1) * tasksPerPage;
+  const endIndex = Math.min(startIndex + tasksPerPage, totalTasks);
+  const paginatedTasks = filteredTasks.slice(startIndex, endIndex);
+
   return `
     <div class="tasks-page-container">
-      <!-- Top Filter Navigation -->
-      <div class="tasks-filter-sidebar">
-        <div class="glass-panel" style="padding: 0.6rem 0.8rem; background: rgba(10, 14, 23, 0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 0.2rem;">
-          <div class="sidebar-nav" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-             <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-               <div class="task-filter-item ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" 
-                    onclick="window.handleSiteFilter('TÜMÜ')"
-                    style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
-                 <i class="fa-solid fa-layer-group" style="font-size: 0.75rem;"></i>
-                 <span>TÜMÜ</span>
-                 <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${tasks.length}</span>
-               </div>
+      <!-- Left Column: Site Sidebar -->
+      <div id="tasks-site-sidebar" class="glass-panel" style="width: 210px; flex-shrink: 0; max-height: calc(100vh - 85px); overflow-y: auto; padding: 0.7rem; display: ${ (window as any).tasksSidebarCollapsed ? 'none' : 'flex' }; flex-direction: column; gap: 0.25rem; scrollbar-width: thin; position: sticky; top: 65px; z-index: 10;">
+        <h4 style="font-family: 'Rajdhani', sans-serif; font-size: 0.88rem; font-weight: 800; color: #FFF; margin: 0 0 0.35rem 0; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.4rem; display: flex; align-items: center; justify-content: space-between; gap: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
+          <span style="display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-mountain-sun" style="color: var(--accent-cyan); text-shadow: 0 0 6px var(--accent-cyan); font-size: 0.78rem;"></i> SANTRALLER
+          </span>
+          <button onclick="window.toggleTasksSidebar()" style="background: transparent; border: none; color: #64748B; cursor: pointer; transition: color 0.2s; padding: 2px 4px;" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='#64748B'" title="Menüyü Gizle">
+            <i class="fa-solid fa-angles-left" style="font-size: 0.75rem;"></i>
+          </button>
+        </h4>
 
-               <div class="task-filter-item ${activeSiteFilter === 'BOLGE_GOREVI' ? 'active' : ''}" 
-                    onclick="window.handleSiteFilter('BOLGE_GOREVI')"
-                    style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 700; ${activeSiteFilter === 'BOLGE_GOREVI' ? 'background: rgba(245, 158, 11, 0.2) !important; border-color: rgba(245, 158, 11, 0.6) !important; color: #fbbf24 !important;' : 'color: #fbbf24;'}">
-                 <i class="fa-solid fa-users-viewfinder" style="font-size: 0.75rem; color: #fbbf24;"></i>
-                 <span>BÖLGE GÖREVLERİ</span>
-                 <span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.18); padding: 2px 6px; border-radius: 6px; color: #fbbf24; font-weight: 800;">${poolTasksList.length}</span>
-               </div>
+        <!-- TÜMÜ -->
+        <button onclick="window.handleSiteFilter('TÜMÜ')" class="cyber-tab-btn ${activeSiteFilter === 'TÜMÜ' ? 'active' : ''}" style="width: 100%; padding: 6px 10px; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; font-weight: 700; border-radius: 6px; border: 1px solid ${activeSiteFilter === 'TÜMÜ' ? 'var(--accent-cyan)' : 'rgba(0, 242, 254, 0.2)'}; background: ${activeSiteFilter === 'TÜMÜ' ? 'rgba(0, 242, 254, 0.15)' : 'rgba(0, 242, 254, 0.04)'}; color: #fff; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+          <span style="display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-layer-group" style="color: var(--accent-cyan); font-size: 0.72rem;"></i> TÜMÜ
+          </span>
+          <span style="background: rgba(255,255,255,0.1); padding: 1px 6px; border-radius: 8px; font-size: 0.68rem; font-family: monospace; font-weight: bold;">${tasks.length}</span>
+        </button>
 
-               ${siteNames.map(id => {
-                  const site = dataService.getAllSites().find(s => s.id === id);
-                  const displayName = site ? site.name : id;
-                  return `
-                  <div class="task-filter-item ${activeSiteFilter === id ? 'active' : ''}" 
-                       onclick="window.handleSiteFilter('${id}')"
-                       style="padding: 6px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.8rem; font-weight: 600;">
-                    <i class="fa-solid fa-wind" style="font-size: 0.75rem;"></i>
-                    <span>${displayName}</span>
-                    <span style="font-size: 0.65rem; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 6px; color: rgba(255,255,255,0.5);">${grouped[id].length}</span>
-                  </div>
-               `}).join('')}
-             </div>
-          </div>
-        </div>
+        <!-- BÖLGE GÖREVLERİ -->
+        <button onclick="window.handleSiteFilter('BOLGE_GOREVI')" class="cyber-tab-btn ${activeSiteFilter === 'BOLGE_GOREVI' ? 'active' : ''}" style="width: 100%; padding: 6px 10px; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; font-weight: 700; border-radius: 6px; border: 1px solid ${activeSiteFilter === 'BOLGE_GOREVI' ? '#f59e0b' : 'rgba(245, 158, 11, 0.3)'}; background: ${activeSiteFilter === 'BOLGE_GOREVI' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(245, 158, 11, 0.05)'}; color: #fbbf24; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+          <span style="display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-users-viewfinder" style="color: #fbbf24; font-size: 0.72rem;"></i> BÖLGE GÖREVLERİ
+          </span>
+          <span style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 1px 6px; border-radius: 8px; font-size: 0.68rem; font-family: monospace; font-weight: 800;">${poolTasksList.length}</span>
+        </button>
+
+        <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 0.15rem 0;"></div>
+
+        <!-- SANTRALLER LIST -->
+        ${siteNames.map(id => {
+          const site = dataService.getAllSites().find(s => s.id === id);
+          const displayName = site ? site.name : id;
+          const isDepo = displayName.toLowerCase().includes('depo');
+          const count = grouped[id]?.length || 0;
+          const isActive = activeSiteFilter === id;
+          return `
+            <button onclick="window.handleSiteFilter('${id}')" class="cyber-tab-btn ${isActive ? 'active' : ''}" style="width: 100%; padding: 6px 10px; font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; font-weight: 700; border-radius: 6px; border: 1px solid ${isActive ? 'var(--accent-cyan)' : (count > 0 ? 'rgba(0, 242, 254, 0.15)' : 'rgba(255,255,255,0.05)')}; background: ${isActive ? 'rgba(0, 242, 254, 0.15)' : (count > 0 ? 'rgba(0, 242, 254, 0.02)' : 'rgba(255,255,255,0.01)')}; color: ${isActive ? 'var(--accent-cyan)' : (count > 0 ? '#fff' : '#64748B')}; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+              <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <i class="fa-solid ${isDepo ? 'fa-warehouse' : 'fa-wind'}" style="font-size: 0.72rem; color: ${isActive ? 'var(--accent-cyan)' : (count > 0 ? '#94a3b8' : '#475569')};"></i>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
+              </span>
+              <span style="background: ${count > 0 ? (isActive ? 'rgba(0, 242, 254, 0.2)' : 'rgba(255,255,255,0.08)') : 'rgba(255,255,255,0.02)'}; color: ${isActive ? 'var(--accent-cyan)' : (count > 0 ? '#e2e8f0' : '#475569')}; padding: 1px 6px; border-radius: 8px; font-size: 0.68rem; font-family: monospace; font-weight: bold; flex-shrink: 0; margin-left: 4px;">${count}</span>
+            </button>
+          `;
+        }).join('')}
       </div>
-        
-        <style>
+
+      <style>
+        .tasks-page-container {
+          display: flex !important;
+          flex-direction: row !important;
+          gap: 1.5rem !important;
+          align-items: flex-start !important;
+          width: 100% !important;
+        }
+        .tasks-table-container {
+          flex-grow: 1 !important;
+          min-width: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+        .cyber-tab-btn.active {
+          background: rgba(0, 242, 254, 0.15) !important;
+          border-color: var(--accent-cyan) !important;
+          color: var(--accent-cyan) !important;
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+        .cyber-tab-btn:hover {
+          border-color: var(--accent-cyan) !important;
+          color: #fff !important;
+        }
+        .cyber-page-btn {
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid var(--glass-border);
+          color: #E2E8F0;
+          width: 32px;
+          height: 32px;
+          border-radius: 6px;
+          font-weight: bold;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.78rem;
+          transition: all 0.2s ease;
+        }
+        .cyber-page-btn:hover:not(:disabled) {
+          background: rgba(0, 242, 254, 0.12);
+          border-color: var(--accent-cyan);
+          color: var(--accent-cyan);
+          box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+        .cyber-page-btn:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+        @media (max-width: 992px) {
           .tasks-page-container {
-            display: flex !important;
             flex-direction: column !important;
-            gap: 1.2rem !important;
           }
-          .tasks-filter-sidebar {
+          #tasks-site-sidebar {
             width: 100% !important;
+            max-height: 280px !important;
             position: relative !important;
             top: 0 !important;
-            flex-shrink: 0 !important;
           }
-          .sidebar-nav {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-          }
-          .task-filter-item {
-            background: var(--glass-bg) !important;
-            border: 1px solid var(--glass-border) !important;
-            color: var(--text-muted) !important;
-            border-radius: 20px !important;
-            padding: 8px 16px !important;
-            font-size: 0.8rem !important;
-            font-weight: 600 !important;
-            letter-spacing: 0.3px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-            border-left: none !important;
-          }
-          .task-filter-item:hover {
-            background: rgba(255, 255, 255, 0.07) !important;
-            border-color: var(--glass-border) !important;
-            color: var(--text-main) !important;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-          }
-          .task-filter-item.active { 
-            background: linear-gradient(135deg, rgba(20, 241, 149, 0.15), rgba(0, 243, 255, 0.1)) !important;
-            border-color: rgba(20, 241, 149, 0.4) !important;
-            color: #14f195 !important;
-            text-shadow: 0 0 8px rgba(20, 241, 149, 0.3);
-            font-weight: 700 !important;
-            box-shadow: 0 0 15px rgba(20, 241, 149, 0.15), inset 0 0 8px rgba(20, 241, 149, 0.05);
-            transform: translateY(-1px);
-            border-left: none !important;
-          }
-          .task-filter-item span:last-child {
-            font-size: 0.7rem !important;
-            background: rgba(0, 0, 0, 0.1) !important;
-            padding: 2px 8px !important;
-            border-radius: 20px !important;
-            color: var(--text-muted) !important;
-            transition: all 0.3s ease;
-            border: 1px solid var(--glass-border);
-          }
-          .task-filter-item.active span:last-child {
-            background: rgba(20, 241, 149, 0.2) !important;
-            color: #14f195 !important;
-            border-color: rgba(20, 241, 149, 0.25);
-          }
+        }
           
           /* Tasks table premium styling */
           .tasks-table-panel {
@@ -322,22 +371,10 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
             box-shadow: inset 4px 0 0 #00f3ff, 0 4px 20px rgba(0, 243, 255, 0.04) !important;
           }
           
-          /* Row entrance animation */
-          @keyframes taskRowIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
+          /* Row transition */
           .tasks-table-panel tbody tr {
-            animation: taskRowIn 0.4s ease-out backwards;
+            transition: background 0.2s ease, box-shadow 0.2s ease;
           }
-          .tasks-table-panel tbody tr:nth-child(1) { animation-delay: 0.03s; }
-          .tasks-table-panel tbody tr:nth-child(2) { animation-delay: 0.06s; }
-          .tasks-table-panel tbody tr:nth-child(3) { animation-delay: 0.09s; }
-          .tasks-table-panel tbody tr:nth-child(4) { animation-delay: 0.12s; }
-          .tasks-table-panel tbody tr:nth-child(5) { animation-delay: 0.15s; }
-          .tasks-table-panel tbody tr:nth-child(6) { animation-delay: 0.18s; }
-          .tasks-table-panel tbody tr:nth-child(7) { animation-delay: 0.21s; }
-          .tasks-table-panel tbody tr:nth-child(8) { animation-delay: 0.24s; }
 
           /* Status Dot */
           .status-dot {
@@ -644,10 +681,14 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
           }
           .team-badge i { color: var(--accent-cyan); font-size: 0.6rem; }
         </style>
-      </div>
 
       <!-- Main Content Area -->
       <div class="tasks-table-container">
+        <!-- Sidebar Toggle Button (Only visible when collapsed) -->
+        <button id="tasks-sidebar-toggle-btn" onclick="window.toggleTasksSidebar()" class="cyber-button" style="display: ${ (window as any).tasksSidebarCollapsed ? 'inline-flex' : 'none' }; align-items: center; gap: 6px; padding: 5px 12px; background: rgba(0, 242, 254, 0.06); border: 1px solid rgba(0, 242, 254, 0.25); color: var(--accent-cyan); border-radius: 6px; cursor: pointer; margin-bottom: 0.8rem; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.78rem; width: fit-content; text-transform: uppercase;">
+          <i class="fa-solid fa-angles-right"></i> Santraller Listesi
+        </button>
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
           <div style="display: flex; align-items: center; gap: 14px;">
             <div style="width: 40px; height: 40px; background: linear-gradient(135deg, rgba(100, 255, 218, 0.12), rgba(0, 114, 255, 0.12)); border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(100, 255, 218, 0.15);">
@@ -680,7 +721,7 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                 </tr>
               </thead>
               <tbody>
-                ${filteredTasks.map(task => {
+                ${paginatedTasks.map(task => {
                   const isReturned = (task as any).isReturnedReport;
                   const isHoldWeather = task.status === 'HOLD_WEATHER';
                   const isFault = (task.rawFaultCode && task.rawFaultCode !== '---');
@@ -829,6 +870,34 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
               </tbody>
             </table>
           </div>
+
+          <!-- Pagination Controls -->
+          ${totalPages > 1 || totalTasks > 0 ? `
+            <div class="tasks-pagination-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem; background: rgba(10, 14, 23, 0.4); border-top: 1px solid var(--glass-border); flex-wrap: wrap; gap: 0.75rem; border-radius: 0 0 16px 16px;">
+              <div style="color: var(--text-muted); font-size: 0.78rem; font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.3px;">
+                <span>Toplam ${totalTasks} iş emri arasından <strong>${totalTasks === 0 ? 0 : startIndex + 1}-${endIndex}</strong> arası gösteriliyor</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <button onclick="window.changeTasksPage(1)" ${tasksCurrentPage === 1 ? 'disabled' : ''} class="cyber-page-btn" title="İlk Sayfa">
+                  <i class="fa-solid fa-angles-left"></i>
+                </button>
+                <button onclick="window.changeTasksPage(${tasksCurrentPage - 1})" ${tasksCurrentPage === 1 ? 'disabled' : ''} class="cyber-page-btn" title="Önceki Sayfa">
+                  <i class="fa-solid fa-angle-left"></i>
+                </button>
+
+                <span style="color: #64ffda; font-size: 0.8rem; padding: 0 0.6rem; font-family: 'Rajdhani', sans-serif; font-weight: 800; letter-spacing: 0.5px;">
+                  SAYFA ${tasksCurrentPage} / ${totalPages}
+                </span>
+
+                <button onclick="window.changeTasksPage(${tasksCurrentPage + 1})" ${tasksCurrentPage === totalPages ? 'disabled' : ''} class="cyber-page-btn" title="Sonraki Sayfa">
+                  <i class="fa-solid fa-angle-right"></i>
+                </button>
+                <button onclick="window.changeTasksPage(${totalPages})" ${tasksCurrentPage === totalPages ? 'disabled' : ''} class="cyber-page-btn" title="Son Sayfa">
+                  <i class="fa-solid fa-angles-right"></i>
+                </button>
+              </div>
+            </div>
+          ` : ''}
         </div>
       </div>
     </div>
@@ -838,6 +907,8 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
 export const TasksPage = async () => {
   let userRole = 'GUEST';
   let lastTasks: Task[] = [];
+  let lastTasksFingerprint = '';
+  (window as any)._resetTasksFingerprint = () => { lastTasksFingerprint = ''; };
   
   try {
     const currentUser = authService.getCurrentUser();
@@ -845,6 +916,7 @@ export const TasksPage = async () => {
       const profile: any = await userService.getProfile(currentUser.uid);
       if (profile) {
         userRole = (profile.role || 'GUEST').toUpperCase();
+        (window as any).currentUserRole = userRole;
         (window as any).currentUserTeam = profile.team || currentUser.email?.split('@')[0].toUpperCase();
       }
     }
@@ -855,6 +927,8 @@ export const TasksPage = async () => {
   // Window handles for events
   (window as any).handleSiteFilter = (siteName: string) => {
     activeSiteFilter = siteName;
+    tasksCurrentPage = 1;
+    lastTasksFingerprint = '';
     const container = document.getElementById('tasks-realtime-container');
     if (container && lastTasks.length > 0) {
       container.innerHTML = renderTasksTable(lastTasks, userRole);
@@ -1190,10 +1264,15 @@ export const TasksPage = async () => {
     (window as any).lastTasksForNavigation = sorted;
     const container = document.getElementById('tasks-realtime-container');
     if (container) {
-      
+      const currentFingerprint = `${activeSiteFilter}_${tasksCurrentPage}_${sorted.length}_` + 
+        sorted.map(t => `${t.id}_${t.status}_${t.personnel || ''}_${t.siteId || ''}_${t.turbineId || ''}`).join('|');
+
+      // If view is already rendered and data hasn't changed, skip DOM replacement to eliminate flicker
+      if (container.querySelector('.tasks-page-container') && currentFingerprint === lastTasksFingerprint) {
+        return;
+      }
+      lastTasksFingerprint = currentFingerprint;
       container.innerHTML = renderTasksTable(sorted, userRole);
-      
-      
     }
   };
 

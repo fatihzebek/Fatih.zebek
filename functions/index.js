@@ -798,6 +798,13 @@ exports.scadaTelemetry = onRequest(
               const faultInfo = resolveFaultInfo(t.enercon_status || t.status_code, t.status_text);
               const serialStr = String(t.serial_no || key || '').trim();
 
+              // 240-246 (Timeout receivebuffer vb. SCADA haberleşme zaman aşımları) için otomatik havuz görevi oluşturulmaz, pas geçilir
+              const rawFaultCode = String(faultInfo.code || newInfo.mainCode || '').replace(':', '-').trim();
+              if (rawFaultCode === '240-246' || rawFaultCode.startsWith('240-')) {
+                t.auto_task_created = true;
+                continue;
+              }
+
               // Mükerrer görev kontrolü: Türbinde henüz tamamlanmamış açık/işlemde görev var mı?
               let hasActiveTask = false;
               try {
