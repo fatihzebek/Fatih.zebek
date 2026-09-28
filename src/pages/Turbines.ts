@@ -11,6 +11,7 @@ import { collection, doc, onSnapshot, addDoc } from 'firebase/firestore'
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { notificationService } from '../services/NotificationService'
 import { statusService } from '../services/StatusService'
+import { bearingService } from '../services/BearingService'
 
 const ENABLE_SCADA_INTEGRATION = true; // SCADA / OPC Canlı veri entegrasyonu toggle
 
@@ -55,6 +56,38 @@ const isFatihZebek = (): boolean => {
   const email = (user?.email || '').toLowerCase().trim();
   return email === 'fatih.zebek@demirerholding.com';
 };
+
+// Rüzgar yönü derece -> 16 yönlü pusula kısaltması, Türkçe yön adı ve geleneksel rüzgar ismi
+function getWindCompassData(deg: number): { deg: number; cardinal: string; fullName: string; windName: string; desc: string } {
+  const normalized = ((Math.round(deg) % 360) + 360) % 360;
+  const directions = [
+    { cardinal: 'K', fullName: 'Kuzey', windName: 'Yıldız' },
+    { cardinal: 'KKD', fullName: 'Kuzey-Kuzeydoğu', windName: 'Poyraz' },
+    { cardinal: 'KD', fullName: 'Kuzeydoğu', windName: 'Poyraz' },
+    { cardinal: 'DKD', fullName: 'Doğu-Kuzeydoğu', windName: 'Gündoğusu' },
+    { cardinal: 'D', fullName: 'Doğu', windName: 'Gündoğusu' },
+    { cardinal: 'DGD', fullName: 'Doğu-Güneydoğu', windName: 'Keşişleme' },
+    { cardinal: 'GD', fullName: 'Güneydoğu', windName: 'Keşişleme' },
+    { cardinal: 'GGD', fullName: 'Güney-Güneydoğu', windName: 'Kıble' },
+    { cardinal: 'G', fullName: 'Güney', windName: 'Kıble' },
+    { cardinal: 'GGB', fullName: 'Güney-Güneybatı', windName: 'Lodos' },
+    { cardinal: 'GB', fullName: 'Güneybatı', windName: 'Lodos' },
+    { cardinal: 'BGB', fullName: 'Batı-Güneybatı', windName: 'Günbatısı' },
+    { cardinal: 'B', fullName: 'Batı', windName: 'Günbatısı' },
+    { cardinal: 'BKB', fullName: 'Batı-Kuzeybatı', windName: 'Karayel' },
+    { cardinal: 'KB', fullName: 'Kuzeybatı', windName: 'Karayel' },
+    { cardinal: 'KKB', fullName: 'Kuzey-Kuzeybatı', windName: 'Yıldız' }
+  ];
+  const index = Math.round(normalized / 22.5) % 16;
+  const item = directions[index];
+  return {
+    deg: normalized,
+    cardinal: item.cardinal,
+    fullName: item.fullName,
+    windName: item.windName,
+    desc: `${item.fullName} · ${item.windName}`
+  };
+}
 
 export const TurbinesPage = () => {
   // Clear map instances to prevent leaflet container reuse issues
@@ -362,6 +395,68 @@ export const TurbinesPage = () => {
           }
 
           if (avgWindEl) avgWindEl.textContent = plantTotals.avg_wind_speed_ms !== undefined ? plantTotals.avg_wind_speed_ms.toString() : '--';
+
+          // SCADA Canlı Rüzgar Yönü
+          let windDirDeg: number | null = null;
+          const ekGenel = liveData.ek_genel || {};
+          const calcWDirRaw = ekGenel['Loc/Wec/CalcWDir']?.v;
+          if (calcWDirRaw !== undefined && calcWDirRaw !== null && calcWDirRaw !== '') {
+            const parsed = parseFloat(calcWDirRaw);
+            if (!isNaN(parsed)) windDirDeg = parsed;
+          }
+
+          // Fallback: ek_genel yoksa türbinlerin GoPos + Vane veya CalcWDir değerlerinin dairesel ortalamasını al
+          if (windDirDeg === null && turbinesArr.length > 0) {
+            let sinSum = 0;
+            let cosSum = 0;
+            let count = 0;
+            turbinesArr.forEach((td: any) => {
+              const ek = td.ek || {};
+              const tDirRaw = ek['Loc/Wec/CalcWDir']?.v;
+              let tDeg: number | null = null;
+              if (tDirRaw !== undefined && tDirRaw !== null && tDirRaw !== '') {
+                const p = parseFloat(tDirRaw);
+                if (!isNaN(p)) tDeg = p;
+              } else if (ek['GoPos']?.v !== undefined) {
+                const goPos = parseFloat(ek['GoPos'].v);
+                const vane = parseFloat(ek['Vane']?.v || '0');
+                if (!isNaN(goPos)) tDeg = (goPos + (isNaN(vane) ? 0 : vane) + 360) % 360;
+              }
+              if (tDeg !== null) {
+                const rad = (tDeg * Math.PI) / 180;
+                sinSum += Math.sin(rad);
+                cosSum += Math.cos(rad);
+                count++;
+              }
+            });
+            if (count > 0) {
+              const avgRad = Math.atan2(sinSum / count, cosSum / count);
+              const deg = (avgRad * 180) / Math.PI;
+              windDirDeg = (deg + 360) % 360;
+            }
+          }
+
+          const windDirEl = document.getElementById('scada-wind-dir');
+          const windDescEl = document.getElementById('scada-wind-desc');
+          const compassIconEl = document.getElementById('scada-compass-icon');
+          const windDirBlock = document.getElementById('scada-wind-dir-block');
+
+          if (windDirDeg !== null) {
+            const compass = getWindCompassData(windDirDeg);
+            if (windDirEl) windDirEl.textContent = `${compass.deg}° ${compass.cardinal}`;
+            if (windDescEl) windDescEl.textContent = `(${compass.fullName} · ${compass.windName})`;
+            if (compassIconEl) {
+              compassIconEl.style.transform = `rotate(${compass.deg}deg)`;
+            }
+            if (windDirBlock) {
+              windDirBlock.title = `Rüzgar Yönü: ${compass.deg}° (${compass.fullName} - ${compass.windName})`;
+            }
+          } else {
+            if (windDirEl) windDirEl.textContent = '--';
+            if (windDescEl) windDescEl.textContent = '';
+            if (compassIconEl) compassIconEl.style.transform = 'rotate(0deg)';
+          }
+
           if (activeTurbinesEl) activeTurbinesEl.textContent = activeCount.toString();
           if (totalTurbinesEl) totalTurbinesEl.textContent = definedCount.toString();
         }
@@ -386,90 +481,111 @@ export const TurbinesPage = () => {
   const siteCap = SITE_INSTALLED_CAPACITY_MW[siteId] || 50.0;
 
   container.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem; max-width: 1600px; margin-left: auto; margin-right: auto; animation: fadeIn 0.4s ease-out;">
-      <button onclick="window.navigate('turbines')" class="action-icon-btn" style="width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-        <i class="fa-solid fa-arrow-left"></i>
-      </button>
-      <div style="flex: 1;">
-        <h2 id="selected-site-title" style="margin: 0; color: var(--text-main); font-size: clamp(1.5rem, 2.5vw, 2.2rem); font-weight: 900; letter-spacing: -1px; text-transform: uppercase;">${site.name.toUpperCase()}</h2>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.85rem; font-weight: 500;">Bölgesel Saha Türbin Yönetimi</p>
+    <!-- Üst Başlık Satırı: Geri Butonu + Başlık + Sağda Kart/Harita Toggles & QR Butonu -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; max-width: 1600px; margin-left: auto; margin-right: auto; animation: fadeIn 0.4s ease-out; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 1.25rem;">
+        <button onclick="window.navigate('turbines')" class="action-icon-btn" style="width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--text-main); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+          <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <div>
+          <h2 id="selected-site-title" style="margin: 0; color: var(--text-main); font-size: clamp(1.4rem, 2.2vw, 2.2rem); font-weight: 900; letter-spacing: -1px; text-transform: uppercase;">${site.name.toUpperCase()}</h2>
+          <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.85rem; font-weight: 500;">Bölgesel Saha Türbin Yönetimi</p>
+        </div>
       </div>
-      ${isAdmin ? `<button onclick="window.printSiteTurbineQRs('${siteId}')" class="cyber-button" style="background: rgba(0, 243, 255, 0.1); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); display: flex; align-items: center; gap: 8px; padding: 0.5rem 1rem;">
-        <i class="fa-solid fa-print"></i> <span class="hide-mobile">TÜM QR ETİKETLERİ YAZDIR</span>
-      </button>` : ''}
+
+      <!-- Sağ Taraf: Kart/Harita Toggles + QR Butonu -->
+      <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <div class="cyber-toggle-container" style="flex-shrink: 0;">
+          <button id="site-view-grid" onclick="window.switchSiteViewMode('grid')" class="cyber-toggle-btn active">
+            <i class="fa-solid fa-border-all"></i> KART GÖRÜNÜMÜ
+          </button>
+          <button id="site-view-map" onclick="window.switchSiteViewMode('map')" class="cyber-toggle-btn">
+            <i class="fa-solid fa-map-location-dot"></i> HARİTA GÖRÜNÜMÜ
+          </button>
+        </div>
+
+        ${isAdmin ? `<button onclick="window.printSiteTurbineQRs('${siteId}')" class="cyber-button" style="background: rgba(0, 243, 255, 0.1); color: var(--accent-cyan); border: 1px solid var(--accent-cyan); display: flex; align-items: center; gap: 8px; padding: 0.5rem 1rem;">
+          <i class="fa-solid fa-print"></i> <span class="hide-mobile">TÜM QR ETİKETLERİ YAZDIR</span>
+        </button>` : ''}
+      </div>
     </div>
 
-    <!-- View Mode Toggles & SCADA Canlı Santral Özeti (Çerçevesiz & Yan Yana) -->
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; max-width: 1600px; margin-left: auto; margin-right: auto; gap: 1rem; flex-wrap: wrap;">
-      <div class="cyber-toggle-container" style="flex-shrink: 0;">
-        <button id="site-view-grid" onclick="window.switchSiteViewMode('grid')" class="cyber-toggle-btn active">
-          <i class="fa-solid fa-border-all"></i> KART GÖRÜNÜMÜ
-        </button>
-        <button id="site-view-map" onclick="window.switchSiteViewMode('map')" class="cyber-toggle-btn">
-          <i class="fa-solid fa-map-location-dot"></i> HARİTA GÖRÜNÜMÜ
-        </button>
-      </div>
-
-      <!-- SCADA Canlı Santral Özeti (Çerçevesiz, Ortalanmış, Mobil Uyumlu) -->
-      <div id="scada-plant-summary" style="display: none; align-items: center; justify-content: center; gap: clamp(0.4rem, 1.5vw, 1.25rem); flex: 1; flex-wrap: wrap; animation: fadeIn 0.4s ease-out;">
-        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-          <span id="scada-live-dot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e67688; animation: pulse 2s infinite;"></span>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.8rem; color: #00e676; font-weight: 700; letter-spacing: 0.5px;">CANLI</span>
+    <!-- SCADA Canlı Santral Özeti (Tam Ortalanmış, Tek Satır & Ferah) -->
+    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; max-width: 1600px; margin-left: auto; margin-right: auto; width: 100%;">
+      <div id="scada-plant-summary" style="display: none; align-items: center; justify-content: center; gap: clamp(0.75rem, 1.8vw, 1.5rem); max-width: 100%; overflow-x: auto; flex-wrap: nowrap; padding: 0.25rem 0.5rem; animation: fadeIn 0.4s ease-out; scrollbar-width: none;">
+        
+        <!-- CANLI Rozeti -->
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 4px 10px; background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.25); border-radius: 20px;">
+          <span id="scada-live-dot" style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e676; animation: pulse 2s infinite;"></span>
+          <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: #00e676; font-weight: 800; letter-spacing: 1px;">CANLI</span>
         </div>
-        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); flex-shrink: 0;"></div>
 
-        <!-- Akıcı Neon Ses/Güç Kapasite Barı (VU Meter) -->
-        <div id="scada-power-block" style="display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 125px; flex-shrink: 0; cursor: default;" title="Anlık Güç: -- MW / Kurulu Güç: ${siteCap.toFixed(1)} MW">
+        <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.12); flex-shrink: 0;"></div>
+
+        <!-- 1. ANLIK GÜÇ (Neon VU Bar ile) -->
+        <div id="scada-power-block" style="display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 135px; flex-shrink: 0; cursor: default;" title="Anlık Güç: -- MW / Kurulu Güç: ${siteCap.toFixed(1)} MW">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i class="fa-solid fa-bolt" id="scada-power-icon" style="color: #00e676; font-size: 0.75rem; transition: color 0.4s, filter 0.4s; filter: drop-shadow(0 0 6px rgba(0,230,118,0.6));"></i>
+            <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;">ANLIK GÜÇ</span>
+          </div>
           <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 6px;">
-            <div style="display: flex; align-items: center; gap: 5px;">
-              <i class="fa-solid fa-bolt" id="scada-power-icon" style="color: #00e676; font-size: 0.85rem; transition: color 0.4s, filter 0.4s; filter: drop-shadow(0 0 6px rgba(0,230,118,0.6));"></i>
+            <div style="display: flex; align-items: baseline; gap: 3px;">
               <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #ffffff; font-weight: 800; line-height: 1; letter-spacing: 0.5px;" id="scada-total-power">--</span>
               <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">MW</span>
             </div>
             <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.72rem; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 0.3px;" id="scada-power-cap">/ ${siteCap.toFixed(1)} MW</span>
           </div>
-
-          <!-- Akıcı Kesintisiz Neon Bar (Yeşil -> Sarı -> Kırmızı Peak) -->
-          <div style="position: relative; width: 100%; height: 7px; background: rgba(0, 0, 0, 0.6); border-radius: 999px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.12);">
+          <!-- Akıcı Kesintisiz Neon Bar -->
+          <div style="position: relative; width: 100%; height: 6px; background: rgba(0, 0, 0, 0.6); border-radius: 999px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.12);">
             <div id="scada-power-vu-bar" style="width: 0%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #00e676 0%, #76ff03 40%, #ffd600 70%, #ff9100 85%, #ff1744 100%); background-size: 100% 100%; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s ease; box-shadow: 0 0 8px rgba(0,230,118,0.7); position: relative;">
               <div id="scada-power-vu-glow" style="position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: #ffffff; border-radius: 999px; box-shadow: 0 0 6px #ffffff, 0 0 10px #00e676;"></div>
             </div>
           </div>
         </div>
 
-        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15); flex-shrink: 0;"></div>
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <i class="fa-solid fa-wind" style="color: #b0bec5; font-size: 0.9rem;"></i>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #e0e0e0; font-weight: 800;" id="scada-avg-wind">--</span>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">m/s</span>
-        </div>
-        <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.15);"></div>
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <div class="turbine-icon-wrapper no-glow" style="color: #81c784; transform: scale(0.55); transform-origin: center center; margin: -10px -6px -10px -10px; pointer-events: none;">
-            <div class="turbine-tower"></div>
-            <div class="turbine-head">
-              <svg class="turbine-blades-svg" viewBox="0 0 100 100">
-                <g transform="translate(50, 50)">
-                  <g transform="rotate(0)">
-                    <path d="M-2,0 C-2,-10 2,-10 2,0 L1,-38 C1,-40 -1,-40 -1,-38 Z" fill="currentColor" />
-                  </g>
-                  <g transform="rotate(120)">
-                    <path d="M-2,0 C-2,-10 2,-10 2,0 L1,-38 C1,-40 -1,-40 -1,-38 Z" fill="currentColor" />
-                  </g>
-                  <g transform="rotate(240)">
-                    <path d="M-2,0 C-2,-10 2,-10 2,0 L1,-38 C1,-40 -1,-40 -1,-38 Z" fill="currentColor" />
-                  </g>
-                </g>
-              </svg>
-            </div>
-          </div>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #81c784; font-weight: 800;" id="scada-active-turbines">--</span>
-          <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">/ <span id="scada-total-turbines">--</span> Türbin</span>
-        </div>
-      </div>
+        <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.12); flex-shrink: 0;"></div>
 
-      <!-- Masaüstünde tam ortalanmayı dengeleyen görünmez blok -->
-      <div style="width: 240px; flex-shrink: 0;" class="hide-mobile"></div>
+        <!-- 2. RÜZGAR HIZI -->
+        <div style="display: flex; flex-direction: column; justify-content: center; gap: 3px; flex-shrink: 0;" title="Ortalama Rüzgar Hızı">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i class="fa-solid fa-wind" style="color: #64b5f6; font-size: 0.75rem;"></i>
+            <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;">RÜZGAR HIZI</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 4px;">
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #e0e0e0; font-weight: 800; line-height: 1;" id="scada-avg-wind">--</span>
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">m/s</span>
+          </div>
+        </div>
+
+        <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.12); flex-shrink: 0;"></div>
+
+        <!-- 3. AKTİF TÜRBİN -->
+        <div style="display: flex; flex-direction: column; justify-content: center; gap: 3px; flex-shrink: 0;" title="Aktif Çalışan Türbin / Toplam Türbin">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i class="fa-solid fa-fan" style="color: #81c784; font-size: 0.75rem;"></i>
+            <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;">AKTİF TÜRBİN</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 4px;">
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #81c784; font-weight: 800; line-height: 1;" id="scada-active-turbines">--</span>
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.75rem; color: var(--text-dim); font-weight: 600;">/ <span id="scada-total-turbines">--</span> Türbin</span>
+          </div>
+        </div>
+
+        <div style="width: 1px; height: 28px; background: rgba(255,255,255,0.12); flex-shrink: 0;"></div>
+
+        <!-- 4. RÜZGAR YÖNÜ -->
+        <div id="scada-wind-dir-block" style="display: flex; flex-direction: column; justify-content: center; gap: 3px; flex-shrink: 0; cursor: default; white-space: nowrap;" title="Rüzgar Yönü">
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <i class="fa-solid fa-compass" id="scada-compass-icon" style="color: var(--accent-cyan); font-size: 0.85rem; transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); display: inline-block; filter: drop-shadow(0 0 5px rgba(0, 243, 255, 0.4));"></i>
+            <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;">RÜZGAR YÖNÜ</span>
+          </div>
+          <div style="display: flex; align-items: baseline; gap: 6px;">
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 1.35rem; color: #e0e0e0; font-weight: 800; line-height: 1;" id="scada-wind-dir">--</span>
+            <span style="font-family: 'Rajdhani', sans-serif; font-size: 0.85rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.3px;" id="scada-wind-desc"></span>
+          </div>
+        </div>
+
+      </div>
     </div>
 
     <div id="turbine-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; max-width: 1600px; margin: 0 auto;">
@@ -553,6 +669,21 @@ export const TurbinesPage = () => {
 
         const isFaulty = !!turbineFault;
         const isMaintenance = !!turbineMaintenance;
+        
+        // Rulman Durum Rozeti (Ön Rulman Değişti / Çapak Takibinde)
+        const bearingRec = bearingService.getRecord(t.id);
+        let bearingBadgeHtml = '';
+        if (bearingRec?.status === 'FRONT_BEARING_REPLACED') {
+          bearingBadgeHtml += `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.58rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; padding: 1px 4px; border-radius: 4px; font-weight: 800; margin-bottom: 3px; width: fit-content;" title="Ön Rulman Değiştirildi (${bearingRec.replacementDate || ''})"><i class="fa-solid fa-arrows-rotate" style="font-size: 0.5rem;"></i> Ön Rulman</div>`;
+        } else if (bearingRec?.status === 'METAL_PARTICLE_DETECTED') {
+          bearingBadgeHtml += `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.58rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 1px 4px; border-radius: 4px; font-weight: 800; margin-bottom: 3px; width: fit-content;" title="Rulmanda Metal Çapak İzleme Mevcut"><i class="fa-solid fa-magnet" style="font-size: 0.5rem;"></i> Çapak İzleme</div>`;
+        }
+        
+        if (bearingRec?.lastAcousticStatus === 'CRITICAL') {
+          bearingBadgeHtml += `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.58rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; padding: 1px 4px; border-radius: 4px; font-weight: 800; margin-bottom: 3px; width: fit-content;" title="Son Akustik: Kritik (${bearingRec.lastInspectionDate || ''})"><i class="fa-solid fa-triangle-exclamation" style="font-size: 0.5rem;"></i> Akustik Kritik</div>`;
+        } else if (bearingRec?.lastAcousticStatus === 'WARNING') {
+          bearingBadgeHtml += `<div style="display: inline-flex; align-items: center; gap: 3px; font-size: 0.58rem; background: rgba(255, 204, 0, 0.15); border: 1px solid rgba(255, 204, 0, 0.4); color: #facc15; padding: 1px 4px; border-radius: 4px; font-weight: 800; margin-bottom: 3px; width: fit-content;" title="Son Akustik: Uyarı (${bearingRec.lastInspectionDate || ''})"><i class="fa-solid fa-circle-exclamation" style="font-size: 0.5rem;"></i> Akustik Uyarı</div>`;
+        }
         
         // SCADA Realtime Integration
         const scada = (window as any).scadaData ? (window as any).scadaData[t.id] : null;
@@ -708,6 +839,7 @@ export const TurbinesPage = () => {
               <div style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;">
                 ${t.id}
               </div>
+              ${bearingBadgeHtml}
               ${scadaWind !== null ? `
               <div style="display: flex; align-items: center; gap: 6px; font-family: 'Rajdhani', sans-serif; font-size: 0.72rem;">
                 ${scada && scada.dataAgeS !== undefined && scada.dataAgeS < 30 ? `<span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #00e676; box-shadow: 0 0 6px #00e67688; flex-shrink: 0;"></span>` : `<span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ff9800; flex-shrink: 0;" title="Veri eski"></span>`}

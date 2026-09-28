@@ -675,7 +675,8 @@ export const OvertimeApprovalsPage = async () => {
         s.date || date,
         s.startTime,
         s.endTime,
-        s.isOffDay || false
+        s.isOffDay || false,
+        personnelName
       );
       const appHours = existingApp.approvedHours !== undefined ? existingApp.approvedHours : parseFloat(sHours.toFixed(2));
 
@@ -1528,7 +1529,8 @@ export const OvertimeApprovalsPage = async () => {
             s.date || date,
             s.startTime,
             s.endTime,
-            s.isOffDay || false
+            s.isOffDay || false,
+            name
           );
           const computedHours = approval.approvedHours !== undefined ? approval.approvedHours : parseFloat(sHours.toFixed(2));
           approvedHoursSum += computedHours;
