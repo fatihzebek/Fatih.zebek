@@ -56,7 +56,7 @@ export const BearingAnalysisPage = async () => {
           <i class="fa-solid fa-shield-halved" style="margin-right: 8px; color: var(--accent-cyan);"></i> 1. Rulman Filo Sağlığı & Takip Paneli
         </button>
         <button id="tab-btn-acoustics" class="tab-nav-btn" onclick="window.switchBearingTab('acoustics')">
-          <i class="fa-solid fa-microphone-lines" style="margin-right: 8px;"></i> 2. Akustik & Vibrasyon Uyum Modülü
+          <i class="fa-solid fa-microphone-lines" style="margin-right: 8px;"></i> 2. Akustik Ses Analizi
         </button>
         <button id="tab-btn-grease" class="tab-nav-btn" onclick="window.switchBearingTab('grease')">
           <i class="fa-solid fa-flask" style="margin-right: 8px;"></i> 3. Gres Laboratuvarı & RAG Eşleştirici
@@ -182,148 +182,44 @@ export const BearingAnalysisPage = async () => {
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <!-- Live Audio Recording Box (Centered / Max Width) -->
+        <div class="glass-panel" style="max-width: 820px; margin: 0 auto; padding: 2rem; border-radius: 12px; background: rgba(10, 15, 24, 0.7); border: 1px solid rgba(0, 242, 254, 0.15); backdrop-filter: blur(10px);">
           
-          <!-- Column 2.1: Live Audio Recording -->
-          <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; background: rgba(10, 15, 24, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); display: flex; flex-direction: column; justify-content: space-between; height: 100%;">
-            <div>
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h3 style="margin: 0; font-size: 1.1rem; font-family: 'Rajdhani', sans-serif; color: #fff; font-weight: 700; border-left: 3px solid var(--accent-blue); padding-left: 10px;">
-                  1. AKUSTİK ANALİZ (CANLI SAHA KAYDI)
-                </h3>
-                <i class="fa-solid fa-wave-square" style="color: var(--accent-blue); font-size: 1.1rem;"></i>
-              </div>
-              
-              <p style="color: #8a8f98; margin: 0 0 1.2rem 0; font-size: 0.85rem; line-height: 1.4;">
-                Mikrofon yardımıyla sahada canlı ses kaydı alınır. Yaw (sapma) motorunun dişli veya fren uğultuları tespit edilirse analiz iptal edilir.
-              </p>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="margin: 0; font-size: 1.25rem; font-family: 'Rajdhani', sans-serif; color: #fff; font-weight: 800; border-left: 3px solid var(--accent-cyan); padding-left: 10px; letter-spacing: 0.5px;">
+              AKUSTİK SES ANALİZİ (CANLI SAHA KAYDI)
+            </h3>
+            <i class="fa-solid fa-wave-square" style="color: var(--accent-cyan); font-size: 1.3rem;"></i>
+          </div>
+          
+          <p style="color: #cbd0d8; margin: 0 0 1.2rem 0; font-size: 0.9rem; line-height: 1.5;">
+            Telefon mikrofonu yardımıyla ana rulmandan ses kaydı alınır. Yapay zeka ve spektral algoritmalar rulman frekans anomalilerini, vuruntu (knocks) ve sürtünme izlerini otomatik teşhis eder.
+          </p>
 
-              <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem;">
-                <!-- Yaw simulation mode switch -->
-                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
-                  <div>
-                    <div style="font-weight: 700; color: #fff; font-size: 0.85rem;">Yaw (Sapma) Motoru Durumu</div>
-                    <div style="font-size: 0.75rem; color: #8a8f98;">Analiz esnasında yaw motor sesi simülasyonu</div>
-                  </div>
-                  <div style="display: flex; gap: 8px;">
-                    <button id="yaw-off-btn" class="yaw-toggle-btn active" onclick="window.setYawSimulation(false)" style="height: 30px; padding: 0 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 4px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.2s;">DEVR DIŞI</button>
-                    <button id="yaw-on-btn" class="yaw-toggle-btn" onclick="window.setYawSimulation(true)" style="height: 30px; padding: 0 12px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 4px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: all 0.2s;">DEVREDE</button>
-                  </div>
-                </div>
-
-                <!-- Canlı Ses Kaydet Button -->
-                <button id="live-audio-btn" onclick="window.startLiveAudioRecording()" style="height: 42px; width: 100%; background: rgba(0, 242, 254, 0.08); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; color: #fff; font-size: 0.9rem; font-weight: 700; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; position: relative; outline: none;">
-                  <i class="fa-solid fa-microphone" id="mic-icon" style="color: var(--accent-cyan);"></i>
-                  <span id="mic-text">Canlı Ses Kaydet (1 Dk)</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Acoustic Output Area -->
-            <div id="acoustic-result-area" class="hidden-result" style="display: none; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem; animation: fadeIn 0.4s ease; margin-top: 1rem;">
-              <div id="acoustic-loader" style="text-align: center; padding: 1rem 0;">
-                <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.5rem; color: var(--accent-cyan); margin-bottom: 0.5rem;"></i>
-                <div style="font-size: 0.8rem; color: #8a8f98;">Akustik spektrum taranıyor, pitch/fren gürültüleri eleniyor...</div>
-              </div>
-              <div id="acoustic-content" style="display: none;"></div>
+          <!-- Field Practical Advice Banner -->
+          <div style="background: rgba(0, 242, 254, 0.04); border: 1px solid rgba(0, 242, 254, 0.18); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.8rem; display: flex; align-items: flex-start; gap: 12px;">
+            <i class="fa-solid fa-lightbulb" style="color: var(--accent-cyan); font-size: 1.2rem; margin-top: 2px;"></i>
+            <div style="font-size: 0.85rem; color: #cbd0d8; line-height: 1.45;">
+              <strong style="color: #fff;">Sahada En Temiz Ölçüm İçin:</strong>
+              Telefonu axel pin / rulman kapağına <span style="color: var(--accent-cyan); font-weight: 700;">10-15 cm mesafede havada tutunuz</span> veya doğrudan bırakılacaksa altına bir <span style="color: var(--accent-cyan); font-weight: 700;">eldiven/bez</span> koyunuz. Türbin gövdesi sabitken (rüzgara dönmüyorken) kayıt alınız.
             </div>
           </div>
 
-          <!-- Column 2.2: Vibration compliance calculator -->
-          <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; background: rgba(10, 15, 24, 0.6); border: 1px solid rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h3 style="margin: 0; font-size: 1.1rem; font-family: 'Rajdhani', sans-serif; color: #fff; font-weight: 700; border-left: 3px solid var(--accent-magenta); padding-left: 10px;">
-                2. VİBRASYON UYUMLULUK ASİSTANI (D03220088/0.0)
-              </h3>
-              <i class="fa-solid fa-circle-check" style="color: var(--accent-magenta); font-size: 1.1rem;"></i>
+          <!-- Canlı Ses Kaydet Button -->
+          <button id="live-audio-btn" onclick="window.startLiveAudioRecording()" style="height: 50px; width: 100%; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); border-radius: 8px; color: #fff; font-size: 1rem; font-weight: 800; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: inherit; position: relative; outline: none; box-shadow: 0 0 15px rgba(0, 242, 254, 0.15);">
+            <i class="fa-solid fa-microphone" id="mic-icon" style="color: var(--accent-cyan); font-size: 1.2rem;"></i>
+            <span id="mic-text">Canlı Ses Kaydet (1 Dk)</span>
+          </button>
+
+          <!-- Acoustic Output Area -->
+          <div id="acoustic-result-area" class="hidden-result" style="display: none; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 1.2rem; animation: fadeIn 0.4s ease; margin-top: 1.5rem;">
+            <div id="acoustic-loader" style="text-align: center; padding: 1.5rem 0;">
+              <i class="fa-solid fa-spinner fa-spin" style="font-size: 1.8rem; color: var(--accent-cyan); margin-bottom: 0.6rem;"></i>
+              <div style="font-size: 0.85rem; color: #cbd0d8;">Akustik spektrum taranıyor, rulman hasar frekansları analiz ediliyor...</div>
             </div>
-            
-            <p style="color: #8a8f98; margin: 0 0 1.2rem 0; font-size: 0.85rem; line-height: 1.4;">
-              Mobil vibrasyon ölçüm kurulumunuzun ENERCON asgari standartlarına uygunluğunu denetleyin. Uyumsuz ölçüm raporları kabul edilmez.
-            </p>
-
-            <!-- Select Vibration Setup/Device Type -->
-            <div style="display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 1rem; background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
-              <label style="font-size: 0.8rem; color: #fff; font-weight: 700;">Vibrasyon Ölçüm Cihazı Tercihi</label>
-              <select id="vib-setup-type" onchange="window.handleVibSetupChange(this.value)" style="height: 36px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem; outline: none; font-family: inherit; cursor: pointer;">
-                <option value="taşınabilir_cihaz" style="background: #0b0f19;">Taşınabilir Cihaz Mevcut (Kurulum Denetimi)</option>
-                <option value="sabit_cms" style="background: #0b0f19;">Türbin Sabit CMS Değerleri (SCADA Raporu)</option>
-                <option value="cihaz_yok" style="background: #0b0f19;">Vibrasyon Cihazı Yok (Akustik & Gres RAG ile Geç)</option>
-              </select>
-            </div>
-
-            <!-- Bypass Info Banner for "Cihaz Yok" option -->
-            <div id="vib-bypass-banner" style="display: none; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.15); padding: 1.2rem; border-radius: 8px; margin-bottom: 1rem; animation: fadeIn 0.3s ease;">
-              <div style="display: flex; align-items: flex-start; gap: 12px;">
-                <i class="fa-solid fa-circle-info" style="color: var(--accent-cyan); font-size: 1.2rem; margin-top: 2px;"></i>
-                <div>
-                  <div style="font-weight: 700; color: #fff; font-size: 0.85rem; margin-bottom: 4px;">VİBRASYON OLMAKSIZIN TEŞHİS MÜMKÜN</div>
-                  <div style="font-size: 0.8rem; color: #cbd0d8; line-height: 1.45;">
-                    Rulman hasar analizi yapmak için mobil vibrasyon analizörü **zorunlu değildir**. Telefon/tablet mikrofonu yardımıyla alacağınız 1 dakikalık canlı akustik ses kaydı ve görsel gres RAG analizleri, rulman durumunu doğru teşhis etmek için tek başına tamamen yeterlidir.
-                  </div>
-                  <div style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: 700; margin-top: 8px; border-top: 1px solid rgba(0, 242, 254, 0.1); padding-top: 6px;">
-                    💡 Diğer analiz kanallarıyla devam etmek için bu adımı bypass edebilirsiniz.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Measurement Parameter Inputs Wrapper -->
-            <div id="vib-inputs-container">
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; background: rgba(255,255,255,0.01); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03); margin-bottom: 1rem;">
-                
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Rotor Hızı (% Nominal)</label>
-                  <input id="vib-rotor-speed" type="number" value="80" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Hız Dalgalanması (± %)</label>
-                  <input id="vib-fluctuation" type="number" value="6" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Ölçüm Süresi (Saniye)</label>
-                  <input id="vib-duration" type="number" value="65" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Geçmiş Ölçüm Sayısı</label>
-                  <input id="vib-count" type="number" value="3" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Sensör Hassasiyeti (mV/g)</label>
-                  <input id="vib-sensitivity" type="number" value="100" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; flex-direction: column; gap: 0.3rem;">
-                  <label style="font-size: 0.8rem; color: #8a8f98; font-weight: 600;">Sensör Doğrusallık Alt (Hz)</label>
-                  <input id="vib-freq-min" type="number" step="0.01" value="0.33" style="height: 34px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: #fff; padding: 0 10px; font-size: 0.85rem;">
-                </div>
-
-                <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-                  <input id="vib-noyaw" type="checkbox" checked style="width: 16px; height: 16px; accent-color: var(--accent-magenta);">
-                  <label for="vib-noyaw" style="font-size: 0.8rem; color: #fff; font-weight: 600; cursor: pointer;">Ölçümde Yaw Sabit mi?</label>
-                </div>
-
-                <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-                  <input id="vib-noice" type="checkbox" checked style="width: 16px; height: 16px; accent-color: var(--accent-magenta);">
-                  <label for="vib-noice" style="font-size: 0.8rem; color: #fff; font-weight: 600; cursor: pointer;">Rotorda Buz Yok mu?</label>
-                </div>
-              </div>
-            </div>
-
-            <button id="vib-calc-btn" onclick="window.triggerVibrationCompliance()" style="height: 36px; width: 100%; background: rgba(240, 18, 190, 0.08); border: 1px solid rgba(240, 18, 190, 0.2); border-radius: 6px; color: #fff; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit;">
-              <i class="fa-solid fa-calculator"></i> Kurulum Uyumunu Analiz Et
-            </button>
-
-            <!-- Vibration Output Area -->
-            <div id="vibration-result-area" style="display: none; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem; margin-top: 1rem; animation: fadeIn 0.4s ease;">
-              <div id="vibration-content"></div>
-            </div>
-
+            <div id="acoustic-content" style="display: none;"></div>
           </div>
+
         </div>
       </div>
 
@@ -1366,6 +1262,16 @@ const updateInspectionsUI = () => {
         ${insp.message ? `<div style="font-size: 0.82rem; color: #cbd0d8; line-height: 1.35;"><strong style="color: #8a8f98;">Ajan Teşhisi:</strong> ${insp.message}</div>` : ''}
         ${insp.notes ? `<div style="font-size: 0.82rem; color: #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.15); border-radius: 4px; padding: 4px 8px; line-height: 1.35;"><i class="fa-regular fa-comment-dots" style="margin-right: 5px;"></i><strong>Teknisyen Notu:</strong> ${insp.notes}</div>` : ''}
 
+        <!-- Audio Player if audioUrl is present -->
+        ${insp.audioUrl ? `
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 4px; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 6px 12px;">
+            <div style="display: flex; align-items: center; gap: 6px; color: var(--accent-cyan); font-size: 0.8rem; font-weight: 700; white-space: nowrap;">
+              <i class="fa-solid fa-headphones"></i> Rulman Sesini Dinle:
+            </div>
+            <audio controls src="${insp.audioUrl}" style="height: 32px; flex: 1; outline: none; border-radius: 4px;" preload="none"></audio>
+          </div>
+        ` : ''}
+
         ${isCritical ? `
           <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
             <button onclick="window.selectTurbineForAnalysis('${insp.turbineId}', 'acoustics'); window.createFlushingWorkOrder();" style="height: 30px; padding: 0 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: 4px; color: #fff; font-weight: 700; font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
@@ -1478,6 +1384,8 @@ const updateInspectionsUI = () => {
     loader.style.display = 'block';
     content.style.display = 'none';
 
+    const previewUrl = blob ? URL.createObjectURL(blob) : null;
+
     const result: AcousticAnalysisResult = await bearingAgent.analyzeAcoustics(
       blob ? 'live_recording.wav' : 'technician_audio_upload.wav',
       isYawActive ? 'WITH_YAW' : 'NO_YAW'
@@ -1534,6 +1442,15 @@ const updateInspectionsUI = () => {
             </div>
           </div>
 
+          ${previewUrl ? `
+          <!-- Audio Playback Preview -->
+          <div style="margin-top: 5px; background: rgba(0, 242, 254, 0.05); border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 6px; padding: 6px 12px; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-volume-high" style="color: var(--accent-cyan); font-size: 0.9rem;"></i>
+            <span style="font-size: 0.8rem; color: #cbd0d8; font-weight: 700; white-space: nowrap;">Alınan Ses Kaydı:</span>
+            <audio controls src="${previewUrl}" style="height: 32px; flex: 1; outline: none;"></audio>
+          </div>
+          ` : ''}
+
           <!-- Save Acoustic Analysis Action Block -->
           <div style="margin-top: 5px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -1553,6 +1470,7 @@ const updateInspectionsUI = () => {
       `;
 
       (window as any).lastAcousticResult = { result, isYawActive };
+      (window as any).lastAcousticBlob = blob;
     }
   };
 
@@ -1894,10 +1812,11 @@ const updateInspectionsUI = () => {
 
   const noteInput = document.getElementById('acoustic-technician-note') as HTMLInputElement;
   const notes = noteInput ? noteInput.value.trim() : '';
+  const audioBlob = (window as any).lastAcousticBlob as Blob | undefined;
 
   const saveBtn = document.getElementById('save-acoustic-analysis-btn');
   if (saveBtn) {
-    saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Kaydediliyor...`;
+    saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${audioBlob ? 'Ses Yükleniyor ve Kaydediliyor...' : 'Kaydediliyor...'}`;
     (saveBtn as HTMLButtonElement).disabled = true;
   }
 
@@ -1927,7 +1846,7 @@ const updateInspectionsUI = () => {
   };
 
   try {
-    await bearingService.saveInspection(inspection);
+    await bearingService.saveInspection(inspection, audioBlob);
     if (saveBtn) {
       saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> Kaydedildi!`;
       saveBtn.style.background = 'rgba(0, 255, 102, 0.25)';

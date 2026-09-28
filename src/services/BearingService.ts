@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
 import { 
   collection, 
   doc, 
@@ -7,6 +7,7 @@ import {
   getDocs, 
   onSnapshot 
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export type BearingConditionStatus = 'HEALTHY' | 'FRONT_BEARING_REPLACED' | 'METAL_PARTICLE_DETECTED' | 'WARNING';
 
@@ -54,6 +55,7 @@ export interface BearingInspection {
   dateFormatted: string; // "DD.MM.YYYY HH:mm"
   inspector: string;
   condition: 'NORMAL' | 'WARNING' | 'CRITICAL';
+  audioUrl?: string;
   
   // Acoustic fields
   peakFrequency?: number;
@@ -214,13 +216,30 @@ class BearingService {
     return unsubscribe;
   }
 
-  public async saveInspection(inspection: Omit<BearingInspection, 'id'> & { id?: string }): Promise<BearingInspection> {
+  public async saveInspection(
+    inspection: Omit<BearingInspection, 'id'> & { id?: string },
+    audioBlob?: Blob
+  ): Promise<BearingInspection> {
     try {
       const id = inspection.id || `insp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      
+      let audioUrl = inspection.audioUrl;
+      if (audioBlob) {
+        try {
+          const extension = audioBlob.type && audioBlob.type.includes('webm') ? 'webm' : (audioBlob.type && audioBlob.type.includes('ogg') ? 'ogg' : 'wav');
+          const storageRef = ref(storage, `bearing_audio/${inspection.turbineId}_${Date.now()}.${extension}`);
+          const snap = await uploadBytes(storageRef, audioBlob);
+          audioUrl = await getDownloadURL(snap.ref);
+        } catch (uploadErr) {
+          console.warn("Audio upload to Storage failed, continuing without audioUrl:", uploadErr);
+        }
+      }
+
       const docRef = doc(db, this.inspectionCollectionName, id);
       const fullInspection: BearingInspection = {
         ...inspection,
         id,
+        audioUrl,
         createdAt: inspection.createdAt || new Date().toISOString()
       };
 
