@@ -7,7 +7,7 @@ import { inventoryService } from '../../services/InventoryService';
 import { serviceReportService } from '../../services/ServiceReportService';
 import { userService } from '../../services/UserService';
 import { auditService } from '../../services/AuditService';
-import { FaultFormUI, isInvalidPersonnelName } from './FaultFormUI';
+import { FaultFormUI, isInvalidPersonnelName, resolveBearingDescription } from './FaultFormUI';
 import * as DateTimeUtils from '../../utils/DateTimeUtils';
 import { personnelService } from '../../services/PersonnelService';
 import { warehouseService } from '../../services/WarehouseService';
@@ -2218,13 +2218,21 @@ export class FaultFormController {
                 );
                 const isDeficiency = (currentTask?.type === 'EKSİKLİK');
                 
+                const isBearing = currentTask?.secilenSablon === 'Rulman Analizi' ||
+                                  currentTask?.rawFaultCode === 'Rulman Analizi' ||
+                                  currentTask?.faultCode === 'Rulman Analizi' ||
+                                  faultCode === 'Rulman Analizi' ||
+                                  (typeof currentTask?.rawFaultCode === 'string' && currentTask.rawFaultCode.startsWith('BRG-')) ||
+                                  (typeof currentTask?.statuKodu === 'string' && currentTask.statuKodu.startsWith('BRG-')) ||
+                                  (typeof currentTask?.type === 'string' && currentTask.type.includes('Rulman'));
+                
                 if (isPlanliDurus) {
                     if (!faultDesc || faultDesc.trim().length < 5) {
                         throw new Error("Lütfen planlı duruş için en az 5 karakterlik açıklama/tanım giriniz.");
                     }
                 }
 
-                if (!isMaintenance && !isDeficiency) {
+                if (!isMaintenance && !isDeficiency && !isBearing) {
                     if (!faultCode || faultCode.trim() === '---') {
                         throw new Error("Lütfen arama kutusundan geçerli bir Arıza Kodu seçiniz.");
                     }
@@ -2628,6 +2636,9 @@ export class FaultFormController {
                         if (isPlanli) {
                             return 'Planlı Duruş';
                         }
+                        if (isBearing || c === 'Rulman Analizi' || (typeof c === 'string' && c.startsWith('BRG-'))) {
+                            return 'Rulman Analizi';
+                        }
                         if (isMaintenance) {
                             return (c && c !== '---') ? c : (currentTask?.secilenSablon || currentTask?.templateName || 'Bakım');
                         }
@@ -2636,6 +2647,11 @@ export class FaultFormController {
                     faultDesc: (() => {
                         let c = faultCode || currentTask?.rawFaultCode || '';
                         let d = faultDesc;
+                        if (isBearing || c === 'Rulman Analizi' || (typeof c === 'string' && c.startsWith('BRG-'))) {
+                            return (d && d !== 'Tanımlanmamış Hata Kodu' && d !== 'Genel Görev' && d.includes('°C')) 
+                                ? d 
+                                : resolveBearingDescription({ ...currentTask, faultDesc: d });
+                        }
                         if (c.includes(' - ')) {
                             d = c.split(' - ').slice(1).join(' - ').trim();
                         } else if (c && c !== '---') {
@@ -3343,51 +3359,67 @@ export class FaultFormController {
             if (faultCode && faultCode.includes(' - ')) {
                 faultCode = faultCode.split(' - ')[0].trim();
             }
-            if (faultCodeInput && !faultCodeInput.value && faultCode) {
-                faultCodeInput.value = faultCode;
-            }
-            if (faultCode) {
-                const isPlanli = initialData?.secilenSablon === 'Planlı Duruş' || 
-                                 (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
-                                 initialData?.templateName === 'Planlı Duruş' || 
-                                 (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
-                                 initialData?.type === 'Planlı Duruş' || 
-                                 (typeof initialData?.type === 'string' && initialData.type.includes('Planlı')) ||
-                                 faultCode === 'Planlı Duruş';
-                
-                const exact = statusService.getCodeByKod(faultCode);
-                if (exact) {
-                    faultDescEl.value = exact.Aciklama;
-                } else if (isPlanli) {
-                    faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || initialData?.faultDesc || 'Planlı Duruş';
-                } else if (initialData?.faultDesc) {
-                    faultDescEl.value = initialData.faultDesc;
-                } else if (initialData?.faultCode && initialData.faultCode.includes(' - ')) {
-                    faultDescEl.value = initialData.faultCode.split(' - ').slice(1).join(' - ').trim();
-                }
-            } else if (!isEditMode && (
-                initialData?.secilenSablon === 'Planlı Duruş' || 
-                (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
-                initialData?.templateName === 'Planlı Duruş' || 
-                (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
-                initialData?.type === 'Planlı Duruş' || 
-                (typeof initialData?.type === 'string' && initialData.type.includes('Planlı'))
-            )) {
+
+            const isBearing = initialData?.secilenSablon === 'Rulman Analizi' ||
+                              initialData?.rawFaultCode === 'Rulman Analizi' ||
+                              initialData?.faultCode === 'Rulman Analizi' ||
+                              faultCode === 'Rulman Analizi' ||
+                              (typeof initialData?.rawFaultCode === 'string' && initialData.rawFaultCode.startsWith('BRG-')) ||
+                              (typeof initialData?.statuKodu === 'string' && initialData.statuKodu.startsWith('BRG-')) ||
+                              (typeof initialData?.type === 'string' && initialData.type.includes('Rulman'));
+
+            if (isBearing) {
                 if (faultCodeInput) {
-                    faultCodeInput.value = 'Planlı Duruş';
+                    faultCodeInput.value = 'Rulman Analizi';
                 }
-                faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || 'Planlı Duruş';
-            } else if (!isEditMode && (
-                initialData?.isMaintenance ||
-                initialData?.type === 'BAKIM' ||
-                (initialData?.secilenSablon && !initialData.secilenSablon.toLowerCase().includes('ariza')) ||
-                (initialData?.templateName && !initialData.templateName.toLowerCase().includes('ariza'))
-            )) {
-                const sablonName = initialData?.secilenSablon || initialData?.templateName || 'Bakım';
-                if (faultCodeInput) {
-                    faultCodeInput.value = sablonName;
+                faultDescEl.value = resolveBearingDescription(initialData);
+            } else {
+                if (faultCodeInput && !faultCodeInput.value && faultCode) {
+                    faultCodeInput.value = faultCode;
                 }
-                faultDescEl.value = sablonName;
+                if (faultCode) {
+                    const isPlanli = initialData?.secilenSablon === 'Planlı Duruş' || 
+                                     (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
+                                     initialData?.templateName === 'Planlı Duruş' || 
+                                     (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
+                                     initialData?.type === 'Planlı Duruş' || 
+                                     (typeof initialData?.type === 'string' && initialData.type.includes('Planlı')) ||
+                                     faultCode === 'Planlı Duruş';
+                    
+                    const exact = statusService.getCodeByKod(faultCode);
+                    if (exact) {
+                        faultDescEl.value = exact.Aciklama;
+                    } else if (isPlanli) {
+                        faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || initialData?.faultDesc || 'Planlı Duruş';
+                    } else if (initialData?.faultDesc) {
+                        faultDescEl.value = initialData.faultDesc;
+                    } else if (initialData?.faultCode && initialData.faultCode.includes(' - ')) {
+                        faultDescEl.value = initialData.faultCode.split(' - ').slice(1).join(' - ').trim();
+                    }
+                } else if (!isEditMode && (
+                    initialData?.secilenSablon === 'Planlı Duruş' || 
+                    (typeof initialData?.secilenSablon === 'string' && initialData.secilenSablon.includes('Planlı')) ||
+                    initialData?.templateName === 'Planlı Duruş' || 
+                    (typeof initialData?.templateName === 'string' && initialData.templateName.includes('Planlı')) ||
+                    initialData?.type === 'Planlı Duruş' || 
+                    (typeof initialData?.type === 'string' && initialData.type.includes('Planlı'))
+                )) {
+                    if (faultCodeInput) {
+                        faultCodeInput.value = 'Planlı Duruş';
+                    }
+                    faultDescEl.value = initialData?.yoneticiNotu || initialData?.description || 'Planlı Duruş';
+                } else if (!isEditMode && (
+                    initialData?.isMaintenance ||
+                    initialData?.type === 'BAKIM' ||
+                    (initialData?.secilenSablon && !initialData.secilenSablon.toLowerCase().includes('ariza')) ||
+                    (initialData?.templateName && !initialData.templateName.toLowerCase().includes('ariza'))
+                )) {
+                    const sablonName = initialData?.secilenSablon || initialData?.templateName || 'Bakım';
+                    if (faultCodeInput) {
+                        faultCodeInput.value = sablonName;
+                    }
+                    faultDescEl.value = sablonName;
+                }
             }
             if (faultCode && w.loadFaultKnowledgeBase) {
                 w.loadFaultKnowledgeBase(faultCode);

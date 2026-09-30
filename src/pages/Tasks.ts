@@ -802,28 +802,57 @@ const renderTasksTable = (tasks: Task[], userRole: string) => {
                       </div>
                     </td>
                     <td>
-                        <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : (task.taskLocationType === 'WAREHOUSE' ? 'maintenance' : 'maintenance'))}">
-                          ${isFault ? `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                              <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
-                              <span style="font-weight: 900; font-size: 0.76rem; color: #ff6b6b; letter-spacing: 0.3px; flex-shrink: 0;">${task.rawFaultCode}</span>
-                              <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                              <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.faultCode.replace(task.rawFaultCode + ' - ', '')}">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
-                            </div>
-                          ` : `
-                            <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
-                              <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-wrench'}" style="color: ${isReturned ? '#b37feb' : '#00f3ff'}; font-size: 0.82rem; text-shadow: 0 0 8px ${isReturned ? 'rgba(179,127,235,0.4)' : 'rgba(0,243,255,0.4)'}; flex-shrink: 0;"></i>
-                              <span style="font-weight: 700; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;">${cleanSablonName(task.secilenSablon || task.faultCode)}</span>
-                              ${task.repairedMaterial?.description ? `
+                      ${(() => {
+                        const isBearing = Boolean(
+                          task.rawFaultCode === 'Rulman Analizi' ||
+                          task.rawFaultCode?.startsWith('BRG-') ||
+                          task.secilenSablon === 'Rulman Analizi'
+                        );
+
+                        if (isBearing) {
+                          let bearingDesc = task.faultCode.replace(task.rawFaultCode + ' - ', '');
+                          if (!bearingDesc || bearingDesc === 'Tanımlanmamış Hata Kodu' || bearingDesc === 'Genel Görev') {
+                            bearingDesc = task.rawFaultCode?.includes('FLUSH')
+                              ? 'Tespit Edilen Sıcaklık Farkı - Rulman Kontrolü & Flushing Görevi'
+                              : 'Tespit Edilen Sıcaklık Farkı - Rulman Kontrolü Görevi';
+                          }
+                          return `
+                            <div class="task-type-badge bearing" style="background: linear-gradient(135deg, rgba(255, 159, 67, 0.08), rgba(255, 159, 67, 0.02)) !important; border: 1px solid rgba(255, 159, 67, 0.3) !important;">
+                              <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+                                <i class="fa-solid fa-temperature-half" style="color: #ff9f43; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,159,67,0.4); flex-shrink: 0;"></i>
+                                <span style="font-weight: 900; font-size: 0.76rem; color: #ff9f43; letter-spacing: 0.3px; flex-shrink: 0;">Rulman Analizi</span>
                                 <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                                <span style="font-weight: 700; font-size: 0.74rem; color: #fff; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;"><i class="fa-solid fa-cube"></i> ${task.repairedMaterial.description} (${task.repairedMaterial.quantity || 1} Ad.)</span>
-                              ` : (task.yoneticiNotu && (!task.yoneticiNotu.startsWith('Sistemden atanan') || task.secilenSablon?.includes('Planlı')) ? `
-                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
-                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
-                              ` : '')}
+                                <span style="font-weight: 700; font-size: 0.74rem; color: #fff; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 340px;" title="${bearingDesc}">${bearingDesc}</span>
+                              </div>
                             </div>
-                          `}
-                        </div>
+                          `;
+                        }
+
+                        return `
+                          <div class="task-type-badge ${isReturned ? 'returned' : (isFault ? 'fault' : (task.taskLocationType === 'WAREHOUSE' ? 'maintenance' : 'maintenance'))}">
+                            ${isFault ? `
+                              <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+                                <i class="fa-solid fa-triangle-exclamation" style="color: #ff4d4d; font-size: 0.82rem; text-shadow: 0 0 8px rgba(255,77,77,0.4); flex-shrink: 0;"></i>
+                                <span style="font-weight: 900; font-size: 0.76rem; color: #ff6b6b; letter-spacing: 0.3px; flex-shrink: 0;">${task.rawFaultCode}</span>
+                                <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.faultCode.replace(task.rawFaultCode + ' - ', '')}">${task.faultCode.replace(task.rawFaultCode + ' - ', '')}</span>
+                              </div>
+                            ` : `
+                              <div style="display: flex; align-items: center; gap: 8px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%;">
+                                <i class="fa-solid ${isReturned ? 'fa-rotate-left' : 'fa-wrench'}" style="color: ${isReturned ? '#b37feb' : '#00f3ff'}; font-size: 0.82rem; text-shadow: 0 0 8px ${isReturned ? 'rgba(179,127,235,0.4)' : 'rgba(0,243,255,0.4)'}; flex-shrink: 0;"></i>
+                                <span style="font-weight: 700; font-size: 0.76rem; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0;">${cleanSablonName(task.secilenSablon || task.faultCode)}</span>
+                                ${task.repairedMaterial?.description ? `
+                                  <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                  <span style="font-weight: 700; font-size: 0.74rem; color: #fff; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;"><i class="fa-solid fa-cube"></i> ${task.repairedMaterial.description} (${task.repairedMaterial.quantity || 1} Ad.)</span>
+                                ` : (task.yoneticiNotu && (!task.yoneticiNotu.startsWith('Sistemden atanan') || task.secilenSablon?.includes('Planlı')) ? `
+                                  <span style="color: var(--text-muted); opacity: 0.4; font-size: 0.72rem; flex-shrink: 0;">|</span>
+                                  <span style="font-weight: 700; font-size: 0.74rem; color: var(--text-main); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px;" title="${task.yoneticiNotu}">${task.yoneticiNotu}</span>
+                                ` : '')}
+                              </div>
+                            `}
+                          </div>
+                        `;
+                      })()}
                     </td>
                     <td style="text-align: center; padding: 10px 8px !important;">
                       <span class="status-badge ${statusClass}">

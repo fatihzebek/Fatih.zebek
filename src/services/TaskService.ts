@@ -10,6 +10,7 @@ export interface TaskCreateData {
   turbinSeriNo: string;
   turbinNo: string;
   statuKodu?: string;
+  statuAciklamasi?: string;
   yoneticiNotu: string;
   assignedTeam: string;
   isPoolTask?: boolean;
@@ -82,13 +83,19 @@ class TaskService {
   private collectionName = 'tasks';
   private tasksCache: Task[] | null = null;
 
-  async createNewTask(data: TaskCreateData & { customStatus?: string, createdBy?: string, isPoolTask?: boolean }) {
+  async createNewTask(data: TaskCreateData & { customStatus?: string, createdBy?: string, isPoolTask?: boolean, statuAciklamasi?: string }) {
     try {
       // 1. Akıllı Arıza Kodu Eşleştirme
-      let statuAciklamasi = '';
-      if (data.statuKodu) {
-        const codeInfo = statusService.getCodeByKod(data.statuKodu);
-        statuAciklamasi = codeInfo ? codeInfo.Aciklama : 'Tanımlanmamış Hata Kodu';
+      let statuAciklamasi = data.statuAciklamasi || '';
+      if (!statuAciklamasi && data.statuKodu) {
+        if (data.statuKodu === 'Rulman Analizi' || data.statuKodu.startsWith('BRG-')) {
+          statuAciklamasi = data.statuKodu.includes('FLUSH')
+            ? 'Rulman Kontrolü & Flushing Görevi'
+            : 'Rulman Kontrolü Görevi';
+        } else {
+          const codeInfo = statusService.getCodeByKod(data.statuKodu);
+          statuAciklamasi = codeInfo ? codeInfo.Aciklama : 'Tanımlanmamış Hata Kodu';
+        }
       }
 
       // 1.1. Otomatik Türbin / Saha Çözümleme (Eğer sadece seri no girildiyse)
@@ -187,7 +194,30 @@ class TaskService {
         const data = doc.data();
         const rawCode = data.faultData?.statuKodu || '';
         let desc = data.faultData?.statuAciklamasi || '';
-        if (rawCode && rawCode !== '---' && (!desc || desc === 'Genel Görev' || desc === 'Tanımlanmamış Hata Kodu')) {
+        const adminNote = data.assignment?.yoneticiNotu || (data as any).yoneticiNotu || (data as any).note || (data as any).description || '';
+
+        if (rawCode && (rawCode === 'Rulman Analizi' || rawCode.startsWith('BRG-'))) {
+          if (!desc || desc === 'Tanımlanmamış Hata Kodu' || desc === 'Genel Görev' || !desc.includes('°C')) {
+            let deltaText = '';
+            if (adminNote) {
+              const m = adminNote.match(/(?:Sıcaklık Farkı\s*\(ΔT\)|\bΔT)\s*:\s*([+\-]?\d+[\.,]?\d*)\s*°?C/i) ||
+                        adminNote.match(/([+\-]?\d+[\.,]?\d*)\s*°C\s*(?:Fark|Sıcaklık)/i);
+              if (m) {
+                const val = m[1].replace('+', '');
+                deltaText = `+${val}°C `;
+              }
+            }
+            if (!deltaText && data.taskInfo?.turbinSeriNo) {
+              const live = (window as any).bearingThermalData?.[data.taskInfo.turbinSeriNo];
+              if (live && live.deltaT !== null && live.deltaT !== undefined) {
+                deltaText = `+${Math.round(Math.abs(live.deltaT))}°C `;
+              }
+            }
+            const isFlush = rawCode.includes('FLUSH') || adminNote.toLowerCase().includes('flushing');
+            const action = isFlush ? 'Rulman Kontrolü & Flushing Görevi' : 'Rulman Kontrolü Görevi';
+            desc = deltaText ? `Tespit Edilen ${deltaText}Fark ${action}` : `Tespit Edilen Sıcaklık Farkı - ${action}`;
+          }
+        } else if (rawCode && rawCode !== '---' && (!desc || desc === 'Genel Görev' || desc === 'Tanımlanmamış Hata Kodu')) {
           const codeInfo = statusService.getCodeByKod(rawCode);
           if (codeInfo) desc = codeInfo.Aciklama;
         }
@@ -217,10 +247,13 @@ class TaskService {
           claimedAt: data.workflow?.claimedAt || null,
           faultCode: `${rawCode || '---'} - ${desc}`,
           rawFaultCode: rawCode,
+          statuAciklamasi: desc,
+          faultDesc: desc,
+          description: desc,
           status: data.workflow?.durum || 'Aktif',
           createdAt: data.workflow?.olusturulmaTarihi,
           secilenSablon: data.taskInfo?.secilenSablon || '',
-          yoneticiNotu: data.assignment?.yoneticiNotu || (data as any).yoneticiNotu || (data as any).note || (data as any).description || '',
+          yoneticiNotu: adminNote,
           resolvedDeficiencyId: data.assignment?.resolvedDeficiencyId || '',
           ohsData: data.ohsData || null,
           maintenanceData: data.maintenanceData || null,

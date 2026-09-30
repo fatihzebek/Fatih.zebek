@@ -1,0 +1,121 @@
+[
+  {
+    "siteId": "3243",
+    "siteName": "Alize Çamseki",
+    "turbineNo": 11,
+    "serial": "481675",
+    "type": "E-48"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 1,
+    "serial": "822191",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 2,
+    "serial": "822192",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 3,
+    "serial": "822193",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 4,
+    "serial": "822194",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 5,
+    "serial": "822195",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 6,
+    "serial": "822196",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 7,
+    "serial": "822197",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 8,
+    "serial": "822198",
+    "type": "E-82"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 9,
+    "serial": "921532",
+    "type": "E-92"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 10,
+    "serial": "921533",
+    "type": "E-92"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 11,
+    "serial": "921534",
+    "type": "E-92"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 12,
+    "serial": "921535",
+    "type": "E-92"
+  },
+  {
+    "siteId": "3892",
+    "siteName": "Alize Çataltepe",
+    "turbineNo": 13,
+    "serial": "921536",
+    "type": "E-92"
+  },
+  {
+    "siteId": "0752",
+    "siteName": "Alize Germiyan",
+    "turbineNo": 1,
+    "serial": "41193",
+    "type": "E40"
+  },
+  {
+    "siteId": "0752",
+    "siteName": "Alize Germiyan",
+    "turbineNo": 2,
+    "serial": "41194",
+    "type": "E40"
+  },
+  {
+    "siteId": "0752",
+    "siteName": "Alize Germiyan",
+    "turbineNo": 3,
+    "serial": "41195",
+    "type": "E40"
+  }
+]

@@ -14,6 +14,39 @@ export function isInvalidPersonnelName(name: any): boolean {
     return false;
 }
 
+export function resolveBearingDescription(task: any): string {
+    if (!task) return 'Tespit Edilen Sıcaklık Farkı - Rulman Kontrolü Görevi';
+    let desc = task?.statuAciklamasi || 
+               (task?.description && task.description !== 'Tanımlanmamış Hata Kodu' && task.description !== 'Genel Görev' ? task.description : '') ||
+               (task?.faultDesc && task.faultDesc !== 'Tanımlanmamış Hata Kodu' && task.faultDesc !== 'Genel Görev' ? task.faultDesc : '') || '';
+
+    if (!desc || desc === 'Tanımlanmamış Hata Kodu' || desc === 'Genel Görev' || !desc.includes('°C')) {
+        const noteText = task?.yoneticiNotu || task?.notes || task?.description || '';
+        let deltaText = '';
+        if (noteText) {
+            const m = noteText.match(/(?:Sıcaklık Farkı\s*\(ΔT\)|\bΔT)\s*:\s*([+\-]?\d+[\.,]?\d*)\s*°?C/i) ||
+                      noteText.match(/([+\-]?\d+[\.,]?\d*)\s*°C\s*(?:Fark|Sıcaklık)/i);
+            if (m) {
+                const val = m[1].replace('+', '');
+                deltaText = `+${val}°C `;
+            }
+        }
+        if (!deltaText && task?.turbinSeriNo) {
+            const live = (window as any).bearingThermalData?.[task.turbinSeriNo];
+            if (live && live.deltaT !== null && live.deltaT !== undefined) {
+                deltaText = `+${Math.round(Math.abs(live.deltaT))}°C `;
+            }
+        }
+        const isFlush = (task?.rawFaultCode && task.rawFaultCode.includes('FLUSH')) ||
+                        (task?.statuKodu && task.statuKodu.includes('FLUSH')) ||
+                        (task?.faultCode && task.faultCode.includes('FLUSH')) ||
+                        (noteText && noteText.toLowerCase().includes('flushing'));
+        const action = isFlush ? 'Rulman Kontrolü & Flushing Görevi' : 'Rulman Kontrolü Görevi';
+        desc = deltaText ? `Tespit Edilen ${deltaText}Fark ${action}` : `Tespit Edilen Sıcaklık Farkı - ${action}`;
+    }
+    return desc;
+}
+
 export const FaultFormUI = {
     renderLoadingState: () => `
         <div style="padding: 4rem; text-align: center; color: var(--accent-cyan); border: 1px dashed rgba(0, 242, 254, 0.1); border-radius: 12px; background: rgba(0,0,0,0.2);">
@@ -76,13 +109,24 @@ export const FaultFormUI = {
                               currentTask?.faultCode === 'Planlı Duruş' ||
                               currentTask?.faultCode === 'PLN';
 
-        const defaultFaultCode = isPlanliDurus ? 'Planlı Duruş' : (currentTask?.rawFaultCode || currentTask?.faultCode || '');
+        const isBearingTask = currentTask?.secilenSablon === 'Rulman Analizi' ||
+                              currentTask?.rawFaultCode === 'Rulman Analizi' ||
+                              currentTask?.faultCode === 'Rulman Analizi' ||
+                              (typeof currentTask?.rawFaultCode === 'string' && currentTask.rawFaultCode.startsWith('BRG-')) ||
+                              (typeof currentTask?.statuKodu === 'string' && currentTask.statuKodu.startsWith('BRG-')) ||
+                              (typeof currentTask?.type === 'string' && currentTask.type.includes('Rulman'));
+
+        const defaultFaultCode = isPlanliDurus 
+            ? 'Planlı Duruş' 
+            : (isBearingTask ? 'Rulman Analizi' : (currentTask?.rawFaultCode || currentTask?.faultCode || ''));
         let initialFaultDesc = currentTask?.faultDesc || '';
         
         if (isWarehouse) {
             initialFaultDesc = currentTask?.secilenSablon || 'Saha İçi Parça Revizyonu';
         } else if (isPlanliDurus) {
             initialFaultDesc = currentTask?.yoneticiNotu || currentTask?.description || 'Planlı Duruş';
+        } else if (isBearingTask) {
+            initialFaultDesc = resolveBearingDescription(currentTask);
         } else if (defaultFaultCode) {
             const exact = statusService.getCodeByKod(defaultFaultCode);
             if (exact) {
@@ -148,10 +192,10 @@ export const FaultFormUI = {
                     <div style="display: flex; flex-direction: column;">
                       <h1 style="font-size: 1.1rem; font-weight: 800; color: #fff; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
                          <i class="fa-solid fa-file-pen" style="color: var(--accent-cyan); font-size: 0.9rem;"></i>
-                         <span id="header-title">${currentTask?.secilenSablon || 'ARIZA MÜDAHALE FORMU'}</span>
+                         <span id="header-title">${currentTask?.secilenSablon || (isBearingTask ? 'RULMAN ANALİZİ' : 'ARIZA MÜDAHALE FORMU')}</span>
                       </h1>
                       <p style="color: var(--accent-cyan); font-size: 0.65rem; font-weight: 800; margin: 0; opacity: 0.9; letter-spacing: 0.5px; text-transform: uppercase;">
-                        <span id="header-subtitle">${isMaintenanceTask ? 'PERİYODİK BAKIM VE KONTROL RAPORU' : 'SERVİS VE MÜDAHALE KAYIT FORMU'}</span>
+                        <span id="header-subtitle">${isBearingTask ? 'TERMAL RULMAN ANALİZİ & MÜDAHALE FORMU' : (isMaintenanceTask ? 'PERİYODİK BAKIM VE KONTROL RAPORU' : 'SERVİS VE MÜDAHALE KAYIT FORMU')}</span>
                       </p>
                     </div>
                 </div>
@@ -162,10 +206,10 @@ export const FaultFormUI = {
                   <div>
                     <h2 style="font-size: 1.5rem; color: #fff; margin: 0; font-weight: 900; letter-spacing: 1px; display: flex; align-items: center; gap: 1rem;">
                        <i class="fa-solid fa-file-signature" style="color: var(--accent-cyan);"></i>
-                       ${currentTask?.secilenSablon || 'ARIZA MÜDAHALE FORMU'}
+                       ${currentTask?.secilenSablon || (isBearingTask ? 'RULMAN ANALİZİ' : 'ARIZA MÜDAHALE FORMU')}
                     </h2>
                     <p style="color: var(--text-muted); font-size: 0.75rem; margin: 0.3rem 0 0 2.5rem; font-weight: 500;">
-                      ${isMaintenanceTask ? 'Periyodik Bakım ve Kontrol Raporu' : 'Servis ve Müdahale Kayıt Formu'}
+                      ${isBearingTask ? 'Termal Rulman Analizi ve Müdahale Formu' : (isMaintenanceTask ? 'Periyodik Bakım ve Kontrol Raporu' : 'Servis ve Müdahale Kayıt Formu')}
                     </p>
                   </div>
                   <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">

@@ -344,7 +344,7 @@ type Page = 'dashboard' | 'tasks' | 'inventory' | 'turbines' | 'teams' | 'new-ta
   'form-e44e48-ana' | 'form-e44e48-yag' | 'form-e44e48-4yil' |
   'form-e70-all' | 'form-e82-all' | 'form-e82e2-ana' | 'form-yag-4yil' |
   'form-e92-ana' | 'form-e92-yag' | 'form-e92-4yil' | 'form-ruzgar' |
-  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-dashboard' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'card-tracking' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management' | 'email-recipients' | 'isg-management' | 'workshop-ai-agent' | 'notification-center';
+  'reports-archive' | 'task-create' | 'MALZEME_YONETIMI' | 'material-dashboard' | 'material-analytics' | 'material-pricing' | 'global-history' | 'repair-history' | 'form-template-edit' | 'siparis' | 'saha-siparisleri' | 'bakim-planlama' | 'bearing-analysis' | 'power-electronics' | 'predictive-agent' | 'code-advisor-agent' | 'tsi-library' | 'asset-custody' | 'tickets-page' | 'visual-bom' | 'purchase-requests' | 'online-users' | 'image-pool' | 'workshop' | 'workshop-stock' | 'workshop-tasks' | 'workshop-components' | 'workshop-performance' | 'workshop-dispatches' | 'card-tracking' | 'workshop-returned' | 'workshop-scrap' | 'field-scraps' | 'card-passport' | 'kkd-kontrol' | 'olcu-aletleri' | 'tork-aletleri' | 'overtime-approvals' | 'personnel-management' | 'scada-reset-logs' | 'parameter-audit' | 'leave-management' | 'fault-library' | 'vehicle-management' | 'email-recipients' | 'isg-management' | 'workshop-ai-agent' | 'notification-center';
 
 interface AppState {
   currentPage: Page
@@ -1046,7 +1046,7 @@ const Sidebar = () => {
           </li>
         ` : ''}
         
-        ${(profile?.role === 'ADMIN' || isAllowed('parameter-audit')) ? `
+        ${(profile?.role === 'ADMIN') ? `
           <li class="nav-item ${state.currentPage === 'parameter-audit' ? 'active' : ''}" ${navDragAttr('parameter-audit')} onclick="window.navigate('parameter-audit')">
             <i class="fa-solid fa-sliders" style="color: var(--accent-cyan);"></i> Parametre Denetimi
           </li>
@@ -1078,13 +1078,18 @@ const Sidebar = () => {
           </li>
         ` : ''}
 
-        ${(isAllowed('bearing-analysis') || profile?.role === 'ADMIN') ? `
+        ${(isAllowed('bearing-analysis') || isAllowed('power-electronics') || profile?.role === 'ADMIN') ? `
           <div class="nav-section-label" ${navDragAttr('sec-ajanlar')}>AJANLAR</div>
         ` : ''}
 
         ${isAllowed('bearing-analysis') ? `
           <li class="nav-item ${state.currentPage === 'bearing-analysis' ? 'active' : ''}" ${navDragAttr('bearing-analysis')} onclick="window.navigate('bearing-analysis')">
             <i class="fa-solid fa-brain" style="color: var(--accent-cyan);"></i> Rulman Analiz Ajanı
+          </li>
+        ` : ''}
+        ${(isAllowed('power-electronics') || isAllowed('bearing-analysis') || profile?.role === 'ADMIN') ? `
+          <li class="nav-item ${state.currentPage === 'power-electronics' ? 'active' : ''}" ${navDragAttr('power-electronics')} onclick="window.navigate('power-electronics')">
+            <i class="fa-solid fa-bolt-lightning" style="color: #ff9f43;"></i> Güç Elektroniği & Sıcaklık
           </li>
         ` : ''}
         ${(profile?.role === 'ADMIN') ? `
@@ -2498,6 +2503,10 @@ const getContent = async () => {
     case 'bearing-analysis': {
       const { BearingAnalysisPage } = await import('./pages/BearingAnalysis');
       return await BearingAnalysisPage();
+    }
+    case 'power-electronics': {
+      const { PowerElectronicsPage } = await import('./pages/PowerElectronics');
+      return await PowerElectronicsPage();
     }
     case 'predictive-agent': {
       const { PredictiveAgentPage } = await import('./pages/PredictiveAgent');

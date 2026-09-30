@@ -1,0 +1,131 @@
+00000	;450154;04.03.2025;13:41:52;
+01000	;Startverzögerung;Startdelay;´0;s
+01001	;Nennspannung;Rated voltage;´230;V
+01002	;Unterspannungsschutz U<;Undervoltage protection U<;´90.0;%
+01003	;Verzögerungszeit Untersp.-schutz U<;Delay of undervolt. protection U<;´3.00;s
+01004	;Unterspannungsschutz U<<;Undervoltage protection U<<;´80.0;%
+01005	;Verzögerungszeit Untersp.-schutz U<<;Delay of undervolt. protection U<<;´1.00;s
+01006	;Überspannungsschutz U>;Overvoltage protection U>;´106.5;%
+01007	;Verzögerungszeit Übersp.-schutz U>;Delay of overvoltage protection U>;´0.10;s
+01008	;Überspannungsschutz U>>;Overvoltage protection U>>;´125.0;%
+01009	;Verzögerungszeit Übersp.-schutz U>>;Delay of overvoltage protection U>>;´0.10;s
+01010	;Abregelspannung;limitation voltage;´125.0;%
+01011	;Nennfrequenz;Rated frequency;´50.00;Hz
+01012	;Unterfrequenzschutz f<;Underfrequency protection f<;´47.50;Hz
+01013	;Verzögerungszeit Unterfreq.schutz f<;Delay of underfreq. protection f<;´0.10;s
+01014	;Überfrequenzschutz f>;Overfrequency protection f>;´51.50;Hz
+01015	;Verzögerungszeit Überfreq.-schutz f>;Delay of overfreq. protection f>;´0.10;s
+01016	;Frequenzregelung;Frequency control;´(00) OFF;
+01030	;FRT Betrieb;FRT operation;´(00) OFF;
+01031	;FACTS-Betrieb;FACTS-operation;´(00) FACTS OFF;
+01032	;Konstante dP/df-Gradienten;Constant dP / df gradients;´(00) OFF;
+01038	;Überwachungszeit für Normalstart;monitoring time for regular start;´0;s
+01039	;Überwachungszeit für Neustart;monitoring time for restart;´5;s
+01040	;Netzunterspannnungsgrenze für Neustart;Mains undervoltage level for restart;´90.0;%
+01041	;Netzüberspannungsgrenze für Neustart;Mains overvoltage level for restart;´106.5;%
+01042	;Netzunterfrequenzgrenze für Neustart;Mains underfrequency level for restart;´47.50;Hz
+01043	;Netzüberfrequenzgrenze für Neustart;Mains overfrequency level for restart;´51.50;Hz
+01044	;Unterfrequenzschutz f<<;underfrequency protection f<<;´43.00;Hz
+01045	;Verzögerungszeit Unterfreq.schutz f<<;delay of underfreq. protection f<<;´60.00;s
+01046	;Überfrequenzschutz f>>;overfrequency protection f>>;´57.00;Hz
+01047	;Verzögerungszeit Überfreq.-schutz f>>;delay of overfreq. protection f>>;´60.00;s
+01050	;Trägheitsregelung;Inertia control;´(00) OFF;
+01059	;Trägheitsregelung extern;inertia control extern;´(01) ON;
+01060	;Trägheitfaktorbasis;inertia factor base;´(00) Nennleistung;
+01061	;Trägheitsrückf.pause;inertia recov. delay;´0.00;s
+01062	;Trägheitfak. halten;inertia factor hold;´(00) OFF;
+01147	;Zeitfenster ZPM-Zähler:;time frame ZPM counter;´0;s
+01148	;Max. Anzahl ZPM im Zeitfenster:;max. number of ZPM in time frame;´0;
+01149	;K-Faktor FRT (Wirkstrom);K-factor FRT (active current);´1.00;
+01150	;K-Faktor FRT(max. Blindstrom);K-factor FRT (max. reactive current);´0.90;
+01151	;Aktive Oberschwing. Kompensation;Active harmonic compensation;´(00) deactivated;
+01200	;STATCOM-Betrieb;STATCOM operation;´(00) OFF;
+01201	;Farm Control Interf.;Farm Control Interf.;´(00) DEACTIVATED;
+01202	;Scheinleistungsbegrenzung durch;Apparent power limitation by;´(00) REACTIVE POWER LIMITATION;
+01203	;V-Kurven-Gradient Q(nom) bei P/P(nom);V-curve gradient Q(rat) at P/P(rat);´20;%
+01204	;Nennblindleistung;Rated reactive power;´400;kVAr
+01206	;Dynamische Blindleistung (Q/P);Dynamic reactive power (Q/P);´0.000;
+01207	;Statische Blindleistung;Static reactive power;´0;kVAr
+01208	;Filterkompensation;Filter compensation;´0;kVAr
+01209	;Dyn. Blindl. (Q/P): (Störung Parkregel.);Dyn. react.pow.(Q/P): (farm contr. faulty);´0.000;
+01210	;Statische Blindl.: (Störung Parkregel.);Static react. pow.: (farm contr. faulty);´0;kVAr
+01308	;SCADA-Parkregelung;SCADA farm control;´(01) ON;
+01309	;dP/dt-Regler;dP/dt-control;´(00) OFF;
+01311	;Sturmregelung;Storm control;´(01) ON;
+01314	;Blattheizung: Automatik;Blade heating: automatic;´(00) OFF;
+01315	;Blattheizung im Betrieb zulassen;Permit blade heating during operation;´(00) NO;
+01316	;Max. Bezugsleistung der Blattheizung;Max. power consump.of blade heating;´12;kW
+01317	;Min. Heizdauer der Blattheizung;Min.heating duration of blade heating;´240;minute
+01319	;Feuchtegrenzwert für präventive Heizung;Humidity level for preventive heating;´70;%
+01320	;Leistungsgrenzwert für präventive Heizung;Power level for preventive heating;´0;kW
+01322	;Bezugsleist.managem. bei präventiver Blattheiz. zulassen;permit power cons. management at prevent. blade heating;´(00) NO;
+01333	;Funktion ext. Stoppeingang I/O2 X8.2B;function ext. stop input I/O2 X8.2B;´(00) normal stop / idle mode on;
+01350	;Autom. Wiederanlauf nach Blattheizung;Auto turbine start after blade heating;´(01) ON;
+01351	;Ice Detection System Automatic restart when free of ice;Ice Detection System Automatic restart when free of ice;´(00) OFF;
+01352	;Ice Detection System fall-back reaction;Ice Detection System fall-back reaction;´(00) further ice dtct system needed;
+01353	;Ice Detection System P1353 Eologix;Ice Detection System P1353 Eologix;´(00) NO;
+01354	;Ice Detection System P1354 Fos4x;Ice Detection System P1354 Fos4x;´(00) NO;
+01355	;Ice Detection System P1355 Woelfel;Ice Detection System P1355 Woelfel;´(00) NO;
+01357	;Ice Detection System only active with turbine stopped;Ice Detection System only active with turbine stopped;´(00) NO;
+01358	;Ice Detection System inactive from;Ice Detection System inactive from;´3.0;m/s
+01359	;Ice Detection System inactive to;Ice Detection System inactive to;´3.0;m/s
+01400	;Maximalleistung (Störung Parkregel.);Maximum power (farm contr. faulty);´960;kW
+02000	;Standorthöhe über Meereshöhe;Site height above sea level;´110;m
+02003	;Nennwirkleistung;Rated active power;´(02) 900kW;
+02012	;Bezugsleistungs-Management;power consumption management;´(00) OFF;
+02100	;Maximalleistung (leistungsoptim.);Maximum power (power optimized);´935;kW
+02102	;Wirkleistungsgrad. (nach Netzausfall);Active power grad. (after mains fail.);´20;kW/s
+02103	;Wirkleistungsgradient (bei Normalstart);Active power grad. (normal start-up);´20;kW/s
+02104	;Wirkleistungsgradient (im Betrieb);Active power grad. (during operation);´60;kW/s
+02105	;Wirkleistungsgradient (nach Überfrequenz);active power grad. (after over freq.);´240;kW/s
+02106	;Wirkleistungsgradient (Stoppschalter);active power grad. (stop switch);´41;kW/s
+02107	;Wirkleistungsgradient (externer Stopp);active power grad. (external stop);´41;kW/s
+02108	;Wirkleistungsgradient (Schalloptimierung);active power grad. (noise optimization);´60;kW/s
+02111	;Wirkleistungsgradient (interner Stopp);active power grad. (internal stop);´41;kW/s
+02120	;Maximalleistung (vertraglich);maximum power (contractual);´1200;kW
+03101	;Labko Eisdetektor;Labko ice detector;´(00) NOT INSTALLED;
+03102	;Labko Eisdetektor: Automat. Neustart nach Vereisung;Labko ice detector: automatic restart after icing;´(01) ON;
+03103	;Labko Eisdetektor: Nur bei gestoppter Anlage aktiv;Labko ice detektor: Only active with turbine stopped;´(00) NO;
+03104	;Labko Eisdetektor: Inaktiv von;Labko ice detektor: inactive from;´3.0;m/s
+03105	;Labko Eisdetektor: Inaktiv bis;Labko ice detektor: inactive to;´3.0;m/s
+03106	;Verzögerung für Blattheizung;delay for blade heating;´120;minute
+04000	;Eis-MPP-Tracker;ice mpp-tracker;´(00) OFF;
+04093	;Sektor-Information generieren;create sector information;´(00) NO;
+04100	;Wind-Toleranz für Leistungskennlinie;Wind tolerance for power curve;´3.0;m/s
+04101	;Wind-Toleranz der Leistungskennlinie für Blattheizung;Wind tolerance of power curve for blade heating;´0.6;m/s
+04102	;Leistungs-Toleranz bei > 10,5m/s;Power tolerance at more than 10,5m/s;´50;%
+04103	;Leistungs-Toleranz bei > 10,5m/s für Blattheizung;Power tolerance at more than 10,5m/s for blade heating;´90;%
+04104	;Wind-Toleranz für Blattwinkelkennlinie;Wind tolerance for blade angle curve;´3.5;m/s
+04105	;Wind-Toleranz der Blattwinkelkennlinie für Blattheizung;Wind tolerance of blade angle curve for blade heating;´2.0;m/s
+04106	;Grenzwert für Park-Eiserkennung;Limit for farm ice detection;´100;%
+04107	;Automat. Neustart nach Vereisung;Automatic restart after icing;´(01) ON;
+04108	;Automat. Neustart während Vereisung;Automatic restart during icing;´(01) ON;
+04111	;Feuchtegrenzwert für Eis-Warnleuchte;humidity level for ice warning light;´80;
+04112	;Eisansatz-Detektionszeit;ice accretion detection time;´30;minute
+04114	;Automat. Neustart nach Park-Eiserkennung;automatic restart after farm ice detection;´(01) ON;
+04115	;Präventive Eiserk. nach 3 Std. Störung;preventive ice det. After 3 hours fault;´(01) ON;
+06000	;Schalloptimierung (1);Noise optimization (1);´(00) OFF;
+06001	;Mindestzeit (1);Minimum time (1);´10;minute
+06002	;Schalloptimierung Zeit (1);Noise optimization time (1);´(00) OFF;
+06003	;Zeit von (1);Time from (1);´00:00;hh:mm
+06004	;Zeit bis (1);Time to (1);´00:00;hh:mm
+06005	;Schalloptimierung Windgeschw. (1);Noise optimization wind speed (1);´(00) OFF;
+06006	;Verzögerung (1);Delay (1);´2;minute
+06007	;Min. Windgeschwindigkeit (1);Min. wind speed (1);´0.0;m/s
+06008	;Max. Windgeschwindigkeit (1);Max. wind speed (1);´0.0;m/s
+06009	;Schalloptimierung Windrichtung (1);Noise optimization wind direction (1);´(00) OFF;
+06010	;Verzögerung (1);Delay (1);´2;minute
+06011	;Winkel 1. Sektor (1);Angle 1. sector (1);´999;°
+06012	;Bereich 1. Sektor (1);Range 1. sector (1);´0;°
+06013	;Winkel 2. Sektor (1);Angle 2. sector (1);´999;°
+06014	;Bereich 2. Sektor (1);Range 2. sector (1);´0;°
+06015	;Winkel 3. Sektor (1);Angle 3. sector (1);´999;°
+06016	;Bereich 3. Sektor (1);Range 3. sector (1);´0;°
+06020	;Schalloptimierung (2);Noise optimization (2);´(00) OFF;
+06040	;Schalloptimierung (3);Noise optimization (3);´(00) OFF;
+06060	;Schalloptimierung (4);Noise optimization (4);´(00) OFF;
+06100	;Schattenabschaltung;Shadow shut off;´(00) OFF;
+06101	;Abschaltintensität;Shut off intensity;´36.0;%
+06102	;Filterzeit ein;Filter on;´5;s
+06103	;Filterzeit aus;Filter off;´300;s
+07017	;Eologix Icing signaling mode;Eologix Icing signaling mode;´(00) Safety;

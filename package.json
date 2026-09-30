@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/sync_sap.js && vite",
-    "dev:local2": "node scripts/sync_sap.js && vite --mode local2",
-    "build": "node scripts/sync_sap.js && node scripts/update-version.mjs && tsc && vite build",
+    "dev": "node scripts/sync_sap.js && node scripts/sync_parameters.cjs && vite",
+    "dev:local2": "node scripts/sync_sap.js && node scripts/sync_parameters.cjs && vite --mode local2",
+    "build": "node scripts/sync_sap.js && node scripts/sync_parameters.cjs && node scripts/update-version.mjs && tsc && vite build",
     "test": "node scripts/run-tests.mjs",
     "preview": "vite preview",
     "advise": "node scripts/code_advisor.js",
-    "sync-sap": "node scripts/sync_sap.js"
+    "sync-sap": "node scripts/sync_sap.js",
+    "sync-params": "node scripts/sync_parameters.cjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

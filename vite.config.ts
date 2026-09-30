@@ -45,6 +45,36 @@ function autoSyncSapPlugin() {
   };
 }
 
+function autoSyncParametersPlugin() {
+  let isSyncing = false;
+  return {
+    name: 'auto-sync-parameters-plugin',
+    configureServer(server: any) {
+      const paramDir = path.resolve(__dirname, 'Türbin parametreleri');
+      server.watcher.add(paramDir);
+      const handleFileChange = (filePath: string) => {
+        if (filePath.includes('Türbin parametreleri')) {
+          if (isSyncing) return;
+          isSyncing = true;
+          console.log('\n[Vite] Türbin parametreleri güncellendi! Parametreler otomatik derleniyor...');
+          exec('node scripts/sync_parameters.cjs', (err, stdout) => {
+            isSyncing = false;
+            if (err) {
+              console.error('[Vite] Parametre senkronizasyon hatası:', err);
+              return;
+            }
+            console.log(stdout.trim());
+            server.hot.send({ type: 'full-reload' });
+          });
+        }
+      };
+      server.watcher.on('add', handleFileChange);
+      server.watcher.on('change', handleFileChange);
+      server.watcher.on('unlink', handleFileChange);
+    }
+  };
+}
+
 function gmailEmailPlugin() {
   return {
     name: 'gmail-email-plugin',
@@ -112,6 +142,7 @@ export default defineConfig({
   plugins: [
     writeVersionPlugin(),
     autoSyncSapPlugin(),
+    autoSyncParametersPlugin(),
     gmailEmailPlugin(),
     VitePWA({
       registerType: 'autoUpdate',

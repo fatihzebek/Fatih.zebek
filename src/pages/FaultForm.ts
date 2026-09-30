@@ -1,5 +1,5 @@
 import { auth } from '../firebase';
-import { FaultFormUI } from './FaultForm/FaultFormUI';
+import { FaultFormUI, resolveBearingDescription } from './FaultForm/FaultFormUI';
 import { FaultFormController } from './FaultForm/FaultFormController';
 
 /**
@@ -29,6 +29,22 @@ export async function FaultFormPage(initialData?: any) {
         } catch (e) {
             console.error("Error reading activeTaskContext draft:", e);
         }
+    }
+
+    const isBearingTask = finalData?.secilenSablon === 'Rulman Analizi' ||
+                          finalData?.rawFaultCode === 'Rulman Analizi' ||
+                          finalData?.faultCode === 'Rulman Analizi' ||
+                          (typeof finalData?.rawFaultCode === 'string' && finalData.rawFaultCode.startsWith('BRG-')) ||
+                          (typeof finalData?.statuKodu === 'string' && finalData.statuKodu.startsWith('BRG-')) ||
+                          (typeof finalData?.type === 'string' && finalData.type.includes('Rulman'));
+
+    if (isBearingTask && finalData) {
+        finalData.rawFaultCode = 'Rulman Analizi';
+        finalData.faultCode = 'Rulman Analizi';
+        const resolved = resolveBearingDescription(finalData) || resolveBearingDescription(initialData);
+        finalData.statuAciklamasi = resolved;
+        finalData.faultDesc = resolved;
+        finalData.description = resolved;
     }
 
     (window as any).isRestoredFromDraft = isRestored;
